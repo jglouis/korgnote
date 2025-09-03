@@ -45,7 +45,8 @@ import kotlinx.datetime.toLocalDateTime
 @Composable
 fun CalendarScreen(
     modifier: Modifier = Modifier,
-    scheduledByDate: Map<LocalDate, List<ScheduledEntry>> = emptyMap()
+    scheduledByDate: Map<LocalDate, List<ScheduledEntry>> = emptyMap(),
+    onOpenScheduled: (ScheduledEntry) -> Unit = {}
 ) {
     var today by remember {
         mutableStateOf(
@@ -202,7 +203,17 @@ fun CalendarScreen(
                 text = {
                     Column {
                         dialogEntries.forEach { e ->
-                            Text("• ${e.title} (${e.fileName})")
+                            Text(
+                                "• ${e.title} (${e.fileName})",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onOpenScheduled(e)
+                                        // close dialog after action
+                                        dialogDate = null
+                                    },
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 }

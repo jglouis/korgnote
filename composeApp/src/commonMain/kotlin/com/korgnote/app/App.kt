@@ -135,7 +135,14 @@ fun App() {
                             OrgText(content = vm.selectedFileContent.ifBlank { "Select an .org file to view its content" })
                         }
                         BottomItem.CALENDAR -> {
-                            CalendarScreen(modifier = Modifier.fillMaxSize(), scheduledByDate = vm.scheduledByDate)
+                            CalendarScreen(
+                                                            modifier = Modifier.fillMaxSize(),
+                                                            scheduledByDate = vm.scheduledByDate,
+                                                            onOpenScheduled = { entry ->
+                                                                vm.onFileSelected(entry.fileName)
+                                                                selectedScreen = BottomItem.HOME
+                                                            }
+                                                        )
                         }
                         BottomItem.SETTINGS -> {
                             Text(
