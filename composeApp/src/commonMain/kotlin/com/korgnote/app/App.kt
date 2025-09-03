@@ -118,6 +118,8 @@ fun App() {
                     Spacer(modifier = Modifier.height(12.dp))
                     // Reflect selection from ViewModel in UI
                     Text(text = vm.selectedFileLabel)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(text = vm.selectedFileContent.ifBlank { "Select an .org file to view its content" })
                 }
             }
         }

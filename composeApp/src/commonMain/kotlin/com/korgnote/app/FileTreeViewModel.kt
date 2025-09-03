@@ -64,10 +64,30 @@ class FileTreeViewModel : ViewModel() {
         )
     )
 
+    // Simple in-memory org-mode contents keyed by file name
+    private val orgContents: Map<String, String> = mapOf(
+        "inbox.org" to "* Inbox\n** TODO Capture an idea\nAdded: [2025-09-03 Wed 15:03]",
+        "next-actions.org" to "* Next Actions\n** TODO Implement Org preview in app\nSCHEDULED: <2025-09-04 Thu>",
+        "calendar.org" to "* Calendar\n** 2025\n*** 2025-09-10 Team sync\n*** 2025-09-15 Release planning",
+        "korgnote.org" to "* Project KorgNote\n** Goals\n- Cross-platform Org viewer\n** Tasks\n- [ ] Show content on select",
+        "website-redesign.org" to "* Website Redesign\n** Milestones\n- [ ] Wireframes\n- [ ] Prototype\n- [ ] Launch",
+        "research-notes.org" to "* Research Notes\n- Compose Multiplatform\n- Org-mode parsing",
+        "2024-12-31.org" to "* Journal 2024-12-31\n- Reflect on the year",
+        "2025-01-01.org" to "* Journal 2025-01-01\n- New beginnings",
+        "2025-09-03.org" to "* Journal 2025-09-03\n- Implemented Org content in app",
+        "books.org" to "* Books\n** Reading\n- The Pragmatic Programmer\n** Wishlist\n- Structure and Interpretation of Computer Programs",
+        "quotes.org" to "* Quotes\n** Alan Kay\n> The best way to predict the future is to invent it.",
+        "notes.org" to "* Notes\nMiscellaneous notes"
+    )
+
     var selectedFileLabel by mutableStateOf("No file selected")
+        private set
+
+    var selectedFileContent by mutableStateOf("")
         private set
 
     fun onFileSelected(name: String) {
         selectedFileLabel = "Selected: $name"
+        selectedFileContent = orgContents[name] ?: "* ${'$'}name\nNo content yet."
     }
 }
