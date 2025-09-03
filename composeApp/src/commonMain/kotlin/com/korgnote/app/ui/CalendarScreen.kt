@@ -34,7 +34,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -50,10 +49,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import com.korgnote.app.viewmodel.ScheduledEntry
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 const val SLIDE_DURATION_MS = 100
 const val FADE_DURATION_MS = 100
 
+@OptIn(ExperimentalTime::class)
 @Composable
 fun CalendarScreen(
     modifier: Modifier = Modifier.background(MaterialTheme.colorScheme.surface),
@@ -382,7 +384,7 @@ private fun DayCell(
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = date.dayOfMonth.toString(), color = textColor)
+        Text(text = date.day.toString(), color = textColor)
         if (hasSchedule) {
             Spacer(Modifier.height(2.dp))
             Box(
