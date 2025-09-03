@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DrawerValue
@@ -38,7 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.home
-import korgnote.composeapp.generated.resources.info
+import korgnote.composeapp.generated.resources.calendar
 import korgnote.composeapp.generated.resources.settings
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -55,6 +55,7 @@ fun App() {
         val vm = viewModel { FileTreeViewModel() }
         ModalNavigationDrawer(
             drawerState = drawerState,
+            gesturesEnabled = selectedScreen != BottomItem.CALENDAR,
             drawerContent = {
                 ModalDrawerSheet(modifier = Modifier.width(280.dp)) {
                     Column(modifier = Modifier.padding(8.dp)) {
@@ -85,8 +86,10 @@ fun App() {
                     TopAppBar(
                         title = { Text(selectedScreen.getLabel()) },
                         navigationIcon = {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(Icons.Filled.Menu, contentDescription = "Open drawer")
+                            if (selectedScreen != BottomItem.CALENDAR) {
+                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                    Icon(Icons.Filled.Menu, contentDescription = "Open drawer")
+                                }
                             }
                         }
                     )
@@ -119,15 +122,30 @@ fun App() {
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = selectedScreen.getLabel(),
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    // Reflect selection from ViewModel in UI
-                    Text(text = vm.selectedFileLabel)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    OrgText(content = vm.selectedFileContent.ifBlank { "Select an .org file to view its content" })
+                    when (selectedScreen) {
+                        BottomItem.HOME -> {
+                            Text(
+                                text = selectedScreen.getLabel(),
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            // Reflect selection from ViewModel in UI
+                            Text(text = vm.selectedFileLabel)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            OrgText(content = vm.selectedFileContent.ifBlank { "Select an .org file to view its content" })
+                        }
+                        BottomItem.CALENDAR -> {
+                            CalendarScreen(modifier = Modifier.fillMaxSize())
+                        }
+                        BottomItem.SETTINGS -> {
+                            Text(
+                                text = selectedScreen.getLabel(),
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Settings placeholder")
+                        }
+                    }
                 }
             }
         }
@@ -135,18 +153,18 @@ fun App() {
 }
 
 private enum class BottomItem {
-    HOME, INFO, SETTINGS;
+    HOME, CALENDAR, SETTINGS;
 
     @Composable
     fun getLabel() = when (this) {
         HOME -> stringResource(Res.string.home)
-        INFO -> stringResource(Res.string.info)
+        CALENDAR -> stringResource(Res.string.calendar)
         SETTINGS -> stringResource(Res.string.settings)
     }
 
     fun getIconRes() = when (this) {
         HOME -> Icons.Filled.Home
-        INFO -> Icons.Filled.Info
+        CALENDAR -> Icons.Filled.CalendarMonth
         SETTINGS -> Icons.Filled.Settings
     }
 }

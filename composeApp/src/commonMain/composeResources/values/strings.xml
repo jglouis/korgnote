@@ -1,5 +1,5 @@
 <resources>
     <string name="home">Home</string>
-    <string name="info">Info</string>
+    <string name="calendar">Calendar</string>
     <string name="settings">Settings</string>
 </resources>
