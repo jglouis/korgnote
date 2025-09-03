@@ -15,44 +15,52 @@ class FileTreeViewModel : ViewModel() {
         name = "Documents",
         children = listOf(
             Folder(
-                name = "Projects",
+                name = "Org",
                 children = listOf(
                     Folder(
-                        name = "KorgNote",
+                        name = "Agenda",
                         children = listOf(
-                            File("README.md"),
-                            File("Design.md"),
+                            File("inbox.org"),
+                            File("next-actions.org"),
+                            File("calendar.org")
+                        )
+                    ),
+                    Folder(
+                        name = "Projects",
+                        children = listOf(
+                            File("korgnote.org"),
+                            File("website-redesign.org"),
+                            File("research-notes.org")
+                        )
+                    ),
+                    Folder(
+                        name = "Journal",
+                        children = listOf(
                             Folder(
-                                name = "assets",
+                                name = "2024",
                                 children = listOf(
-                                    File("icon.png"),
-                                    File("banner.jpg")
+                                    File("2024-12-31.org")
+                                )
+                            ),
+                            Folder(
+                                name = "2025",
+                                children = listOf(
+                                    File("2025-01-01.org"),
+                                    File("2025-09-03.org")
                                 )
                             )
                         )
                     ),
-                    File("todo.txt")
-                )
-            ),
-            Folder(
-                name = "Photos",
-                children = listOf(
                     Folder(
-                        name = "2023",
+                        name = "Reference",
                         children = listOf(
-                            File("vacation-1.jpg"),
-                            File("vacation-2.jpg")
-                        )
-                    ),
-                    Folder(
-                        name = "2024",
-                        children = listOf(
-                            File("family.png")
+                            File("books.org"),
+                            File("quotes.org")
                         )
                     )
                 )
             ),
-            File("notes.txt")
+            File("notes.org")
         )
     )
 
