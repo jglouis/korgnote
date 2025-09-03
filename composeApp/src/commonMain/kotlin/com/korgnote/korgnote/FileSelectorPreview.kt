@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
@@ -23,6 +22,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -61,12 +62,17 @@ private fun TreeFolderItem(
     onFileSelected: (String) -> Unit,
 ) {
     val isExpanded = expandedMap[folder] ?: true // root expanded by default
+    val rotation = androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        label = "expand_rotation"
+    ).value
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expandedMap[folder] = !isExpanded }
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+            .animateContentSize(),
         horizontalArrangement = Arrangement.Start
     ) {
         Spacer(Modifier.width((depth * 16).dp))
@@ -81,17 +87,24 @@ private fun TreeFolderItem(
             modifier = Modifier.weight(1f)
         )
         Icon(
-            imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-            contentDescription = if (isExpanded) "Collapse" else "Expand"
+            imageVector = Icons.Filled.ExpandMore,
+            contentDescription = if (isExpanded) "Collapse" else "Expand",
+            modifier = Modifier.rotate(rotation)
         )
     }
     HorizontalDivider()
 
-    if (isExpanded) {
-        folder.children.forEach { child ->
-            when (child) {
-                is Folder -> TreeFolderItem(child, depth + 1, expandedMap, onFileSelected)
-                is File -> TreeFileItem(child, depth + 1, onFileSelected)
+    androidx.compose.animation.AnimatedVisibility(
+        visible = isExpanded,
+        enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
+        exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut(),
+    ) {
+        Column(modifier = Modifier.animateContentSize()) {
+            folder.children.forEach { child ->
+                when (child) {
+                    is Folder -> TreeFolderItem(child, depth + 1, expandedMap, onFileSelected)
+                    is File -> TreeFileItem(child, depth + 1, onFileSelected)
+                }
             }
         }
     }
