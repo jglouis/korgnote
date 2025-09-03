@@ -4,9 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
@@ -119,7 +119,7 @@ fun App() {
                     // Reflect selection from ViewModel in UI
                     Text(text = vm.selectedFileLabel)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(text = vm.selectedFileContent.ifBlank { "Select an .org file to view its content" })
+                    OrgText(content = vm.selectedFileContent.ifBlank { "Select an .org file to view its content" })
                 }
             }
         }
