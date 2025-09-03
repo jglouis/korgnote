@@ -1,4 +1,4 @@
-package com.korgnote.app
+package com.korgnote.app.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable

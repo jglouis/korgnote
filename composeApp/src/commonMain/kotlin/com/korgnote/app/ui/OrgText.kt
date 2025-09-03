@@ -1,4 +1,4 @@
-package com.korgnote.app
+package com.korgnote.app.ui
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme

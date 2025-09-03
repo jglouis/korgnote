@@ -1,10 +1,14 @@
-package com.korgnote.app
+package com.korgnote.app.viewmodel
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import com.korgnote.app.ui.File
+import com.korgnote.app.ui.Folder
+import com.korgnote.app.ui.Node
 import kotlinx.datetime.LocalDate
+import kotlin.collections.iterator
 
 /**
  * Simple ViewModel holding the fake file tree and the selected file name.

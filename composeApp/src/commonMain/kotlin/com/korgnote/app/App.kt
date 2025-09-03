@@ -36,6 +36,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.korgnote.app.ui.CalendarScreen
+import com.korgnote.app.ui.FileTree
+import com.korgnote.app.ui.OrgText
+import com.korgnote.app.viewmodel.FileTreeViewModel
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.home
 import korgnote.composeapp.generated.resources.calendar
@@ -136,13 +140,13 @@ fun App() {
                         }
                         BottomItem.CALENDAR -> {
                             CalendarScreen(
-                                                            modifier = Modifier.fillMaxSize(),
-                                                            scheduledByDate = vm.scheduledByDate,
-                                                            onOpenScheduled = { entry ->
-                                                                vm.onFileSelected(entry.fileName)
-                                                                selectedScreen = BottomItem.HOME
-                                                            }
-                                                        )
+                                modifier = Modifier.fillMaxSize(),
+                                scheduledByDate = vm.scheduledByDate,
+                                onOpenScheduled = { entry ->
+                                    vm.onFileSelected(entry.fileName)
+                                    selectedScreen = BottomItem.HOME
+                                }
+                            )
                         }
                         BottomItem.SETTINGS -> {
                             Text(

@@ -1,4 +1,4 @@
-package com.korgnote.app
+package com.korgnote.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -49,6 +49,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import com.korgnote.app.viewmodel.ScheduledEntry
 
 const val SLIDE_DURATION_MS = 100
 const val FADE_DURATION_MS = 100
