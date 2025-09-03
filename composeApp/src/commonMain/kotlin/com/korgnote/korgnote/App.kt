@@ -1,5 +1,6 @@
 package com.korgnote.korgnote
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,6 +12,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -20,12 +22,14 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -42,9 +46,8 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 @Preview
 fun App() {
     MaterialTheme {
-        var selected by remember { mutableStateOf(BottomItem.HOME) }
-        val drawerState =
-            androidx.compose.material3.rememberDrawerState(initialValue = androidx.compose.material3.DrawerValue.Closed)
+        var selectedScreen by remember { mutableStateOf(BottomItem.HOME) }
+        val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val scope = rememberCoroutineScope()
         val vm = viewModel { FileTreeViewModel() }
         androidx.compose.material3.ModalNavigationDrawer(
@@ -65,7 +68,7 @@ fun App() {
             Scaffold(
                 topBar = {
                     TopAppBar(
-                        title = { Text(selected.getLabel()) },
+                        title = { Text(selectedScreen.getLabel()) },
                         navigationIcon = {
                             IconButton(onClick = { scope.launch { drawerState.open() } }) {
                                 Icon(Icons.Filled.Menu, contentDescription = "Open drawer")
@@ -77,8 +80,8 @@ fun App() {
                     NavigationBar {
                         BottomItem.entries.forEach { item ->
                             NavigationBarItem(
-                                selected = selected == item,
-                                onClick = { selected = item },
+                                selected = selectedScreen == item,
+                                onClick = { selectedScreen = item },
                                 icon = {
                                     Icon(
                                         item.getIconRes(),
@@ -98,10 +101,10 @@ fun App() {
                         .fillMaxSize()
                         .padding(paddingValues)
                         .padding(16.dp),
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(text = selected.getLabel(), style = MaterialTheme.typography.titleLarge)
+                    Text(text = selectedScreen.getLabel(), style = MaterialTheme.typography.titleLarge)
                     Spacer(modifier = Modifier.height(12.dp))
                     // Reflect selection from ViewModel in UI
                     Text(text = vm.selectedFileLabel)

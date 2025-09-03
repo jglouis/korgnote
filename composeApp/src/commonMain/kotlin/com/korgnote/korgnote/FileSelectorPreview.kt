@@ -24,6 +24,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -62,7 +67,7 @@ private fun TreeFolderItem(
     onFileSelected: (String) -> Unit,
 ) {
     val isExpanded = expandedMap[folder] ?: true // root expanded by default
-    val rotation = androidx.compose.animation.core.animateFloatAsState(
+    val rotation = animateFloatAsState(
         targetValue = if (isExpanded) 180f else 0f,
         label = "expand_rotation"
     ).value
@@ -96,8 +101,8 @@ private fun TreeFolderItem(
 
     androidx.compose.animation.AnimatedVisibility(
         visible = isExpanded,
-        enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
-        exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut(),
+        enter = expandVertically() + fadeIn(),
+        exit = shrinkVertically() + fadeOut(),
     ) {
         Column(modifier = Modifier.animateContentSize()) {
             folder.children.forEach { child ->
