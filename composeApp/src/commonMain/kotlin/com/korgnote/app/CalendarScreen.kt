@@ -214,22 +214,22 @@ fun CalendarScreen(
                         )
                     }
                 }, label = "calendarPager"
-            ) { (m, aDate) ->
-                when (m) {
+            ) { (calendarMode, aDate) ->
+                when (calendarMode) {
                     CalendarMode.Month -> MonthGrid(
                         anchorDate = aDate,
                         today = today,
                         scheduledByDate = scheduledByDate
-                    ) { d ->
-                        if (!scheduledByDate[d].isNullOrEmpty()) dialogDate = d
+                    ) { date ->
+                        if (!scheduledByDate[date].isNullOrEmpty()) dialogDate = date
                     }
 
                     CalendarMode.Week -> WeekRow(
                         anchorDate = aDate,
                         today = today,
                         scheduledByDate = scheduledByDate
-                    ) { d ->
-                        if (!scheduledByDate[d].isNullOrEmpty()) dialogDate = d
+                    ) { date ->
+                        if (!scheduledByDate[date].isNullOrEmpty()) dialogDate = date
                     }
                 }
             }
@@ -338,17 +338,17 @@ private fun MonthGrid(
             ) {
                 for (col in 0 until 7) {
                     val idx = row * 7 + col
-                    val d = start.plus(idx, DateTimeUnit.DAY)
-                    val isOther = d.month != anchorDate.month
-                    val has = !scheduledByDate[d].isNullOrEmpty()
+                    val date = start.plus(idx, DateTimeUnit.DAY)
+                    val isOther = date.month != anchorDate.month
+                    val hasSchedule = !scheduledByDate[date].isNullOrEmpty()
                     Box(modifier = Modifier.weight(1f)) {
                         DayCell(
-                            date = d,
-                            isToday = d == today,
+                            date = date,
+                            isToday = date == today,
                             isOtherMonth = isOther,
-                            hasSchedule = has
+                            hasSchedule = hasSchedule
                         ) {
-                            if (has) onDateClick(d)
+                            if (hasSchedule) onDateClick(date)
                         }
                     }
                 }
@@ -366,7 +366,7 @@ private fun DayCell(
     hasSchedule: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
-    val bg =
+    val backgroundColor =
         if (isToday) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent
     val textColor = when {
         isOtherMonth -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
@@ -377,7 +377,7 @@ private fun DayCell(
         modifier = Modifier
             .padding(2.dp)
             .then(clickableMod)
-            .background(bg)
+            .background(backgroundColor)
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -406,39 +406,39 @@ private fun LocalDate.startOfWeek(): LocalDate {
 
 private fun previewSampleScheduled(): Map<LocalDate, List<ScheduledEntry>> {
     // Fixed sample data focused on September 2025
-    val d1 = LocalDate(2025, 9, 10)
-    val d2 = LocalDate(2025, 9, 15)
-    val d3 = LocalDate(2025, 9, 21)
-    val d4 = LocalDate(2025, 9, 30)
+    val date1 = LocalDate(2025, 9, 10)
+    val date2 = LocalDate(2025, 9, 15)
+    val date3 = LocalDate(2025, 9, 21)
+    val date4 = LocalDate(2025, 9, 30)
     return mapOf(
-        d1 to listOf(
+        date1 to listOf(
             ScheduledEntry(
                 "TODO Kickoff Q4 planning",
-                d1,
+                date1,
                 "sep-2025.org",
                 "SCHEDULED: <2025-09-10 Wed>"
             )
         ),
-        d2 to listOf(
+        date2 to listOf(
             ScheduledEntry(
                 "DONE Submit budget proposal",
-                d2,
+                date2,
                 "sep-2025.org",
                 "SCHEDULED: <2025-09-15 Mon>"
             )
         ),
-        d3 to listOf(
+        date3 to listOf(
             ScheduledEntry(
                 "TODO Write blog post",
-                d3,
+                date3,
                 "next-actions.org",
                 "SCHEDULED: <2025-09-21 Sun>"
             )
         ),
-        d4 to listOf(
+        date4 to listOf(
             ScheduledEntry(
                 "TODO End of month review",
-                d4,
+                date4,
                 "sep-2025.org",
                 "SCHEDULED: <2025-09-30 Tue>"
             )
