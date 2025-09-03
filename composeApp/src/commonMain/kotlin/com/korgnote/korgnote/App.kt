@@ -1,20 +1,21 @@
 package com.korgnote.korgnote
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.home
 import korgnote.composeapp.generated.resources.info
@@ -33,46 +34,28 @@ fun App() {
         val settingsLabel = stringResource(Res.string.settings)
         Scaffold(
             bottomBar = {
-                BottomAppBar {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        IconButton(onClick = { selected = BottomItem.HOME }, modifier = Modifier.semantics {
-                            contentDescription = homeLabel
-                            this.selected = (selected == BottomItem.HOME)
-                        }) {
-                            val isSelected = selected == BottomItem.HOME
-                            val tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Filled.Home, contentDescription = null, tint = tint)
-                                Text(homeLabel, color = tint, style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                        IconButton(onClick = { selected = BottomItem.INFO }, modifier = Modifier.semantics {
-                            contentDescription = infoLabel
-                            this.selected = (selected == BottomItem.INFO)
-                        }) {
-                            val isSelected = selected == BottomItem.INFO
-                            val tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Filled.Info, contentDescription = null, tint = tint)
-                                Text(infoLabel, color = tint, style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                        IconButton(onClick = { selected = BottomItem.SETTINGS }, modifier = Modifier.semantics {
-                            contentDescription = settingsLabel
-                            this.selected = (selected == BottomItem.SETTINGS)
-                        }) {
-                            val isSelected = selected == BottomItem.SETTINGS
-                            val tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Filled.Settings, contentDescription = null, tint = tint)
-                                Text(settingsLabel, color = tint, style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    }
+                NavigationBar {
+                    NavigationBarItem(
+                        selected = selected == BottomItem.HOME,
+                        onClick = { selected = BottomItem.HOME },
+                        icon = { Icon(Icons.Filled.Home, contentDescription = homeLabel) },
+                        label = { Text(homeLabel) },
+                        alwaysShowLabel = true
+                    )
+                    NavigationBarItem(
+                        selected = selected == BottomItem.INFO,
+                        onClick = { selected = BottomItem.INFO },
+                        icon = { Icon(Icons.Filled.Info, contentDescription = infoLabel) },
+                        label = { Text(infoLabel) },
+                        alwaysShowLabel = true
+                    )
+                    NavigationBarItem(
+                        selected = selected == BottomItem.SETTINGS,
+                        onClick = { selected = BottomItem.SETTINGS },
+                        icon = { Icon(Icons.Filled.Settings, contentDescription = settingsLabel) },
+                        label = { Text(settingsLabel) },
+                        alwaysShowLabel = true
+                    )
                 }
             }
         ) { _ ->
