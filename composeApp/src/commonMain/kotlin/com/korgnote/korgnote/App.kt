@@ -28,44 +28,39 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 fun App() {
     MaterialTheme {
         var selected by remember { mutableStateOf(BottomItem.HOME) }
-
-        val homeLabel = stringResource(Res.string.home)
-        val infoLabel = stringResource(Res.string.info)
-        val settingsLabel = stringResource(Res.string.settings)
         Scaffold(
             bottomBar = {
                 NavigationBar {
-                    NavigationBarItem(
-                        selected = selected == BottomItem.HOME,
-                        onClick = { selected = BottomItem.HOME },
-                        icon = { Icon(Icons.Filled.Home, contentDescription = homeLabel) },
-                        label = { Text(homeLabel) },
-                        alwaysShowLabel = true
-                    )
-                    NavigationBarItem(
-                        selected = selected == BottomItem.INFO,
-                        onClick = { selected = BottomItem.INFO },
-                        icon = { Icon(Icons.Filled.Info, contentDescription = infoLabel) },
-                        label = { Text(infoLabel) },
-                        alwaysShowLabel = true
-                    )
-                    NavigationBarItem(
-                        selected = selected == BottomItem.SETTINGS,
-                        onClick = { selected = BottomItem.SETTINGS },
-                        icon = { Icon(Icons.Filled.Settings, contentDescription = settingsLabel) },
-                        label = { Text(settingsLabel) },
-                        alwaysShowLabel = true
-                    )
+                    BottomItem.entries.forEach { item ->
+                        NavigationBarItem(
+                            selected = selected == item,
+                            onClick = { selected = item },
+                            icon = { Icon(item.getIconRes(), contentDescription = item.getLabel()) },
+                            label = { Text(item.getLabel()) },
+                            alwaysShowLabel = true
+                        )
+                    }
                 }
             }
         ) { _ ->
-            when (selected) {
-                BottomItem.HOME -> Text(homeLabel, modifier = Modifier)
-                BottomItem.INFO -> Text(infoLabel, modifier = Modifier)
-                BottomItem.SETTINGS -> Text(settingsLabel, modifier = Modifier)
-            }
+            Text(selected.getLabel(), modifier = Modifier)
         }
     }
 }
 
-private enum class BottomItem { HOME, INFO, SETTINGS }
+private enum class BottomItem {
+    HOME, INFO, SETTINGS;
+
+    @Composable
+    fun getLabel() = when (this) {
+        HOME -> stringResource(Res.string.home)
+        INFO -> stringResource(Res.string.info)
+        SETTINGS -> stringResource(Res.string.settings)
+    }
+
+    fun getIconRes() = when (this) {
+        HOME -> Icons.Filled.Home
+        INFO -> Icons.Filled.Info
+        SETTINGS -> Icons.Filled.Settings
+    }
+}
