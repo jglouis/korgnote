@@ -35,7 +35,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.korgnote.app.di.appModule
+import org.koin.compose.KoinApplication
 import com.korgnote.app.ui.CalendarScreen
 import com.korgnote.app.ui.FileTree
 import com.korgnote.app.ui.OrgText
@@ -47,114 +48,119 @@ import korgnote.composeapp.generated.resources.settings
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.ui.tooling.preview.Preview
+import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @Preview
 fun App() {
-    MaterialTheme {
-        var selectedScreen by remember { mutableStateOf(BottomItem.HOME) }
-        val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-        val scope = rememberCoroutineScope()
-        val vm = viewModel { FileTreeViewModel() }
-        ModalNavigationDrawer(
-            drawerState = drawerState,
-            gesturesEnabled = selectedScreen != BottomItem.CALENDAR,
-            drawerContent = {
-                ModalDrawerSheet(modifier = Modifier.width(280.dp)) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        Text("Files", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.width(8.dp))
-                        OutlinedTextField(
-                            value = vm.filterQuery,
-                            onValueChange = { vm.filterQuery = it },
-                            label = { Text("Filter files") },
-                            singleLine = true
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        FileTree(
-                            root = vm.filteredTree,
-                            onFileSelected = { name ->
-                                scope.launch {
-                                    vm.onFileSelected(name)
-                                    drawerState.close()
+    KoinApplication(application = { modules(appModule) }) {
+        MaterialTheme {
+            var selectedScreen by remember { mutableStateOf(BottomItem.HOME) }
+            val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+            val scope = rememberCoroutineScope()
+            val vm = koinViewModel<FileTreeViewModel>()
+            ModalNavigationDrawer(
+                drawerState = drawerState,
+                gesturesEnabled = selectedScreen != BottomItem.CALENDAR,
+                drawerContent = {
+                    ModalDrawerSheet(modifier = Modifier.width(280.dp)) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Text("Files", style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.width(8.dp))
+                            OutlinedTextField(
+                                value = vm.filterQuery,
+                                onValueChange = { vm.filterQuery = it },
+                                label = { Text("Filter files") },
+                                singleLine = true
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            FileTree(
+                                root = vm.filteredTree,
+                                onFileSelected = { name ->
+                                    scope.launch {
+                                        vm.onFileSelected(name)
+                                        drawerState.close()
+                                    }
                                 }
-                            }
-                        )
-                    }
-                }
-            }
-        ) {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = { Text(selectedScreen.getLabel()) },
-                        navigationIcon = {
-                            if (selectedScreen != BottomItem.CALENDAR) {
-                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                    Icon(Icons.Filled.Menu, contentDescription = "Open drawer")
-                                }
-                            }
-                        }
-                    )
-                },
-                bottomBar = {
-                    NavigationBar {
-                        BottomItem.entries.forEach { item ->
-                            NavigationBarItem(
-                                selected = selectedScreen == item,
-                                onClick = { selectedScreen = item },
-                                icon = {
-                                    Icon(
-                                        item.getIconRes(),
-                                        contentDescription = item.getLabel()
-                                    )
-                                },
-                                label = { Text(item.getLabel()) },
-                                alwaysShowLabel = true
                             )
                         }
                     }
                 }
-            ) { paddingValues ->
-                // Main content area
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    when (selectedScreen) {
-                        BottomItem.HOME -> {
-                            Text(
-                                text = selectedScreen.getLabel(),
-                                style = MaterialTheme.typography.titleLarge
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            // Reflect selection from ViewModel in UI
-                            Text(text = vm.selectedFileLabel)
-                            Spacer(modifier = Modifier.height(16.dp))
-                            OrgText(content = vm.selectedFileContent.ifBlank { "Select an .org file to view its content" })
-                        }
-                        BottomItem.CALENDAR -> {
-                            CalendarScreen(
-                                modifier = Modifier.fillMaxSize(),
-                                scheduledByDate = vm.scheduledByDate,
-                                onOpenScheduled = { entry ->
-                                    vm.onFileSelected(entry.fileName)
-                                    selectedScreen = BottomItem.HOME
+            ) {
+                Scaffold(
+                    topBar = {
+                        TopAppBar(
+                            title = { Text(selectedScreen.getLabel()) },
+                            navigationIcon = {
+                                if (selectedScreen != BottomItem.CALENDAR) {
+                                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                        Icon(Icons.Filled.Menu, contentDescription = "Open drawer")
+                                    }
                                 }
-                            )
+                            }
+                        )
+                    },
+                    bottomBar = {
+                        NavigationBar {
+                            BottomItem.entries.forEach { item ->
+                                NavigationBarItem(
+                                    selected = selectedScreen == item,
+                                    onClick = { selectedScreen = item },
+                                    icon = {
+                                        Icon(
+                                            item.getIconRes(),
+                                            contentDescription = item.getLabel()
+                                        )
+                                    },
+                                    label = { Text(item.getLabel()) },
+                                    alwaysShowLabel = true
+                                )
+                            }
                         }
-                        BottomItem.SETTINGS -> {
-                            Text(
-                                text = selectedScreen.getLabel(),
-                                style = MaterialTheme.typography.titleLarge
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("Settings placeholder")
+                    }
+                ) { paddingValues ->
+                    // Main content area
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(paddingValues)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        when (selectedScreen) {
+                            BottomItem.HOME -> {
+                                Text(
+                                    text = selectedScreen.getLabel(),
+                                    style = MaterialTheme.typography.titleLarge
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                // Reflect selection from ViewModel in UI
+                                Text(text = vm.selectedFileLabel)
+                                Spacer(modifier = Modifier.height(16.dp))
+                                OrgText(content = vm.selectedFileContent.ifBlank { "Select an .org file to view its content" })
+                            }
+
+                            BottomItem.CALENDAR -> {
+                                CalendarScreen(
+                                    modifier = Modifier.fillMaxSize(),
+                                    scheduledByDate = vm.scheduledByDate,
+                                    onOpenScheduled = { entry ->
+                                        vm.onFileSelected(entry.fileName)
+                                        selectedScreen = BottomItem.HOME
+                                    }
+                                )
+                            }
+
+                            BottomItem.SETTINGS -> {
+                                Text(
+                                    text = selectedScreen.getLabel(),
+                                    style = MaterialTheme.typography.titleLarge
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Settings placeholder")
+                            }
                         }
                     }
                 }
