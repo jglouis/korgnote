@@ -42,7 +42,7 @@ private fun parseHeading(line: String): Triple<Boolean, Int, String> {
     } else Triple(false, 0, trim)
 }
 
-private fun buildOrgAnnotatedString(text: String): AnnotatedString {
+fun buildOrgAnnotatedString(text: String): AnnotatedString {
     // Highlight TODO (green) and DONE (grey) tokens as whole words
     val todoColor = Color(0xFF2E7D32)
     val doneColor = Color(0xFF9E9E9E)

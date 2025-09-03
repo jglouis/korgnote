@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -199,21 +200,35 @@ fun CalendarScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                 },
-                title = { Text("${dialogDate}") },
+                title = { Text("$dialogDate") },
                 text = {
                     Column {
                         dialogEntries.forEach { e ->
-                            Text(
-                                "• ${e.title} (${e.fileName})",
+                            // Build annotated string with same highlighting as main content
+                            val annotated = buildOrgAnnotatedString("• ${e.title} (${e.fileName})")
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
                                         onOpenScheduled(e)
-                                        // close dialog after action
                                         dialogDate = null
-                                    },
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Leading affordance dot
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .background(MaterialTheme.colorScheme.primary, shape = CircleShape)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = annotated,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
                 }
