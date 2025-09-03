@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
@@ -43,10 +44,11 @@ fun App() {
     MaterialTheme {
         var selected by remember { mutableStateOf(BottomItem.HOME) }
         var selectedFile by remember { mutableStateOf("No file selected") }
-        val drawerState = androidx.compose.material3.rememberDrawerState(initialValue = androidx.compose.material3.DrawerValue.Closed)
+        val drawerState =
+            androidx.compose.material3.rememberDrawerState(initialValue = androidx.compose.material3.DrawerValue.Closed)
         val scope = rememberCoroutineScope()
         androidx.compose.material3.ModalNavigationDrawer(
-            drawerState = drawerState, 
+            drawerState = drawerState,
             drawerContent = {
                 androidx.compose.material3.ModalDrawerSheet(modifier = Modifier.width(280.dp)) {
                     Column(modifier = Modifier.padding(8.dp)) {
@@ -88,7 +90,7 @@ fun App() {
                                         Folder(
                                             name = "2024",
                                             children = listOf(
-                                            File("family.png")
+                                                File("family.png")
                                             )
                                         )
                                     )
@@ -104,38 +106,50 @@ fun App() {
                 }
             }
         ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text(selected.getLabel()) },
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Filled.Menu, contentDescription = "Open drawer")
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = { Text(selected.getLabel()) },
+                        navigationIcon = {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Filled.Menu, contentDescription = "Open drawer")
+                            }
+                        }
+                    )
+                },
+                bottomBar = {
+                    NavigationBar {
+                        BottomItem.entries.forEach { item ->
+                            NavigationBarItem(
+                                selected = selected == item,
+                                onClick = { selected = item },
+                                icon = {
+                                    Icon(
+                                        item.getIconRes(),
+                                        contentDescription = item.getLabel()
+                                    )
+                                },
+                                label = { Text(item.getLabel()) },
+                                alwaysShowLabel = true
+                            )
                         }
                     }
-                )
-            },
-            bottomBar = {
-                NavigationBar {
-                    BottomItem.entries.forEach { item ->
-                        NavigationBarItem(
-                            selected = selected == item,
-                            onClick = { selected = item },
-                            icon = { Icon(item.getIconRes(), contentDescription = item.getLabel()) },
-                            label = { Text(item.getLabel()) },
-                            alwaysShowLabel = true
-                        )
-                    }
+                }
+            ) { paddingValues ->
+                // Main content area
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                        .padding(16.dp),
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                ) {
+                    Text(text = selected.getLabel(), style = MaterialTheme.typography.titleLarge)
+                    androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(12.dp))
+                    Text(text = selectedFile)
                 }
             }
-        ) { paddingValues ->
-            // Main content area
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                Text(text = selected.getLabel(), style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.width(8.dp))
-                Text(text = selectedFile)
-            }
-        }
         }
     }
 }
