@@ -44,7 +44,12 @@ fun FileTree(
     val expandedMap = remember { mutableStateMapOf<Folder, Boolean>() }
 
     Column(modifier = modifier) {
-        TreeFolderItem(folder = root, depth = 0, expandedMap = expandedMap, onFileSelected = onFileSelected)
+        TreeFolderItem(
+            folder = root,
+            depth = 0,
+            expandedMap = expandedMap,
+            onFileSelected = onFileSelected
+        )
     }
 }
 
@@ -70,7 +75,11 @@ private fun TreeFolderItem(
             contentDescription = if (isExpanded) "Folder open" else "Folder"
         )
         Spacer(Modifier.width(8.dp))
-        Text(folder.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Text(
+            folder.name,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f)
+        )
         Icon(
             imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
             contentDescription = if (isExpanded) "Collapse" else "Expand"

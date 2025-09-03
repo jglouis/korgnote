@@ -39,7 +39,6 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @Preview
-//@androidx.compose.material3.ExperimentalMaterial3Api
 fun App() {
     MaterialTheme {
         var selected by remember { mutableStateOf(BottomItem.HOME) }
@@ -146,7 +145,7 @@ fun App() {
                     horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
                 ) {
                     Text(text = selected.getLabel(), style = MaterialTheme.typography.titleLarge)
-                    androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Text(text = selectedFile)
                 }
             }
