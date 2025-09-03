@@ -31,6 +31,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.height
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 // A simple in-memory model for preview/demo purposes
@@ -50,13 +51,16 @@ fun FileTree(
     // Track expanded state by node identity (here by object reference via Any hash)
     val expandedMap = remember { mutableStateMapOf<Folder, Boolean>() }
 
-    Column(modifier = modifier) {
-        TreeFolderItem(
-            folder = root,
-            depth = 0,
-            expandedMap = expandedMap,
-            onFileSelected = onFileSelected
-        )
+    // Make the tree scrollable to handle long file lists
+    androidx.compose.foundation.lazy.LazyColumn(modifier = modifier) {
+        item {
+            TreeFolderItem(
+                folder = root,
+                depth = 0,
+                expandedMap = expandedMap,
+                onFileSelected = onFileSelected
+            )
+        }
     }
 }
 
@@ -190,7 +194,7 @@ fun FileSelector_Preview() {
 
     MaterialTheme {
         Surface {
-            FileTree(root = sample, onFileSelected = {}, modifier = Modifier.padding(8.dp))
+            FileTree(root = sample, onFileSelected = {}, modifier = Modifier.padding(8.dp).height(300.dp))
         }
     }
 }

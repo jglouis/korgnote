@@ -82,7 +82,8 @@ fun App() {
                                         vm.onFileSelected(name)
                                         drawerState.close()
                                     }
-                                }
+                                },
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
