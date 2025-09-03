@@ -12,10 +12,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,8 +43,15 @@ import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 
 @Composable
-fun CalendarScreen(modifier: Modifier = Modifier) {
-    var today by remember { mutableStateOf(Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date) }
+fun CalendarScreen(
+    modifier: Modifier = Modifier,
+    scheduledByDate: Map<LocalDate, List<ScheduledEntry>> = emptyMap()
+) {
+    var today by remember {
+        mutableStateOf(
+            Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+        )
+    }
     var anchorDate by remember { mutableStateOf(today) }
     var mode by remember { mutableStateOf(CalendarMode.Month) }
 
@@ -56,7 +65,9 @@ fun CalendarScreen(modifier: Modifier = Modifier) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.CalendarMonth, contentDescription = null)
                 Text(
-                    text = "${anchorDate.month.name.lowercase().replaceFirstChar { it.titlecase() }} ${anchorDate.year}",
+                    text = "${
+                        anchorDate.month.name.lowercase().replaceFirstChar { it.titlecase() }
+                    } ${anchorDate.year}",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(start = 8.dp)
                 )
@@ -90,7 +101,10 @@ fun CalendarScreen(modifier: Modifier = Modifier) {
         Spacer(Modifier.height(8.dp))
 
         // Mode switcher
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             FilterChip(
                 selected = mode == CalendarMode.Week,
                 onClick = { mode = CalendarMode.Week },
@@ -107,15 +121,22 @@ fun CalendarScreen(modifier: Modifier = Modifier) {
 
         // Week day headers
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            val days = listOf("Mon","Tue","Wed","Thu","Fri","Sat","Sun")
+            val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
             for (d in days) {
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    Text(d, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                    Text(
+                        d,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
                 }
             }
         }
 
         Spacer(Modifier.height(4.dp))
+
+        var dialogDate by remember { mutableStateOf<LocalDate?>(null) }
+        val dialogEntries = dialogDate?.let { scheduledByDate[it] }
 
         Box(
             modifier = Modifier
@@ -148,18 +169,56 @@ fun CalendarScreen(modifier: Modifier = Modifier) {
                 }
         ) {
             when (mode) {
-                CalendarMode.Month -> MonthGrid(anchorDate = anchorDate, today = today)
-                CalendarMode.Week -> WeekRow(anchorDate = anchorDate, today = today)
+                CalendarMode.Month -> MonthGrid(
+                    anchorDate = anchorDate,
+                    today = today,
+                    scheduledByDate = scheduledByDate
+                ) { d ->
+                    if (!scheduledByDate[d].isNullOrEmpty()) dialogDate = d
+                }
+
+                CalendarMode.Week -> WeekRow(
+                    anchorDate = anchorDate,
+                    today = today,
+                    scheduledByDate = scheduledByDate
+                ) { d ->
+                    if (!scheduledByDate[d].isNullOrEmpty()) dialogDate = d
+                }
             }
+        }
+
+        // Dialog showing scheduled entries for selected date
+        if (dialogEntries != null && dialogEntries.isNotEmpty() && dialogDate != null) {
+            AlertDialog(
+                onDismissRequest = { dialogDate = null },
+                confirmButton = {
+                    Text(
+                        text = "Close",
+                        modifier = Modifier.clickable { dialogDate = null },
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                },
+                title = { Text("${dialogDate}") },
+                text = {
+                    Column {
+                        dialogEntries.forEach { e ->
+                            Text("• ${e.title} (${e.fileName})")
+                        }
+                    }
+                }
+            )
         }
     }
 }
 
-enum class CalendarMode { Week, Month;
+enum class CalendarMode {
+    Week, Month;
+
     fun next(date: LocalDate): LocalDate = when (this) {
         Week -> date.plus(7, DateTimeUnit.DAY)
         Month -> date.plus(1, DateTimeUnit.MONTH)
     }
+
     fun prev(date: LocalDate): LocalDate = when (this) {
         Week -> date.minus(7, DateTimeUnit.DAY)
         Month -> date.minus(1, DateTimeUnit.MONTH)
@@ -167,31 +226,55 @@ enum class CalendarMode { Week, Month;
 }
 
 @Composable
-private fun WeekRow(anchorDate: LocalDate, today: LocalDate) {
+private fun WeekRow(
+    anchorDate: LocalDate,
+    today: LocalDate,
+    scheduledByDate: Map<LocalDate, List<ScheduledEntry>>,
+    onDateClick: (LocalDate) -> Unit
+) {
     val start = anchorDate.startOfWeek()
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         for (i in 0 until 7) {
             val d = start.plus(i, DateTimeUnit.DAY)
+            val has = !scheduledByDate[d].isNullOrEmpty()
             Box(modifier = Modifier.weight(1f)) {
-                DayCell(date = d, isToday = d == today, isOtherMonth = false)
+                DayCell(date = d, isToday = d == today, isOtherMonth = false, hasSchedule = has) {
+                    if (has) onDateClick(d)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun MonthGrid(anchorDate: LocalDate, today: LocalDate) {
+private fun MonthGrid(
+    anchorDate: LocalDate,
+    today: LocalDate,
+    scheduledByDate: Map<LocalDate, List<ScheduledEntry>>,
+    onDateClick: (LocalDate) -> Unit
+) {
     val firstOfMonth = LocalDate(anchorDate.year, anchorDate.month, 1)
     val start = firstOfMonth.startOfWeek()
     Column(modifier = Modifier.fillMaxWidth()) {
         for (row in 0 until 6) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 for (col in 0 until 7) {
                     val idx = row * 7 + col
                     val d = start.plus(idx, DateTimeUnit.DAY)
                     val isOther = d.month != anchorDate.month
+                    val has = !scheduledByDate[d].isNullOrEmpty()
                     Box(modifier = Modifier.weight(1f)) {
-                        DayCell(date = d, isToday = d == today, isOtherMonth = isOther)
+                        DayCell(
+                            date = d,
+                            isToday = d == today,
+                            isOtherMonth = isOther,
+                            hasSchedule = has
+                        ) {
+                            if (has) onDateClick(d)
+                        }
                     }
                 }
             }
@@ -201,20 +284,37 @@ private fun MonthGrid(anchorDate: LocalDate, today: LocalDate) {
 }
 
 @Composable
-private fun DayCell(date: LocalDate, isToday: Boolean, isOtherMonth: Boolean) {
-    val bg = if (isToday) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent
+private fun DayCell(
+    date: LocalDate,
+    isToday: Boolean,
+    isOtherMonth: Boolean,
+    hasSchedule: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
+    val bg =
+        if (isToday) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent
     val textColor = when {
         isOtherMonth -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
         else -> MaterialTheme.colorScheme.onSurface
     }
-    Box(
+    val clickableMod = if (hasSchedule) Modifier.clickable { onClick?.invoke() } else Modifier
+    Column(
         modifier = Modifier
             .padding(2.dp)
+            .then(clickableMod)
             .background(bg)
-            .padding(vertical = 10.dp),
-        contentAlignment = Alignment.Center
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(text = date.dayOfMonth.toString(), color = textColor)
+        if (hasSchedule) {
+            Spacer(Modifier.height(2.dp))
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .background(MaterialTheme.colorScheme.primary, shape = CircleShape)
+            )
+        }
     }
 }
 

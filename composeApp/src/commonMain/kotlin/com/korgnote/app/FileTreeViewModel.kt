@@ -4,11 +4,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import kotlinx.datetime.LocalDate
 
 /**
  * Simple ViewModel holding the fake file tree and the selected file name.
  * The fake data itself remains unchanged; it is just moved out of the Composable.
  */
+
+data class ScheduledEntry(
+    val title: String,
+    val date: LocalDate,
+    val fileName: String,
+    val line: String
+)
+
 class FileTreeViewModel : ViewModel() {
     // Fake tree data (moved from App.kt)
     val tree: Folder = Folder(
@@ -22,7 +31,8 @@ class FileTreeViewModel : ViewModel() {
                         children = listOf(
                             File("inbox.org"),
                             File("next-actions.org"),
-                            File("calendar.org")
+                            File("calendar.org"),
+                            File("sep-2025.org")
                         )
                     ),
                     Folder(
@@ -87,8 +97,12 @@ class FileTreeViewModel : ViewModel() {
             is Folder -> {
                 val childMatches = node.children.mapNotNull { filterNode(it, queryLower) }
                 val selfMatches = node.name.lowercase().contains(queryLower)
-                if (selfMatches || childMatches.isNotEmpty()) Folder(node.name, childMatches) else null
+                if (selfMatches || childMatches.isNotEmpty()) Folder(
+                    node.name,
+                    childMatches
+                ) else null
             }
+
             else -> null
         }
     }
@@ -96,9 +110,10 @@ class FileTreeViewModel : ViewModel() {
     // Simple in-memory org-mode contents keyed by file name
     private val orgContents: Map<String, String> = mapOf(
         "inbox.org" to "* Inbox\n** TODO Capture an idea\nAdded: [2025-09-03 Wed 15:03]",
-        "next-actions.org" to "* Next Actions\n** TODO Implement Org preview in app\nSCHEDULED: <2025-09-04 Thu>",
-        "calendar.org" to "* Calendar\n** 2025\n*** 2025-09-10 Team sync\n*** 2025-09-15 Release planning",
-        "korgnote.org" to "* Project KorgNote\n** Goals\n- Cross-platform Org viewer\n** Tasks\n- [ ] Show content on select",
+        "next-actions.org" to "* Next Actions\n** TODO Implement Org preview in app\nSCHEDULED: <2025-09-04 Thu>\n** TODO Review release notes\nSCHEDULED: <2025-09-21 Sun>",
+        "calendar.org" to "* Calendar\n** 2025\n*** Team sync\nSCHEDULED: <2025-09-10 Wed>\n*** Release planning\nSCHEDULED: <2025-09-15 Mon>",
+        "sep-2025.org" to "* September 2025\n** TODO Kickoff Q4 planning\nSCHEDULED: <2025-09-10 Wed>\n** DONE Submit budget proposal\nSCHEDULED: <2025-09-15 Mon>\n** TODO Write blog post\nSCHEDULED: <2025-09-21 Sun>\n** TODO End of month review\nSCHEDULED: <2025-09-30 Tue>",
+        "korgnote.org" to "* Project KorgNote\n** Goals\n- Cross-platform Org viewer\n** Tasks\n- [ ] Show content on select\n** TODO Calendar markers\nSCHEDULED: <2025-09-18 Thu>",
         "website-redesign.org" to "* Website Redesign\n** Milestones\n- [ ] Wireframes\n- [ ] Prototype\n- [ ] Launch",
         "research-notes.org" to "* Research Notes\n- Compose Multiplatform\n- Org-mode parsing",
         "2024-12-31.org" to "* Journal 2024-12-31\n- Reflect on the year",
@@ -115,8 +130,48 @@ class FileTreeViewModel : ViewModel() {
     var selectedFileContent by mutableStateOf("")
         private set
 
+    // Map of scheduled entries by LocalDate, computed from all fake org contents
+    val scheduledByDate: Map<LocalDate, List<ScheduledEntry>> = buildScheduledIndex(orgContents)
+
     fun onFileSelected(name: String) {
         selectedFileLabel = "Selected: $name"
         selectedFileContent = orgContents[name] ?: "* ${'$'}name\nNo content yet."
+    }
+
+    private fun buildScheduledIndex(contents: Map<String, String>): Map<LocalDate, List<ScheduledEntry>> {
+        val regex = Regex("SCHEDULED:\\s*<([0-9]{4})-([0-9]{2})-([0-9]{2})")
+        val titleRegex = Regex("^(\\*+)\\s+(.*)")
+        val result = mutableMapOf<LocalDate, MutableList<ScheduledEntry>>()
+        for ((fileName, text) in contents) {
+            var currentTitle = ""
+            for (line in text.lineSequence()) {
+                val heading = titleRegex.find(line.trim())
+                if (heading != null) {
+                    currentTitle = heading.groupValues[2].trim()
+                }
+                val m = regex.find(line)
+                if (m != null) {
+                    val y = m.groupValues[1].toInt()
+                    val mo = m.groupValues[2].toInt()
+                    val d = m.groupValues[3].toInt()
+                    val date = LocalDate(y, mo, d)
+                    val entry = ScheduledEntry(
+                        title = currentTitle.ifBlank { fileName },
+                        date = date,
+                        fileName = fileName,
+                        line = line.trim()
+                    )
+                    result.getOrPut(date) { mutableListOf() }.add(entry)
+                }
+            }
+        }
+        // sort entries per date by fileName/title for deterministic order
+        return result.mapValues { (_, list) ->
+            list.sortedWith(
+                compareBy(
+                    { it.fileName },
+                    { it.title })
+            )
+        }
     }
 }
