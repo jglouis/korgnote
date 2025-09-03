@@ -28,6 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.home
 import korgnote.composeapp.generated.resources.info
@@ -42,7 +43,6 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 fun App() {
     MaterialTheme {
         var selected by remember { mutableStateOf(BottomItem.HOME) }
-        var selectedFile by remember { mutableStateOf("No file selected") }
         val drawerState =
             androidx.compose.material3.rememberDrawerState(initialValue = androidx.compose.material3.DrawerValue.Closed)
         val scope = rememberCoroutineScope()
@@ -53,53 +53,10 @@ fun App() {
                     Column(modifier = Modifier.padding(8.dp)) {
                         Text("Files", style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.width(8.dp))
-                        val tree = Folder(
-                            name = "Documents",
-                            children = listOf(
-                                Folder(
-                                    name = "Projects",
-                                    children = listOf(
-                                        Folder(
-                                            name = "KorgNote",
-                                            children = listOf(
-                                                File("README.md"),
-                                                File("Design.md"),
-                                                Folder(
-                                                    name = "assets",
-                                                    children = listOf(
-                                                        File("icon.png"),
-                                                        File("banner.jpg")
-                                                    )
-                                                )
-                                            )
-                                        ),
-                                        File("todo.txt")
-                                    )
-                                ),
-                                Folder(
-                                    name = "Photos",
-                                    children = listOf(
-                                        Folder(
-                                            name = "2023",
-                                            children = listOf(
-                                                File("vacation-1.jpg"),
-                                                File("vacation-2.jpg")
-                                            )
-                                        ),
-                                        Folder(
-                                            name = "2024",
-                                            children = listOf(
-                                                File("family.png")
-                                            )
-                                        )
-                                    )
-                                ),
-                                File("notes.txt")
-                            )
-                        )
+                        val vm = viewModel<FileTreeViewModel>()
                         FileTree(
-                            root = tree,
-                            onFileSelected = { name -> selectedFile = "Selected: $name" }
+                            root = vm.tree,
+                            onFileSelected = { name -> vm.onFileSelected(name) }
                         )
                     }
                 }
@@ -146,7 +103,9 @@ fun App() {
                 ) {
                     Text(text = selected.getLabel(), style = MaterialTheme.typography.titleLarge)
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(text = selectedFile)
+                    // Reflect selection from ViewModel in UI
+                    val vmUi = viewModel<FileTreeViewModel>()
+                    Text(text = vmUi.selectedFileLabel)
                 }
             }
         }
