@@ -21,6 +21,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -59,8 +60,15 @@ fun App() {
                     Column(modifier = Modifier.padding(8.dp)) {
                         Text("Files", style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.width(8.dp))
+                        OutlinedTextField(
+                            value = vm.filterQuery,
+                            onValueChange = { vm.filterQuery = it },
+                            label = { Text("Filter files") },
+                            singleLine = true
+                        )
+                        Spacer(Modifier.width(8.dp))
                         FileTree(
-                            root = vm.tree,
+                            root = vm.filteredTree,
                             onFileSelected = { name ->
                                 scope.launch {
                                     vm.onFileSelected(name)

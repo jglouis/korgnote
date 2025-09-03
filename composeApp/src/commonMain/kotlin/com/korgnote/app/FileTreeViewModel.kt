@@ -64,6 +64,35 @@ class FileTreeViewModel : ViewModel() {
         )
     )
 
+    // Filter query for the file tree
+    var filterQuery by mutableStateOf("")
+
+    // Computed filtered tree based on the filter query
+    val filteredTree: Folder
+        get() {
+            val q = filterQuery.trim()
+            if (q.isEmpty()) return tree
+            val filtered = filterNode(tree, q.lowercase())
+            return when (filtered) {
+                is Folder -> filtered
+                is File -> Folder(name = tree.name, children = listOf(filtered))
+                null -> Folder(name = tree.name, children = emptyList())
+                else -> Folder(name = tree.name, children = emptyList())
+            }
+        }
+
+    private fun filterNode(node: Node, queryLower: String): Node? {
+        return when (node) {
+            is File -> if (node.name.lowercase().contains(queryLower)) node else null
+            is Folder -> {
+                val childMatches = node.children.mapNotNull { filterNode(it, queryLower) }
+                val selfMatches = node.name.lowercase().contains(queryLower)
+                if (selfMatches || childMatches.isNotEmpty()) Folder(node.name, childMatches) else null
+            }
+            else -> null
+        }
+    }
+
     // Simple in-memory org-mode contents keyed by file name
     private val orgContents: Map<String, String> = mapOf(
         "inbox.org" to "* Inbox\n** TODO Capture an idea\nAdded: [2025-09-03 Wed 15:03]",
