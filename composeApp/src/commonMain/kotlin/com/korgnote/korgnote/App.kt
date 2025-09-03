@@ -59,7 +59,12 @@ fun App() {
                         Spacer(Modifier.width(8.dp))
                         FileTree(
                             root = vm.tree,
-                            onFileSelected = { name -> vm.onFileSelected(name) }
+                            onFileSelected = { name ->
+                                scope.launch {
+                                    vm.onFileSelected(name)
+                                    drawerState.close()
+                                }
+                            }
                         )
                     }
                 }
@@ -104,7 +109,10 @@ fun App() {
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(text = selectedScreen.getLabel(), style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        text = selectedScreen.getLabel(),
+                        style = MaterialTheme.typography.titleLarge
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
                     // Reflect selection from ViewModel in UI
                     Text(text = vm.selectedFileLabel)
