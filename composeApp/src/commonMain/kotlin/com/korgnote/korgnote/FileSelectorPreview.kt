@@ -27,23 +27,24 @@ import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 // A simple in-memory model for preview/demo purposes
-private sealed interface Node {
+sealed interface Node {
     val name: String
 }
 
-private data class Folder(override val name: String, val children: List<Node>) : Node
-private data class File(override val name: String) : Node
+data class Folder(override val name: String, val children: List<Node>) : Node
+data class File(override val name: String) : Node
 
 @Composable
-private fun FileTree(
+fun FileTree(
     root: Folder,
+    onFileSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Track expanded state by node identity (here by object reference via Any hash)
     val expandedMap = remember { mutableStateMapOf<Folder, Boolean>() }
 
     Column(modifier = modifier) {
-        TreeFolderItem(folder = root, depth = 0, expandedMap = expandedMap)
+        TreeFolderItem(folder = root, depth = 0, expandedMap = expandedMap, onFileSelected = onFileSelected)
     }
 }
 
@@ -52,6 +53,7 @@ private fun TreeFolderItem(
     folder: Folder,
     depth: Int,
     expandedMap: MutableMap<Folder, Boolean>,
+    onFileSelected: (String) -> Unit,
 ) {
     val isExpanded = expandedMap[folder] ?: true // root expanded by default
 
@@ -79,18 +81,19 @@ private fun TreeFolderItem(
     if (isExpanded) {
         folder.children.forEach { child ->
             when (child) {
-                is Folder -> TreeFolderItem(child, depth + 1, expandedMap)
-                is File -> TreeFileItem(child, depth + 1)
+                is Folder -> TreeFolderItem(child, depth + 1, expandedMap, onFileSelected)
+                is File -> TreeFileItem(child, depth + 1, onFileSelected)
             }
         }
     }
 }
 
 @Composable
-private fun TreeFileItem(file: File, depth: Int) {
+private fun TreeFileItem(file: File, depth: Int, onFileSelected: (String) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable { onFileSelected(file.name) }
             .padding(horizontal = 8.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.Start
     ) {
@@ -151,7 +154,7 @@ fun FileSelector_Preview() {
 
     MaterialTheme {
         Surface {
-            FileTree(root = sample, modifier = Modifier.padding(8.dp))
+            FileTree(root = sample, onFileSelected = {}, modifier = Modifier.padding(8.dp))
         }
     }
 }
