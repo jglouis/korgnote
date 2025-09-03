@@ -1,5 +1,6 @@
 package com.korgnote.app
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -33,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 // A simple in-memory model for preview/demo purposes
-sealed interface Node {
+interface Node {
     val name: String
 }
 
@@ -99,7 +100,7 @@ private fun TreeFolderItem(
     }
     HorizontalDivider()
 
-    androidx.compose.animation.AnimatedVisibility(
+    AnimatedVisibility(
         visible = isExpanded,
         enter = expandVertically() + fadeIn(),
         exit = shrinkVertically() + fadeOut(),
