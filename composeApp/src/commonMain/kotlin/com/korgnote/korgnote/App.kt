@@ -17,6 +17,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -50,10 +52,10 @@ fun App() {
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val scope = rememberCoroutineScope()
         val vm = viewModel { FileTreeViewModel() }
-        androidx.compose.material3.ModalNavigationDrawer(
+        ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {
-                androidx.compose.material3.ModalDrawerSheet(modifier = Modifier.width(280.dp)) {
+                ModalDrawerSheet(modifier = Modifier.width(280.dp)) {
                     Column(modifier = Modifier.padding(8.dp)) {
                         Text("Files", style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.width(8.dp))
