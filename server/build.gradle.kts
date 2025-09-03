@@ -4,10 +4,10 @@ plugins {
     application
 }
 
-group = "com.korgnote.korgnote"
+group = "com.korgnote.server"
 version = "1.0.0"
 application {
-    mainClass.set("com.korgnote.korgnote.ApplicationKt")
+    mainClass.set("com.korgnote.server.ApplicationKt")
 
     val isDevelopment: Boolean = project.ext.has("development")
     applicationDefaultJvmArgs = listOf("-Dio.ktor.development=$isDevelopment")

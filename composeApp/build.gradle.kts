@@ -63,11 +63,11 @@ kotlin {
 }
 
 android {
-    namespace = "com.korgnote.korgnote"
+    namespace = "com.korgnote.app"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.korgnote.korgnote"
+        applicationId = "com.korgnote.app"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
@@ -95,11 +95,11 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "com.korgnote.korgnote.MainKt"
+        mainClass = "com.korgnote.app.MainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "com.korgnote.korgnote"
+            packageName = "com.korgnote.app"
             packageVersion = "1.0.0"
         }
     }
