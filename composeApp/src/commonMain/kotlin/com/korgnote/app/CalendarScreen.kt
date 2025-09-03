@@ -42,20 +42,24 @@ import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
+import org.jetbrains.compose.ui.tooling.preview.Preview
 
 @Composable
 fun CalendarScreen(
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier.background(MaterialTheme.colorScheme.surface),
     scheduledByDate: Map<LocalDate, List<ScheduledEntry>> = emptyMap(),
-    onOpenScheduled: (ScheduledEntry) -> Unit = {}
+    onOpenScheduled: (ScheduledEntry) -> Unit = {},
+    initialMode: CalendarMode? = null,
+    initialAnchorDate: LocalDate? = null,
+    initialDialogDate: LocalDate? = null
 ) {
     var today by remember {
         mutableStateOf(
             Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
         )
     }
-    var anchorDate by remember { mutableStateOf(today) }
-    var mode by remember { mutableStateOf(CalendarMode.Month) }
+    var anchorDate by remember { mutableStateOf(initialAnchorDate ?: today) }
+    var mode by remember { mutableStateOf(initialMode ?: CalendarMode.Month) }
 
     Column(modifier = modifier.padding(8.dp)) {
         // Header with month/year and navigation
@@ -137,7 +141,7 @@ fun CalendarScreen(
 
         Spacer(Modifier.height(4.dp))
 
-        var dialogDate by remember { mutableStateOf<LocalDate?>(null) }
+        var dialogDate by remember { mutableStateOf(initialDialogDate) }
         val dialogEntries = dialogDate?.let { scheduledByDate[it] }
 
         Box(
@@ -348,4 +352,75 @@ private fun LocalDate.startOfWeek(): LocalDate {
     // Assume Monday as first day
     val dayIndex = (this.dayOfWeek.isoDayNumber - 1) // 0..6
     return this.minus(dayIndex, DateTimeUnit.DAY)
+}
+
+
+// -----------------------
+// Previews
+// -----------------------
+
+private fun previewSampleScheduled(): Map<LocalDate, List<ScheduledEntry>> {
+    // Fixed sample data focused on September 2025
+    val d1 = LocalDate(2025, 9, 10)
+    val d2 = LocalDate(2025, 9, 15)
+    val d3 = LocalDate(2025, 9, 21)
+    val d4 = LocalDate(2025, 9, 30)
+    return mapOf(
+        d1 to listOf(
+            ScheduledEntry("TODO Kickoff Q4 planning", d1, "sep-2025.org", "SCHEDULED: <2025-09-10 Wed>")
+        ),
+        d2 to listOf(
+            ScheduledEntry("DONE Submit budget proposal", d2, "sep-2025.org", "SCHEDULED: <2025-09-15 Mon>")
+        ),
+        d3 to listOf(
+            ScheduledEntry("TODO Write blog post", d3, "next-actions.org", "SCHEDULED: <2025-09-21 Sun>")
+        ),
+        d4 to listOf(
+            ScheduledEntry("TODO End of month review", d4, "sep-2025.org", "SCHEDULED: <2025-09-30 Tue>")
+        )
+    )
+}
+
+@Preview
+@Composable
+private fun Preview_Calendar_Month_NoDialog() {
+    CalendarScreen(
+        scheduledByDate = previewSampleScheduled(),
+        initialMode = CalendarMode.Month,
+        initialAnchorDate = LocalDate(2025, 9, 15)
+    )
+}
+
+@Preview
+@Composable
+private fun Preview_Calendar_Week_NoDialog() {
+    CalendarScreen(
+        scheduledByDate = previewSampleScheduled(),
+        initialMode = CalendarMode.Week,
+        initialAnchorDate = LocalDate(2025, 9, 15)
+    )
+}
+
+@Preview
+@Composable
+private fun Preview_Calendar_Month_WithDialog() {
+    val dateWithEntries = LocalDate(2025, 9, 10)
+    CalendarScreen(
+        scheduledByDate = previewSampleScheduled(),
+        initialMode = CalendarMode.Month,
+        initialAnchorDate = LocalDate(2025, 9, 1),
+        initialDialogDate = dateWithEntries
+    )
+}
+
+@Preview
+@Composable
+private fun Preview_Calendar_Week_WithDialog() {
+    val dateWithEntries = LocalDate(2025, 9, 21)
+    CalendarScreen(
+        scheduledByDate = previewSampleScheduled(),
+        initialMode = CalendarMode.Week,
+        initialAnchorDate = LocalDate(2025, 9, 21),
+        initialDialogDate = dateWithEntries
+    )
 }
