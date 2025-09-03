@@ -46,6 +46,7 @@ fun App() {
         val drawerState =
             androidx.compose.material3.rememberDrawerState(initialValue = androidx.compose.material3.DrawerValue.Closed)
         val scope = rememberCoroutineScope()
+        val vm = viewModel { FileTreeViewModel() }
         androidx.compose.material3.ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {
@@ -53,7 +54,6 @@ fun App() {
                     Column(modifier = Modifier.padding(8.dp)) {
                         Text("Files", style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.width(8.dp))
-                        val vm = viewModel<FileTreeViewModel>()
                         FileTree(
                             root = vm.tree,
                             onFileSelected = { name -> vm.onFileSelected(name) }
@@ -104,8 +104,7 @@ fun App() {
                     Text(text = selected.getLabel(), style = MaterialTheme.typography.titleLarge)
                     Spacer(modifier = Modifier.height(12.dp))
                     // Reflect selection from ViewModel in UI
-                    val vmUi = viewModel<FileTreeViewModel>()
-                    Text(text = vmUi.selectedFileLabel)
+                    Text(text = vm.selectedFileLabel)
                 }
             }
         }
