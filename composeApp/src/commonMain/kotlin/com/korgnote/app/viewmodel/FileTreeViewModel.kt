@@ -23,6 +23,7 @@ data class ScheduledEntry(
 )
 
 class FileTreeViewModel : ViewModel() {
+    private var _currentFile: String? = null
     // Fake tree data (moved from App.kt)
     val tree: Folder = Folder(
         name = "Documents",
@@ -112,7 +113,7 @@ class FileTreeViewModel : ViewModel() {
     }
 
     // Simple in-memory org-mode contents keyed by file name
-    private val orgContents: Map<String, String> = mapOf(
+    private val orgContents: MutableMap<String, String> = mutableMapOf(
         "inbox.org" to "* Inbox\n** TODO Capture an idea\nAdded: [2025-09-03 Wed 15:03]",
         "next-actions.org" to "* Next Actions\n** TODO Implement Org preview in app\nSCHEDULED: <2025-09-04 Thu>\n** TODO Review release notes\nSCHEDULED: <2025-09-21 Sun>",
         "calendar.org" to "* Calendar\n** 2025\n*** Team sync\nSCHEDULED: <2025-09-10 Wed>\n*** Release planning\nSCHEDULED: <2025-09-15 Mon>",
@@ -137,9 +138,34 @@ class FileTreeViewModel : ViewModel() {
     // Map of scheduled entries by LocalDate, computed from all fake org contents
     val scheduledByDate: Map<LocalDate, List<ScheduledEntry>> = buildScheduledIndex(orgContents)
 
+    fun toggleCheckboxAt(lineIndex: Int, checked: Boolean) {
+        val file = _currentFile ?: return
+        val content = orgContents[file] ?: return
+        val lines = content.split('\n').toMutableList()
+        if (lineIndex !in lines.indices) return
+        val line = lines[lineIndex]
+        val regex = Regex("^(\\s*)- \\[([ xX])](.*)")
+        val m = regex.find(line) ?: return
+        val leading = m.groupValues[1]
+        val rest = m.groupValues[3]
+        val newMark = if (checked) "X" else " "
+        val newLine = buildString {
+            append(leading)
+            append("- [")
+            append(newMark)
+            append("]")
+            append(rest)
+        }
+        lines[lineIndex] = newLine
+        val updated = lines.joinToString("\n")
+        orgContents[file] = updated
+        selectedFileContent = updated
+    }
+
     fun onFileSelected(name: String) {
         selectedFileLabel = "Selected: $name"
-        selectedFileContent = orgContents[name] ?: "* ${'$'}name\nNo content yet."
+        selectedFileContent = orgContents[name] ?: "* ${name}\nNo content yet."
+        _currentFile = name
     }
 
     private fun buildScheduledIndex(contents: Map<String, String>): Map<LocalDate, List<ScheduledEntry>> {

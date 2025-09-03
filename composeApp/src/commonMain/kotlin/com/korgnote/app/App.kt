@@ -139,7 +139,10 @@ fun App() {
                                 // Reflect selection from ViewModel in UI
                                 Text(text = vm.selectedFileLabel)
                                 Spacer(modifier = Modifier.height(16.dp))
-                                OrgText(content = vm.selectedFileContent.ifBlank { "Select an .org file to view its content" })
+                                OrgText(
+                                                                    content = vm.selectedFileContent.ifBlank { "Select an .org file to view its content" },
+                                                                    onToggleCheckbox = { lineIndex, checked -> vm.toggleCheckboxAt(lineIndex, checked) }
+                                                                )
                             }
 
                             BottomItem.CALENDAR -> {

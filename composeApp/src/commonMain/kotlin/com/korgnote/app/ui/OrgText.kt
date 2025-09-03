@@ -1,6 +1,10 @@
 package com.korgnote.app.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -12,22 +16,53 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
 
 @Composable
-fun OrgText(content: String, modifier: Modifier = Modifier) {
+fun OrgText(
+    content: String,
+    modifier: Modifier = Modifier,
+    onToggleCheckbox: ((lineIndex: Int, checked: Boolean) -> Unit)? = null,
+) {
     val lines = content.split('\n')
     Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
-        lines.forEach { raw ->
+        lines.forEachIndexed { index, raw ->
             val (isHeading, level, text) = parseHeading(raw)
-            val annotated = buildOrgAnnotatedString(text)
-            val baseStyle = when {
-                isHeading && level == 1 -> MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                isHeading && level == 2 -> MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                isHeading && level >= 3 -> MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-                else -> MaterialTheme.typography.bodyMedium
+            // Detect checkbox list item: - [ ] or - [X]/[x]
+            val cbMatch = Regex("^\\s*- \\[([ xX])]\\s*(.*)").find(text)
+            if (cbMatch != null) {
+                val mark = cbMatch.groupValues[1]
+                val itemText = cbMatch.groupValues[2]
+                val checked = mark.equals("x", ignoreCase = true)
+                CheckboxLine(
+                    checked = checked,
+                    text = itemText,
+                    onCheckedChange = { newValue -> onToggleCheckbox?.invoke(index, newValue) }
+                )
+            } else {
+                val annotated = buildOrgAnnotatedString(text)
+                val baseStyle = when {
+                    isHeading && level == 1 -> MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    isHeading && level == 2 -> MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    isHeading && level >= 3 -> MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    else -> MaterialTheme.typography.bodyMedium
+                }
+                Text(text = annotated, style = baseStyle)
             }
-            Text(text = annotated, style = baseStyle)
         }
+    }
+}
+
+@Composable
+private fun CheckboxLine(
+    checked: Boolean,
+    text: String,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked = checked, onCheckedChange = { newValue: Boolean -> onCheckedChange(newValue) })
+        Spacer(Modifier.width(6.dp))
+        Text(text = buildOrgAnnotatedString(text), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
