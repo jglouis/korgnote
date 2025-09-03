@@ -43,6 +43,15 @@ import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.ui.tooling.preview.Preview
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+
+const val SLIDE_DURATION_MS = 100
+const val FADE_DURATION_MS = 100
 
 @Composable
 fun CalendarScreen(
@@ -60,6 +69,7 @@ fun CalendarScreen(
     }
     var anchorDate by remember { mutableStateOf(initialAnchorDate ?: today) }
     var mode by remember { mutableStateOf(initialMode ?: CalendarMode.Month) }
+    var slideDirection by remember { mutableStateOf(0) } // -1 for left (next), +1 for right (prev)
 
     Column(modifier = modifier.padding(8.dp)) {
         // Header with month/year and navigation
@@ -83,7 +93,7 @@ fun CalendarScreen(
                     text = "Today",
                     modifier = Modifier
                         .padding(end = 8.dp)
-                        .clickable { anchorDate = today },
+                        .clickable { slideDirection = 0; anchorDate = today },
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -92,14 +102,14 @@ fun CalendarScreen(
                     contentDescription = "Previous",
                     modifier = Modifier
                         .size(28.dp)
-                        .clickable { anchorDate = mode.prev(anchorDate) }
+                        .clickable { slideDirection = 1; anchorDate = mode.prev(anchorDate) }
                 )
                 Icon(
                     Icons.Filled.ChevronRight,
                     contentDescription = "Next",
                     modifier = Modifier
                         .size(28.dp)
-                        .clickable { anchorDate = mode.next(anchorDate) }
+                        .clickable { slideDirection = -1; anchorDate = mode.next(anchorDate) }
                 )
             }
         }
@@ -113,12 +123,12 @@ fun CalendarScreen(
         ) {
             FilterChip(
                 selected = mode == CalendarMode.Week,
-                onClick = { mode = CalendarMode.Week },
+                onClick = { slideDirection = 0; mode = CalendarMode.Week },
                 label = { Text("Week") }
             )
             FilterChip(
                 selected = mode == CalendarMode.Month,
-                onClick = { mode = CalendarMode.Month },
+                onClick = { slideDirection = 0; mode = CalendarMode.Month },
                 label = { Text("Month") }
             )
         }
@@ -156,9 +166,11 @@ fun CalendarScreen(
                             if (triggered) return@detectHorizontalDragGestures
                             totalDx += dragAmount
                             if (totalDx <= -threshold) {
+                                slideDirection = -1
                                 anchorDate = mode.next(anchorDate)
                                 triggered = true
                             } else if (totalDx >= threshold) {
+                                slideDirection = 1
                                 anchorDate = mode.prev(anchorDate)
                                 triggered = true
                             }
@@ -174,21 +186,51 @@ fun CalendarScreen(
                     )
                 }
         ) {
-            when (mode) {
-                CalendarMode.Month -> MonthGrid(
-                    anchorDate = anchorDate,
-                    today = today,
-                    scheduledByDate = scheduledByDate
-                ) { d ->
-                    if (!scheduledByDate[d].isNullOrEmpty()) dialogDate = d
-                }
+            AnimatedContent(
+                targetState = Pair(mode, anchorDate),
+                transitionSpec = {
+                    val dir = slideDirection
+                    if (dir < 0) {
+                        slideIntoContainer(
+                            AnimatedContentTransitionScope.SlideDirection.Left,
+                            animationSpec = tween(SLIDE_DURATION_MS)
+                        ) + fadeIn(animationSpec = tween(SLIDE_DURATION_MS)) togetherWith
+                                slideOutOfContainer(
+                                    AnimatedContentTransitionScope.SlideDirection.Left,
+                                    animationSpec = tween(SLIDE_DURATION_MS)
+                                ) + fadeOut(animationSpec = tween(SLIDE_DURATION_MS))
+                    } else if (dir > 0) {
+                        slideIntoContainer(
+                            AnimatedContentTransitionScope.SlideDirection.Right,
+                            animationSpec = tween(SLIDE_DURATION_MS)
+                        ) + fadeIn(animationSpec = tween(SLIDE_DURATION_MS)) togetherWith
+                                slideOutOfContainer(
+                                    AnimatedContentTransitionScope.SlideDirection.Right,
+                                    animationSpec = tween(SLIDE_DURATION_MS)
+                                ) + fadeOut(animationSpec = tween(SLIDE_DURATION_MS))
+                    } else {
+                        fadeIn(animationSpec = tween(FADE_DURATION_MS)) togetherWith fadeOut(
+                            animationSpec = tween(FADE_DURATION_MS)
+                        )
+                    }
+                }, label = "calendarPager"
+            ) { (m, aDate) ->
+                when (m) {
+                    CalendarMode.Month -> MonthGrid(
+                        anchorDate = aDate,
+                        today = today,
+                        scheduledByDate = scheduledByDate
+                    ) { d ->
+                        if (!scheduledByDate[d].isNullOrEmpty()) dialogDate = d
+                    }
 
-                CalendarMode.Week -> WeekRow(
-                    anchorDate = anchorDate,
-                    today = today,
-                    scheduledByDate = scheduledByDate
-                ) { d ->
-                    if (!scheduledByDate[d].isNullOrEmpty()) dialogDate = d
+                    CalendarMode.Week -> WeekRow(
+                        anchorDate = aDate,
+                        today = today,
+                        scheduledByDate = scheduledByDate
+                    ) { d ->
+                        if (!scheduledByDate[d].isNullOrEmpty()) dialogDate = d
+                    }
                 }
             }
         }
@@ -224,7 +266,10 @@ fun CalendarScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(10.dp)
-                                        .background(MaterialTheme.colorScheme.primary, shape = CircleShape)
+                                        .background(
+                                            MaterialTheme.colorScheme.primary,
+                                            shape = CircleShape
+                                        )
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Text(
@@ -367,16 +412,36 @@ private fun previewSampleScheduled(): Map<LocalDate, List<ScheduledEntry>> {
     val d4 = LocalDate(2025, 9, 30)
     return mapOf(
         d1 to listOf(
-            ScheduledEntry("TODO Kickoff Q4 planning", d1, "sep-2025.org", "SCHEDULED: <2025-09-10 Wed>")
+            ScheduledEntry(
+                "TODO Kickoff Q4 planning",
+                d1,
+                "sep-2025.org",
+                "SCHEDULED: <2025-09-10 Wed>"
+            )
         ),
         d2 to listOf(
-            ScheduledEntry("DONE Submit budget proposal", d2, "sep-2025.org", "SCHEDULED: <2025-09-15 Mon>")
+            ScheduledEntry(
+                "DONE Submit budget proposal",
+                d2,
+                "sep-2025.org",
+                "SCHEDULED: <2025-09-15 Mon>"
+            )
         ),
         d3 to listOf(
-            ScheduledEntry("TODO Write blog post", d3, "next-actions.org", "SCHEDULED: <2025-09-21 Sun>")
+            ScheduledEntry(
+                "TODO Write blog post",
+                d3,
+                "next-actions.org",
+                "SCHEDULED: <2025-09-21 Sun>"
+            )
         ),
         d4 to listOf(
-            ScheduledEntry("TODO End of month review", d4, "sep-2025.org", "SCHEDULED: <2025-09-30 Tue>")
+            ScheduledEntry(
+                "TODO End of month review",
+                d4,
+                "sep-2025.org",
+                "SCHEDULED: <2025-09-30 Tue>"
+            )
         )
     )
 }
