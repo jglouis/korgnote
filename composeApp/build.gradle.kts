@@ -62,7 +62,7 @@ kotlin {
             // Ktor client
             implementation(libs.ktor.clientCore)
             implementation(libs.ktor.clientContentNegotiation)
-            implementation(libs.ktor.clientJson)
+            implementation(libs.ktor.serializationKotlinxJson)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
