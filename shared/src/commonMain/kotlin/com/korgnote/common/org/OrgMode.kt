@@ -7,7 +7,7 @@ interface OrgNode
 data class OrgDocument(val children: List<OrgNode>, val metadata: List<String>) : OrgNode
 
 // A section is a heading with its inline content (paragraph text after heading line until next heading).
-data class OrgSection(val title: String, val content: String) : OrgNode
+data class OrgSection(val title: String, val content: String, val todo: String? = null) : OrgNode
 
 // A flat list of items where each child is typically OrgRaw or OrgSection; bulletType is '-', '+', or '*'.
 data class OrgList(val bulletType: Char, val children: List<OrgNode>) : OrgNode
@@ -17,6 +17,9 @@ data class OrgKeyword(val content: String) : OrgNode
 
 // Any raw text paragraph or line content that doesn't fit another construct.
 data class OrgRaw(val content: String) : OrgNode
+
+// TODO state for headings is a free-form string (e.g., TODO, DONE, WAITING) defined by document metadata.
+// We intentionally avoid an enum to allow arbitrary states.
 
 // Checkbox list item like: - [ ] Task or - [X] Done
 // Only supports simple on/off state; nested states are out of scope for now.
@@ -69,8 +72,8 @@ fun String.toOrgDocument(): OrgDocument {
     fun parseList(start: Int, bullet: Char): Pair<OrgNode, Int> {
         val items = mutableListOf<OrgNode>()
         var idx = start
-        val itemRegex = Regex("^\\s*\\" + bullet + "\\s+(.*)")
-        val checkboxRegex = Regex("^\\s*\\" + bullet + "\\s+\\[([ xX])]\\s*(.*)")
+        val itemRegex = Regex("^\\s*\\$bullet\\s+(.*)")
+        val checkboxRegex = Regex("^\\s*\\$bullet\\s+\\[([ xX])]\\s*(.*)")
         while (idx < lines.size) {
             val l = lines[idx]
             val m = itemRegex.find(l) ?: break
@@ -92,8 +95,11 @@ fun String.toOrgDocument(): OrgDocument {
 
     fun parseSection(start: Int): Pair<OrgNode, Int> {
         val heading = lines[start]
-        val m = Regex("^(\\*+)\\s+(.*)").find(heading.trimEnd())
-        val title = m?.groupValues?.get(2) ?: heading.trim()
+        val m = Regex("^(\\*+)\\s+(?:([A-Z][A-Z0-9_-]*)\\s+)?(.*)").find(heading.trimEnd())
+        val token = m?.groupValues?.getOrNull(2)
+        val title = m?.groupValues?.getOrNull(4)?.ifBlank { null } ?: heading.trim()
+        // Capture TODO-like token as-is (arbitrary, defined by metadata)
+        val todo: String? = token
         val contentSb = StringBuilder()
         var idx = start + 1
         while (idx < lines.size) {
@@ -109,7 +115,7 @@ fun String.toOrgDocument(): OrgDocument {
             contentSb.appendLine(trim)
             idx++
         }
-        return OrgSection(title, contentSb.toString().trimEnd()) to idx
+        return OrgSection(title, contentSb.toString().trimEnd(), todo) to idx
     }
 
     while (i < lines.size) {
@@ -163,3 +169,35 @@ fun String.toOrgDocument(): OrgDocument {
 
     return OrgDocument(children, metadata)
 }
+
+// Represents parsed TODO workflow configuration from #+TODO metadata lines.
+data class OrgTodoConfig(val todo: Set<String>, val done: Set<String>)
+
+// Parse #+TODO metadata lines to extract TODO/DONE state sets.
+fun parseTodoConfigFrom(metadata: List<String>): OrgTodoConfig {
+    val todo = linkedSetOf<String>()
+    val done = linkedSetOf<String>()
+    val lineRegex = Regex("^#\\+TODO:\\s*(.*)", RegexOption.IGNORE_CASE)
+    for (line in metadata) {
+        val m = lineRegex.find(line.trim()) ?: continue
+        val spec = m.groupValues[1].trim()
+        // Split around first '|' if present
+        val parts = spec.split('|', limit = 2)
+        val left = parts.getOrNull(0)?.trim().orEmpty()
+        val right = parts.getOrNull(1)?.trim().orEmpty()
+        fun parseSide(side: String): List<String> {
+            if (side.isBlank()) return emptyList()
+            // Tokens like WORD(k) possibly repeated; also allow bare WORD
+            val tokenRegex = Regex("([A-Z][A-Z0-9_-]*)(?:\\([^)]*\\))?")
+            return tokenRegex.findAll(side).map { it.groupValues[1] }.toList()
+        }
+        parseSide(left).forEach { todo.add(it) }
+        parseSide(right).forEach { done.add(it) }
+    }
+    return OrgTodoConfig(todo, done)
+}
+
+// Convenience helpers to classify a section's state according to document metadata.
+fun OrgDocument.todoConfig(): OrgTodoConfig = parseTodoConfigFrom(this.metadata)
+fun OrgSection.isTodo(doc: OrgDocument): Boolean = this.todo != null && this.todo in doc.todoConfig().todo
+fun OrgSection.isDone(doc: OrgDocument): Boolean = this.todo != null && this.todo in doc.todoConfig().done
