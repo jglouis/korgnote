@@ -2,6 +2,8 @@ package com.korgnote.app
 
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import com.korgnote.app.data.PersistentSettingsRepository
+import com.korgnote.app.data.SettingsRepository
 
 fun main() = application {
     Window(
@@ -9,10 +11,10 @@ fun main() = application {
         title = "korgnote",
     ) {
         run {
-                val desktopModule = org.koin.dsl.module {
-                    single<com.korgnote.app.data.SettingsRepository> { com.korgnote.app.data.PersistentSettingsRepository() }
-                }
-                App(extraModules = listOf(desktopModule))
-                }
+            val desktopModule = org.koin.dsl.module {
+                single<SettingsRepository> { PersistentSettingsRepository() }
+            }
+            App(extraModules = listOf(desktopModule))
+        }
     }
 }
