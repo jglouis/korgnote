@@ -39,6 +39,8 @@ kotlin {
         androidMain.dependencies {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
+            // Ktor Android engine (choose exactly one)
+            implementation(libs.ktor.client.android)
         }
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -55,6 +57,10 @@ kotlin {
             implementation(libs.koin.core)
             implementation(libs.koin.compose)
             implementation(libs.koin.compose.viewmodel)
+            // Ktor client
+            implementation(libs.ktor.clientCore)
+            implementation(libs.ktor.clientContentNegotiation)
+            implementation(libs.ktor.clientJson)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -62,6 +68,15 @@ kotlin {
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
+            implementation(libs.ktor.clientJava)
+        }
+        iosMain.dependencies {
+            // Ktor iOS engine (Darwin)
+            implementation(libs.ktor.clientDarwin)
+        }
+        wasmJsMain.dependencies {
+            // Ktor JS engine for Wasm/JS target
+            implementation(libs.ktor.clientJs)
         }
     }
 }

@@ -32,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -60,6 +61,9 @@ fun App() {
             val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
             val scope = rememberCoroutineScope()
             val vm = koinViewModel<FileTreeViewModel>()
+            LaunchedEffect(Unit) {
+                vm.loadFromServer()
+            }
             ModalNavigationDrawer(
                 drawerState = drawerState,
                 gesturesEnabled = selectedScreen != BottomItem.CALENDAR,

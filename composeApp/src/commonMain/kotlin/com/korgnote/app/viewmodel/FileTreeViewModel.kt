@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import com.korgnote.app.data.OrgRepository
 import com.korgnote.app.ui.File
 import com.korgnote.app.ui.Folder
 import com.korgnote.app.ui.Node
@@ -11,8 +12,7 @@ import kotlinx.datetime.LocalDate
 import kotlin.collections.iterator
 
 /**
- * Simple ViewModel holding the fake file tree and the selected file name.
- * The fake data itself remains unchanged; it is just moved out of the Composable.
+ * Simple ViewModel that holds a file tree and uses a repository to fetch org contents.
  */
 
 data class ScheduledEntry(
@@ -22,60 +22,13 @@ data class ScheduledEntry(
     val line: String
 )
 
-class FileTreeViewModel : ViewModel() {
+class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     private var _currentFile: String? = null
-    // Fake tree data (moved from App.kt)
-    val tree: Folder = Folder(
-        name = "Documents",
-        children = listOf(
-            Folder(
-                name = "Org",
-                children = listOf(
-                    Folder(
-                        name = "Agenda",
-                        children = listOf(
-                            File("inbox.org"),
-                            File("next-actions.org"),
-                            File("calendar.org"),
-                            File("sep-2025.org")
-                        )
-                    ),
-                    Folder(
-                        name = "Projects",
-                        children = listOf(
-                            File("korgnote.org"),
-                            File("website-redesign.org"),
-                            File("research-notes.org")
-                        )
-                    ),
-                    Folder(
-                        name = "Journal",
-                        children = listOf(
-                            Folder(
-                                name = "2024",
-                                children = listOf(
-                                    File("2024-12-31.org")
-                                )
-                            ),
-                            Folder(
-                                name = "2025",
-                                children = listOf(
-                                    File("2025-01-01.org"),
-                                    File("2025-09-03.org")
-                                )
-                            )
-                        )
-                    ),
-                    Folder(
-                        name = "Reference",
-                        children = listOf(
-                            File("books.org"),
-                            File("quotes.org")
-                        )
-                    )
-                )
-            ),
-            File("notes.org")
+    // File tree populated from server; wrapped in state so UI recomposes
+    var tree by mutableStateOf(
+        Folder(
+            name = "Documents",
+            children = emptyList()
         )
     )
 
@@ -112,22 +65,8 @@ class FileTreeViewModel : ViewModel() {
         }
     }
 
-    // Simple in-memory org-mode contents keyed by file name
-    private val orgContents: MutableMap<String, String> = mutableMapOf(
-        "inbox.org" to "* Inbox\n** TODO Capture an idea\nAdded: [2025-09-03 Wed 15:03]",
-        "next-actions.org" to "* Next Actions\n** TODO Implement Org preview in app\nSCHEDULED: <2025-09-04 Thu>\n** TODO Review release notes\nSCHEDULED: <2025-09-21 Sun>",
-        "calendar.org" to "* Calendar\n** 2025\n*** Team sync\nSCHEDULED: <2025-09-10 Wed>\n*** Release planning\nSCHEDULED: <2025-09-15 Mon>",
-        "sep-2025.org" to "* September 2025\n** TODO Kickoff Q4 planning\nSCHEDULED: <2025-09-10 Wed>\n** DONE Submit budget proposal\nSCHEDULED: <2025-09-15 Mon>\n** TODO Write blog post\nSCHEDULED: <2025-09-21 Sun>\n** TODO End of month review\nSCHEDULED: <2025-09-30 Tue>",
-        "korgnote.org" to "* Project KorgNote\n** Goals\n- Cross-platform Org viewer\n** Tasks\n- [ ] Show content on select\n** TODO Calendar markers\nSCHEDULED: <2025-09-18 Thu>",
-        "website-redesign.org" to "* Website Redesign\n** Milestones\n- [ ] Wireframes\n- [ ] Prototype\n- [ ] Launch",
-        "research-notes.org" to "* Research Notes\n- Compose Multiplatform\n- Org-mode parsing",
-        "2024-12-31.org" to "* Journal 2024-12-31\n- Reflect on the year",
-        "2025-01-01.org" to "* Journal 2025-01-01\n- New beginnings",
-        "2025-09-03.org" to "* Journal 2025-09-03\n- Implemented Org content in app",
-        "books.org" to "* Books\n** Reading\n- The Pragmatic Programmer\n** Wishlist\n- Structure and Interpretation of Computer Programs",
-        "quotes.org" to "* Quotes\n** Alan Kay\n> The best way to predict the future is to invent it.",
-        "notes.org" to "* Notes\nMiscellaneous notes"
-    )
+    // Simple in-memory org-mode contents keyed by file name. Will be replaced by server data.
+    private val orgContents: MutableMap<String, String> = mutableMapOf()
 
     var selectedFileLabel by mutableStateOf("No file selected")
         private set
@@ -135,8 +74,8 @@ class FileTreeViewModel : ViewModel() {
     var selectedFileContent by mutableStateOf("")
         private set
 
-    // Map of scheduled entries by LocalDate, computed from all fake org contents
-    val scheduledByDate: Map<LocalDate, List<ScheduledEntry>> = buildScheduledIndex(orgContents)
+    // Map of scheduled entries by LocalDate, computed from all contents
+    var scheduledByDate by mutableStateOf<Map<LocalDate, List<ScheduledEntry>>>(buildScheduledIndex(orgContents))
 
     fun toggleCheckboxAt(lineIndex: Int, checked: Boolean) {
         val file = _currentFile ?: return
@@ -166,6 +105,56 @@ class FileTreeViewModel : ViewModel() {
         selectedFileLabel = "Selected: $name"
         selectedFileContent = orgContents[name] ?: "* ${name}\nNo content yet."
         _currentFile = name
+    }
+
+    // Load tree paths and contents from server repository and update state
+    suspend fun loadFromServer() {
+        try {
+            val paths = repository.fetchTreePaths()
+            val data = repository.fetchAllContents()
+            orgContents.clear()
+            orgContents.putAll(data)
+            tree = buildTreeFromPaths(paths)
+            scheduledByDate = buildScheduledIndex(orgContents)
+            if (_currentFile == null) {
+                val first = data.keys.sorted().firstOrNull()
+                if (first != null) onFileSelected(first)
+            } else {
+                _currentFile?.let { current ->
+                    selectedFileContent = orgContents[current] ?: selectedFileContent
+                }
+            }
+        } catch (t: Throwable) {
+            // Keep local fallback content on error; could set an error state if needed
+        }
+    }
+
+    private fun buildTreeFromPaths(paths: List<String>): Folder {
+        class FolderBuilder(val name: String) {
+            val folders = mutableMapOf<String, FolderBuilder>()
+            val files = mutableSetOf<String>()
+        }
+        val root = FolderBuilder("Documents")
+        for (raw in paths) {
+            val parts = raw.split('/').filter { it.isNotBlank() }
+            if (parts.isEmpty()) continue
+            var cursor = root
+            for (i in parts.indices) {
+                val segment = parts[i]
+                if (i == parts.lastIndex) {
+                    // last segment -> a file
+                    cursor.files.add(segment)
+                } else {
+                    cursor = cursor.folders.getOrPut(segment) { FolderBuilder(segment) }
+                }
+            }
+        }
+        fun toNode(b: FolderBuilder): Folder {
+            val childFolders = b.folders.values.sortedBy { it.name }.map { toNode(it) }
+            val childFiles = b.files.sorted().map { File(it) }
+            return Folder(b.name, childFolders + childFiles)
+        }
+        return toNode(root)
     }
 
     private fun buildScheduledIndex(contents: Map<String, String>): Map<LocalDate, List<ScheduledEntry>> {
