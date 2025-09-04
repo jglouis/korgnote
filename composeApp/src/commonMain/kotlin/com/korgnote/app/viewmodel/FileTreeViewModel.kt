@@ -26,7 +26,7 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     // Exposed error message when network/server cannot be reached
     var lastErrorMessage by mutableStateOf("")
         private set
-    private var _currentFile: String? = null
+    private var currentFile: String? = null
     // File tree populated from server; wrapped in state so UI recomposes
     var tree by mutableStateOf(
         Folder(
@@ -43,8 +43,7 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         get() {
             val q = filterQuery.trim()
             if (q.isEmpty()) return tree
-            val filtered = filterNode(tree, q.lowercase())
-            return when (filtered) {
+            return when (val filtered = filterNode(tree, q.lowercase())) {
                 is Folder -> filtered
                 is File -> Folder(name = tree.name, children = listOf(filtered))
                 null -> Folder(name = tree.name, children = emptyList())
@@ -78,10 +77,10 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         private set
 
     // Map of scheduled entries by LocalDate, computed from all contents
-    var scheduledByDate by mutableStateOf<Map<LocalDate, List<ScheduledEntry>>>(buildScheduledIndex(orgContents))
+    var scheduledByDate by mutableStateOf(buildScheduledIndex(orgContents))
 
     fun toggleCheckboxAt(lineIndex: Int, checked: Boolean) {
-        val file = _currentFile ?: return
+        val file = currentFile ?: return
         val content = orgContents[file] ?: return
         val lines = content.split('\n').toMutableList()
         if (lineIndex !in lines.indices) return
@@ -107,7 +106,7 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     fun onFileSelected(name: String) {
         selectedFileLabel = "Selected: $name"
         selectedFileContent = orgContents[name] ?: "* ${name}\nNo content yet."
-        _currentFile = name
+        currentFile = name
     }
 
     // Load tree paths and contents from server repository and update state
@@ -121,11 +120,11 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
             scheduledByDate = buildScheduledIndex(orgContents)
             // clear error on success
             clearError()
-            if (_currentFile == null) {
+            if (currentFile == null) {
                 val first = data.keys.minOrNull()
                 if (first != null) onFileSelected(first)
             } else {
-                _currentFile?.let { current ->
+                currentFile?.let { current ->
                     selectedFileContent = orgContents[current] ?: selectedFileContent
                 }
             }
@@ -134,7 +133,7 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
             orgContents.clear()
             tree = Folder(name = "Documents", children = emptyList())
             scheduledByDate = buildScheduledIndex(orgContents)
-            _currentFile = null
+            currentFile = null
             selectedFileLabel = "No file selected"
             selectedFileContent = ""
             // Surface a friendly message to the UI

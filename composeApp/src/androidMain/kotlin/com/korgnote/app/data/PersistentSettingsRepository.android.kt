@@ -30,7 +30,10 @@ class PersistentSettingsRepository(appContext: Context) : SettingsRepository {
     }
 
     private fun loadHost(): String {
-        val def = defaultServerBaseUrl().removePrefix("http://").removePrefix("https://").substringBefore(":")
+        val def = defaultServerBaseUrl()
+            .removePrefix("http://")
+            .removePrefix("https://")
+            .substringBefore(":")
         return prefs.getString(KEY_HOST, def) ?: def
     }
 
