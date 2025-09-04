@@ -5,8 +5,9 @@ import android.content.SharedPreferences
 import com.korgnote.common.SERVER_PORT
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import androidx.core.content.edit
 
-class PersistentSettingsRepository(private val appContext: Context) : SettingsRepository {
+class PersistentSettingsRepository(appContext: Context) : SettingsRepository {
     private val prefs: SharedPreferences = appContext.getSharedPreferences("korgnote_settings", Context.MODE_PRIVATE)
 
     private val hostFlow = MutableStateFlow(loadHost())
@@ -20,12 +21,12 @@ class PersistentSettingsRepository(private val appContext: Context) : SettingsRe
 
     override fun setServerHost(host: String) {
         hostFlow.value = host
-        prefs.edit().putString(KEY_HOST, host).apply()
+        prefs.edit { putString(KEY_HOST, host) }
     }
 
     override fun setServerPort(port: Int) {
         portFlow.value = port
-        prefs.edit().putInt(KEY_PORT, port).apply()
+        prefs.edit { putInt(KEY_PORT, port) }
     }
 
     private fun loadHost(): String {

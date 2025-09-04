@@ -10,7 +10,7 @@ fun main() = application {
     ) {
         run {
                 val desktopModule = org.koin.dsl.module {
-                    single<com.korgnote.app.data.SettingsRepository> { com.korgnote.app.data.InMemorySettingsRepository() }
+                    single<com.korgnote.app.data.SettingsRepository> { com.korgnote.app.data.PersistentSettingsRepository() }
                 }
                 App(extraModules = listOf(desktopModule))
                 }
