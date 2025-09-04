@@ -15,11 +15,13 @@ import com.korgnote.app.data.buildBaseUrl
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(repo: SettingsRepository) {
+fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
     val scope = rememberCoroutineScope()
     var host by remember { mutableStateOf("") }
     var portText by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    var saved by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         host = repo.getServerHost()
@@ -49,7 +51,7 @@ fun SettingsScreen(repo: SettingsRepository) {
             Text(error!!)
         }
         Spacer(Modifier.height(12.dp))
-        Button(onClick = {
+        Button(enabled = !saving, onClick = {
             val port = portText.toIntOrNull()
             if (host.isBlank() || port == null || port !in 1..65535) {
                 error = "Please enter a valid host and port (1-65535)."
@@ -57,8 +59,18 @@ fun SettingsScreen(repo: SettingsRepository) {
             }
             error = null
             scope.launch {
-                repo.setServerHost(host.trim())
-                repo.setServerPort(port)
+                saving = true
+                try {
+                    repo.setServerHost(host.trim())
+                    repo.setServerPort(port)
+                    saved = true
+                    onSaved?.invoke()
+                } finally {
+                    // show saved feedback briefly
+                    kotlinx.coroutines.delay(1200)
+                    saved = false
+                    saving = false
+                }
             }
         }) {
             Text("Save")
@@ -70,6 +82,10 @@ fun SettingsScreen(repo: SettingsRepository) {
         }
         if (preview.isNotBlank()) {
             Text("Base URL: $preview")
+        }
+        if (saved) {
+            Spacer(Modifier.height(4.dp))
+            Text("Saved. Reloading…")
         }
     }
 }

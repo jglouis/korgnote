@@ -120,7 +120,7 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
             tree = buildTreeFromPaths(paths)
             scheduledByDate = buildScheduledIndex(orgContents)
             // clear error on success
-            lastErrorMessage = ""
+            clearError()
             if (_currentFile == null) {
                 val first = data.keys.minOrNull()
                 if (first != null) onFileSelected(first)
@@ -130,6 +130,13 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
                 }
             }
         } catch (t: Throwable) {
+            // Failure: clear previous data to avoid showing stale content
+            orgContents.clear()
+            tree = Folder(name = "Documents", children = emptyList())
+            scheduledByDate = buildScheduledIndex(orgContents)
+            _currentFile = null
+            selectedFileLabel = "No file selected"
+            selectedFileContent = ""
             // Surface a friendly message to the UI
             lastErrorMessage = friendlyErrorMessage(t)
             println("[DEBUG_LOG][FileTreeViewModel] Failed to load from server: ${t::class.simpleName}: ${t.message}")

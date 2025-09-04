@@ -171,7 +171,7 @@ fun App() {
 
                             BottomItem.SETTINGS -> {
                                 val settingsRepo = koinInject<SettingsRepository>()
-                                SettingsScreen(repo = settingsRepo)
+                                SettingsScreen(repo = settingsRepo, onSaved = { scope.launch { vm.loadFromServer() } })
                             }
                         }
                     }
