@@ -117,7 +117,7 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
             tree = buildTreeFromPaths(paths)
             scheduledByDate = buildScheduledIndex(orgContents)
             if (_currentFile == null) {
-                val first = data.keys.sorted().firstOrNull()
+                val first = data.keys.minOrNull()
                 if (first != null) onFileSelected(first)
             } else {
                 _currentFile?.let { current ->
@@ -126,6 +126,8 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
             }
         } catch (t: Throwable) {
             // Keep local fallback content on error; could set an error state if needed
+            println("[DEBUG_LOG][FileTreeViewModel] Failed to load from server: ${t::class.simpleName}: ${t.message}")
+            t.printStackTrace()
         }
     }
 

@@ -2,9 +2,7 @@ package com.korgnote.app.data
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
-import io.ktor.serialization.kotlinx.json.json
 
 class KtorOrgRepository(
     private val client: HttpClient,
@@ -20,9 +18,9 @@ class KtorOrgRepository(
     }
 
     companion object {
-        fun default(): HttpClient = HttpClient {
-            // Client only needs content negotiation; CORS is server-side
-            install(ContentNegotiation) { json() }
-        }
+        fun default(): HttpClient = platformBuildHttpClient()
     }
 }
+
+// Platform-specific client builder (Android adds Logging, others are minimal)
+expect fun platformBuildHttpClient(): HttpClient

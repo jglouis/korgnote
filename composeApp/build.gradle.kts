@@ -41,6 +41,8 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             // Ktor Android engine (choose exactly one)
             implementation(libs.ktor.client.android)
+            // Ktor client logging (debug diagnostics)
+            implementation(libs.ktor.clientLogging)
         }
         commonMain.dependencies {
             implementation(compose.runtime)

@@ -3,7 +3,6 @@ package com.korgnote.app.di
 import com.korgnote.app.data.KtorOrgRepository
 import com.korgnote.app.data.OrgRepository
 import com.korgnote.app.viewmodel.FileTreeViewModel
-import io.ktor.client.*
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.bind
 import org.koin.dsl.module
@@ -11,7 +10,7 @@ import org.koin.dsl.module
 // Simple Koin setup for Multiplatform Compose
 val appModule = module {
     // Provide a base URL pointing to local server (platform-aware)
-    single { com.korgnote.app.data.defaultServerBaseUrl() }
+    single { com.korgnote.app.data.defaultServerBaseUrl().also { println("[DEBUG_LOG][DI] Server base URL = $it") } }
     // Provide Ktor HttpClient with JSON plugin (base URL includes port; client itself is engine + JSON only)
     single { KtorOrgRepository.default() }
     // Repository implementation
