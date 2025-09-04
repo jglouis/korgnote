@@ -16,8 +16,7 @@ data class Folder(
     override val name: String,
     override val path: String,
     val children: List<Node>
-) : Node {
-}
+) : Node
 
 @Serializable
 @SerialName("file")

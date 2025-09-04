@@ -95,9 +95,11 @@ fun Application.module() {
         }
 
         // API endpoints kept under /api to avoid collision with index.html routing
-        // Keep legacy root endpoint for tests
-        get("/") {
-            call.respondText("Ktor: ${Greeting().greet()}")
+        // Serve index.html at root when WASM output exists; otherwise fall back to legacy greeting
+        if (wasmOut == null) {
+            get("/") {
+                call.respondText("Ktor: ${Greeting().greet()}")
+            }
         }
 
         route("/api") {
