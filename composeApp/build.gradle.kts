@@ -3,11 +3,11 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    alias(libs.plugins.kotlinMultiplatform)
-    alias(libs.plugins.androidApplication)
-    alias(libs.plugins.composeMultiplatform)
-    alias(libs.plugins.composeCompiler)
-    alias(libs.plugins.composeHotReload)
+    alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.compose.multiplatform)
+    alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.compose.hot.reload)
 }
 
 kotlin {
@@ -42,7 +42,7 @@ kotlin {
             // Ktor Android engine (choose exactly one)
             implementation(libs.ktor.client.android)
             // Ktor client logging (debug diagnostics)
-            implementation(libs.ktor.clientLogging)
+            implementation(libs.ktor.client.logging)
         }
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -52,33 +52,33 @@ kotlin {
             implementation(compose.components.resources)
             implementation(compose.materialIconsExtended)
             implementation(compose.components.uiToolingPreview)
-            implementation(libs.androidx.lifecycle.viewmodelCompose)
-            implementation(libs.androidx.lifecycle.runtimeCompose)
+            implementation(libs.androidx.lifecycle.viewmodel.compose)
+            implementation(libs.androidx.lifecycle.runtime.compose)
             implementation(projects.shared)
             implementation(libs.kotlinx.datetime)
             implementation(libs.koin.core)
             implementation(libs.koin.compose)
             implementation(libs.koin.compose.viewmodel)
             // Ktor client
-            implementation(libs.ktor.clientCore)
-            implementation(libs.ktor.clientContentNegotiation)
-            implementation(libs.ktor.serializationKotlinxJson)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.kotlinx.json)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
-            implementation(libs.kotlinx.coroutinesSwing)
-            implementation(libs.ktor.clientJava)
+            implementation(libs.kotlinx.coroutines.swing)
+            implementation(libs.ktor.client.java)
         }
         iosMain.dependencies {
             // Ktor iOS engine (Darwin)
-            implementation(libs.ktor.clientDarwin)
+            implementation(libs.ktor.client.darwin)
         }
         wasmJsMain.dependencies {
             // Ktor JS engine for Wasm/JS target
-            implementation(libs.ktor.clientJs)
+            implementation(libs.ktor.client.js)
         }
     }
 }
