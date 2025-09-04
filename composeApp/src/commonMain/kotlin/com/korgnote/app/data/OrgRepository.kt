@@ -1,9 +1,12 @@
 package com.korgnote.app.data
 
+import com.korgnote.common.fs.Folder
+import com.korgnote.common.org.OrgDocument
+
 interface OrgRepository {
     // Returns map of filename -> parsed OrgDocument
-    suspend fun fetchAllContents(): Map<String, com.korgnote.common.org.OrgDocument>
+    suspend fun fetchAllContents(): Map<String, OrgDocument>
 
     // Returns a serializable tree rooted at Documents
-    suspend fun fetchTree(): com.korgnote.common.fs.Folder
+    suspend fun fetchTree(): Folder
 }

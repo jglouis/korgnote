@@ -5,5 +5,3 @@ package com.korgnote.app.data
 // Common code declares expect; platforms provide actuals.
 internal expect fun defaultServerBaseUrl(): String
 
-// expect/actual declaration for platform name
-expect fun getPlatformName(): String

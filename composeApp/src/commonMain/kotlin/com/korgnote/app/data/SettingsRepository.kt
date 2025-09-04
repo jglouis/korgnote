@@ -13,8 +13,3 @@ interface SettingsRepository {
     fun setServerPort(port: Int)
 }
 
-// Helper to build base URL from host and port
-fun buildBaseUrl(host: String, port: Int): String {
-    val normalized = if (host.startsWith("http://") || host.startsWith("https://")) host else "http://$host"
-    return "$normalized:$port"
-}

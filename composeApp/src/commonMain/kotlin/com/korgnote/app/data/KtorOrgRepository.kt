@@ -1,5 +1,6 @@
 package com.korgnote.app.data
 
+import com.korgnote.common.fs.Folder
 import com.korgnote.common.org.OrgDocument
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -16,14 +17,7 @@ class KtorOrgRepository(
         return client.get("${baseUrl()}/api/org-content").body()
     }
 
-    override suspend fun fetchTree(): com.korgnote.common.fs.Folder {
+    override suspend fun fetchTree(): Folder {
         return client.get("${baseUrl()}/api/org-tree-paths").body()
     }
-
-    companion object {
-        fun default(): HttpClient = platformBuildHttpClient()
-    }
 }
-
-// Platform-specific client builder (Android adds Logging, others are minimal)
-expect fun platformBuildHttpClient(): HttpClient

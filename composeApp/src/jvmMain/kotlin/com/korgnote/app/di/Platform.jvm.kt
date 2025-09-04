@@ -1,4 +1,4 @@
-package com.korgnote.app.data
+package com.korgnote.app.di
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.java.Java

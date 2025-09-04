@@ -11,7 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.SettingsRepository
-import com.korgnote.app.data.buildBaseUrl
+import com.korgnote.app.di.buildBaseUrl
 import kotlinx.coroutines.launch
 
 @Composable

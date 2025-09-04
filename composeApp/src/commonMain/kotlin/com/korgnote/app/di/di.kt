@@ -3,8 +3,8 @@ package com.korgnote.app.di
 import com.korgnote.app.data.KtorOrgRepository
 import com.korgnote.app.data.OrgRepository
 import com.korgnote.app.data.SettingsRepository
-import com.korgnote.app.data.buildBaseUrl
 import com.korgnote.app.viewmodel.FileTreeViewModel
+import io.ktor.client.HttpClient
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.bind
 import org.koin.dsl.module
@@ -13,18 +13,14 @@ import org.koin.dsl.module
 val appModule = module {
 
     // Provide Ktor HttpClient with JSON plugin (base URL includes port; client itself is engine + JSON only)
-    single { KtorOrgRepository.default() }
-
-    // Provide dynamic base URL provider that reads from settings each call
-    single<() -> String> {
-        val repo = get<SettingsRepository>()
-        val provider: () -> String = { buildBaseUrl(repo.getServerHost(), repo.getServerPort()) }
-        println("[DEBUG_LOG][DI] Base URL provider installed")
-        provider
-    }
+    single { platformBuildHttpClient() }
 
     // Repository implementation
-    single { KtorOrgRepository(get(), get()) } bind OrgRepository::class
+    single {
+        val repo = get<SettingsRepository>()
+        val baseUrlProvider = { buildBaseUrl(repo.getServerHost(), repo.getServerPort()) }
+        KtorOrgRepository(get(), baseUrlProvider)
+    } bind OrgRepository::class
     // ViewModel uses repository
     viewModel { FileTreeViewModel(get<OrgRepository>()) }
 }
@@ -34,3 +30,12 @@ val appModule = module {
 //    startKoin {
 //        modules(appModule + additionalModules)
 //    }.koin
+
+// Helper to build base URL from host and port
+fun buildBaseUrl(host: String, port: Int): String {
+    val normalized = if (host.startsWith("http://") || host.startsWith("https://")) host else "http://$host"
+    return "$normalized:$port"
+}
+
+// Platform-specific client builder (Android adds Logging, others are minimal)
+expect fun platformBuildHttpClient(): HttpClient
