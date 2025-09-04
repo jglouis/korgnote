@@ -15,6 +15,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import java.io.File
+import java.nio.file.Paths
 
 fun main() {
     embeddedServer(Netty, port = SERVER_PORT, host = "0.0.0.0", module = Application::module)
@@ -60,15 +61,33 @@ fun Application.module() {
     )
 
     routing {
-        // Serve the WASM app statically from the composeApp build output if present.
-        // Build it first with: ./gradlew :composeApp:wasmJsBrowserProductionWebpack OR productionExecutable
-        val wasmProd = File("composeApp/build/dist/wasmJs/productionExecutable")
-        val wasmDev = File("composeApp/build/dist/wasmJs/developmentExecutable")
-        val wasmOut = when {
-            wasmProd.exists() -> wasmProd
-            wasmDev.exists() -> wasmDev
-            else -> null
+        // Robust resolver for the WASM app output directory (Option A)
+        fun wasmCandidates(): List<File> {
+            val override = System.getProperty("wasm.dir")?.trim().takeUnless { it.isNullOrEmpty() }
+                ?: System.getenv("WASM_DIR")?.trim().takeUnless { it.isNullOrEmpty() }
+
+            val paths = mutableListOf<String>()
+            if (override != null) paths += override
+
+            // Project-root relative (works if working dir is repo root)
+            paths += listOf(
+                "composeApp/build/dist/wasmJs/productionExecutable",
+                "composeApp/build/dist/wasmJs/developmentExecutable"
+            )
+            // Server-module relative (works if working dir is repoRoot/server)
+            paths += listOf(
+                "../composeApp/build/dist/wasmJs/productionExecutable",
+                "../composeApp/build/dist/wasmJs/developmentExecutable"
+            )
+
+            return paths.map { Paths.get(it).toFile() }
         }
+
+        val wasmOut = wasmCandidates().firstOrNull { it.exists() }
+        println(
+            "Working dir: ${System.getProperty("user.dir")} | Using WASM dir: ${wasmOut?.absolutePath ?: "<not found>"}"
+        )
+
         if (wasmOut != null) {
             staticFiles("/", wasmOut, index = "index.html")
         }
