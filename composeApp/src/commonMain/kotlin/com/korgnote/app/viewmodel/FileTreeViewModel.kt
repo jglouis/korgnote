@@ -23,6 +23,9 @@ data class ScheduledEntry(
 )
 
 class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
+    // Exposed error message when network/server cannot be reached
+    var lastErrorMessage by mutableStateOf("")
+        private set
     private var _currentFile: String? = null
     // File tree populated from server; wrapped in state so UI recomposes
     var tree by mutableStateOf(
@@ -116,6 +119,8 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
             orgContents.putAll(data)
             tree = buildTreeFromPaths(paths)
             scheduledByDate = buildScheduledIndex(orgContents)
+            // clear error on success
+            lastErrorMessage = ""
             if (_currentFile == null) {
                 val first = data.keys.minOrNull()
                 if (first != null) onFileSelected(first)
@@ -125,10 +130,20 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
                 }
             }
         } catch (t: Throwable) {
-            // Keep local fallback content on error; could set an error state if needed
+            // Surface a friendly message to the UI
+            lastErrorMessage = friendlyErrorMessage(t)
             println("[DEBUG_LOG][FileTreeViewModel] Failed to load from server: ${t::class.simpleName}: ${t.message}")
             t.printStackTrace()
         }
+    }
+
+    fun clearError() { lastErrorMessage = "" }
+
+    private fun friendlyErrorMessage(t: Throwable): String {
+        val msg = t.message ?: ""
+        val simple = t::class.simpleName ?: "Error"
+        // Generic, user-friendly phrasing
+        return "Cannot reach the server. Please check Settings and your connection. ($simple: $msg)"
     }
 
     private fun buildTreeFromPaths(paths: List<String>): Folder {

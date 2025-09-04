@@ -6,15 +6,17 @@ import io.ktor.client.request.get
 
 class KtorOrgRepository(
     private val client: HttpClient,
-    private val baseUrl: String,
+    private val baseUrlProvider: () -> String,
 ) : OrgRepository {
+    private fun baseUrl() = baseUrlProvider()
+
     override suspend fun fetchAllContents(): Map<String, String> {
         // Expecting a JSON object of filename -> content
-        return client.get("$baseUrl/api/org-contents").body()
+        return client.get("${baseUrl()}/api/org-contents").body()
     }
 
     override suspend fun fetchTreePaths(): List<String> {
-        return client.get("$baseUrl/api/org-tree-paths").body()
+        return client.get("${baseUrl()}/api/org-tree-paths").body()
     }
 
     companion object {

@@ -41,6 +41,7 @@ import org.koin.compose.KoinApplication
 import com.korgnote.app.ui.CalendarScreen
 import com.korgnote.app.ui.FileTree
 import com.korgnote.app.ui.OrgText
+import com.korgnote.app.ui.SettingsScreen
 import com.korgnote.app.viewmodel.FileTreeViewModel
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.home
@@ -50,6 +51,8 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
+import org.koin.compose.koinInject
+import com.korgnote.app.data.SettingsRepository
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -141,6 +144,11 @@ fun App() {
                                     style = MaterialTheme.typography.titleLarge
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
+                                // Error banner if server unreachable
+                                if (vm.lastErrorMessage.isNotBlank()) {
+                                    Text(vm.lastErrorMessage, color = MaterialTheme.colorScheme.error)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
                                 // Reflect selection from ViewModel in UI
                                 Text(text = vm.selectedFileLabel)
                                 Spacer(modifier = Modifier.height(16.dp))
@@ -162,12 +170,8 @@ fun App() {
                             }
 
                             BottomItem.SETTINGS -> {
-                                Text(
-                                    text = selectedScreen.getLabel(),
-                                    style = MaterialTheme.typography.titleLarge
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text("Settings placeholder")
+                                val settingsRepo = koinInject<SettingsRepository>()
+                                SettingsScreen(repo = settingsRepo)
                             }
                         }
                     }
