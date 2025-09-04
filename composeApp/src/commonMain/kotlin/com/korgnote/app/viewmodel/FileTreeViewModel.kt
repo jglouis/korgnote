@@ -8,6 +8,9 @@ import com.korgnote.app.data.OrgRepository
 import com.korgnote.app.ui.File
 import com.korgnote.app.ui.Folder
 import com.korgnote.app.ui.Node
+import com.korgnote.common.fs.Folder as SharedFolder
+import com.korgnote.common.fs.File as SharedFile
+import com.korgnote.common.fs.Node as SharedNode
 import kotlinx.datetime.LocalDate
 import kotlin.collections.iterator
 
@@ -109,14 +112,14 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         currentFile = name
     }
 
-    // Load tree paths and contents from server repository and update state
+    // Load tree and contents from server repository and update state
     suspend fun loadFromServer() {
         try {
-            val paths = repository.fetchTreePaths()
+            val sharedTree = repository.fetchTree()
             val data = repository.fetchAllContents()
             orgContents.clear()
             orgContents.putAll(data)
-            tree = buildTreeFromPaths(paths)
+            tree = mapRootToUiFolder(sharedTree)
             scheduledByDate = buildScheduledIndex(orgContents)
             // clear error on success
             clearError()
@@ -152,33 +155,17 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         return "Cannot reach the server. Please check Settings and your connection. ($simple: $msg)"
     }
 
-    private fun buildTreeFromPaths(paths: List<String>): Folder {
-        class FolderBuilder(val name: String) {
-            val folders = mutableMapOf<String, FolderBuilder>()
-            val files = mutableSetOf<String>()
+    private fun mapSharedToUi(node: SharedNode): Node {
+        return when (node) {
+            is SharedFile -> File(node.name)
+            is SharedFolder -> Folder(
+                name = node.name,
+                children = node.children.map { mapSharedToUi(it) }
+            )
         }
-        val root = FolderBuilder("Documents")
-        for (raw in paths) {
-            val parts = raw.split('/').filter { it.isNotBlank() }
-            if (parts.isEmpty()) continue
-            var cursor = root
-            for (i in parts.indices) {
-                val segment = parts[i]
-                if (i == parts.lastIndex) {
-                    // last segment -> a file
-                    cursor.files.add(segment)
-                } else {
-                    cursor = cursor.folders.getOrPut(segment) { FolderBuilder(segment) }
-                }
-            }
-        }
-        fun toNode(b: FolderBuilder): Folder {
-            val childFolders = b.folders.values.sortedBy { it.name }.map { toNode(it) }
-            val childFiles = b.files.sorted().map { File(it) }
-            return Folder(b.name, childFolders + childFiles)
-        }
-        return toNode(root)
     }
+
+    private fun mapRootToUiFolder(shared: SharedFolder): Folder = mapSharedToUi(shared) as Folder
 
     private fun buildScheduledIndex(contents: Map<String, String>): Map<LocalDate, List<ScheduledEntry>> {
         val regex = Regex("SCHEDULED:\\s*<([0-9]{4})-([0-9]{2})-([0-9]{2})")

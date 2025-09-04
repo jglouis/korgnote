@@ -2,6 +2,8 @@ package com.korgnote.server
 
 import com.korgnote.common.Greeting
 import com.korgnote.common.SERVER_PORT
+import com.korgnote.common.fs.TreeUtils.buildFromPaths
+import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -106,15 +108,16 @@ fun Application.module() {
             get("/org-contents") {
                 call.respond(orgContents)
             }
-            // Returns a JSON array of file paths (strings) representing the tree
+            // Returns a JSON serializable Folder tree instead of raw paths
             get("/org-tree-paths") {
-                call.respond(orgTreePaths)
+                val tree = buildFromPaths(orgTreePaths, rootName = "Documents")
+                call.respond(tree)
             }
             // Convenience endpoint to fetch a single file content
             get("/content/{name}") {
                 val name = call.parameters["name"]
                 val body = orgContents[name]
-                if (body == null) call.respondText("Not found", status = io.ktor.http.HttpStatusCode.NotFound)
+                if (body == null) call.respondText("Not found", status = HttpStatusCode.NotFound)
                 else call.respondText(body)
             }
         }

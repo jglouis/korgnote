@@ -15,7 +15,7 @@ class KtorOrgRepository(
         return client.get("${baseUrl()}/api/org-contents").body()
     }
 
-    override suspend fun fetchTreePaths(): List<String> {
+    override suspend fun fetchTree(): com.korgnote.common.fs.Folder {
         return client.get("${baseUrl()}/api/org-tree-paths").body()
     }
 
