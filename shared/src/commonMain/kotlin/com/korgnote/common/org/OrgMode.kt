@@ -1,21 +1,35 @@
 package com.korgnote.common.org
 
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
 // An immutable node in an org document.
+@Serializable
 sealed interface OrgNode
 
 // Top-level org document with parsed children and collected file keywords (#+TITLE, #+AUTHOR, etc.).
+@Serializable
+@SerialName("document")
 data class OrgDocument(val children: List<OrgNode>, val metadata: List<String>) : OrgNode
 
 // A section is a heading with its inline content (paragraph text after heading line until next heading).
+@Serializable
+@SerialName("section")
 data class OrgSection(val title: String, val content: String, val todo: String? = null) : OrgNode
 
 // A flat list of items where each child is typically OrgRaw or OrgSection; bulletType is '-', '+', or '*'.
+@Serializable
+@SerialName("list")
 data class OrgList(val bulletType: Char, val children: List<OrgNode>) : OrgNode
 
 // Lines that start with #+...
+@Serializable
+@SerialName("keyword")
 data class OrgKeyword(val content: String) : OrgNode
 
 // Any raw text paragraph or line content that doesn't fit another construct.
+@Serializable
+@SerialName("raw")
 data class OrgRaw(val content: String) : OrgNode
 
 // TODO state for headings is a free-form string (e.g., TODO, DONE, WAITING) defined by document metadata.
@@ -23,12 +37,18 @@ data class OrgRaw(val content: String) : OrgNode
 
 // Checkbox list item like: - [ ] Task or - [X] Done
 // Only supports simple on/off state; nested states are out of scope for now.
+@Serializable
+@SerialName("checkboxItem")
 data class OrgCheckboxItem(val checked: Boolean, val text: String) : OrgNode
 
 // Very simplified table model: consecutive lines starting with '|' become a single table with rows of cells.
-data class OrgTable(val rows : OrgTableRow) : OrgNode
-
-data class OrgTableRow(val cells : List<OrgNode>) :OrgNode
+@Serializable
+@SerialName("table")
+ data class OrgTable(val rows : OrgTableRow) : OrgNode
+ 
+@Serializable
+@SerialName("tableRow")
+ data class OrgTableRow(val cells : List<OrgNode>) :OrgNode
 
 // Parse a String into a very small subset of Org-mode constructs supported by the data model above.
 fun String.toOrgDocument(): OrgDocument {

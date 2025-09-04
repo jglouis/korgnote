@@ -3,6 +3,8 @@ package com.korgnote.server
 import com.korgnote.common.Greeting
 import com.korgnote.common.SERVER_PORT
 import com.korgnote.common.fs.TreeUtils.buildFromPaths
+import com.korgnote.common.org.OrgDocument
+import com.korgnote.common.org.toOrgDocument
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -106,9 +108,12 @@ fun Application.module() {
             get("/") {
                 call.respondText("Ktor: ${Greeting().greet()}")
             }
-            // Returns a JSON object mapping filename -> org content
-            get("/org-contents") {
-                call.respond(orgContents)
+            // Returns a JSON object mapping filename -> parsed OrgDocument
+            get("/org-content") {
+                val parsed: Map<String, OrgDocument> = orgContents.mapValues { (_, text) ->
+                    text.toOrgDocument()
+                }
+                call.respond(parsed)
             }
             // Returns a JSON serializable Folder tree instead of raw paths
             get("/org-tree-paths") {

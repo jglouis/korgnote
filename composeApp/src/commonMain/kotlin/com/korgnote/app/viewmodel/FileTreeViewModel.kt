@@ -11,6 +11,7 @@ import com.korgnote.app.ui.Node
 import com.korgnote.common.fs.Folder as SharedFolder
 import com.korgnote.common.fs.File as SharedFile
 import com.korgnote.common.fs.Node as SharedNode
+import com.korgnote.common.org.toOrgString
 import kotlinx.datetime.LocalDate
 import kotlin.collections.iterator
 
@@ -117,8 +118,10 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         try {
             val sharedTree = repository.fetchTree()
             val data = repository.fetchAllContents()
+            // Convert parsed OrgDocument values to string for current UI and indexing
+            val stringData: Map<String, String> = data.mapValues { (_, doc) -> doc.toOrgString() }
             orgContents.clear()
-            orgContents.putAll(data)
+            orgContents.putAll(stringData)
             tree = mapRootToUiFolder(sharedTree)
             scheduledByDate = buildScheduledIndex(orgContents)
             // clear error on success
