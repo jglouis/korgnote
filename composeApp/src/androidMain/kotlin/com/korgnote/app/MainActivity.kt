@@ -13,7 +13,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            App()
+            val androidModule = org.koin.dsl.module {
+                single<com.korgnote.app.data.SettingsRepository> { com.korgnote.app.data.PersistentSettingsRepository(applicationContext) }
+            }
+            App(extraModules = listOf(androidModule))
         }
     }
 }

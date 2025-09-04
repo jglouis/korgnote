@@ -7,6 +7,11 @@ import kotlinx.browser.document
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
     ComposeViewport(document.body!!) {
-        App()
+        run {
+                val webModule = org.koin.dsl.module {
+                    single<com.korgnote.app.data.SettingsRepository> { com.korgnote.app.data.InMemorySettingsRepository() }
+                }
+                App(extraModules = listOf(webModule))
+            }
     }
 }

@@ -8,6 +8,11 @@ fun main() = application {
         onCloseRequest = ::exitApplication,
         title = "korgnote",
     ) {
-        App()
+        run {
+                val desktopModule = org.koin.dsl.module {
+                    single<com.korgnote.app.data.SettingsRepository> { com.korgnote.app.data.InMemorySettingsRepository() }
+                }
+                App(extraModules = listOf(desktopModule))
+                }
     }
 }

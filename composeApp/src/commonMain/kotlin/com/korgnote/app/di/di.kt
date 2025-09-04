@@ -1,6 +1,5 @@
 package com.korgnote.app.di
 
-import com.korgnote.app.data.InMemorySettingsRepository
 import com.korgnote.app.data.KtorOrgRepository
 import com.korgnote.app.data.OrgRepository
 import com.korgnote.app.data.SettingsRepository
@@ -12,8 +11,6 @@ import org.koin.dsl.module
 
 // Simple Koin setup for Multiplatform Compose
 val appModule = module {
-    // Settings repository (in-memory for now; platform persistence can replace this)
-    single<SettingsRepository> { InMemorySettingsRepository() }
 
     // Provide Ktor HttpClient with JSON plugin (base URL includes port; client itself is engine + JSON only)
     single { KtorOrgRepository.default() }

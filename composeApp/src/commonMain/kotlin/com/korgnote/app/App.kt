@@ -57,8 +57,8 @@ import com.korgnote.app.data.SettingsRepository
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @Preview
-fun App() {
-    KoinApplication(application = { modules(appModule) }) {
+fun App(extraModules: List<org.koin.core.module.Module> = emptyList()) {
+    KoinApplication(application = { modules(appModule + extraModules) }) {
         MaterialTheme {
             var selectedScreen by remember { mutableStateOf(BottomItem.HOME) }
             val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
