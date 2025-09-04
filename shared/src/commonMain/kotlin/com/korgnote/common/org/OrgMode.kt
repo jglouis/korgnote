@@ -1,7 +1,7 @@
 package com.korgnote.common.org
 
 // An immutable node in an org document.
-interface OrgNode
+sealed interface OrgNode
 
 // Top-level org document with parsed children and collected file keywords (#+TITLE, #+AUTHOR, etc.).
 data class OrgDocument(val children: List<OrgNode>, val metadata: List<String>) : OrgNode
@@ -95,9 +95,9 @@ fun String.toOrgDocument(): OrgDocument {
 
     fun parseSection(start: Int): Pair<OrgNode, Int> {
         val heading = lines[start]
-        val m = Regex("^(\\*+)\\s+(?:([A-Z][A-Z0-9_-]*)\\s+)?(.*)").find(heading.trimEnd())
+        val m = Regex("^(\\*+)\\s+(?:([A-Z][A-Z0-9_-]*)\\s+)?(.*)").find(heading.trim())
         val token = m?.groupValues?.getOrNull(2)
-        val title = m?.groupValues?.getOrNull(4)?.ifBlank { null } ?: heading.trim()
+        val title = m?.groupValues?.getOrNull(3)?.ifBlank { null } ?: heading.trim()
         // Capture TODO-like token as-is (arbitrary, defined by metadata)
         val todo: String? = token
         val contentSb = StringBuilder()
@@ -201,3 +201,33 @@ fun parseTodoConfigFrom(metadata: List<String>): OrgTodoConfig {
 fun OrgDocument.todoConfig(): OrgTodoConfig = parseTodoConfigFrom(this.metadata)
 fun OrgSection.isTodo(doc: OrgDocument): Boolean = this.todo != null && this.todo in doc.todoConfig().todo
 fun OrgSection.isDone(doc: OrgDocument): Boolean = this.todo != null && this.todo in doc.todoConfig().done
+
+// --- Serialization back to org-mode text ---
+fun OrgNode.toOrgString(): String = when (this) {
+    is OrgDocument -> buildString {
+        this@toOrgString.children.forEachIndexed { idx, node ->
+            if (idx > 0) append('\n')
+            append(node.toOrgString())
+        }
+    }
+    is OrgKeyword -> this.content
+    is OrgRaw -> this.content
+    is OrgCheckboxItem -> "- [" + (if (checked) "x" else " ") + "] " + text
+    is OrgList -> children.joinToString("\n") { child ->
+        when (child) {
+            is OrgCheckboxItem -> "- [" + (if (child.checked) "x" else " ") + "] " + child.text
+            is OrgRaw -> "${this.bulletType} ${child.content}"
+            else -> "${this.bulletType} ${child.toOrgString()}"
+        }
+    }
+    is OrgSection -> buildString {
+        // We don't track heading level; emit single-star heading with optional TODO token
+        if (todo != null) append("* ").append(todo).append(' ').appendLine(title) else append("* ").appendLine(title)
+        if (content.isNotBlank()) appendLine(content.trimEnd())
+    }.trimEnd()
+    is OrgTable -> {
+        val row = rows
+        if (row.cells.isEmpty()) "" else row.cells.joinToString("\n") { cell -> "| " + (cell as? OrgRaw)?.content.orEmpty() + " |" }
+    }
+    is OrgTableRow -> cells.joinToString(" | ") { (it as? OrgRaw)?.content ?: "" }
+}
