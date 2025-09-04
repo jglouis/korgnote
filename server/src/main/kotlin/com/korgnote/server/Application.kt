@@ -2,16 +2,18 @@ package com.korgnote.server
 
 import com.korgnote.common.Greeting
 import com.korgnote.common.SERVER_PORT
-import io.ktor.http.*
-import io.ktor.serialization.kotlinx.json.*
-import io.ktor.server.application.*
-import io.ktor.server.engine.*
-import io.ktor.server.http.content.*
-import io.ktor.server.netty.*
-import io.ktor.server.plugins.contentnegotiation.*
-import io.ktor.server.plugins.cors.routing.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
+import io.ktor.serialization.kotlinx.json.json
+import io.ktor.server.application.Application
+import io.ktor.server.application.install
+import io.ktor.server.engine.embeddedServer
+import io.ktor.server.http.content.staticFiles
+import io.ktor.server.netty.Netty
+import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.response.respond
+import io.ktor.server.response.respondText
+import io.ktor.server.routing.get
+import io.ktor.server.routing.route
+import io.ktor.server.routing.routing
 import java.io.File
 
 fun main() {
@@ -21,23 +23,6 @@ fun main() {
 
 fun Application.module() {
     install(ContentNegotiation) { json() }
-
-    // CORS for browser (Wasm/JS) client during development
-    install(CORS) {
-        // Allow the browser app origins
-        allowHost("localhost", schemes = listOf("http"))
-        allowHost("192.168.129.36", schemes = listOf("http"))
-
-        // Methods/Headers commonly used by our client
-        allowMethod(HttpMethod.Get)
-        allowMethod(HttpMethod.Options) // preflight
-        allowHeader(HttpHeaders.ContentType)
-        allowHeader(HttpHeaders.Accept)
-
-        allowCredentials = false
-        allowNonSimpleContentTypes = true
-        allowSameOrigin = false
-    }
 
     // Fake in-memory org contents; this mirrors the app's previous local data
     val orgContents: Map<String, String> = mapOf(
