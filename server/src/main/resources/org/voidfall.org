@@ -1,0 +1,124 @@
+#+title: Readme
+#+Author: Jean-Guillaume Louis
+#+TODO: TODO(t) DOING(p!) WAIT(w@/!) | DONE(d!) CANCELED(c@/!)
+
+* Introduction
+
+Implementation of [[https://mindclashgames.com/our-games/voidfall/][Voidfall]] from Mindclash Games.
+
+* Dependencies
+
+- [[https://crates.io/crates/rand][rand]]: For shuffling in [[file:src/game/deck.rs][deck.rs]]
+- [[https://crates.io/crates/thiserror][thiserror]]: for easing Rust error handling
+- [[https://crates.io/crates/bevy][bevy]]: See [[https://bevyengine.org/learn/book/getting-started/setup/#install-os-dependencies][Bevy Book: Os Dependencies]]
+
+* Setup
+
+Clone this repository:
+
+#+BEGIN_SRC shell
+git clone https://github.com/jglouis/voidfall.git && cd voidfall
+#+END_SRC
+
+To run the project:
+
+#+BEGIN_SRC shell
+cargo run
+#+END_SRC
+
+To launch tests:
+
+#+BEGIN_SRC shell
+cargo test
+#+END_SRC
+
+To quit the game, use [[kbd:][CMD+Q]] or [[kbd:][ALT+F4]] (close on escape removed in bevy 0.13, see [[https://bevyengine.org/learn/migration-guides/0-13-to-0-14/#remove-close-on-esc][link]]).
+
+* WASM target
+** Prerequisites
+For more details, see this [[https://bevy-cheatbook.github.io/platforms/wasm.html#quick-start][link]].
+
+First, add WASM support to your Rust installation. Using Rustup:
+
+#+BEGIN_SRC shell
+rustup target install wasm32-unknown-unknown
+#+END_SRC
+
+** Run
+Now you can just run your game with:
+
+#+BEGIN_SRC shell
+cargo run --target wasm32-unknown-unknown
+#+END_SRC
+
+** Configuration
+To make it easy, the project uses ~wasm-server-runner~
+See [[file:.cargo/config.toml][.cargo/config.toml]].
+
+* Progress
+** WAIT Add logging
+- State "WAIT"       from "TODO"       [2023-12-27 Wed 20:56] \\
+  Waiting for getting a better idea of the logging requirements.
+  I still need to decide if I will go with the [[https://crates.io/crates/tracing][tracing crate]] or
+  something like simple [[https://crates.io/crates/simple_logger][simple_logger crate]]. Also See [[https://docs.rs/log/latest/log/][log - Rust]], for
+  some general design on how to implement logging in Rust.
+
+** DOING Game model [80%]
+  - [X] Hex
+  - [X] House
+    - [X] Player controlled
+      - [X] Starting agendas
+      - [X] Starting resources
+      - [X] Starting sector setup
+      - [X] Starting mat setup
+    - [X] Fallen houses
+  - [X] Agenda
+  - [X] Focus
+    - [X] Common
+    - [X] Heroic
+    - [X] Joint
+  - [X] Guild
+  - [X] Installation
+  - [X] Resources
+  - [X] Technology
+  - [X] Sector
+  - [X] Deck
+  - [X] Reclaim tokens
+  - [X] Bounty tokens
+  - [-] Effect
+  - [ ] Crisis cards
+  - [X] voidstorms
+** DOING Game setup [0%]
+- State "DOING"      from "TODO"       [2023-12-27 Wed 21:13]
+- [-] SOLO
+  - [-] Board setup
+    - [-] First Stand
+  - [ ] Player Setup
+    - [ ] First Stand
+  - [ ] Other
+- [ ] COOP
+  - [ ] Board setup
+  - [ ] Player Setup
+  - [ ] Other
+- [ ] COMPETITIVE
+  - [ ] Board setup
+  - [ ] Player Setup
+  - [ ] Other
+** TODO Add game loop
+** TODO Graphics
+- [ ] Choose a color palette. I think I have to do this manually and
+  have a reduced set of color to get more visual coherency. I also
+  maybe want to avoid white and black.
+  - [ ] Check this [[https://www.youtube.com/watch?v=PNtMAxYaGyg][video]].
+- [ ] Ships
+  - [ ] Draw inspiration from [[https://www.youtube.com/watch?v=7c8auiJMwA8][video]] (also for the text and afterburn
+    effect)
+- [ ] Sectors
+  - [ ] Check this [[https://www.youtube.com/watch?v=BdFm07xpEhM][video]] with a nice dithering effect. Krita has a
+    brush like that.
+- [ ] Guilds
+- [ ] Installations
+- [ ] Icons
+- [ ] Population
+- [ ] Corruption
+- [ ] UI

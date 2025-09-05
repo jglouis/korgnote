@@ -54,11 +54,11 @@ fun Application.module() {
     fun deriveOrgTreePaths(fileNames: Set<String>): List<String> {
         fun isJournal(name: String): Boolean = Regex("^(\\d{4})-(\\d{2})-(\\d{2})\\.org$").matches(name)
         fun journalPath(name: String): String {
-            val year = name.substring(0, 4)
+            val year = name.take(4)
             return "Org/Journal/$year/$name"
         }
         val agenda = setOf("inbox.org", "next-actions.org", "calendar.org", "sep-2025.org")
-        val projects = setOf("korgnote.org", "website-redesign.org", "research-notes.org")
+        val projects = setOf("korgnote.org", "website-redesign.org", "research-notes.org", "learn_java_by_its_pitfalls.org", "voidfall.org")
         val reference = setOf("books.org", "quotes.org")
         return fileNames.mapNotNull { fn ->
             when {
