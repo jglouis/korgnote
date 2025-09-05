@@ -50,23 +50,28 @@ fun Application.module() {
 
     val orgContents: Map<String, String> = loadOrgResources()
 
-    // Tree paths representing the hierarchical structure under Documents/
-    // These paths map to the filenames present in orgContents
-    val orgTreePaths: List<String> = listOf(
-        "Org/Agenda/inbox.org",
-        "Org/Agenda/next-actions.org",
-        "Org/Agenda/calendar.org",
-        "Org/Agenda/sep-2025.org",
-        "Org/Projects/korgnote.org",
-        "Org/Projects/website-redesign.org",
-        "Org/Projects/research-notes.org",
-        "Org/Journal/2024/2024-12-31.org",
-        "Org/Journal/2025/2025-01-01.org",
-        "Org/Journal/2025/2025-09-03.org",
-        "Org/Reference/books.org",
-        "Org/Reference/quotes.org",
-        "notes.org"
-    )
+    // Derive tree paths from the available .org resources (or fallback contents)
+    fun deriveOrgTreePaths(fileNames: Set<String>): List<String> {
+        fun isJournal(name: String): Boolean = Regex("^(\\d{4})-(\\d{2})-(\\d{2})\\.org$").matches(name)
+        fun journalPath(name: String): String {
+            val year = name.substring(0, 4)
+            return "Org/Journal/$year/$name"
+        }
+        val agenda = setOf("inbox.org", "next-actions.org", "calendar.org", "sep-2025.org")
+        val projects = setOf("korgnote.org", "website-redesign.org", "research-notes.org")
+        val reference = setOf("books.org", "quotes.org")
+        return fileNames.mapNotNull { fn ->
+            when {
+                isJournal(fn) -> journalPath(fn)
+                fn in agenda -> "Org/Agenda/$fn"
+                fn in projects -> "Org/Projects/$fn"
+                fn in reference -> "Org/Reference/$fn"
+                fn == "notes.org" -> fn
+                else -> null // omit unknowns from tree to avoid broken links
+            }
+        }.sorted()
+    }
+    val orgTreePaths: List<String> = deriveOrgTreePaths(orgContents.keys)
 
     routing {
         // Robust resolver for the WASM app output directory (Option A)
