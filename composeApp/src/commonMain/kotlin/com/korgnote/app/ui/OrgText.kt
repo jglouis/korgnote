@@ -90,13 +90,7 @@ private fun RenderNode(
                 node.children.forEach { child ->
                     when (child) {
                         is OrgCheckboxItem -> {
-                            val idx = ordinal.i
-                            key(idx) {
-                                CheckboxLine(checked = child.checked, text = child.text, onCheckedChange = { c ->
-                                    onToggleCheckbox?.invoke(idx, c)
-                                })
-                            }
-                            ordinal.i = idx + 1
+                            RenderCheckboxItem(child.checked, child.text, ordinal, onToggleCheckbox)
                         }
 
                         is OrgRaw -> Text(
@@ -111,13 +105,7 @@ private fun RenderNode(
         }
 
         is OrgCheckboxItem -> {
-            val idx = ordinal.i
-            key(idx) {
-                CheckboxLine(checked = node.checked, text = node.text, onCheckedChange = { c ->
-                    onToggleCheckbox?.invoke(idx, c)
-                })
-            }
-            ordinal.i = idx + 1
+            RenderCheckboxItem(node.checked, node.text, ordinal, onToggleCheckbox)
         }
 
         is OrgKeyword -> {
@@ -152,6 +140,22 @@ private fun RenderNode(
             Text(text = buildOrgAnnotatedString(line), style = MaterialTheme.typography.bodyMedium)
         }
     }
+}
+
+@Composable
+private fun RenderCheckboxItem(
+    checked: Boolean,
+    text: String,
+    ordinal: Ord,
+    onToggleCheckbox: ((Int, Boolean) -> Unit)?
+) {
+    val idx = ordinal.i
+    key(idx) {
+        CheckboxLine(checked = checked, text = text, onCheckedChange = { c ->
+            onToggleCheckbox?.invoke(idx, c)
+        })
+    }
+    ordinal.i = idx + 1
 }
 
 @Composable
