@@ -153,8 +153,10 @@ fun App(extraModules: List<org.koin.core.module.Module> = emptyList()) {
                                 Text(text = vm.selectedFileLabel)
                                 Spacer(modifier = Modifier.height(16.dp))
                                 OrgText(
-                                    content = vm.selectedFileContent.ifBlank { "Select an .org file to view its content" },
-                                    onToggleCheckbox = { lineIndex, checked -> vm.toggleCheckboxAt(lineIndex, checked) }
+                                    content = vm.selectedOrgNode ?: com.korgnote.common.org.OrgRaw(
+                                        vm.selectedFileContent.ifBlank { "Select an .org file to view its content" }
+                                    ),
+                                    onToggleCheckbox = { ordinalIndex, checked -> vm.toggleCheckboxByOrdinal(ordinalIndex, checked) }
                                 )
                             }
 

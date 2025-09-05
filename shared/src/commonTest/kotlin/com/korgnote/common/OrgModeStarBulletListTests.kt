@@ -7,7 +7,7 @@ import kotlin.test.assertIs
 
 class OrgModeStarBulletListTests {
     @Test
-    fun parsesStarBulletIsTreatedAsListNotSection() {
+    fun parsesStarLinesAsSections() {
         val text = """
             * Heading One
             Paragraph one line 1
@@ -17,23 +17,11 @@ class OrgModeStarBulletListTests {
             Content two
         """.trimIndent()
         val doc = text.toOrgDocument()
-        // In the current parser, lines starting with '*' are parsed as a '*' list, not sections
-        // Expected nodes: a '*' list with one item "Heading One", then a paragraph with two lines, then another '*' list item "Heading Two", then a paragraph.
-        assertEquals(4, doc.children.size)
-        val list1 = assertIs<OrgList>(doc.children[0]); assertEquals('*', list1.bulletType); assertEquals(
-            1,
-            list1.children.size
-        )
-        assertEquals("Heading One", (assertIs<OrgRaw>(list1.children[0])).content)
-        val para1 = assertIs<OrgRaw>(doc.children[1]); assertEquals(
-            "Paragraph one line 1\nParagraph one line 2",
-            para1.content
-        )
-        val list2 = assertIs<OrgList>(doc.children[2]); assertEquals('*', list2.bulletType); assertEquals(
-            1,
-            list2.children.size
-        )
-        assertEquals("Heading Two", (assertIs<OrgRaw>(list2.children[0])).content)
-        val para2 = assertIs<OrgRaw>(doc.children[3]); assertEquals("Content two", para2.content)
+        // With updated parser, lines starting with '*' are parsed as sections
+        assertEquals(2, doc.children.size)
+        val sec1 = assertIs<OrgSection>(doc.children[0]); assertEquals("Heading One", sec1.title)
+        assertEquals("Paragraph one line 1\nParagraph one line 2", sec1.content)
+        val sec2 = assertIs<OrgSection>(doc.children[1]); assertEquals("Heading Two", sec2.title)
+        assertEquals("Content two", sec2.content)
     }
 }

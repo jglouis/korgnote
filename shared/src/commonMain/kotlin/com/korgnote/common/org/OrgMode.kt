@@ -160,23 +160,24 @@ fun String.toOrgDocument(): OrgDocument {
             i = next
             continue
         }
+        // Prefer parsing headings (lines starting with one or more '*') as sections before '*' lists
+        if (line.startsWith("*")) {
+            flushParagraph()
+            val (section, next) = parseSection(i)
+            children.add(section)
+            i = next
+            continue
+        }
         val listBullet = when {
             Regex("^\\s*- ").containsMatchIn(line) -> '-'
             Regex("^\\s*\\+ ").containsMatchIn(line) -> '+'
-            Regex("^\\s*\\* ").containsMatchIn(line) -> '*'
+            // Do not treat single '*' as list bullet at top-level anymore; keep '*' out to avoid conflict with sections
             else -> null
         }
         if (listBullet != null) {
             flushParagraph()
             val (listNode, next) = parseList(i, listBullet)
             children.add(listNode)
-            i = next
-            continue
-        }
-        if (line.startsWith("*")) {
-            flushParagraph()
-            val (section, next) = parseSection(i)
-            children.add(section)
             i = next
             continue
         }

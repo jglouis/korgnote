@@ -31,6 +31,13 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     var lastErrorMessage by mutableStateOf("")
         private set
     private var currentFile: String? = null
+
+    // Keep parsed org contents for structural rendering
+    private var parsedOrgContents: Map<String, com.korgnote.common.org.OrgDocument> = emptyMap()
+
+    // For mapping checkbox ordinal -> line index in original text
+    private var checkboxLineIndices: List<Int> = emptyList()
+
     // File tree populated from server; wrapped in state so UI recomposes
     var tree by mutableStateOf(
         Folder(
@@ -80,6 +87,10 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     var selectedFileContent by mutableStateOf("")
         private set
 
+    // Selected node for structural rendering in UI
+    var selectedOrgNode: com.korgnote.common.org.OrgNode? by mutableStateOf(null)
+        private set
+
     // Map of scheduled entries by LocalDate, computed from all contents
     var scheduledByDate by mutableStateOf(buildScheduledIndex(orgContents))
 
@@ -105,11 +116,35 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         val updated = lines.joinToString("\n")
         orgContents[file] = updated
         selectedFileContent = updated
+        // After toggling, recompute checkbox mapping and refresh selectedOrgNode fallback
+        rebuildCheckboxLineIndices()
+        selectedOrgNode = parsedOrgContents[file] ?: com.korgnote.common.org.OrgRaw(updated)
+    }
+
+    private fun rebuildCheckboxLineIndices() {
+        val text = selectedFileContent
+        if (text.isBlank()) {
+            checkboxLineIndices = emptyList()
+            return
+        }
+        val re = Regex("^\\s*- \\[([ xX])].*$")
+        val list = mutableListOf<Int>()
+        text.split('\n').forEachIndexed { idx, line -> if (re.containsMatchIn(line)) list.add(idx) }
+        checkboxLineIndices = list
+    }
+
+    fun toggleCheckboxByOrdinal(ordinal: Int, checked: Boolean) {
+        val idx = checkboxLineIndices.getOrNull(ordinal) ?: return
+        toggleCheckboxAt(idx, checked)
     }
 
     fun onFileSelected(name: String) {
         selectedFileLabel = "Selected: $name"
         selectedFileContent = orgContents[name] ?: "* ${name}\nNo content yet."
+        selectedOrgNode = parsedOrgContents[name] ?: com.korgnote.common.org.OrgRaw(
+            selectedFileContent
+        )
+        rebuildCheckboxLineIndices()
         currentFile = name
     }
 
@@ -118,6 +153,8 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         try {
             val sharedTree = repository.fetchTree()
             val data = repository.fetchAllContents()
+            // Save parsed documents for structural UI
+            parsedOrgContents = data
             // Convert parsed OrgDocument values to string for current UI and indexing
             val stringData: Map<String, String> = data.mapValues { (_, doc) -> doc.toOrgString() }
             orgContents.clear()
@@ -128,10 +165,15 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
             clearError()
             if (currentFile == null) {
                 val first = data.keys.minOrNull()
-                if (first != null) onFileSelected(first)
+                if (first != null) onFileSelected(first) else {
+                    selectedOrgNode = null
+                    checkboxLineIndices = emptyList()
+                }
             } else {
                 currentFile?.let { current ->
                     selectedFileContent = orgContents[current] ?: selectedFileContent
+                    selectedOrgNode = parsedOrgContents[current] ?: selectedOrgNode
+                    rebuildCheckboxLineIndices()
                 }
             }
         } catch (t: Throwable) {

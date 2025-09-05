@@ -8,6 +8,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -17,38 +19,103 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.korgnote.common.org.OrgCheckboxItem
+import com.korgnote.common.org.OrgDocument
+import com.korgnote.common.org.OrgKeyword
+import com.korgnote.common.org.OrgList
+import com.korgnote.common.org.OrgNode
+import com.korgnote.common.org.OrgRaw
+import com.korgnote.common.org.OrgSection
+import com.korgnote.common.org.OrgTable
+import com.korgnote.common.org.OrgTableRow
 
 @Composable
 fun OrgText(
-    content: String,
+    content: OrgNode,
     modifier: Modifier = Modifier,
-    onToggleCheckbox: ((lineIndex: Int, checked: Boolean) -> Unit)? = null,
+    // Int parameter represents the ordinal index of the checkbox item in the original text
+    onToggleCheckbox: ((ordinalIndex: Int, checked: Boolean) -> Unit)? = null,
 ) {
-    val lines = content.split('\n')
+    val checkboxOrdinal = remember { mutableIntStateOf(0) }
     Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
-        lines.forEachIndexed { index, raw ->
-            val (isHeading, level, text) = parseHeading(raw)
-            // Detect checkbox list item: - [ ] or - [X]/[x]
-            val cbMatch = Regex("^\\s*- \\[([ xX])]\\s*(.*)").find(text)
-            if (cbMatch != null) {
-                val mark = cbMatch.groupValues[1]
-                val itemText = cbMatch.groupValues[2]
-                val checked = mark.equals("x", ignoreCase = true)
-                CheckboxLine(
-                    checked = checked,
-                    text = itemText,
-                    onCheckedChange = { newValue -> onToggleCheckbox?.invoke(index, newValue) }
-                )
-            } else {
-                val annotated = buildOrgAnnotatedString(text)
-                val baseStyle = when {
-                    isHeading && level == 1 -> MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    isHeading && level == 2 -> MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    isHeading && level >= 3 -> MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-                    else -> MaterialTheme.typography.bodyMedium
-                }
-                Text(text = annotated, style = baseStyle)
+        RenderNode(
+            node = content,
+            onCheckbox = { checked ->
+                val idx = checkboxOrdinal.intValue
+                onToggleCheckbox?.invoke(idx, checked)
+                // advance ordinal for next checkbox in document order
+                checkboxOrdinal.intValue = idx + 1
             }
+        )
+    }
+}
+
+@Composable
+private fun RenderNode(
+    node: OrgNode,
+    onCheckbox: ((Boolean) -> Unit)?
+) {
+    when (node) {
+        is OrgDocument -> {
+            Column(horizontalAlignment = Alignment.Start) {
+                node.children.forEach { child -> RenderNode(child, onCheckbox) }
+            }
+        }
+        is OrgSection -> {
+            // Heading line
+            val headingText = buildString {
+                if (!node.todo.isNullOrEmpty()) {
+                    append(node.todo)
+                    append(' ')
+                }
+                append(node.title)
+            }
+            Text(
+                text = buildOrgAnnotatedString(headingText),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            )
+            // Section content (preformatted lines)
+            if (node.content.isNotBlank()) {
+                node.content.split('\n').forEach { ln ->
+                    Text(text = buildOrgAnnotatedString(ln), style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+        is OrgList -> {
+            Column(horizontalAlignment = Alignment.Start) {
+                node.children.forEach { child ->
+                    when (child) {
+                        is OrgCheckboxItem -> CheckboxLine(checked = child.checked, text = child.text, onCheckedChange = { c -> onCheckbox?.invoke(c) })
+                        is OrgRaw -> Text(text = buildOrgAnnotatedString("${node.bulletType} ${child.content}"), style = MaterialTheme.typography.bodyMedium)
+                        else -> RenderNode(child, onCheckbox)
+                    }
+                }
+            }
+        }
+        is OrgCheckboxItem -> {
+            CheckboxLine(checked = node.checked, text = node.text, onCheckedChange = { c -> onCheckbox?.invoke(c) })
+        }
+        is OrgKeyword -> {
+            Text(text = buildOrgAnnotatedString(node.content), style = MaterialTheme.typography.bodySmall)
+        }
+        is OrgRaw -> {
+            node.content.split('\n').forEach { ln ->
+                Text(text = buildOrgAnnotatedString(ln), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        is OrgTable -> {
+            // Very simple: print rows as lines like | cell |
+            val row = node.rows
+            if (row.cells.isNotEmpty()) {
+                row.cells.forEach { cell ->
+                    val raw = (cell as? OrgRaw)?.content ?: cell.toString()
+                    Text(text = buildOrgAnnotatedString("| $raw |"), style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+        is OrgTableRow -> {
+            val line = node.cells.joinToString(" | ") { (it as? OrgRaw)?.content ?: "" }
+            Text(text = buildOrgAnnotatedString(line), style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -64,17 +131,6 @@ private fun CheckboxLine(
         Spacer(Modifier.width(6.dp))
         Text(text = buildOrgAnnotatedString(text), style = MaterialTheme.typography.bodyMedium)
     }
-}
-
-private fun parseHeading(line: String): Triple<Boolean, Int, String> {
-    val trim = line.trimEnd()
-    val regex = Regex("^(\\*+)\\s+(.*)")
-    val match = regex.find(trim)
-    return if (match != null) {
-        val stars = match.groupValues[1]
-        val text = match.groupValues[2]
-        Triple(true, stars.length, text)
-    } else Triple(false, 0, trim)
 }
 
 fun buildOrgAnnotatedString(text: String): AnnotatedString {

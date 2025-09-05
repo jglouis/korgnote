@@ -23,21 +23,26 @@ class OrgModeMixedContentTests {
             End
         """.trimIndent()
         val doc = text.toOrgDocument()
-        // Expected order with current parser: keyword, intro paragraph, '-' list, '*' list (one item), paragraph, table, paragraph
-        assertEquals(7, doc.children.size)
+        // With updated parser: keyword, intro paragraph, '-' list, section 'Head' with two paragraphs and a table inside its content (flattened as raw). Since our simple model keeps section content as raw text and stops at next heading, and here there is no next heading, we expect:
+        // keyword, intro paragraph, '-' list, section, and remaining lines accumulated as section content.
+        assertEquals(4, doc.children.size)
         assertIs<OrgKeyword>(doc.children[0])
         val intro = assertIs<OrgRaw>(doc.children[1]); assertEquals("Intro para line 1\nintro line 2", intro.content)
-        val listDash = assertIs<OrgList>(doc.children[2]); assertEquals('-', listDash.bulletType); assertEquals(
-            2,
-            listDash.children.size
-        )
-        val listStar = assertIs<OrgList>(doc.children[3]); assertEquals('*', listStar.bulletType); assertEquals(
-            1,
-            listStar.children.size
-        )
-        assertEquals("Head", (assertIs<OrgRaw>(listStar.children[0])).content)
-        val under = assertIs<OrgRaw>(doc.children[4]); assertEquals("under head", under.content)
-//        val table = assertIs<OrgTable>(doc.children[5])
-        val end = assertIs<OrgRaw>(doc.children[6]); assertEquals("End", end.content)
+        val listDash = assertIs<OrgList>(doc.children[2]); assertEquals('-', listDash.bulletType); assertEquals(2, listDash.children.size)
+        val section = assertIs<OrgSection>(doc.children[3]); assertEquals("Head", section.title)
+        // Our parser captures section content raw until next heading; thus it includes the following lines
+        assertEquals("under head\n| a | b |\n| 1 | 2 |\nEnd", section.content)
+    }
+
+    @Test
+    fun mixedContentCheckBoxSectionsParagraphs() {
+        val text = "* Website Redesign\n** Milestones\n- [ ] Wireframes\n- [ ] Prototype\n- [ ] Launch"
+        val doc = text.toOrgDocument()
+        // With updated parser: top-level section 'Website Redesign', then a subsection 'Milestones' whose content contains the three checkbox lines as raw text (we don't yet parse lists inside sections)
+        assertEquals(2, doc.children.size)
+        val top = assertIs<OrgSection>(doc.children[0]); assertEquals("Website Redesign", top.title)
+        val sec = assertIs<OrgSection>(doc.children[1])
+        assertEquals("Milestones", sec.title)
+        assertEquals("- [ ] Wireframes\n- [ ] Prototype\n- [ ] Launch", sec.content)
     }
 }

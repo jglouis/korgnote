@@ -19,27 +19,17 @@ class OrgModeSimpleListsTests {
             * star two
         """.trimIndent()
         val doc = text.toOrgDocument()
-        // Expect three lists: '-', '+', and '*' bullets
-        assertEquals(3, doc.children.size)
-        val list1 = assertIs<OrgList>(doc.children[0]); assertEquals('-', list1.bulletType); assertEquals(
-            2,
-            list1.children.size
-        )
+        // With updated parser: '-' and '+' are lists; '*' becomes sections
+        assertEquals(4, doc.children.size)
+        val list1 = assertIs<OrgList>(doc.children[0]); assertEquals('-', list1.bulletType); assertEquals(2, list1.children.size)
         assertEquals("item a", (assertIs<OrgRaw>(list1.children[0])).content)
         assertEquals("item b", (assertIs<OrgRaw>(list1.children[1])).content)
 
-        val list2 = assertIs<OrgList>(doc.children[1]); assertEquals('+', list2.bulletType); assertEquals(
-            2,
-            list2.children.size
-        )
+        val list2 = assertIs<OrgList>(doc.children[1]); assertEquals('+', list2.bulletType); assertEquals(2, list2.children.size)
         assertEquals("plus one", (assertIs<OrgRaw>(list2.children[0])).content)
         assertEquals("plus two", (assertIs<OrgRaw>(list2.children[1])).content)
 
-        val list3 = assertIs<OrgList>(doc.children[2]); assertEquals('*', list3.bulletType); assertEquals(
-            2,
-            list3.children.size
-        )
-        assertEquals("star one", (assertIs<OrgRaw>(list3.children[0])).content)
-        assertEquals("star two", (assertIs<OrgRaw>(list3.children[1])).content)
+        val sec1 = assertIs<OrgSection>(doc.children[2]); assertEquals("star one", sec1.title); assertEquals("", sec1.content)
+        val sec2 = assertIs<OrgSection>(doc.children[3]); assertEquals("star two", sec2.title); assertEquals("", sec2.content)
     }
 }
