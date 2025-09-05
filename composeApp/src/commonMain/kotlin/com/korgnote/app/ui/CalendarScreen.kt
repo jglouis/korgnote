@@ -48,7 +48,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import com.korgnote.app.viewmodel.ScheduledEntry
+import com.korgnote.common.org.OrgNode
+import com.korgnote.common.org.OrgPlanning
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -59,8 +60,8 @@ const val FADE_DURATION_MS = 100
 @Composable
 fun CalendarScreen(
     modifier: Modifier = Modifier.background(MaterialTheme.colorScheme.surface),
-    scheduledByDate: Map<LocalDate, List<ScheduledEntry>> = emptyMap(),
-    onOpenScheduled: (ScheduledEntry) -> Unit = {},
+    scheduledByDate: Map<LocalDate, List<Pair<String, OrgNode>>> = emptyMap(),
+    onOpenScheduled: (Pair<String, OrgNode>) -> Unit = {},
     initialMode: CalendarMode? = null,
     initialAnchorDate: LocalDate? = null,
     initialDialogDate: LocalDate? = null
@@ -253,8 +254,6 @@ fun CalendarScreen(
                 text = {
                     Column {
                         dialogEntries.forEach { e ->
-                            // Build annotated string with same highlighting as main content
-                            val annotated = buildOrgAnnotatedString("• ${e.title} (${e.fileName})")
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -275,11 +274,8 @@ fun CalendarScreen(
                                         )
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = annotated,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
+                                // Reuse OrgText composable to render the org node consistently
+                                OrgText(content = e.second)
                             }
                         }
                     }
@@ -307,7 +303,7 @@ enum class CalendarMode {
 private fun WeekRow(
     anchorDate: LocalDate,
     today: LocalDate,
-    scheduledByDate: Map<LocalDate, List<ScheduledEntry>>,
+    scheduledByDate: Map<LocalDate, List<Pair<String, OrgNode>>>,
     onDateClick: (LocalDate) -> Unit
 ) {
     val start = anchorDate.startOfWeek()
@@ -328,7 +324,7 @@ private fun WeekRow(
 private fun MonthGrid(
     anchorDate: LocalDate,
     today: LocalDate,
-    scheduledByDate: Map<LocalDate, List<ScheduledEntry>>,
+    scheduledByDate: Map<LocalDate, List<Pair<String, OrgNode>>>,
     onDateClick: (LocalDate) -> Unit
 ) {
     val firstOfMonth = LocalDate(anchorDate.year, anchorDate.month, 1)
@@ -407,7 +403,7 @@ private fun LocalDate.startOfWeek(): LocalDate {
 // Previews
 // -----------------------
 
-private fun previewSampleScheduled(): Map<LocalDate, List<ScheduledEntry>> {
+private fun previewSampleScheduled(): Map<LocalDate, List<Pair<String, OrgNode>>> {
     // Fixed sample data focused on September 2025
     val date1 = LocalDate(2025, 9, 10)
     val date2 = LocalDate(2025, 9, 15)
@@ -415,36 +411,16 @@ private fun previewSampleScheduled(): Map<LocalDate, List<ScheduledEntry>> {
     val date4 = LocalDate(2025, 9, 30)
     return mapOf(
         date1 to listOf(
-            ScheduledEntry(
-                "TODO Kickoff Q4 planning",
-                date1,
-                "sep-2025.org",
-                "SCHEDULED: <2025-09-10 Wed>"
-            )
+            "sep-2025.org" to OrgPlanning("SCHEDULED", "<2025-09-10 Wed>")
         ),
         date2 to listOf(
-            ScheduledEntry(
-                "DONE Submit budget proposal",
-                date2,
-                "sep-2025.org",
-                "SCHEDULED: <2025-09-15 Mon>"
-            )
+            "sep-2025.org" to OrgPlanning("SCHEDULED", "<2025-09-15 Mon>")
         ),
         date3 to listOf(
-            ScheduledEntry(
-                "TODO Write blog post",
-                date3,
-                "next-actions.org",
-                "SCHEDULED: <2025-09-21 Sun>"
-            )
+            "next-actions.org" to OrgPlanning("SCHEDULED", "<2025-09-21 Sun>")
         ),
         date4 to listOf(
-            ScheduledEntry(
-                "TODO End of month review",
-                date4,
-                "sep-2025.org",
-                "SCHEDULED: <2025-09-30 Tue>"
-            )
+            "sep-2025.org" to OrgPlanning("SCHEDULED", "<2025-09-30 Tue>")
         )
     )
 }

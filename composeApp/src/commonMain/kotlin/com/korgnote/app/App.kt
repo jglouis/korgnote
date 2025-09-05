@@ -167,8 +167,9 @@ fun App(extraModules: List<org.koin.core.module.Module> = emptyList()) {
                                 CalendarScreen(
                                     modifier = Modifier.fillMaxSize(),
                                     scheduledByDate = vm.scheduledByDate,
-                                    onOpenScheduled = { entry ->
-                                        vm.onFileSelected(entry.fileName)
+                                    onOpenScheduled = { pair ->
+                                        val fileName = pair.first
+                                        vm.onFileSelected(fileName)
                                         selectedScreen = BottomItem.HOME
                                     }
                                 )

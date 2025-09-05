@@ -18,19 +18,12 @@ import com.korgnote.common.fs.Node as SharedNode
  * Simple ViewModel that holds a file tree and uses a repository to fetch org contents.
  */
 
-data class ScheduledEntry(
-    val title: String,
-    val date: LocalDate,
-    val fileName: String,
-    val line: String
-)
 
 class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     // Exposed error message when network/server cannot be reached
     var lastErrorMessage by mutableStateOf("")
         private set
     private var currentFile: String? = null
-
 
 
     // File tree populated from server; wrapped in state so UI recomposes
@@ -100,6 +93,7 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
                         node to false
                     }
                 }
+
                 is OrgList -> {
                     val newChildren = mutableListOf<OrgNode>()
                     var done = false
@@ -114,6 +108,7 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
                     }
                     if (done) OrgList(node.bulletType, newChildren) to true else node to false
                 }
+
                 is OrgDocument -> {
                     val newChildren = mutableListOf<OrgNode>()
                     var done = false
@@ -128,6 +123,7 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
                     }
                     if (done) OrgDocument(newChildren, node.metadata) to true else node to false
                 }
+
                 else -> node to false
             }
         }
@@ -143,7 +139,6 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         selectedOrgNode = updated
         selectedFileContent = updated.toOrgString()
     }
-
 
 
     fun onFileSelected(name: String) {
@@ -196,7 +191,9 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         }
     }
 
-    fun clearError() { lastErrorMessage = "" }
+    fun clearError() {
+        lastErrorMessage = ""
+    }
 
     private fun friendlyErrorMessage(t: Throwable): String {
         val msg = t.message ?: ""
@@ -217,14 +214,14 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
 
     private fun mapRootToUiFolder(shared: SharedFolder): Folder = mapSharedToUi(shared) as Folder
 
-    private fun buildScheduledIndex(contents: Map<String, OrgDocument>): Map<LocalDate, List<ScheduledEntry>> {
+    private fun buildScheduledIndex(contents: Map<String, OrgDocument>): Map<LocalDate, List<Pair<String, OrgNode>>> {
         val dateRegex = Regex("<(\\d{4})-(\\d{2})-(\\d{2})")
-        val result = mutableMapOf<LocalDate, MutableList<ScheduledEntry>>()
+        val result = mutableMapOf<LocalDate, MutableList<Pair<String, OrgNode>>>()
         contents.forEach { (fileName, doc) ->
-            var currentTitle = ""
+            var currentSection: OrgNode? = null
             doc.children.forEach { node ->
                 when (node) {
-                    is OrgSection -> currentTitle = node.title.trim()
+                    is OrgSection -> currentSection = node
                     is OrgPlanning -> if (node.planType == "SCHEDULED") {
                         val m = dateRegex.find(node.timestamp)
                         if (m != null) {
@@ -232,21 +229,18 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
                             val mo = m.groupValues[2].toInt()
                             val d = m.groupValues[3].toInt()
                             val date = LocalDate(y, mo, d)
-                            val entry = ScheduledEntry(
-                                title = currentTitle.ifBlank { fileName },
-                                date = date,
-                                fileName = fileName,
-                                line = node.toOrgString()
-                            )
-                            result.getOrPut(date) { mutableListOf() }.add(entry)
+                            if (currentSection != null) {
+                                result.getOrPut(date) { mutableListOf() }.add(fileName to currentSection)
+                            }
                         }
                     }
+
                     else -> {}
                 }
             }
         }
         return result.mapValues { (_, list) ->
-            list.sortedWith(compareBy({ it.fileName }, { it.title }))
+            list.map { it.first to (it.second ) }
         }
     }
 }
