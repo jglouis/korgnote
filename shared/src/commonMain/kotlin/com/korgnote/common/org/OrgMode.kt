@@ -273,8 +273,8 @@ fun OrgNode.toOrgString(): String = when (this) {
     }
     is OrgTableRow -> cells.joinToString(" | ") { (it as? OrgRaw)?.content ?: "" }
     is OrgPlanning -> when (planType) {
-        "SCHEDULED" -> "SCHEDULED: " + timestamp
-        "DEADLINE" -> "DEADLINE: " + timestamp
+        "SCHEDULED" -> "SCHEDULED: $timestamp"
+        "DEADLINE" -> "DEADLINE: $timestamp"
         else -> timestamp
     }
 }
