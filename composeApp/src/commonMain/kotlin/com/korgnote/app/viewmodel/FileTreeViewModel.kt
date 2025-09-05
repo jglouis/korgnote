@@ -8,13 +8,11 @@ import com.korgnote.app.data.OrgRepository
 import com.korgnote.app.ui.File
 import com.korgnote.app.ui.Folder
 import com.korgnote.app.ui.Node
-import com.korgnote.common.fs.Folder as SharedFolder
-import com.korgnote.common.fs.File as SharedFile
-import com.korgnote.common.fs.Node as SharedNode
-import com.korgnote.common.org.toOrgString
-import com.korgnote.common.org.toOrgDocument
+import com.korgnote.common.org.*
 import kotlinx.datetime.LocalDate
-import kotlin.collections.iterator
+import com.korgnote.common.fs.File as SharedFile
+import com.korgnote.common.fs.Folder as SharedFolder
+import com.korgnote.common.fs.Node as SharedNode
 
 /**
  * Simple ViewModel that holds a file tree and uses a repository to fetch org contents.
@@ -33,11 +31,7 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         private set
     private var currentFile: String? = null
 
-    // Keep parsed org contents for structural rendering
-    private var parsedOrgContents: Map<String, com.korgnote.common.org.OrgDocument> = emptyMap()
 
-    // For mapping checkbox ordinal -> line index in original text
-    private var checkboxLineIndices: List<Int> = emptyList()
 
     // File tree populated from server; wrapped in state so UI recomposes
     var tree by mutableStateOf(
@@ -79,8 +73,8 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         }
     }
 
-    // Simple in-memory org-mode contents keyed by file name. Will be replaced by server data.
-    private val orgContents: MutableMap<String, String> = mutableMapOf()
+    // In-memory parsed org documents keyed by file name, provided by the server
+    private val orgContents: MutableMap<String, OrgDocument> = mutableMapOf()
 
     var selectedFileLabel by mutableStateOf("No file selected")
         private set
@@ -89,64 +83,74 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         private set
 
     // Selected node for structural rendering in UI
-    var selectedOrgNode: com.korgnote.common.org.OrgNode? by mutableStateOf(null)
+    var selectedOrgNode: OrgNode? by mutableStateOf(null)
         private set
 
     // Map of scheduled entries by LocalDate, computed from all contents
     var scheduledByDate by mutableStateOf(buildScheduledIndex(orgContents))
 
-    fun toggleCheckboxAt(lineIndex: Int, checked: Boolean) {
-        val file = currentFile ?: return
-        val content = orgContents[file] ?: return
-        val lines = content.split('\n').toMutableList()
-        if (lineIndex !in lines.indices) return
-        val line = lines[lineIndex]
-        val regex = Regex("^(\\s*)- \\[([ xX])](.*)")
-        val m = regex.find(line) ?: return
-        val leading = m.groupValues[1]
-        val rest = m.groupValues[3]
-        val newMark = if (checked) "X" else " "
-        val newLine = buildString {
-            append(leading)
-            append("- [")
-            append(newMark)
-            append("]")
-            append(rest)
+    private fun toggleNthCheckbox(doc: OrgDocument, ordinal: Int, checked: Boolean): OrgDocument? {
+        val count = 0
+        fun visit(node: OrgNode): Pair<OrgNode, Boolean> {
+            return when (node) {
+                is OrgCheckboxItem -> {
+                    if (count == ordinal) {
+                        node.copy(checked = checked) to true
+                    } else {
+                        node to false
+                    }
+                }
+                is OrgList -> {
+                    val newChildren = mutableListOf<OrgNode>()
+                    var done = false
+                    for (child in node.children) {
+                        if (!done) {
+                            val (nc, d) = visit(child)
+                            newChildren.add(nc)
+                            done = d
+                        } else {
+                            newChildren.add(child)
+                        }
+                    }
+                    if (done) OrgList(node.bulletType, newChildren) to true else node to false
+                }
+                is OrgDocument -> {
+                    val newChildren = mutableListOf<OrgNode>()
+                    var done = false
+                    for (child in node.children) {
+                        if (!done) {
+                            val (nc, d) = visit(child)
+                            newChildren.add(nc)
+                            done = d
+                        } else {
+                            newChildren.add(child)
+                        }
+                    }
+                    if (done) OrgDocument(newChildren, node.metadata) to true else node to false
+                }
+                else -> node to false
+            }
         }
-        lines[lineIndex] = newLine
-        val updated = lines.joinToString("\n")
-        orgContents[file] = updated
-        selectedFileContent = updated
-        // After toggling, recompute checkbox mapping and refresh selectedOrgNode from freshly parsed content
-        rebuildCheckboxLineIndices()
-        val parsed = updated.toOrgDocument()
-        parsedOrgContents = parsedOrgContents + (file to parsed)
-        selectedOrgNode = parsed
-    }
-
-    private fun rebuildCheckboxLineIndices() {
-        val text = selectedFileContent
-        if (text.isBlank()) {
-            checkboxLineIndices = emptyList()
-            return
-        }
-        val re = Regex("^\\s*- \\[([ xX])].*$")
-        val list = mutableListOf<Int>()
-        text.split('\n').forEachIndexed { idx, line -> if (re.containsMatchIn(line)) list.add(idx) }
-        checkboxLineIndices = list
+        val (newDocNode, done) = visit(doc)
+        return if (done) newDocNode as OrgDocument else null
     }
 
     fun toggleCheckboxByOrdinal(ordinal: Int, checked: Boolean) {
-        val idx = checkboxLineIndices.getOrNull(ordinal) ?: return
-        toggleCheckboxAt(idx, checked)
+        val file = currentFile ?: return
+        val doc = orgContents[file] ?: return
+        val updated = toggleNthCheckbox(doc, ordinal, checked) ?: return
+        orgContents[file] = updated
+        selectedOrgNode = updated
+        selectedFileContent = updated.toOrgString()
     }
+
+
 
     fun onFileSelected(name: String) {
         selectedFileLabel = "Selected: $name"
-        selectedFileContent = orgContents[name] ?: "* ${name}\nNo content yet."
-        // Reparse from current text to ensure checkboxes reflect latest state
-        selectedOrgNode = selectedFileContent.toOrgDocument()
-        rebuildCheckboxLineIndices()
+        val doc = orgContents[name]
+        selectedOrgNode = doc
+        selectedFileContent = doc?.toOrgString() ?: "* ${name}\nNo content yet."
         currentFile = name
     }
 
@@ -155,12 +159,8 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         try {
             val sharedTree = repository.fetchTree()
             val data = repository.fetchAllContents()
-            // Save parsed documents for structural UI
-            parsedOrgContents = data
-            // Convert parsed OrgDocument values to string for current UI and indexing
-            val stringData: Map<String, String> = data.mapValues { (_, doc) -> doc.toOrgString() }
             orgContents.clear()
-            orgContents.putAll(stringData)
+            orgContents.putAll(data)
             tree = mapRootToUiFolder(sharedTree)
             scheduledByDate = buildScheduledIndex(orgContents)
             // clear error on success
@@ -169,16 +169,16 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
                 val first = data.keys.minOrNull()
                 if (first != null) onFileSelected(first) else {
                     selectedOrgNode = null
-                    checkboxLineIndices = emptyList()
+                    selectedFileContent = ""
                 }
             } else {
-                currentFile?.let { current ->
-                    selectedFileContent = orgContents[current] ?: selectedFileContent
-                    // Reparse to ensure UI reflects latest content (including any local toggles)
-                    val parsed = selectedFileContent.toOrgDocument()
-                    parsedOrgContents = parsedOrgContents + (current to parsed)
-                    selectedOrgNode = parsed
-                    rebuildCheckboxLineIndices()
+                val current = currentFile
+                if (current != null) {
+                    val doc = orgContents[current]
+                    if (doc != null) {
+                        selectedOrgNode = doc
+                        selectedFileContent = doc.toOrgString()
+                    }
                 }
             }
         } catch (t: Throwable) {
@@ -217,40 +217,36 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
 
     private fun mapRootToUiFolder(shared: SharedFolder): Folder = mapSharedToUi(shared) as Folder
 
-    private fun buildScheduledIndex(contents: Map<String, String>): Map<LocalDate, List<ScheduledEntry>> {
-        val regex = Regex("SCHEDULED:\\s*<([0-9]{4})-([0-9]{2})-([0-9]{2})")
-        val titleRegex = Regex("^(\\*+)\\s+(.*)")
+    private fun buildScheduledIndex(contents: Map<String, OrgDocument>): Map<LocalDate, List<ScheduledEntry>> {
+        val dateRegex = Regex("<(\\d{4})-(\\d{2})-(\\d{2})")
         val result = mutableMapOf<LocalDate, MutableList<ScheduledEntry>>()
-        for ((fileName, text) in contents) {
+        contents.forEach { (fileName, doc) ->
             var currentTitle = ""
-            for (line in text.lineSequence()) {
-                val heading = titleRegex.find(line.trim())
-                if (heading != null) {
-                    currentTitle = heading.groupValues[2].trim()
-                }
-                val m = regex.find(line)
-                if (m != null) {
-                    val y = m.groupValues[1].toInt()
-                    val mo = m.groupValues[2].toInt()
-                    val d = m.groupValues[3].toInt()
-                    val date = LocalDate(y, mo, d)
-                    val entry = ScheduledEntry(
-                        title = currentTitle.ifBlank { fileName },
-                        date = date,
-                        fileName = fileName,
-                        line = line.trim()
-                    )
-                    result.getOrPut(date) { mutableListOf() }.add(entry)
+            doc.children.forEach { node ->
+                when (node) {
+                    is OrgSection -> currentTitle = node.title.trim()
+                    is OrgPlanning -> if (node.planType == "SCHEDULED") {
+                        val m = dateRegex.find(node.timestamp)
+                        if (m != null) {
+                            val y = m.groupValues[1].toInt()
+                            val mo = m.groupValues[2].toInt()
+                            val d = m.groupValues[3].toInt()
+                            val date = LocalDate(y, mo, d)
+                            val entry = ScheduledEntry(
+                                title = currentTitle.ifBlank { fileName },
+                                date = date,
+                                fileName = fileName,
+                                line = node.toOrgString()
+                            )
+                            result.getOrPut(date) { mutableListOf() }.add(entry)
+                        }
+                    }
+                    else -> {}
                 }
             }
         }
-        // sort entries per date by fileName/title for deterministic order
         return result.mapValues { (_, list) ->
-            list.sortedWith(
-                compareBy(
-                    { it.fileName },
-                    { it.title })
-            )
+            list.sortedWith(compareBy({ it.fileName }, { it.title }))
         }
     }
 }
