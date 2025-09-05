@@ -124,6 +124,12 @@ private fun RenderNode(
             Text(text = buildOrgAnnotatedString(node.content), style = MaterialTheme.typography.bodySmall)
         }
 
+        is com.korgnote.common.org.OrgPlanning -> {
+            val darkGrey = Color(0xFF616161)
+            val line = node.planType + ": " + node.timestamp
+            Text(text = buildOrgAnnotatedString(line), style = MaterialTheme.typography.bodySmall.copy(color = darkGrey))
+        }
+
         is OrgRaw -> {
             node.content.split('\n').forEach { ln ->
                 Text(text = buildOrgAnnotatedString(ln), style = MaterialTheme.typography.bodyMedium)

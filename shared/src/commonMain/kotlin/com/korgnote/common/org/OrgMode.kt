@@ -27,6 +27,11 @@ data class OrgList(val bulletType: Char, val children: List<OrgNode>) : OrgNode
 @SerialName("keyword")
 data class OrgKeyword(val content: String) : OrgNode
 
+// SCHEDULED or DEADLINE timestamp line under a heading
+@Serializable
+@SerialName("planning")
+data class OrgPlanning(@SerialName("planType") val planType: String, val timestamp: String) : OrgNode
+
 // Any raw text paragraph or line content that doesn't fit another construct.
 @Serializable
 @SerialName("raw")
@@ -129,6 +134,8 @@ fun String.toOrgDocument(): OrgDocument {
             if (trim.startsWith("*")) break
             // stop before a top-level simple list so that lists after headings are parsed as lists, not raw content
             if (Regex("^\\s*[-+] ").containsMatchIn(trim)) break
+            // stop before planning lines so they are separate nodes
+            if (Regex("^(?:SCHEDULED|DEADLINE):").containsMatchIn(trim)) break
             if (trim.isBlank()) {
                 contentSb.append('\n')
                 idx++
@@ -140,7 +147,7 @@ fun String.toOrgDocument(): OrgDocument {
         return OrgSection(title, contentSb.toString().trimEnd(), todo) to idx
     }
 
-    while (i < lines.size) {
+    mainLoop@ while (i < lines.size) {
         val raw = lines[i]
         val line = raw.trimEnd()
         if (line.isBlank()) {
@@ -169,6 +176,18 @@ fun String.toOrgDocument(): OrgDocument {
             children.add(section)
             i = next
             continue
+        }
+        // Planning lines: SCHEDULED: or DEADLINE:
+        run {
+            val pm = Regex("^(?:SCHEDULED|DEADLINE):\\s*(.*)").find(line)
+            if (pm != null) {
+                flushParagraph()
+                val type = if (line.trimStart().startsWith("SCHEDULED:")) "SCHEDULED" else "DEADLINE"
+                val ts = pm.groupValues[1].trim()
+                children.add(OrgPlanning(planType = type, timestamp = ts))
+                i++
+                continue@mainLoop
+            }
         }
         val listBullet = when {
             Regex("^\\s*- ").containsMatchIn(line) -> '-'
@@ -253,4 +272,9 @@ fun OrgNode.toOrgString(): String = when (this) {
         if (row.cells.isEmpty()) "" else row.cells.joinToString("\n") { cell -> "| " + (cell as? OrgRaw)?.content.orEmpty() + " |" }
     }
     is OrgTableRow -> cells.joinToString(" | ") { (it as? OrgRaw)?.content ?: "" }
+    is OrgPlanning -> when (planType) {
+        "SCHEDULED" -> "SCHEDULED: " + timestamp
+        "DEADLINE" -> "DEADLINE: " + timestamp
+        else -> timestamp
+    }
 }
