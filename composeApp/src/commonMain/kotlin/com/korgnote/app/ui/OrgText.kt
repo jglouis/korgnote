@@ -8,8 +8,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -29,6 +28,8 @@ import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTable
 import com.korgnote.common.org.OrgTableRow
 
+private class Ord(var i: Int)
+
 @Composable
 fun OrgText(
     content: OrgNode,
@@ -36,16 +37,13 @@ fun OrgText(
     // Int parameter represents the ordinal index of the checkbox item in the original text
     onToggleCheckbox: ((ordinalIndex: Int, checked: Boolean) -> Unit)? = null,
 ) {
-    val checkboxOrdinal = remember { mutableIntStateOf(0) }
+    // Fresh counter each composition to ensure consistent ordinal indexing on every recomposition
+    val ord = Ord(0)
     Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
         RenderNode(
             node = content,
-            onCheckbox = { checked ->
-                val idx = checkboxOrdinal.intValue
-                onToggleCheckbox?.invoke(idx, checked)
-                // advance ordinal for next checkbox in document order
-                checkboxOrdinal.intValue = idx + 1
-            }
+            ordinal = ord,
+            onToggleCheckbox = onToggleCheckbox,
         )
     }
 }
@@ -53,14 +51,16 @@ fun OrgText(
 @Composable
 private fun RenderNode(
     node: OrgNode,
-    onCheckbox: ((Boolean) -> Unit)?
+    ordinal: Ord,
+    onToggleCheckbox: ((Int, Boolean) -> Unit)?
 ) {
     when (node) {
         is OrgDocument -> {
             Column(horizontalAlignment = Alignment.Start) {
-                node.children.forEach { child -> RenderNode(child, onCheckbox) }
+                node.children.forEach { child -> RenderNode(child, ordinal, onToggleCheckbox) }
             }
         }
+
         is OrgSection -> {
             // Heading line
             val headingText = buildString {
@@ -72,7 +72,10 @@ private fun RenderNode(
             }
             Text(
                 text = buildOrgAnnotatedString(headingText),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
             )
             // Section content (preformatted lines)
             if (node.content.isNotBlank()) {
@@ -81,28 +84,52 @@ private fun RenderNode(
                 }
             }
         }
+
         is OrgList -> {
             Column(horizontalAlignment = Alignment.Start) {
                 node.children.forEach { child ->
                     when (child) {
-                        is OrgCheckboxItem -> CheckboxLine(checked = child.checked, text = child.text, onCheckedChange = { c -> onCheckbox?.invoke(c) })
-                        is OrgRaw -> Text(text = buildOrgAnnotatedString("${node.bulletType} ${child.content}"), style = MaterialTheme.typography.bodyMedium)
-                        else -> RenderNode(child, onCheckbox)
+                        is OrgCheckboxItem -> {
+                            val idx = ordinal.i
+                            key(idx) {
+                                CheckboxLine(checked = child.checked, text = child.text, onCheckedChange = { c ->
+                                    onToggleCheckbox?.invoke(idx, c)
+                                })
+                            }
+                            ordinal.i = idx + 1
+                        }
+
+                        is OrgRaw -> Text(
+                            text = buildOrgAnnotatedString("${node.bulletType} ${child.content}"),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+
+                        else -> RenderNode(child, ordinal, onToggleCheckbox)
                     }
                 }
             }
         }
+
         is OrgCheckboxItem -> {
-            CheckboxLine(checked = node.checked, text = node.text, onCheckedChange = { c -> onCheckbox?.invoke(c) })
+            val idx = ordinal.i
+            key(idx) {
+                CheckboxLine(checked = node.checked, text = node.text, onCheckedChange = { c ->
+                    onToggleCheckbox?.invoke(idx, c)
+                })
+            }
+            ordinal.i = idx + 1
         }
+
         is OrgKeyword -> {
             Text(text = buildOrgAnnotatedString(node.content), style = MaterialTheme.typography.bodySmall)
         }
+
         is OrgRaw -> {
             node.content.split('\n').forEach { ln ->
                 Text(text = buildOrgAnnotatedString(ln), style = MaterialTheme.typography.bodyMedium)
             }
         }
+
         is OrgTable -> {
             // Very simple: print rows as lines like | cell |
             val row = node.rows
@@ -113,6 +140,7 @@ private fun RenderNode(
                 }
             }
         }
+
         is OrgTableRow -> {
             val line = node.cells.joinToString(" | ") { (it as? OrgRaw)?.content ?: "" }
             Text(text = buildOrgAnnotatedString(line), style = MaterialTheme.typography.bodyMedium)
@@ -154,7 +182,9 @@ fun buildOrgAnnotatedString(text: String): AnnotatedString {
                     }
                 }
             }
-            if (!matched) { append(text[i]); i++ }
+            if (!matched) {
+                append(text[i]); i++
+            }
         }
     }
 }

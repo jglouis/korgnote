@@ -38,11 +38,13 @@ class OrgModeMixedContentTests {
     fun mixedContentCheckBoxSectionsParagraphs() {
         val text = "* Website Redesign\n** Milestones\n- [ ] Wireframes\n- [ ] Prototype\n- [ ] Launch"
         val doc = text.toOrgDocument()
-        // With updated parser: top-level section 'Website Redesign', then a subsection 'Milestones' whose content contains the three checkbox lines as raw text (we don't yet parse lists inside sections)
-        assertEquals(2, doc.children.size)
-        val top = assertIs<OrgSection>(doc.children[0]); assertEquals("Website Redesign", top.title)
-        val sec = assertIs<OrgSection>(doc.children[1])
-        assertEquals("Milestones", sec.title)
-        assertEquals("- [ ] Wireframes\n- [ ] Prototype\n- [ ] Launch", sec.content)
+        // Updated expectation: sections are parsed for headings, and a list immediately following a heading is parsed as a list node, not swallowed as raw section content.
+        assertEquals(3, doc.children.size)
+        val top = assertIs<OrgSection>(doc.children[0]); assertEquals("Website Redesign", top.title); assertEquals("", top.content)
+        val sec = assertIs<OrgSection>(doc.children[1]); assertEquals("Milestones", sec.title); assertEquals("", sec.content)
+        val list = assertIs<OrgList>(doc.children[2]); assertEquals('-', list.bulletType); assertEquals(3, list.children.size)
+        val c1 = assertIs<OrgCheckboxItem>(list.children[0]); assertEquals(false, c1.checked); assertEquals("Wireframes", c1.text)
+        val c2 = assertIs<OrgCheckboxItem>(list.children[1]); assertEquals(false, c2.checked); assertEquals("Prototype", c2.text)
+        val c3 = assertIs<OrgCheckboxItem>(list.children[2]); assertEquals(false, c3.checked); assertEquals("Launch", c3.text)
     }
 }

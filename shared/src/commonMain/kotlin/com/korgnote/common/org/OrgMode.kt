@@ -127,6 +127,8 @@ fun String.toOrgDocument(): OrgDocument {
             val trim = l.trimEnd()
             // stop at next heading of same or higher level (starts with *)
             if (trim.startsWith("*")) break
+            // stop before a top-level simple list so that lists after headings are parsed as lists, not raw content
+            if (Regex("^\\s*[-+] ").containsMatchIn(trim)) break
             if (trim.isBlank()) {
                 contentSb.append('\n')
                 idx++

@@ -12,6 +12,7 @@ import com.korgnote.common.fs.Folder as SharedFolder
 import com.korgnote.common.fs.File as SharedFile
 import com.korgnote.common.fs.Node as SharedNode
 import com.korgnote.common.org.toOrgString
+import com.korgnote.common.org.toOrgDocument
 import kotlinx.datetime.LocalDate
 import kotlin.collections.iterator
 
@@ -116,9 +117,11 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         val updated = lines.joinToString("\n")
         orgContents[file] = updated
         selectedFileContent = updated
-        // After toggling, recompute checkbox mapping and refresh selectedOrgNode fallback
+        // After toggling, recompute checkbox mapping and refresh selectedOrgNode from freshly parsed content
         rebuildCheckboxLineIndices()
-        selectedOrgNode = parsedOrgContents[file] ?: com.korgnote.common.org.OrgRaw(updated)
+        val parsed = updated.toOrgDocument()
+        parsedOrgContents = parsedOrgContents + (file to parsed)
+        selectedOrgNode = parsed
     }
 
     private fun rebuildCheckboxLineIndices() {
@@ -141,9 +144,8 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     fun onFileSelected(name: String) {
         selectedFileLabel = "Selected: $name"
         selectedFileContent = orgContents[name] ?: "* ${name}\nNo content yet."
-        selectedOrgNode = parsedOrgContents[name] ?: com.korgnote.common.org.OrgRaw(
-            selectedFileContent
-        )
+        // Reparse from current text to ensure checkboxes reflect latest state
+        selectedOrgNode = selectedFileContent.toOrgDocument()
         rebuildCheckboxLineIndices()
         currentFile = name
     }
@@ -172,7 +174,10 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
             } else {
                 currentFile?.let { current ->
                     selectedFileContent = orgContents[current] ?: selectedFileContent
-                    selectedOrgNode = parsedOrgContents[current] ?: selectedOrgNode
+                    // Reparse to ensure UI reflects latest content (including any local toggles)
+                    val parsed = selectedFileContent.toOrgDocument()
+                    parsedOrgContents = parsedOrgContents + (current to parsed)
+                    selectedOrgNode = parsed
                     rebuildCheckboxLineIndices()
                 }
             }
