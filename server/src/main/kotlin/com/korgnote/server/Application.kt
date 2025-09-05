@@ -14,7 +14,9 @@ import io.ktor.server.http.content.staticFiles
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
+import io.ktor.server.routing.RoutingContext
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
@@ -96,6 +98,13 @@ fun Application.module() {
             staticFiles("/", wasmOut, index = "index.html")
         }
 
+        get("/favicon.png") {
+            respondFavIcon()
+        }
+        get("/favicon.ico") {
+            respondFavIcon()
+        }
+
         // API endpoints kept under /api to avoid collision with index.html routing
         // Serve index.html at root when WASM output exists; otherwise fall back to legacy greeting
         if (wasmOut == null) {
@@ -128,5 +137,13 @@ fun Application.module() {
                 else call.respondText(body)
             }
         }
+    }
+}
+suspend fun RoutingContext.respondFavIcon() {
+    val bytes = this::class.java.classLoader.getResourceAsStream("favicon.png")?.readBytes()
+    if (bytes == null) {
+        call.respondText("Not found", status = HttpStatusCode.NotFound)
+    } else {
+        call.respondBytes(bytes, contentType = io.ktor.http.ContentType.Image.PNG)
     }
 }
