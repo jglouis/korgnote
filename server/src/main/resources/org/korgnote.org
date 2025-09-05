@@ -1,0 +1,11 @@
+#+TITLE: Project KorgNote
+#+AUTHOR: Team
+* Project KorgNote
+** Goals
+- Cross-platform Org viewer
+- Calendar extraction
+** TODO Calendar markers
+SCHEDULED: <2025-09-18 Thu>
+** Data Table
+| R1C1 | R1C2 | R1C3 |
+| R2C1 | R2C2 | R2C3 |

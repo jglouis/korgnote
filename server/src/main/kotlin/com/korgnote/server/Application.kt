@@ -31,22 +31,24 @@ fun main() {
 fun Application.module() {
     install(ContentNegotiation) { json() }
 
-    // Fake in-memory org contents; this mirrors the app's previous local data
-    val orgContents: Map<String, String> = mapOf(
-        "inbox.org" to "* Inbox\n** TODO Capture an idea\nAdded: [2025-09-03 Wed 15:03]",
-        "next-actions.org" to "* Next Actions\n** TODO Implement Org preview in app\nSCHEDULED: <2025-09-04 Thu>\n** TODO Review release notes\nSCHEDULED: <2025-09-21 Sun>",
-        "calendar.org" to "* Calendar\n** 2025\n*** Team sync\nSCHEDULED: <2025-09-10 Wed>\n*** Release planning\nSCHEDULED: <2025-09-15 Mon>",
-        "sep-2025.org" to "* September 2025\n** TODO Kickoff Q4 planning\nSCHEDULED: <2025-09-10 Wed>\n** DONE Submit budget proposal\nSCHEDULED: <2025-09-15 Mon>\n** TODO Write blog post\nSCHEDULED: <2025-09-21 Sun>\n** TODO End of month review\nSCHEDULED: <2025-09-30 Tue>",
-        "korgnote.org" to "* Project KorgNote\n** Goals\n- Cross-platform Org viewer\n** Tasks\n- [ ] Show content on select\n** TODO Calendar markers\nSCHEDULED: <2025-09-18 Thu>",
-        "website-redesign.org" to "* Website Redesign\n** Milestones\n- [ ] Wireframes\n- [ ] Prototype\n- [ ] Launch",
-        "research-notes.org" to "* Research Notes\n- Compose Multiplatform\n- Org-mode parsing",
-        "2024-12-31.org" to "* Journal 2024-12-31\n- Reflect on the year",
-        "2025-01-01.org" to "* Journal 2025-01-01\n- New beginnings",
-        "2025-09-03.org" to "* Journal 2025-09-03\n- Implemented Org content in app",
-        "books.org" to "* Books\n** Reading\n- The Pragmatic Programmer\n** Wishlist\n- Structure and Interpretation of Computer Programs",
-        "quotes.org" to "* Quotes\n** Alan Kay\n> The best way to predict the future is to invent it.",
-        "notes.org" to "* Notes\nMiscellaneous notes"
-    )
+    // Load .org examples from resources under /org directory
+    fun loadOrgResources(): Map<String, String> {
+        val cl = this::class.java.classLoader
+        // Try to list files in resources/org via the file system (works in tests and from Gradle run)
+        val baseUrl = cl.getResource("org/")
+        val map = linkedMapOf<String, String>()
+        if (baseUrl != null) {
+            val file = kotlin.runCatching { File(baseUrl.toURI()) }.getOrNull()
+            if (file != null && file.exists() && file.isDirectory) {
+                file.walkTopDown().filter { it.isFile && it.name.endsWith(".org") }.forEach { f ->
+                    map[f.name] = f.readText()
+                }
+            }
+        }
+        return map
+    }
+
+    val orgContents: Map<String, String> = loadOrgResources()
 
     // Tree paths representing the hierarchical structure under Documents/
     // These paths map to the filenames present in orgContents

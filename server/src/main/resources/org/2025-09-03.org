@@ -1,0 +1,6 @@
+* Journal 2025-09-03
+A busy day implementing Org content in the app.
+
+- Implemented API
+- Wrote tests
+- Debugged server

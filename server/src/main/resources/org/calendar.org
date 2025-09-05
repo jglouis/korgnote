@@ -1,0 +1,7 @@
+#+TITLE: Calendar
+* Calendar
+** 2025-09
+*** Team sync
+SCHEDULED: <2025-09-10 Wed>
+*** Release planning
+SCHEDULED: <2025-09-15 Mon>

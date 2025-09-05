@@ -1,0 +1,10 @@
+* Next Actions
+#+TODO: TODO WAITING | DONE
+** TODO Implement Org preview in app
+SCHEDULED: <2025-09-04 Thu>
+** TODO Review release notes
+SCHEDULED: <2025-09-21 Sun>
+** Tasks
+- [ ] Hook up API
+- [ ] Render lists
+- [x] Parse headings

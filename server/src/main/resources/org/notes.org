@@ -1,0 +1,8 @@
+* Notes
+This file contains miscellaneous notes and longer paragraphs for testing rendering.
+
+KorgNote accelerates note-taking with Org-mode. This paragraph is part of a generated sample used for testing.
+
+- Bullet one
+- Bullet two
+- Bullet three

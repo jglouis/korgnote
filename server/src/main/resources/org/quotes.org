@@ -1,0 +1,5 @@
+* Quotes
+** Alan Kay
+> The best way to predict the future is to invent it.
+** Grace Hopper
+> The most dangerous phrase in the language is, "We've always done it this way."

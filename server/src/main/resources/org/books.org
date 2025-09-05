@@ -1,0 +1,8 @@
+* Books
+** Reading
+- The Pragmatic Programmer
+- Clean Code
+- Domain-Driven Design
+** Wishlist
+- Structure and Interpretation of Computer Programs
+- Designing Data-Intensive Applications

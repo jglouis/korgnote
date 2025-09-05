@@ -1,0 +1,9 @@
+* September 2025
+** TODO Kickoff Q4 planning
+SCHEDULED: <2025-09-10 Wed>
+** DONE Submit budget proposal
+SCHEDULED: <2025-09-15 Mon>
+** TODO Write blog post
+SCHEDULED: <2025-09-21 Sun>
+** TODO End of month review
+SCHEDULED: <2025-09-30 Tue>
