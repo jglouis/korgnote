@@ -33,7 +33,7 @@ val appModule = module {
 
 // Helper to build base URL from host and port
 fun buildBaseUrl(host: String, port: Int): String {
-    val normalized = if (host.startsWith("http://") || host.startsWith("https://")) host else "http://$host"
+    val normalized = if (host.startsWith("http://") || host.startsWith("https://")) host else "https://$host"
     return "$normalized:$port"
 }
 
