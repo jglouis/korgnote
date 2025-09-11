@@ -1,7 +1,6 @@
 package com.korgnote.server
 
 import com.korgnote.common.Greeting
-import com.korgnote.common.SERVER_PORT
 import com.korgnote.common.fs.TreeUtils.buildFromPaths
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.toOrgDocument
@@ -9,9 +8,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
-import io.ktor.server.engine.embeddedServer
 import io.ktor.server.http.content.staticFiles
-import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondBytes
@@ -23,9 +20,18 @@ import io.ktor.server.routing.routing
 import java.io.File
 import java.nio.file.Paths
 
-fun main() {
-    embeddedServer(Netty, port = SERVER_PORT, host = "0.0.0.0", module = Application::module)
-        .start(wait = true)
+fun main(args: Array<String>) {
+    // Ensure a self-signed certificate exists for HTTPS and delegate startup to EngineMain
+    val keystoreFile = File("build/keystore.jks").apply { parentFile.mkdirs() }
+    if (!keystoreFile.exists()) {
+        io.ktor.network.tls.certificates.generateCertificate(
+            file = keystoreFile,
+            keyAlias = "selfsigned",
+            keyPassword = "changeit",
+            jksPassword = "changeit"
+        )
+    }
+    io.ktor.server.netty.EngineMain.main(args)
 }
 
 fun Application.module() {
