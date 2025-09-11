@@ -23,6 +23,7 @@ import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgKeyword
 import com.korgnote.common.org.OrgList
 import com.korgnote.common.org.OrgNode
+import com.korgnote.common.org.OrgPlanning
 import com.korgnote.common.org.OrgRaw
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTable
@@ -112,10 +113,13 @@ private fun RenderNode(
             Text(text = buildOrgAnnotatedString(node.content), style = MaterialTheme.typography.bodySmall)
         }
 
-        is com.korgnote.common.org.OrgPlanning -> {
+        is OrgPlanning -> {
             val darkGrey = Color(0xFF616161)
             val line = node.planType + ": " + node.timestamp
-            Text(text = buildOrgAnnotatedString(line), style = MaterialTheme.typography.bodySmall.copy(color = darkGrey))
+            Text(
+                text = buildOrgAnnotatedString(line),
+                style = MaterialTheme.typography.bodySmall.copy(color = darkGrey)
+            )
         }
 
         is OrgRaw -> {
