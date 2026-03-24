@@ -57,6 +57,7 @@ kotlin {
         }
         androidMain.dependencies {
             implementation(libs.compose.ui.tooling.preview)
+            implementation(libs.compose.ui.tooling)
             implementation(libs.androidx.activity.compose)
             // Ktor Android engine (choose exactly one)
             implementation(libs.ktor.client.android)
