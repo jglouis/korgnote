@@ -41,7 +41,6 @@ import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.compose.ui.tooling.preview.Preview
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
@@ -50,6 +49,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import com.korgnote.common.org.OrgNode
 import com.korgnote.common.org.OrgPlanning
+import org.jetbrains.compose.ui.tooling.preview.Preview
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
