@@ -18,12 +18,11 @@ extensions.configure<ApplicationExtension> {
         }
     }
     namespace = "com.korgnote.androidapp"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        minSdk = 26
+        minSdk = libs.versions.android.minSdk.get().toInt()
+        targetSdk = libs.versions.android.targetSdk.get().toInt()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
