@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import com.korgnote.app.data.PersistentSettingsRepository
 import com.korgnote.app.data.SettingsRepository
+import com.korgnote.app.di.initKoin
 import org.koin.dsl.module
 
 class MainActivity : ComponentActivity() {
@@ -15,11 +16,13 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
+        val androidModule = module {
+            single<SettingsRepository> { PersistentSettingsRepository(applicationContext) }
+        }
+        initKoin(extraModules = listOf(androidModule))
+
         setContent {
-            val androidModule = module {
-                single<SettingsRepository> { PersistentSettingsRepository(applicationContext) }
-            }
-            App(extraModules = listOf(androidModule))
+            App()
         }
     }
 }

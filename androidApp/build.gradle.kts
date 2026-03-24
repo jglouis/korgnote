@@ -1,10 +1,21 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
 }
 
+kotlin {
+    androidTarget()
+}
+
 android {
-    namespace = "com.korgnote.app"
+    sourceSets {
+        getByName("main") {
+            manifest.srcFile("src/main/AndroidManifest.xml")
+        }
+    }
+    namespace = "com.korgnote.androidapp"
     compileSdk {
         version = release(36)
     }

@@ -3,10 +3,16 @@ package com.korgnote.app
 import androidx.compose.ui.window.ComposeUIViewController
 import com.korgnote.app.data.PersistentSettingsRepository
 import com.korgnote.app.data.SettingsRepository
+import com.korgnote.app.di.initKoin
+import org.koin.dsl.module
 
-fun MainViewController() = ComposeUIViewController { 
-    val iosModule = org.koin.dsl.module {
+fun MainViewController(): platform.UIKit.UIViewController {
+    val iosModule = module {
         single<SettingsRepository> { PersistentSettingsRepository() }
     }
-    App(extraModules = listOf(iosModule))
+    initKoin(extraModules = listOf(iosModule))
+
+    return ComposeUIViewController {
+        App()
+    }
 }

@@ -6,6 +6,8 @@ import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.viewmodel.FileTreeViewModel
 import io.ktor.client.HttpClient
 import org.koin.core.module.dsl.viewModel
+import org.koin.core.context.startKoin
+import org.koin.core.module.Module
 import org.koin.dsl.bind
 import org.koin.dsl.module
 
@@ -25,11 +27,11 @@ val appModule = module {
     viewModel { FileTreeViewModel(get<OrgRepository>()) }
 }
 
-// Expose an init function to start Koin from platform-specific entry points if needed
-//fun initKoin(additionalModules: List<Module> = emptyList()): Koin =
-//    startKoin {
-//        modules(appModule + additionalModules)
-//    }.koin
+fun initKoin(extraModules: List<Module> = emptyList()) {
+    startKoin {
+        modules(appModule + extraModules)
+    }
+}
 
 // Helper to build base URL from host and port
 fun buildBaseUrl(host: String, port: Int): String {

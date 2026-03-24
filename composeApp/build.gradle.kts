@@ -15,7 +15,6 @@ kotlin {
         compileSdk = 36
         minSdk = 26
         namespace = "com.korgnote.app"
-        experimentalProperties["android.experimental.kmp.enable.AndroidResources"] = true
     }
 
     listOf(
@@ -37,14 +36,6 @@ kotlin {
     }
 
     sourceSets {
-        androidMain.dependencies {
-            implementation(compose.preview)
-            implementation(libs.androidx.activity.compose)
-            // Ktor Android engine (choose exactly one)
-            implementation(libs.ktor.client.android)
-            // Ktor client logging (debug diagnostics)
-            implementation(libs.ktor.client.logging)
-        }
         commonMain.dependencies {
             implementation(compose.runtime)
             implementation(compose.foundation)
@@ -64,6 +55,14 @@ kotlin {
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)
+        }
+        androidMain.dependencies {
+            implementation(compose.preview)
+            implementation(libs.androidx.activity.compose)
+            // Ktor Android engine (choose exactly one)
+            implementation(libs.ktor.client.android)
+            // Ktor client logging (debug diagnostics)
+            implementation(libs.ktor.client.logging)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

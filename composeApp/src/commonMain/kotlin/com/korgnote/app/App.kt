@@ -39,7 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.di.appModule
-import org.koin.compose.KoinApplication
+import org.koin.compose.KoinContext
 import com.korgnote.app.ui.CalendarScreen
 import com.korgnote.app.ui.FileTree
 import com.korgnote.app.ui.OrgText
@@ -55,130 +55,130 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.compose.koinInject
 import com.korgnote.app.data.SettingsRepository
+import org.koin.core.context.startKoin
+import org.koin.dsl.KoinAppDeclaration
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @Preview
-fun App(extraModules: List<org.koin.core.module.Module> = emptyList()) {
-    KoinApplication(application = { modules(appModule + extraModules) }) {
-        MaterialTheme {
-            var selectedScreen by remember { mutableStateOf(BottomItem.HOME) }
-            val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-            val scope = rememberCoroutineScope()
-            val vm = koinViewModel<FileTreeViewModel>()
-            LaunchedEffect(Unit) {
-                vm.loadFromServer()
+fun App() {
+    MaterialTheme {
+        var selectedScreen by remember { mutableStateOf(BottomItem.HOME) }
+        val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+        val scope = rememberCoroutineScope()
+        val vm = koinViewModel<FileTreeViewModel>()
+        LaunchedEffect(Unit) {
+            vm.loadFromServer()
+        }
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            gesturesEnabled = selectedScreen != BottomItem.CALENDAR,
+            drawerContent = {
+                ModalDrawerSheet(modifier = Modifier.width(280.dp)) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("Files", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.width(8.dp))
+                        OutlinedTextField(
+                            value = vm.filterQuery,
+                            onValueChange = { vm.filterQuery = it },
+                            label = { Text("Filter files") },
+                            singleLine = true
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        FileTree(
+                            root = vm.filteredTree,
+                            onFileSelected = { name ->
+                                scope.launch {
+                                    vm.onFileSelected(name)
+                                    drawerState.close()
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
             }
-            ModalNavigationDrawer(
-                drawerState = drawerState,
-                gesturesEnabled = selectedScreen != BottomItem.CALENDAR,
-                drawerContent = {
-                    ModalDrawerSheet(modifier = Modifier.width(280.dp)) {
-                        Column(modifier = Modifier.padding(8.dp)) {
-                            Text("Files", style = MaterialTheme.typography.titleMedium)
-                            Spacer(Modifier.width(8.dp))
-                            OutlinedTextField(
-                                value = vm.filterQuery,
-                                onValueChange = { vm.filterQuery = it },
-                                label = { Text("Filter files") },
-                                singleLine = true
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            FileTree(
-                                root = vm.filteredTree,
-                                onFileSelected = { name ->
-                                    scope.launch {
-                                        vm.onFileSelected(name)
-                                        drawerState.close()
-                                    }
+        ) {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = { Text(selectedScreen.getLabel()) },
+                        navigationIcon = {
+                            if (selectedScreen != BottomItem.CALENDAR) {
+                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                    Icon(Icons.Filled.Menu, contentDescription = "Open drawer")
+                                }
+                            }
+                        }
+                    )
+                },
+                bottomBar = {
+                    NavigationBar {
+                        BottomItem.entries.forEach { item ->
+                            NavigationBarItem(
+                                selected = selectedScreen == item,
+                                onClick = { selectedScreen = item },
+                                icon = {
+                                    Icon(
+                                        item.getIconRes(),
+                                        contentDescription = item.getLabel()
+                                    )
                                 },
-                                modifier = Modifier.weight(1f)
+                                label = { Text(item.getLabel()) },
+                                alwaysShowLabel = true
                             )
                         }
                     }
                 }
-            ) {
-                Scaffold(
-                    topBar = {
-                        TopAppBar(
-                            title = { Text(selectedScreen.getLabel()) },
-                            navigationIcon = {
-                                if (selectedScreen != BottomItem.CALENDAR) {
-                                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                        Icon(Icons.Filled.Menu, contentDescription = "Open drawer")
-                                    }
-                                }
+            ) { paddingValues ->
+                // Main content area
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.Top,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    when (selectedScreen) {
+                        BottomItem.HOME -> {
+                            Text(
+                                text = selectedScreen.getLabel(),
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            // Error banner if server unreachable
+                            if (vm.lastErrorMessage.isNotBlank()) {
+                                Text(vm.lastErrorMessage, color = MaterialTheme.colorScheme.error)
+                                Spacer(modifier = Modifier.height(8.dp))
                             }
-                        )
-                    },
-                    bottomBar = {
-                        NavigationBar {
-                            BottomItem.entries.forEach { item ->
-                                NavigationBarItem(
-                                    selected = selectedScreen == item,
-                                    onClick = { selectedScreen = item },
-                                    icon = {
-                                        Icon(
-                                            item.getIconRes(),
-                                            contentDescription = item.getLabel()
-                                        )
-                                    },
-                                    label = { Text(item.getLabel()) },
-                                    alwaysShowLabel = true
-                                )
-                            }
+                            // Reflect selection from ViewModel in UI
+                            Text(text = vm.selectedFileLabel)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            OrgText(
+                                content = vm.selectedOrgNode ?: com.korgnote.common.org.OrgRaw(
+                                    vm.selectedFileContent.ifBlank { "Select an .org file to view its content" }
+                                ),
+                                onToggleCheckbox = { ordinalIndex, checked -> vm.toggleCheckboxByOrdinal(ordinalIndex, checked) }
+                            )
                         }
-                    }
-                ) { paddingValues ->
-                    // Main content area
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(paddingValues)
-                            .padding(16.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.Top,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        when (selectedScreen) {
-                            BottomItem.HOME -> {
-                                Text(
-                                    text = selectedScreen.getLabel(),
-                                    style = MaterialTheme.typography.titleLarge
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                // Error banner if server unreachable
-                                if (vm.lastErrorMessage.isNotBlank()) {
-                                    Text(vm.lastErrorMessage, color = MaterialTheme.colorScheme.error)
-                                    Spacer(modifier = Modifier.height(8.dp))
+
+                        BottomItem.CALENDAR -> {
+                            CalendarScreen(
+                                modifier = Modifier.fillMaxSize(),
+                                scheduledByDate = vm.scheduledByDate,
+                                onOpenScheduled = { pair ->
+                                    val fileName = pair.first
+                                    vm.onFileSelected(fileName)
+                                    selectedScreen = BottomItem.HOME
                                 }
-                                // Reflect selection from ViewModel in UI
-                                Text(text = vm.selectedFileLabel)
-                                Spacer(modifier = Modifier.height(16.dp))
-                                OrgText(
-                                    content = vm.selectedOrgNode ?: com.korgnote.common.org.OrgRaw(
-                                        vm.selectedFileContent.ifBlank { "Select an .org file to view its content" }
-                                    ),
-                                    onToggleCheckbox = { ordinalIndex, checked -> vm.toggleCheckboxByOrdinal(ordinalIndex, checked) }
-                                )
-                            }
+                            )
+                        }
 
-                            BottomItem.CALENDAR -> {
-                                CalendarScreen(
-                                    modifier = Modifier.fillMaxSize(),
-                                    scheduledByDate = vm.scheduledByDate,
-                                    onOpenScheduled = { pair ->
-                                        val fileName = pair.first
-                                        vm.onFileSelected(fileName)
-                                        selectedScreen = BottomItem.HOME
-                                    }
-                                )
-                            }
-
-                            BottomItem.SETTINGS -> {
-                                val settingsRepo = koinInject<SettingsRepository>()
-                                SettingsScreen(repo = settingsRepo, onSaved = { scope.launch { vm.loadFromServer() } })
-                            }
+                        BottomItem.SETTINGS -> {
+                            val settingsRepo = koinInject<SettingsRepository>()
+                            SettingsScreen(repo = settingsRepo, onSaved = { scope.launch { vm.loadFromServer() } })
                         }
                     }
                 }
@@ -192,9 +192,9 @@ private enum class BottomItem {
 
     @Composable
     fun getLabel() = when (this) {
-        HOME -> stringResource(Res.string.home)
-        CALENDAR -> stringResource(Res.string.calendar)
-        SETTINGS -> stringResource(Res.string.settings)
+        HOME -> "Home"
+        CALENDAR -> "Calendar"
+        SETTINGS -> "Settings"
     }
 
     fun getIconRes() = when (this) {
