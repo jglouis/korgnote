@@ -1,18 +1,18 @@
 [versions]
-agp = "8.11.1"
+agp = "9.1.0"
 android-compileSdk = "36"
 android-minSdk = "24"
 android-targetSdk = "36"
-androidx-activity = "1.10.1"
-androidx-lifecycle = "2.9.3"
-compose-hot-reload = "1.0.0-beta06"
-compose-multiplatform = "1.8.2"
-kotlin = "2.2.10"
+androidx-activity = "1.13.0"
+androidx-lifecycle = "2.10.0"
+compose-hot-reload = "1.0.0"
+compose-multiplatform = "1.10.3"
+kotlin = "2.3.20"
 kotlinx-coroutines = "1.10.2"
-kotlinx-serialization-core = "1.9.0"
-ktor = "3.2.3"
-logback = "1.5.18"
-koin = "4.1.0"
+kotlinx-serialization-core = "1.10.0"
+ktor = "3.4.1"
+logback = "1.5.32"
+koin = "4.2.0"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
