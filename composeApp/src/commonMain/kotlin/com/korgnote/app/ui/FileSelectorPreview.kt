@@ -32,7 +32,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.height
-import org.jetbrains.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.Preview
 
 // A simple in-memory model for preview/demo purposes
 interface Node {
