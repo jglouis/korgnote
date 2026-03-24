@@ -2,13 +2,8 @@ import com.android.build.api.dsl.ApplicationExtension
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
-}
-
-kotlin {
-    androidTarget()
 }
 
 extensions.configure<ApplicationExtension> {
