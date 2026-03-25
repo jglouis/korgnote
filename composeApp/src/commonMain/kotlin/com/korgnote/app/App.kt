@@ -185,7 +185,8 @@ fun App() {
                                     onToggleCheckbox = { ordinalIndex, checked ->
                                         vm.toggleCheckboxByOrdinal(
                                             ordinalIndex,
-                                            checked
+                                            checked,
+                                            scope
                                         )
                                     }
                                 )

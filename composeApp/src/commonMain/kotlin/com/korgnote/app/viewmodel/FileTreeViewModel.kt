@@ -8,6 +8,8 @@ import com.korgnote.app.data.OrgRepository
 import com.korgnote.app.ui.File
 import com.korgnote.app.ui.Folder
 import com.korgnote.app.ui.Node
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import com.korgnote.common.org.*
 import kotlinx.datetime.LocalDate
 import com.korgnote.common.fs.File as SharedFile
@@ -162,13 +164,27 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         return if (done) newDocNode as OrgDocument else null
     }
 
-    fun toggleCheckboxByOrdinal(ordinal: Int, checked: Boolean) {
+    fun toggleCheckboxByOrdinal(ordinal: Int, checked: Boolean, scope: CoroutineScope? = null) {
         val file = currentFile ?: return
         val doc = orgContents[file] ?: return
         val updated = toggleNthCheckbox(doc, ordinal, checked) ?: return
         orgContents[file] = updated
         selectedOrgNode = updated
         selectedFileContent = updated.toOrgString()
+
+        // Persist change to server
+        if (scope != null) {
+            scope.launch {
+                try {
+                    repository.saveContent(file, selectedFileContent)
+                    scheduledByDate = buildScheduledIndex(orgContents)
+                    clearError()
+                } catch (t: Throwable) {
+                    lastErrorMessage = "Failed to save: ${t.message}"
+                    t.printStackTrace()
+                }
+            }
+        }
     }
 
 
