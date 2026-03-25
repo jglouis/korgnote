@@ -74,6 +74,39 @@ class ApplicationTest {
     }
 
     @Test
+    fun testSaveContent() {
+        val tempDir = File("temp_save_test")
+        tempDir.mkdirs()
+        try {
+            val file = File(tempDir, "save.org")
+            file.writeText("* Initial")
+
+            System.setProperty("notes.dir", tempDir.path)
+
+            testApplication {
+                application {
+                    module()
+                }
+                
+                val newContent = "* Updated Content"
+                val response = client.post("/api/content/save.org") {
+                    setBody(newContent)
+                }
+                
+                assertEquals(HttpStatusCode.OK, response.status)
+                assertEquals(newContent, file.readText())
+                
+                // Also verify it's updated in the GET response
+                val getResponse = client.get("/api/content/save.org")
+                assertEquals(newContent, getResponse.bodyAsText())
+            }
+        } finally {
+            System.clearProperty("notes.dir")
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun testTildeExpansion() {
         val home = System.getProperty("user.home")
         val tempDir = File(home, "temp_notes_tilde_test")

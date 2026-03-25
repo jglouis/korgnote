@@ -77,6 +77,26 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     var selectedFileContent by mutableStateOf("")
         private set
 
+    fun onContentChanged(newContent: String) {
+        selectedFileContent = newContent
+    }
+
+    suspend fun saveCurrentFile() {
+        val path = currentFile ?: return
+        try {
+            repository.saveContent(path, selectedFileContent)
+            // Re-parse the saved content into orgContents map
+            val updatedDoc = selectedFileContent.toOrgDocument()
+            orgContents[path] = updatedDoc
+            selectedOrgNode = updatedDoc
+            scheduledByDate = buildScheduledIndex(orgContents)
+            clearError()
+        } catch (t: Throwable) {
+            lastErrorMessage = "Failed to save: ${t.message}"
+            t.printStackTrace()
+        }
+    }
+
     // Selected node for structural rendering in UI
     var selectedOrgNode: OrgNode? by mutableStateOf(null)
         private set

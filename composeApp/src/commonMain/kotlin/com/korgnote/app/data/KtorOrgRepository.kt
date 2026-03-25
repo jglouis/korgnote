@@ -5,6 +5,8 @@ import com.korgnote.common.org.OrgDocument
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 
 class KtorOrgRepository(
     private val client: HttpClient,
@@ -19,5 +21,11 @@ class KtorOrgRepository(
 
     override suspend fun fetchTree(): Folder {
         return client.get("${baseUrl()}/api/org-tree-paths").body()
+    }
+
+    override suspend fun saveContent(path: String, content: String) {
+        client.post("${baseUrl()}/api/content/$path") {
+            setBody(content)
+        }
     }
 }

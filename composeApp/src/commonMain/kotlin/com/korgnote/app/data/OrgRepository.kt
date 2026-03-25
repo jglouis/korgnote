@@ -9,4 +9,7 @@ interface OrgRepository {
 
     // Returns a serializable tree rooted at Documents
     suspend fun fetchTree(): Folder
+
+    // Saves the content of a file
+    suspend fun saveContent(path: String, content: String)
 }

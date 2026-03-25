@@ -13,11 +13,13 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.http.content.staticFiles
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.RoutingContext
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import java.io.File
@@ -32,38 +34,38 @@ fun Application.module() {
     install(ContentNegotiation) { json() }
 
     // Load .org files from a directory on the file system or resources
+    fun resolvePath(path: String): File {
+        var expanded = when {
+            path.startsWith("~/") -> {
+                val home = System.getProperty("user.home")
+                path.replaceFirst("~/", home + File.separator)
+            }
+            path.startsWith("~") -> {
+                val home = System.getProperty("user.home")
+                path.replaceFirst("~", home)
+            }
+            else -> path
+        }
+
+        // Also handle Windows environment variables if present in the string
+        if (expanded.contains("%")) {
+            expanded = expanded.replace(Regex("%([^%]+)%")) { match ->
+                val varName = match.groupValues[1]
+                System.getenv(varName) ?: match.value
+            }
+        }
+
+        return File(expanded)
+    }
+
+    val notesDirOverride = System.getProperty("notes.dir")?.trim().takeUnless { it.isNullOrEmpty() }
+        ?: System.getenv("NOTES_DIR")?.trim().takeUnless { it.isNullOrEmpty() }
+        ?: "notes" // Default to a 'notes' directory in the current working directory
+
     fun loadOrgFiles(): Map<String, String> {
         val map = linkedMapOf<String, String>()
 
-        val override = System.getProperty("notes.dir")?.trim().takeUnless { it.isNullOrEmpty() }
-            ?: System.getenv("NOTES_DIR")?.trim().takeUnless { it.isNullOrEmpty() }
-            ?: "notes" // Default to a 'notes' directory in the current working directory
-
-        fun resolvePath(path: String): File {
-            var expanded = when {
-                path.startsWith("~/") -> {
-                    val home = System.getProperty("user.home")
-                    path.replaceFirst("~/", home + File.separator)
-                }
-                path.startsWith("~") -> {
-                    val home = System.getProperty("user.home")
-                    path.replaceFirst("~", home)
-                }
-                else -> path
-            }
-
-            // Also handle Windows environment variables if present in the string
-            if (expanded.contains("%")) {
-                expanded = expanded.replace(Regex("%([^%]+)%")) { match ->
-                    val varName = match.groupValues[1]
-                    System.getenv(varName) ?: match.value
-                }
-            }
-
-            return File(expanded)
-        }
-
-        val notesDir = resolvePath(override)
+        val notesDir = resolvePath(notesDirOverride)
         if (notesDir.exists() && notesDir.isDirectory) {
             println("Loading .org files from directory: ${notesDir.absolutePath}")
             notesDir.walkTopDown()
@@ -165,6 +167,38 @@ fun Application.module() {
                 val body = orgContents[name]
                 if (body == null) call.respondText("Not found: $name", status = HttpStatusCode.NotFound)
                 else call.respondText(body)
+            }
+
+            // Save content for a single file
+            post("/content/{name...}") {
+                val name = call.parameters.getAll("name")?.joinToString("/") ?: ""
+                val newBody = call.receiveText()
+
+                // Check if the file exists in our current loaded set
+                if (!orgContents.containsKey(name)) {
+                    call.respondText("File not found or not in allowed directory", status = HttpStatusCode.NotFound)
+                    return@post
+                }
+
+                // Identify the file on disk
+                val notesDir = resolvePath(notesDirOverride)
+                if (notesDir.exists() && notesDir.isDirectory) {
+                    val targetFile = File(notesDir, name.replace('/', File.separatorChar))
+                    if (targetFile.exists() && targetFile.isFile && targetFile.extension == "org") {
+                        try {
+                            targetFile.writeText(newBody)
+                            // Update our in-memory cache
+                            (orgContents as MutableMap)[name] = newBody
+                            call.respond(HttpStatusCode.OK, "Saved")
+                        } catch (e: Exception) {
+                            call.respondText("Failed to write: ${e.message}", status = HttpStatusCode.InternalServerError)
+                        }
+                    } else {
+                        call.respondText("Target file not found on disk", status = HttpStatusCode.NotFound)
+                    }
+                } else {
+                    call.respondText("Server is in read-only mode (resources)", status = HttpStatusCode.Forbidden)
+                }
             }
         }
     }

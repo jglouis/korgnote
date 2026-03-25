@@ -11,8 +11,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,6 +57,7 @@ import org.koin.compose.viewmodel.koinViewModel
 fun App() {
     MaterialTheme {
         var selectedScreen by remember { mutableStateOf(BottomItem.HOME) }
+        var isEditing by remember { mutableStateOf(false) }
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val scope = rememberCoroutineScope()
         val vm = koinViewModel<FileTreeViewModel>()
@@ -81,6 +84,7 @@ fun App() {
                             onFileSelected = { name ->
                                 scope.launch {
                                     vm.onFileSelected(name)
+                                    isEditing = false
                                     drawerState.close()
                                 }
                             },
@@ -98,6 +102,24 @@ fun App() {
                             if (selectedScreen != BottomItem.CALENDAR) {
                                 IconButton(onClick = { scope.launch { drawerState.open() } }) {
                                     Icon(Icons.Filled.Menu, contentDescription = "Open drawer")
+                                }
+                            }
+                        },
+                        actions = {
+                            if (selectedScreen == BottomItem.HOME && vm.selectedFileLabel != "No file selected") {
+                                if (isEditing) {
+                                    IconButton(onClick = {
+                                        scope.launch {
+                                            vm.saveCurrentFile()
+                                            isEditing = false
+                                        }
+                                    }) {
+                                        Icon(Icons.Filled.Save, contentDescription = "Save file")
+                                    }
+                                } else {
+                                    IconButton(onClick = { isEditing = true }) {
+                                        Icon(Icons.Filled.Edit, contentDescription = "Edit file")
+                                    }
                                 }
                             }
                         }
@@ -147,12 +169,27 @@ fun App() {
                             // Reflect selection from ViewModel in UI
                             Text(text = vm.selectedFileLabel)
                             Spacer(modifier = Modifier.height(16.dp))
-                            OrgText(
-                                content = vm.selectedOrgNode ?: com.korgnote.common.org.OrgRaw(
-                                    vm.selectedFileContent.ifBlank { "Select an .org file to view its content" }
-                                ),
-                                onToggleCheckbox = { ordinalIndex, checked -> vm.toggleCheckboxByOrdinal(ordinalIndex, checked) }
-                            )
+
+                            if (isEditing) {
+                                OutlinedTextField(
+                                    value = vm.selectedFileContent,
+                                    onValueChange = { vm.onContentChanged(it) },
+                                    modifier = Modifier.fillMaxSize().weight(1f),
+                                    label = { Text("Content") }
+                                )
+                            } else {
+                                OrgText(
+                                    content = vm.selectedOrgNode ?: com.korgnote.common.org.OrgRaw(
+                                        vm.selectedFileContent.ifBlank { "Select an .org file to view its content" }
+                                    ),
+                                    onToggleCheckbox = { ordinalIndex, checked ->
+                                        vm.toggleCheckboxByOrdinal(
+                                            ordinalIndex,
+                                            checked
+                                        )
+                                    }
+                                )
+                            }
                         }
 
                         BottomItem.CALENDAR -> {
