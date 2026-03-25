@@ -30,6 +30,7 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     var tree by mutableStateOf(
         Folder(
             name = "Documents",
+            path = "",
             children = emptyList()
         )
     )
@@ -44,9 +45,9 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
             if (q.isEmpty()) return tree
             return when (val filtered = filterNode(tree, q.lowercase())) {
                 is Folder -> filtered
-                is File -> Folder(name = tree.name, children = listOf(filtered))
-                null -> Folder(name = tree.name, children = emptyList())
-                else -> Folder(name = tree.name, children = emptyList())
+                is File -> Folder(name = tree.name, path = tree.path, children = listOf(filtered))
+                null -> Folder(name = tree.name, path = tree.path, children = emptyList())
+                else -> Folder(name = tree.name, path = tree.path, children = emptyList())
             }
         }
 
@@ -57,8 +58,9 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
                 val childMatches = node.children.mapNotNull { filterNode(it, queryLower) }
                 val selfMatches = node.name.lowercase().contains(queryLower)
                 if (selfMatches || childMatches.isNotEmpty()) Folder(
-                    node.name,
-                    childMatches
+                    name = node.name,
+                    path = node.path,
+                    children = childMatches
                 ) else null
             }
 
@@ -150,12 +152,12 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     }
 
 
-    fun onFileSelected(name: String) {
-        selectedFileLabel = "Selected: $name"
-        val doc = orgContents[name]
+    fun onFileSelected(path: String) {
+        selectedFileLabel = "Selected: $path"
+        val doc = orgContents[path]
         selectedOrgNode = doc
-        selectedFileContent = doc?.toOrgString() ?: "* ${name}\nNo content yet."
-        currentFile = name
+        selectedFileContent = doc?.toOrgString() ?: "* ${path}\nNo content yet."
+        currentFile = path
     }
 
     // Load tree and contents from server repository and update state
@@ -188,7 +190,7 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         } catch (t: Throwable) {
             // Failure: clear previous data to avoid showing stale content
             orgContents.clear()
-            tree = Folder(name = "Documents", children = emptyList())
+            tree = Folder(name = "Documents", path = "", children = emptyList())
             scheduledByDate = buildScheduledIndex(orgContents)
             currentFile = null
             selectedFileLabel = "No file selected"
@@ -213,9 +215,10 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
 
     private fun mapSharedToUi(node: SharedNode): Node {
         return when (node) {
-            is SharedFile -> File(node.name)
+            is SharedFile -> File(node.name, node.path)
             is SharedFolder -> Folder(
                 name = node.name,
+                path = node.path,
                 children = node.children.map { mapSharedToUi(it) }
             )
         }

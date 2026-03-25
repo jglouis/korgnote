@@ -31,47 +31,70 @@ fun main() {
 fun Application.module() {
     install(ContentNegotiation) { json() }
 
-    // Load .org examples from resources under /org directory
-    fun loadOrgResources(): Map<String, String> {
-        val cl = this::class.java.classLoader
-        // Try to list files in resources/org via the file system (works in tests and from Gradle run)
-        val baseUrl = cl.getResource("org/")
+    // Load .org files from a directory on the file system or resources
+    fun loadOrgFiles(): Map<String, String> {
         val map = linkedMapOf<String, String>()
-        if (baseUrl != null) {
-            val file = kotlin.runCatching { File(baseUrl.toURI()) }.getOrNull()
-            if (file != null && file.exists() && file.isDirectory) {
-                file.walkTopDown().filter { it.isFile && it.name.endsWith(".org") }.forEach { f ->
-                    map[f.name] = f.readText()
+
+        val override = System.getProperty("notes.dir")?.trim().takeUnless { it.isNullOrEmpty() }
+            ?: System.getenv("NOTES_DIR")?.trim().takeUnless { it.isNullOrEmpty() }
+            ?: "notes" // Default to a 'notes' directory in the current working directory
+
+        fun resolvePath(path: String): File {
+            var expanded = when {
+                path.startsWith("~/") -> {
+                    val home = System.getProperty("user.home")
+                    path.replaceFirst("~/", home + File.separator)
+                }
+                path.startsWith("~") -> {
+                    val home = System.getProperty("user.home")
+                    path.replaceFirst("~", home)
+                }
+                else -> path
+            }
+
+            // Also handle Windows environment variables if present in the string
+            if (expanded.contains("%")) {
+                expanded = expanded.replace(Regex("%([^%]+)%")) { match ->
+                    val varName = match.groupValues[1]
+                    System.getenv(varName) ?: match.value
+                }
+            }
+
+            return File(expanded)
+        }
+
+        val notesDir = resolvePath(override)
+        if (notesDir.exists() && notesDir.isDirectory) {
+            println("Loading .org files from directory: ${notesDir.absolutePath}")
+            notesDir.walkTopDown()
+                .filter { it.isFile && it.extension == "org" }
+                .forEach { f ->
+                    val relativePath = f.relativeTo(notesDir).path.replace(File.separatorChar, '/')
+                    map[relativePath] = f.readText()
+                }
+        } else {
+            // Fallback to resources for examples
+            println("Directory '${notesDir.absolutePath}' not found, falling back to resources/org")
+            val cl = this::class.java.classLoader
+            val baseUrl = cl.getResource("org/")
+            if (baseUrl != null) {
+                val file = kotlin.runCatching { File(baseUrl.toURI()) }.getOrNull()
+                if (file != null && file.exists() && file.isDirectory) {
+                    file.walkTopDown().filter { it.isFile && it.name.endsWith(".org") }.forEach { f ->
+                        // In resources we assume flat structure for now or match the walk
+                        val relativePath = f.relativeTo(file).path.replace(File.separatorChar, '/')
+                        map[relativePath] = f.readText()
+                    }
                 }
             }
         }
         return map
     }
 
-    val orgContents: Map<String, String> = loadOrgResources()
+    val orgContents: Map<String, String> = loadOrgFiles()
 
-    // Derive tree paths from the available .org resources (or fallback contents)
-    fun deriveOrgTreePaths(fileNames: Set<String>): List<String> {
-        fun isJournal(name: String): Boolean = Regex("^(\\d{4})-(\\d{2})-(\\d{2})\\.org$").matches(name)
-        fun journalPath(name: String): String {
-            val year = name.take(4)
-            return "Org/Journal/$year/$name"
-        }
-        val agenda = setOf("inbox.org", "next-actions.org", "calendar.org", "sep-2025.org")
-        val projects = setOf("korgnote.org", "website-redesign.org", "research-notes.org", "learn_java_by_its_pitfalls.org", "voidfall.org")
-        val reference = setOf("books.org", "quotes.org")
-        return fileNames.mapNotNull { fn ->
-            when {
-                isJournal(fn) -> journalPath(fn)
-                fn in agenda -> "Org/Agenda/$fn"
-                fn in projects -> "Org/Projects/$fn"
-                fn in reference -> "Org/Reference/$fn"
-                fn == "notes.org" -> fn
-                else -> null // omit unknowns from tree to avoid broken links
-            }
-        }.sorted()
-    }
-    val orgTreePaths: List<String> = deriveOrgTreePaths(orgContents.keys)
+    // Use relative paths as they are already provided by loadOrgFiles keys
+    val orgTreePaths: List<String> = orgContents.keys.sorted()
 
     routing {
         // Robust resolver for the WASM app output directory (Option A)
@@ -133,14 +156,14 @@ fun Application.module() {
             }
             // Returns a JSON serializable Folder tree instead of raw paths
             get("/org-tree-paths") {
-                val tree = buildFromPaths(orgTreePaths, rootName = "Documents")
+                val tree = buildFromPaths(orgTreePaths, rootName = "Org")
                 call.respond(tree)
             }
             // Convenience endpoint to fetch a single file content
-            get("/content/{name}") {
-                val name = call.parameters["name"]
+            get("/content/{name...}") {
+                val name = call.parameters.getAll("name")?.joinToString("/")
                 val body = orgContents[name]
-                if (body == null) call.respondText("Not found", status = HttpStatusCode.NotFound)
+                if (body == null) call.respondText("Not found: $name", status = HttpStatusCode.NotFound)
                 else call.respondText(body)
             }
         }
