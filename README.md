@@ -62,16 +62,16 @@ in your IDE’s toolbar or run it directly from the terminal:
 
 ### Build and Run Web Application
 
-To build and run the development version of the web app, use the run configuration from the run widget
-in your IDE’s toolbar or run it directly from the terminal:
+The Ktor server is configured to host an existing wasm distribution of the Compose app.
+Before running the server, run this:
 
 - on macOS/Linux
   ```shell
-  ./gradlew :composeApp:wasmJsBrowserDevelopmentRun
+  ./gradlew :composeApp:wasmJsBrowserDistribution
   ```
 - on Windows
   ```shell
-  .\gradlew.bat :composeApp:wasmJsBrowserDevelopmentRun
+  .\gradlew.bat :composeApp:wasmJsBrowserDistribution
   ```
 
 ### Build and Run iOS Application
