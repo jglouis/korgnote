@@ -83,13 +83,14 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     var scheduledByDate by mutableStateOf(buildScheduledIndex(orgContents))
 
     private fun toggleNthCheckbox(doc: OrgDocument, ordinal: Int, checked: Boolean): OrgDocument? {
-        val count = 0
+        var count = 0
         fun visit(node: OrgNode): Pair<OrgNode, Boolean> {
             return when (node) {
                 is OrgCheckboxItem -> {
                     if (count == ordinal) {
                         node.copy(checked = checked) to true
                     } else {
+                        count++
                         node to false
                     }
                 }
@@ -107,6 +108,14 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
                         }
                     }
                     if (done) OrgList(node.bulletType, newChildren) to true else node to false
+                }
+
+                is OrgSection -> {
+                    // OrgSection can contain OrgRaw content which might (in future) be parsed further,
+                    // but it doesn't currently have OrgNodes as children in the data model for its content.
+                    // However, it is an OrgNode and might be part of a document.
+                    // If we ever add children to OrgSection, we should visit them here.
+                    node to false
                 }
 
                 is OrgDocument -> {
