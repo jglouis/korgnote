@@ -11,7 +11,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -110,15 +109,17 @@ private fun RenderNode(
         }
 
         is OrgKeyword -> {
-            Text(text = buildOrgAnnotatedString(node.content), style = MaterialTheme.typography.bodySmall)
+            Text(
+                text = buildOrgAnnotatedString(node.content),
+                style = MaterialTheme.typography.bodySmall.copy(color = OrgColors.keyword)
+            )
         }
 
         is OrgPlanning -> {
-            val darkGrey = Color(0xFF616161)
             val line = node.planType + ": " + node.timestamp
             Text(
                 text = buildOrgAnnotatedString(line),
-                style = MaterialTheme.typography.bodySmall.copy(color = darkGrey)
+                style = MaterialTheme.typography.bodySmall.copy(color = OrgColors.planning)
             )
         }
 
@@ -177,9 +178,7 @@ private fun CheckboxLine(
 
 fun buildOrgAnnotatedString(text: String): AnnotatedString {
     // Highlight TODO (green) and DONE (grey) tokens as whole words
-    val todoColor = Color(0xFF2E7D32)
-    val doneColor = Color(0xFF9E9E9E)
-    val tokens = listOf("TODO" to todoColor, "DONE" to doneColor)
+    val tokens = listOf("TODO" to OrgColors.todo, "DONE" to OrgColors.done)
     return buildAnnotatedString {
         var i = 0
         while (i < text.length) {

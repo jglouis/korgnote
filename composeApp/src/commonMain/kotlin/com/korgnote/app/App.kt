@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.ui.CalendarScreen
 import com.korgnote.app.ui.FileTree
+import com.korgnote.app.ui.OrgSyntaxHighlightTransformation
 import com.korgnote.app.ui.OrgText
 import com.korgnote.app.ui.SettingsScreen
 import com.korgnote.app.viewmodel.FileTreeViewModel
@@ -171,11 +172,16 @@ fun App() {
                             Spacer(modifier = Modifier.height(16.dp))
 
                             if (isEditing) {
+                                val headingColor = MaterialTheme.colorScheme.primary
+                                val orgHighlighting = remember(headingColor) {
+                                    OrgSyntaxHighlightTransformation(headingColor)
+                                }
                                 OutlinedTextField(
                                     value = vm.selectedFileContent,
                                     onValueChange = { vm.onContentChanged(it) },
                                     modifier = Modifier.fillMaxSize().weight(1f),
-                                    label = { Text("Content") }
+                                    label = { Text("Content") },
+                                    visualTransformation = orgHighlighting
                                 )
                             } else {
                                 OrgText(
