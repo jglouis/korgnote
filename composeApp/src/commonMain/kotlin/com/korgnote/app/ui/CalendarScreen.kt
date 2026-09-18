@@ -51,21 +51,20 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.korgnote.common.org.OrgNode
 import com.korgnote.common.org.OrgPlanning
 import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 
 const val SLIDE_DURATION_MS = 100
 const val FADE_DURATION_MS = 100
 
-@OptIn(ExperimentalTime::class)
 @Composable
 fun CalendarScreen(
-    modifier: Modifier = Modifier.background(MaterialTheme.colorScheme.surface),
+    modifier: Modifier = Modifier,
     scheduledByDate: Map<LocalDate, List<Pair<String, OrgNode>>> = emptyMap(),
     onOpenScheduled: (Pair<String, OrgNode>) -> Unit = {},
     initialMode: CalendarMode? = null,
     initialAnchorDate: LocalDate? = null,
     initialDialogDate: LocalDate? = null
 ) {
+    modifier.background(MaterialTheme.colorScheme.surface)
     var today by remember {
         mutableStateOf(
             Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
@@ -240,7 +239,7 @@ fun CalendarScreen(
         }
 
         // Dialog showing scheduled entries for selected date
-        if (dialogEntries != null && dialogEntries.isNotEmpty() && dialogDate != null) {
+        if (!dialogEntries.isNullOrEmpty() && dialogDate != null) {
             AlertDialog(
                 onDismissRequest = { dialogDate = null },
                 confirmButton = {
