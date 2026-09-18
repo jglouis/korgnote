@@ -46,7 +46,7 @@ fun buildOrgHighlightedString(text: String, headingColor: Color): AnnotatedStrin
     }
 }
 
-private fun androidx.compose.ui.text.AnnotatedString.Builder.appendHighlightedLine(
+private fun AnnotatedString.Builder.appendHighlightedLine(
     line: String,
     headingColor: Color
 ) {
@@ -68,12 +68,15 @@ private fun androidx.compose.ui.text.AnnotatedString.Builder.appendHighlightedLi
         else -> {
             val cb = checkboxRegex.find(line)
             if (cb != null) {
-                val box = cb.groups[1]!!
-                append(line.substring(0, box.range.first))
+                // The checkbox group is the last part of the match, so its position can be
+                // derived from MatchResult.range (common stdlib) without MatchGroup.range.
+                val box = cb.groupValues[1]
+                val boxStart = cb.range.last + 1 - box.length
+                append(line.substring(0, boxStart))
                 withStyle(SpanStyle(color = OrgColors.checkbox, fontWeight = FontWeight.Bold)) {
-                    append(box.value)
+                    append(box)
                 }
-                appendWithTodoTokens(line.substring(box.range.last + 1))
+                appendWithTodoTokens(line.substring(boxStart + box.length))
             } else {
                 appendWithTodoTokens(line)
             }
@@ -81,7 +84,7 @@ private fun androidx.compose.ui.text.AnnotatedString.Builder.appendHighlightedLi
     }
 }
 
-private fun androidx.compose.ui.text.AnnotatedString.Builder.appendWithTodoTokens(text: String) {
+private fun AnnotatedString.Builder.appendWithTodoTokens(text: String) {
     val tokens = listOf("TODO" to OrgColors.todo, "DONE" to OrgColors.done)
     var i = 0
     while (i < text.length) {
