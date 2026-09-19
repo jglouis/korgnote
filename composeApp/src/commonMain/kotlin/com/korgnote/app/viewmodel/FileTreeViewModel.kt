@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.korgnote.app.data.OrgRepository
 import com.korgnote.app.ui.File
 import com.korgnote.app.ui.Folder
@@ -106,71 +107,15 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     // Map of scheduled entries by LocalDate, computed from all contents
     var scheduledByDate by mutableStateOf(buildScheduledIndex(orgContents))
 
-    private fun toggleNthCheckbox(doc: OrgDocument, ordinal: Int, checked: Boolean): OrgDocument? {
-        var count = 0
-        fun visit(node: OrgNode): Pair<OrgNode, Boolean> {
-            return when (node) {
-                is OrgCheckboxItem -> {
-                    if (count == ordinal) {
-                        node.copy(checked = checked) to true
-                    } else {
-                        count++
-                        node to false
-                    }
-                }
-
-                is OrgList -> {
-                    val newChildren = mutableListOf<OrgNode>()
-                    var done = false
-                    for (child in node.children) {
-                        if (!done) {
-                            val (nc, d) = visit(child)
-                            newChildren.add(nc)
-                            done = d
-                        } else {
-                            newChildren.add(child)
-                        }
-                    }
-                    if (done) OrgList(node.bulletType, newChildren) to true else node to false
-                }
-
-                is OrgSection -> {
-                    // OrgSection can contain OrgRaw content which might (in future) be parsed further,
-                    // but it doesn't currently have OrgNodes as children in the data model for its content.
-                    // However, it is an OrgNode and might be part of a document.
-                    // If we ever add children to OrgSection, we should visit them here.
-                    node to false
-                }
-
-                is OrgDocument -> {
-                    val newChildren = mutableListOf<OrgNode>()
-                    var done = false
-                    for (child in node.children) {
-                        if (!done) {
-                            val (nc, d) = visit(child)
-                            newChildren.add(nc)
-                            done = d
-                        } else {
-                            newChildren.add(child)
-                        }
-                    }
-                    if (done) OrgDocument(newChildren, node.metadata) to true else node to false
-                }
-
-                else -> node to false
-            }
-        }
-        val (newDocNode, done) = visit(doc)
-        return if (done) newDocNode as OrgDocument else null
-    }
-
     fun toggleCheckboxByOrdinal(ordinal: Int, checked: Boolean, scope: CoroutineScope? = null) {
         val file = currentFile ?: return
-        val doc = orgContents[file] ?: return
-        val updated = toggleNthCheckbox(doc, ordinal, checked) ?: return
-        orgContents[file] = updated
-        selectedOrgNode = updated
-        selectedFileContent = updated.toOrgString()
+        // Patch only the toggled checkbox's marker in the raw text; every other character in the
+        // file (blank lines, trailing whitespace, formatting) is left exactly as it was on disk.
+        val updatedText = selectedFileContent.toggleNthCheckbox(ordinal, checked) ?: return
+        selectedFileContent = updatedText
+        val updatedDoc = updatedText.toOrgDocument()
+        orgContents[file] = updatedDoc
+        selectedOrgNode = updatedDoc
 
         // Persist change to server
         if (scope != null) {
@@ -192,8 +137,22 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         selectedFileLabel = "Selected: $path"
         val doc = orgContents[path]
         selectedOrgNode = doc
-        selectedFileContent = doc?.toOrgString() ?: "* ${path}\nNo content yet."
         currentFile = path
+        if (doc == null) {
+            selectedFileContent = "* ${path}\nNo content yet."
+            return
+        }
+        // Fetch the file's exact raw text to edit, rather than a re-serialized version of the
+        // parsed document, so saving without changes round-trips the file byte-for-byte.
+        viewModelScope.launch {
+            try {
+                val raw = repository.fetchRawContent(path)
+                if (currentFile == path) selectedFileContent = raw
+            } catch (t: Throwable) {
+                lastErrorMessage = "Failed to load file: ${t.message}"
+                t.printStackTrace()
+            }
+        }
     }
 
     // Load tree and contents from server repository and update state
@@ -219,7 +178,13 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
                     val doc = orgContents[current]
                     if (doc != null) {
                         selectedOrgNode = doc
-                        selectedFileContent = doc.toOrgString()
+                        try {
+                            val raw = repository.fetchRawContent(current)
+                            if (currentFile == current) selectedFileContent = raw
+                        } catch (t: Throwable) {
+                            lastErrorMessage = "Failed to load file: ${t.message}"
+                            t.printStackTrace()
+                        }
                     }
                 }
             }
