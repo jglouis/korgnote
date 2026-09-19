@@ -75,7 +75,13 @@ fun OrgTodoConfig.colorFor(word: String): Color? = when (word) {
     else -> null
 }
 
-/** Line-level Org syntax patterns shared by the highlighter and the reading-mode renderer. */
+/**
+ * Line-level Org syntax patterns shared by the highlighter and the reading-mode renderer.
+ *
+ * The `\]` escapes are flagged as redundant by the IDE (JVM semantics) but they are required:
+ * Kotlin/JS and Kotlin/Wasm compile regexes with the JavaScript `u` flag, where a lone `]` is a SyntaxError.
+ */
+@Suppress("RegExpRedundantEscape")
 object OrgSyntax {
     val heading = Regex("^(\\*+)\\s")
     val blockBegin = Regex("^\\s*#\\+BEGIN_(\\S+)(.*)$", RegexOption.IGNORE_CASE)
@@ -100,10 +106,16 @@ object OrgSyntax {
     fun isTableRuleLine(line: String) = line.isOrgTableRuleLine()
 }
 
+// `\]` must stay escaped: see the note on [OrgSyntax] (JavaScript `u`-mode regexes).
+@Suppress("RegExpRedundantEscape")
 private val linkRegex = Regex("\\[\\[([^\\[\\]]+)\\](?:\\[([^\\[\\]]*)\\])?\\]")
+@Suppress("RegExpRedundantEscape")
 private val urlRegex = Regex("(?:https?|ftp|mailto):[^\\s<>\\[\\]()\"']+")
+@Suppress("RegExpRedundantEscape")
 private val timestampRegex = Regex("[<\\[]\\d{4}-\\d{2}-\\d{2}(?: [^\\]>\\n]*)?[>\\]]")
+@Suppress("RegExpRedundantEscape")
 private val footnoteRegex = Regex("\\[fn:[^\\]]+\\]")
+@Suppress("RegExpRedundantEscape")
 private val statisticsRegex = Regex("\\[(?:\\d+/\\d+|\\d+%)\\]")
 
 private class EmphasisSpec(val marker: Char, val regex: Regex, val style: SpanStyle, val markupColor: Color)

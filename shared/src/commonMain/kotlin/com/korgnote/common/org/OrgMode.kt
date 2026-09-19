@@ -116,6 +116,8 @@ fun String.toOrgDocument(): OrgDocument {
         var idx = start
         // The bullet goes in a character class: escaping it with a backslash is not portable to JS regexes
         val itemRegex = Regex("^\\s*[$bullet]\\s+(.*)")
+        // `\]` is not redundant: JS/Wasm regexes run in `u` mode where a lone `]` is a SyntaxError
+        @Suppress("RegExpRedundantEscape")
         val checkboxRegex = Regex("^\\s*[$bullet]\\s+\\[([ xX])\\]\\s*(.*)")
         while (idx < lines.size) {
             val l = lines[idx]
