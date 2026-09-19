@@ -1,0 +1,19 @@
+package com.korgnote.app
+
+import android.app.Application
+import com.korgnote.app.data.PersistentSettingsRepository
+import com.korgnote.app.data.SettingsRepository
+import com.korgnote.app.di.initKoin
+import org.koin.dsl.module
+
+// Koin must be started exactly once per process. Doing it here (instead of in the Activity) survives
+// configuration changes such as screen rotation, which recreate the Activity but not the Application.
+class KorgNoteApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        val androidModule = module {
+            single<SettingsRepository> { PersistentSettingsRepository(this@KorgNoteApplication) }
+        }
+        initKoin(extraModules = listOf(androidModule))
+    }
+}
