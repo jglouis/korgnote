@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -47,6 +48,7 @@ import com.korgnote.app.ui.OrgSyntaxHighlightTransformation
 import com.korgnote.app.ui.OrgText
 import com.korgnote.app.ui.SettingsScreen
 import com.korgnote.app.viewmodel.FileTreeViewModel
+import com.korgnote.common.org.OrgDocument
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
@@ -57,6 +59,8 @@ fun App() {
     MaterialTheme {
         var selectedScreen by remember { mutableStateOf(BottomItem.HOME) }
         var isEditing by remember { mutableStateOf(false) }
+        // Set when a calendar entry is opened; consumed by OrgText to scroll that heading into view.
+        var pendingScrollIndex by remember { mutableStateOf<Int?>(null) }
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val scope = rememberCoroutineScope()
         val vm = koinViewModel<FileTreeViewModel>()
@@ -84,6 +88,7 @@ fun App() {
                                 scope.launch {
                                     vm.onFileSelected(name)
                                     isEditing = false
+                                    pendingScrollIndex = null
                                     drawerState.close()
                                 }
                             },
@@ -174,10 +179,14 @@ fun App() {
                                 val orgHighlighting = remember(headingColor) {
                                     OrgSyntaxHighlightTransformation(headingColor)
                                 }
+                                // No fillMaxSize/weight here: the field grows to its natural height so
+                                // the surrounding screen Column's own scroll (shared with reading mode
+                                // below) is what scrolls it, keeping the scroll position when toggling
+                                // between reading and editing.
                                 OutlinedTextField(
                                     value = vm.selectedFileContent,
                                     onValueChange = { vm.onContentChanged(it) },
-                                    modifier = Modifier.fillMaxSize().weight(1f),
+                                    modifier = Modifier.fillMaxWidth(),
                                     label = { Text("Content") },
                                     visualTransformation = orgHighlighting
                                 )
@@ -186,6 +195,8 @@ fun App() {
                                     content = vm.selectedOrgNode ?: com.korgnote.common.org.OrgRaw(
                                         vm.selectedFileContent.ifBlank { "Select an .org file to view its content" }
                                     ),
+                                    scrollToChildIndex = pendingScrollIndex,
+                                    onScrolledToChildIndex = { pendingScrollIndex = null },
                                     onToggleCheckbox = { ordinalIndex, checked ->
                                         vm.toggleCheckboxByOrdinal(
                                             ordinalIndex,
@@ -204,6 +215,9 @@ fun App() {
                                 onOpenScheduled = { pair ->
                                     val fileName = pair.first
                                     vm.onFileSelected(fileName)
+                                    isEditing = false
+                                    pendingScrollIndex = (vm.selectedOrgNode as? OrgDocument)
+                                        ?.children?.indexOf(pair.second)?.takeIf { it >= 0 }
                                     selectedScreen = BottomItem.HOME
                                 }
                             )

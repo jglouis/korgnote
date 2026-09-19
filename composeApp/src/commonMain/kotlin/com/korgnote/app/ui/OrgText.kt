@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -74,17 +77,44 @@ fun OrgText(
     modifier: Modifier = Modifier,
     // Int parameter represents the ordinal index of the checkbox item in the original text
     onToggleCheckbox: ((ordinalIndex: Int, checked: Boolean) -> Unit)? = null,
+    // Index into content.children (when content is an OrgDocument) to scroll into view, e.g. after
+    // opening a file from a calendar entry. Consumed once via onScrolledToChildIndex.
+    scrollToChildIndex: Int? = null,
+    onScrolledToChildIndex: () -> Unit = {},
 ) {
     // Fresh counter each composition to ensure consistent ordinal indexing on every recomposition
     val ord = Ord(0)
     val todoConfig = if (content is OrgDocument) orgTodoConfigOf(content) else DefaultOrgTodoConfig
     Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
-        RenderNode(
-            node = content,
-            ordinal = ord,
-            todoConfig = todoConfig,
-            onToggleCheckbox = onToggleCheckbox,
-        )
+        if (content is OrgDocument) {
+            // One requester per top-level node so a calendar entry (which always refers to a
+            // top-level OrgSection) can be scrolled into view within the surrounding scroll container.
+            val requesters = remember(content) { content.children.map { BringIntoViewRequester() } }
+            content.children.forEachIndexed { idx, child ->
+                // A Column, not a Box: some nodes (e.g. a heading plus its body) render as several
+                // sibling composables that must stack vertically, which a Box would overlay instead.
+                Column(
+                    modifier = Modifier.bringIntoViewRequester(requesters[idx]),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    RenderNode(node = child, ordinal = ord, todoConfig = todoConfig, onToggleCheckbox = onToggleCheckbox)
+                }
+            }
+            LaunchedEffect(scrollToChildIndex, requesters) {
+                val idx = scrollToChildIndex
+                if (idx != null && idx in requesters.indices) {
+                    requesters[idx].bringIntoView()
+                    onScrolledToChildIndex()
+                }
+            }
+        } else {
+            RenderNode(
+                node = content,
+                ordinal = ord,
+                todoConfig = todoConfig,
+                onToggleCheckbox = onToggleCheckbox,
+            )
+        }
     }
 }
 

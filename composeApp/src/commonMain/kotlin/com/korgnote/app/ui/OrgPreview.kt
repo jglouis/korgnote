@@ -32,6 +32,7 @@ val OrgSampleDocument = """
     SCHEDULED: <2026-09-20 Sun 10:00> DEADLINE: <2026-09-30 Wed>
     :PROPERTIES:
     :EFFORT:   4:00
+    :LOCATION: 1600 Amphitheatre Pkwy, Mountain View, CA
     :END:
     Inline markup: *bold*, /italic/, _underline_, +strike+, =verbatim= and ~code~.
     A link [[https://orgmode.org/manual/][to the manual]], a bare https://orgmode.org URL,

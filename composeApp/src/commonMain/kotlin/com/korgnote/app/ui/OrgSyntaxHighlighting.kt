@@ -22,6 +22,7 @@ import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.isOrgTableLine
 import com.korgnote.common.org.isOrgTableRuleLine
 import com.korgnote.common.org.parseTodoConfigFrom
+import io.ktor.http.encodeURLQueryComponent
 
 /**
  * Colors used by both reading mode ([OrgText]) and editing mode ([OrgSyntaxHighlightTransformation])
@@ -105,6 +106,13 @@ object OrgSyntax {
     fun isTableLine(line: String) = line.isOrgTableLine()
     fun isTableRuleLine(line: String) = line.isOrgTableRuleLine()
 }
+
+/** True when a `:PROPERTIES:` drawer property key (as captured by [OrgSyntax.property]) is `LOCATION`. */
+private fun isLocationPropertyKey(key: String) = key.trim().trim(':').equals("LOCATION", ignoreCase = true)
+
+/** Google Maps search URL for a `LOCATION` property value, opened via the platform's [androidx.compose.ui.platform.UriHandler]. */
+fun googleMapsUrl(location: String): String =
+    "https://www.google.com/maps/search/?api=1&query=" + location.encodeURLQueryComponent(encodeFull = true, spaceToPlus = true)
 
 // `\]` must stay escaped: see the note on [OrgSyntax] (JavaScript `u`-mode regexes).
 @Suppress("RegExpRedundantEscape")
@@ -201,7 +209,7 @@ private fun AnnotatedString.Builder.appendHighlightedLine(
     }
     if (state.inDrawer) {
         if (OrgSyntax.drawerEnd.containsMatchIn(line)) state.inDrawer = false
-        appendDrawerLine(line)
+        appendDrawerLine(line, viewMode)
         return
     }
     when {
@@ -226,7 +234,7 @@ private fun AnnotatedString.Builder.appendHighlightedLine(
 
         OrgSyntax.drawerBegin.containsMatchIn(line) -> {
             state.inDrawer = !OrgSyntax.drawerEnd.containsMatchIn(line)
-            appendDrawerLine(line)
+            appendDrawerLine(line, viewMode)
         }
 
         OrgSyntax.planning.containsMatchIn(line) -> appendPlanning(line, viewMode)
@@ -253,12 +261,20 @@ private fun AnnotatedString.Builder.appendBlockBody(line: String, blockType: Str
     withStyle(style) { append(line) }
 }
 
-private fun AnnotatedString.Builder.appendDrawerLine(line: String) {
+private fun AnnotatedString.Builder.appendDrawerLine(line: String, viewMode: Boolean) {
     withStyle(SpanStyle(color = OrgColors.drawer)) {
         val prop = OrgSyntax.property.find(line)
         if (prop != null) {
-            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(prop.groupValues[1]) }
-            append(prop.groupValues[2])
+            val key = prop.groupValues[1]
+            val value = prop.groupValues[2]
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(key) }
+            if (viewMode && isLocationPropertyKey(key) && value.isNotBlank()) {
+                withLink(LinkAnnotation.Url(googleMapsUrl(value.trim()), TextLinkStyles(style = linkStyle))) {
+                    append(value)
+                }
+            } else {
+                append(value)
+            }
         } else {
             append(line)
         }

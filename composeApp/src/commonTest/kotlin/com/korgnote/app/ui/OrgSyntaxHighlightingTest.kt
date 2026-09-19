@@ -189,6 +189,36 @@ class OrgSyntaxHighlightingTest {
     }
 
     @Test
+    fun locationPropertyIsNotLinkedInEditMode() {
+        val src = ":PROPERTIES:\n:LOCATION: 1600 Amphitheatre Pkwy\n:END:"
+        val out = buildOrgHighlightedString(src, heading)
+        assertTrue(out.getLinkAnnotations(0, out.length).isEmpty())
+    }
+
+    @Test
+    fun locationPropertyIsLinkedToGoogleMapsInViewMode() {
+        val src = ":PROPERTIES:\n:LOCATION: 1600 Amphitheatre Pkwy, Mountain View\n:END:"
+        val out = buildOrgHighlightedString(src, heading, viewMode = true)
+        assertEquals(src, out.text)
+        val links = out.getLinkAnnotations(0, out.length)
+        assertEquals(1, links.size)
+        val url = (links.single().item as LinkAnnotation.Url).url
+        assertEquals(googleMapsUrl("1600 Amphitheatre Pkwy, Mountain View"), url)
+        assertTrue(url.startsWith("https://www.google.com/maps/search/?api=1&query="))
+        val valueStart = src.indexOf(" 1600")
+        val valueEnd = src.indexOf("\n:END:")
+        assertEquals(valueStart, links.single().start)
+        assertEquals(valueEnd, links.single().end)
+    }
+
+    @Test
+    fun otherDrawerPropertiesAreNotLinkedInViewMode() {
+        val src = ":PROPERTIES:\n:ID: 42\n:END:"
+        val out = buildOrgHighlightedString(src, heading, viewMode = true)
+        assertTrue(out.getLinkAnnotations(0, out.length).isEmpty())
+    }
+
+    @Test
     fun commentsFootnotesAndRulesAreHighlighted() {
         val src = "# note\nsee[fn:1]\n-----"
         val out = buildOrgHighlightedString(src, heading)
