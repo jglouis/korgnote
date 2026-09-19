@@ -293,6 +293,33 @@ fun parseTodoConfigFrom(metadata: List<String>): OrgTodoConfig {
     return OrgTodoConfig(todo, done)
 }
 
+// Returns true when a line (as it appears in the raw text) is recognized as a checkbox list
+// item by the parser above: a top-level "- "/"+ " bullet whose text starts with "[ ]"/"[x]"/"[X]".
+// Kept in sync with parseList()'s checkboxRegex so raw-text ordinals match the parsed document.
+private val rawCheckboxLineRegex = Regex("^\\s*[-+]\\s+\\[([ xX])\\]\\s*.*")
+
+// Flips the checked state of the nth (0-based, document order) checkbox item directly in the raw
+// text, changing only that line's "[ ]"/"[x]" marker and leaving every other character - including
+// blank lines, trailing whitespace, and indentation elsewhere in the file - untouched.
+// Returns null if there is no such checkbox (ordinal out of range).
+fun String.toggleNthCheckbox(ordinal: Int, checked: Boolean): String? {
+    val lines = this.split('\n').toMutableList()
+    var count = 0
+    for (idx in lines.indices) {
+        val line = lines[idx]
+        // Section content bodies never contain checkbox lines (parseSection stops before them),
+        // so a plain line scan visits checkbox lines in the same order toOrgDocument() would.
+        if (!rawCheckboxLineRegex.matches(line)) continue
+        if (count == ordinal) {
+            val newMark = if (checked) "x" else " "
+            lines[idx] = line.replaceFirst(Regex("\\[[ xX]\\]"), "[$newMark]")
+            return lines.joinToString("\n")
+        }
+        count++
+    }
+    return null
+}
+
 // Convenience helpers to classify a section's state according to document metadata.
 fun OrgDocument.todoConfig(): OrgTodoConfig = parseTodoConfigFrom(this.metadata)
 fun OrgSection.isTodo(doc: OrgDocument): Boolean = this.todo != null && this.todo in doc.todoConfig().todo

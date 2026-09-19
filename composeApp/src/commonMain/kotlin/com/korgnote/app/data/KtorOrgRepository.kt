@@ -23,6 +23,10 @@ class KtorOrgRepository(
         return client.get("${baseUrl()}/api/org-tree-paths").body()
     }
 
+    override suspend fun fetchRawContent(path: String): String {
+        return client.get("${baseUrl()}/api/content/$path").body()
+    }
+
     override suspend fun saveContent(path: String, content: String) {
         client.post("${baseUrl()}/api/content/$path") {
             setBody(content)
