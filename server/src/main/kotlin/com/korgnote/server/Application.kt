@@ -8,12 +8,19 @@ import com.korgnote.common.org.toOrgDocument
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationCallPipeline
+import io.ktor.server.application.call
 import io.ktor.server.application.install
+import io.ktor.server.application.log
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.http.content.staticFiles
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.origin
+import io.ktor.server.request.httpMethod
 import io.ktor.server.request.receiveText
+import io.ktor.server.request.uri
+import io.ktor.server.request.userAgent
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
@@ -32,6 +39,15 @@ fun main() {
 
 fun Application.module() {
     install(ContentNegotiation) { json() }
+
+    intercept(ApplicationCallPipeline.Monitoring) {
+        val origin = call.request.origin
+        val ua = call.request.userAgent()
+        this@module.log.info(
+            "Request ${call.request.httpMethod.value} ${call.request.uri} " +
+                "from ${origin.remoteHost}:${origin.remotePort} UA=$ua"
+        )
+    }
 
     // Load .org files from a directory on the file system or resources
     fun resolvePath(path: String): File {
