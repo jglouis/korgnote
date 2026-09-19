@@ -13,9 +13,16 @@ sealed interface OrgNode
 data class OrgDocument(val children: List<OrgNode>, val metadata: List<String>) : OrgNode
 
 // A section is a heading with its inline content (paragraph text after heading line until next heading).
+// level is the number of leading stars; tags are the trailing :tag1:tag2: of the heading line (without colons).
 @Serializable
 @SerialName("section")
-data class OrgSection(val title: String, val content: String, val todo: String? = null) : OrgNode
+data class OrgSection(
+    val title: String,
+    val content: String,
+    val todo: String? = null,
+    val level: Int = 1,
+    val tags: List<String> = emptyList(),
+) : OrgNode
 
 // A flat list of items where each child is typically OrgRaw or OrgSection; bulletType is '-', '+', or '*'.
 @Serializable
@@ -46,14 +53,41 @@ data class OrgRaw(val content: String) : OrgNode
 @SerialName("checkboxItem")
 data class OrgCheckboxItem(val checked: Boolean, val text: String) : OrgNode
 
-// Very simplified table model: consecutive lines starting with '|' become a single table with rows of cells.
+// Table model: consecutive lines starting with '|' become a single table. Each line is a row; a line
+// starting with "|-" is a horizontal rule row (isRule = true, no cells).
 @Serializable
 @SerialName("table")
- data class OrgTable(val rows : OrgTableRow) : OrgNode
- 
+data class OrgTable(val rows: List<OrgTableRow>) : OrgNode {
+    val columnCount: Int get() = rows.maxOfOrNull { it.cells.size } ?: 0
+}
+
 @Serializable
 @SerialName("tableRow")
- data class OrgTableRow(val cells : List<OrgNode>) :OrgNode
+data class OrgTableRow(val cells: List<OrgNode>, val isRule: Boolean = false) : OrgNode
+
+private val headingLineRegex = Regex("^(\\*+)\\s+(?:([A-Z][A-Z0-9_-]*)\\s+)?(.*)")
+private val headingTagsRegex = Regex("\\s+:([\\p{L}\\p{N}_@#%]+(?::[\\p{L}\\p{N}_@#%]+)*):\\s*$")
+
+// True when the line is part of a table (starts with '|' after optional indentation).
+fun String.isOrgTableLine(): Boolean = trimStart().startsWith("|")
+
+// True when the line is a table horizontal rule such as |---+---| .
+fun String.isOrgTableRuleLine(): Boolean = trimStart().startsWith("|-")
+
+// Parses consecutive table lines (all starting with '|') into an OrgTable.
+fun parseOrgTable(lines: List<String>): OrgTable {
+    val rows = lines.map { l ->
+        if (l.isOrgTableRuleLine()) {
+            OrgTableRow(emptyList(), isRule = true)
+        } else {
+            var body = l.trim().removePrefix("|")
+            if (body.endsWith("|")) body = body.dropLast(1)
+            val cells = body.split('|').map { OrgRaw(it.trim()) as OrgNode }
+            OrgTableRow(cells)
+        }
+    }
+    return OrgTable(rows)
+}
 
 // Parse a String into a very small subset of Org-mode constructs supported by the data model above.
 fun String.toOrgDocument(): OrgDocument {
@@ -72,33 +106,17 @@ fun String.toOrgDocument(): OrgDocument {
     }
 
     fun parseTable(start: Int): Pair<OrgNode, Int> {
-        val tableRows = mutableListOf<OrgTableRow>()
         var idx = start
-        while (idx < lines.size) {
-            val l = lines[idx]
-            if (!l.trimStart().startsWith("|")) break
-            // Split cells by '|' ignoring the first empty entry due to leading '|'
-            val parts = l.trim().trimEnd().split('|')
-            val cells = parts
-                .filter { it.isNotEmpty() }
-                .map { OrgRaw(it.trim()) as OrgNode }
-            tableRows.add(OrgTableRow(cells))
-            idx++
-        }
-        // The OrgTable type accepts a single OrgTableRow; to keep compatibility with current model,
-        // we will wrap multiple rows into a single row where each cell is an OrgRaw joined by newlines.
-        // If there is at least one row, we convert rows into a single row with string-joined lines.
-        val singleRow = if (tableRows.isEmpty()) OrgTableRow(emptyList()) else OrgTableRow(
-            tableRows.map { row -> OrgRaw(row.cells.joinToString(" | ") { (it as? OrgRaw)?.content ?: "" }) as OrgNode }
-        )
-        return OrgTable(singleRow) to idx
+        while (idx < lines.size && lines[idx].isOrgTableLine()) idx++
+        return parseOrgTable(lines.subList(start, idx)) to idx
     }
 
     fun parseList(start: Int, bullet: Char): Pair<OrgNode, Int> {
         val items = mutableListOf<OrgNode>()
         var idx = start
-        val itemRegex = Regex("^\\s*\\$bullet\\s+(.*)")
-        val checkboxRegex = Regex("^\\s*\\$bullet\\s+\\[([ xX])]\\s*(.*)")
+        // The bullet goes in a character class: escaping it with a backslash is not portable to JS regexes
+        val itemRegex = Regex("^\\s*[$bullet]\\s+(.*)")
+        val checkboxRegex = Regex("^\\s*[$bullet]\\s+\\[([ xX])\\]\\s*(.*)")
         while (idx < lines.size) {
             val l = lines[idx]
             val m = itemRegex.find(l) ?: break
@@ -120,9 +138,15 @@ fun String.toOrgDocument(): OrgDocument {
 
     fun parseSection(start: Int): Pair<OrgNode, Int> {
         val heading = lines[start]
-        val m = Regex("^(\\*+)\\s+(?:([A-Z][A-Z0-9_-]*)\\s+)?(.*)").find(heading.trim())
+        val m = headingLineRegex.find(heading.trim())
+        val level = m?.groupValues?.getOrNull(1)?.length?.coerceAtLeast(1) ?: 1
         val token = m?.groupValues?.getOrNull(2)
-        val title = m?.groupValues?.getOrNull(3)?.ifBlank { null } ?: heading.trim()
+        var title = m?.groupValues?.getOrNull(3)?.ifBlank { null } ?: heading.trim()
+        // Trailing :tag1:tag2: are stripped from the title and kept separately
+        val tags = headingTagsRegex.find(title)?.let { tm ->
+            title = title.substring(0, tm.range.first).trimEnd()
+            tm.groupValues[1].split(':')
+        } ?: emptyList()
         // Capture TODO-like token as-is (arbitrary, defined by metadata)
         val todo: String? = token
         val contentSb = StringBuilder()
@@ -144,7 +168,7 @@ fun String.toOrgDocument(): OrgDocument {
             contentSb.appendLine(trim)
             idx++
         }
-        return OrgSection(title, contentSb.toString().trimEnd(), todo) to idx
+        return OrgSection(title, contentSb.toString().trimEnd(), todo, level, tags) to idx
     }
 
     mainLoop@ while (i < lines.size) {
@@ -212,6 +236,34 @@ fun String.toOrgDocument(): OrgDocument {
     return OrgDocument(children, metadata)
 }
 
+private fun OrgNode.cellText(): String = (this as? OrgRaw)?.content ?: this.toOrgString()
+
+// Renders the table as Org text with every column padded to the widest cell (like Emacs does),
+// so the result is aligned when displayed in a monospace font.
+fun OrgTable.toAlignedLines(): List<String> {
+    val cols = columnCount
+    if (cols == 0) return rows.map { "|-|" }
+    val widths = IntArray(cols)
+    for (row in rows) {
+        if (row.isRule) continue
+        row.cells.forEachIndexed { c, cell -> widths[c] = maxOf(widths[c], cell.cellText().length) }
+    }
+    return rows.map { row ->
+        if (row.isRule) {
+            widths.joinToString(separator = "+", prefix = "|", postfix = "|") { "-".repeat(it + 2) }
+        } else {
+            (0 until cols).joinToString(separator = "|", prefix = "|", postfix = "|") { c ->
+                val text = row.cells.getOrNull(c)?.cellText().orEmpty()
+                if (text.isNumeric()) " " + text.padStart(widths[c]) + " " else " " + text.padEnd(widths[c]) + " "
+            }
+        }
+    }
+}
+
+// Emacs right-aligns cells that look like numbers.
+private val numericCellRegex = Regex("^[-+]?(\\d+([.,]\\d*)?|[.,]\\d+)([eE][-+]?\\d+)?%?$")
+fun String.isNumeric(): Boolean = isNotEmpty() && numericCellRegex.matches(this)
+
 // Represents parsed TODO workflow configuration from #+TODO metadata lines.
 data class OrgTodoConfig(val todo: Set<String>, val done: Set<String>)
 
@@ -263,15 +315,15 @@ fun OrgNode.toOrgString(): String = when (this) {
         }
     }
     is OrgSection -> buildString {
-        // We don't track heading level; emit single-star heading with optional TODO token
-        if (todo != null) append("* ").append(todo).append(' ').appendLine(title) else append("* ").appendLine(title)
+        append("*".repeat(level.coerceAtLeast(1))).append(' ')
+        if (todo != null) append(todo).append(' ')
+        append(title)
+        if (tags.isNotEmpty()) append(" :").append(tags.joinToString(":")).append(':')
+        appendLine()
         if (content.isNotBlank()) appendLine(content.trimEnd())
     }.trimEnd()
-    is OrgTable -> {
-        val row = rows
-        if (row.cells.isEmpty()) "" else row.cells.joinToString("\n") { cell -> "| " + (cell as? OrgRaw)?.content.orEmpty() + " |" }
-    }
-    is OrgTableRow -> cells.joinToString(" | ") { (it as? OrgRaw)?.content ?: "" }
+    is OrgTable -> toAlignedLines().joinToString("\n")
+    is OrgTableRow -> if (isRule) "|-|" else "| " + cells.joinToString(" | ") { it.cellText() } + " |"
     is OrgPlanning -> when (planType) {
         "SCHEDULED" -> "SCHEDULED: $timestamp"
         "DEADLINE" -> "DEADLINE: $timestamp"

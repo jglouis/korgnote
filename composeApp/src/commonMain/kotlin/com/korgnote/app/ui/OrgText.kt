@@ -1,21 +1,49 @@
 package com.korgnote.app.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgDocument
@@ -27,9 +55,19 @@ import com.korgnote.common.org.OrgRaw
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTable
 import com.korgnote.common.org.OrgTableRow
+import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.isNumeric
+import com.korgnote.common.org.parseOrgTable
+import com.korgnote.common.org.toOrgString
 
 private class Ord(var i: Int)
 
+private val titleKeywordRegex = Regex("^#\\+TITLE:\\s*(.*)$", RegexOption.IGNORE_CASE)
+
+/**
+ * Reading-mode renderer for an Org node: headings are sized by level, tables become grids,
+ * source blocks are shown in monospace, drawers are collapsible and inline markup is hidden.
+ */
 @Composable
 fun OrgText(
     content: OrgNode,
@@ -39,10 +77,12 @@ fun OrgText(
 ) {
     // Fresh counter each composition to ensure consistent ordinal indexing on every recomposition
     val ord = Ord(0)
+    val todoConfig = if (content is OrgDocument) orgTodoConfigOf(content) else DefaultOrgTodoConfig
     Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
         RenderNode(
             node = content,
             ordinal = ord,
+            todoConfig = todoConfig,
             onToggleCheckbox = onToggleCheckbox,
         )
     }
@@ -52,36 +92,20 @@ fun OrgText(
 private fun RenderNode(
     node: OrgNode,
     ordinal: Ord,
+    todoConfig: OrgTodoConfig,
     onToggleCheckbox: ((Int, Boolean) -> Unit)?
 ) {
     when (node) {
         is OrgDocument -> {
             Column(horizontalAlignment = Alignment.Start) {
-                node.children.forEach { child -> RenderNode(child, ordinal, onToggleCheckbox) }
+                node.children.forEach { child -> RenderNode(child, ordinal, todoConfig, onToggleCheckbox) }
             }
         }
 
         is OrgSection -> {
-            // Heading line
-            val headingText = buildString {
-                if (!node.todo.isNullOrEmpty()) {
-                    append(node.todo)
-                    append(' ')
-                }
-                append(node.title)
-            }
-            Text(
-                text = buildOrgAnnotatedString(headingText),
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            )
-            // Section content (preformatted lines)
+            OrgHeading(node, todoConfig)
             if (node.content.isNotBlank()) {
-                node.content.split('\n').forEach { ln ->
-                    Text(text = buildOrgAnnotatedString(ln), style = MaterialTheme.typography.bodyMedium)
-                }
+                OrgBody(node.content, todoConfig)
             }
         }
 
@@ -93,12 +117,9 @@ private fun RenderNode(
                             RenderCheckboxItem(child.checked, child.text, ordinal, onToggleCheckbox)
                         }
 
-                        is OrgRaw -> Text(
-                            text = buildOrgAnnotatedString("${node.bulletType} ${child.content}"),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        is OrgRaw -> OrgLine("${node.bulletType} ${child.content}", todoConfig)
 
-                        else -> RenderNode(child, ordinal, onToggleCheckbox)
+                        else -> RenderNode(child, ordinal, todoConfig, onToggleCheckbox)
                     }
                 }
             }
@@ -109,41 +130,335 @@ private fun RenderNode(
         }
 
         is OrgKeyword -> {
-            Text(
-                text = buildOrgAnnotatedString(node.content),
-                style = MaterialTheme.typography.bodySmall.copy(color = OrgColors.keyword)
-            )
-        }
-
-        is OrgPlanning -> {
-            val line = node.planType + ": " + node.timestamp
-            Text(
-                text = buildOrgAnnotatedString(line),
-                style = MaterialTheme.typography.bodySmall.copy(color = OrgColors.planning)
-            )
-        }
-
-        is OrgRaw -> {
-            node.content.split('\n').forEach { ln ->
-                Text(text = buildOrgAnnotatedString(ln), style = MaterialTheme.typography.bodyMedium)
+            val title = titleKeywordRegex.find(node.content.trim())?.groupValues?.get(1)
+            if (title != null) {
+                Text(
+                    text = buildOrgInlineString(title),
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            } else {
+                Text(
+                    text = node.content,
+                    style = MaterialTheme.typography.bodySmall.copy(color = OrgColors.keyword)
+                )
             }
         }
 
-        is OrgTable -> {
-            // Very simple: print rows as lines like | cell |
-            val row = node.rows
-            if (row.cells.isNotEmpty()) {
-                row.cells.forEach { cell ->
-                    val raw = (cell as? OrgRaw)?.content ?: cell.toString()
-                    Text(text = buildOrgAnnotatedString("| $raw |"), style = MaterialTheme.typography.bodyMedium)
+        is OrgPlanning -> OrgLine(node.planType + ": " + node.timestamp, todoConfig, MaterialTheme.typography.bodySmall)
+
+        is OrgRaw -> OrgBody(node.content, todoConfig)
+
+        is OrgTable -> OrgTableView(node)
+
+        is OrgTableRow -> OrgTableView(OrgTable(listOf(node)))
+    }
+}
+
+@Composable
+private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig) {
+    val typography = MaterialTheme.typography
+    val base = when (node.level) {
+        1 -> typography.titleLarge
+        2 -> typography.titleMedium
+        3 -> typography.titleSmall
+        else -> typography.bodyLarge
+    }
+    val style = base.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(top = if (node.level == 1) 12.dp else 6.dp, bottom = 2.dp)
+    ) {
+        val heading = buildAnnotatedString {
+            val todoColor = node.todo?.let { todoConfig.colorFor(it) }
+            if (!node.todo.isNullOrEmpty()) {
+                withStyle(SpanStyle(color = todoColor ?: style.color)) { append(node.todo) }
+                append(' ')
+            }
+            var title = node.title
+            OrgSyntax.priority.find(title)?.let { prio ->
+                withStyle(SpanStyle(color = OrgColors.priority)) { append(prio.value) }
+                title = title.substring(prio.value.length)
+            }
+            appendOrgInline(title, viewMode = true)
+        }
+        Text(text = heading, style = style, modifier = Modifier.weight(1f, fill = false))
+        if (node.tags.isNotEmpty()) {
+            Spacer(Modifier.width(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                node.tags.forEach { tag -> OrgTagChip(tag) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OrgTagChip(tag: String) {
+    Surface(color = OrgColors.tag.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
+        Text(
+            text = tag,
+            style = MaterialTheme.typography.labelSmall,
+            color = OrgColors.tag,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+        )
+    }
+}
+
+/** Renders a single Org line (list item, planning, keyword...) with markup hidden. */
+@Composable
+private fun OrgLine(line: String, todoConfig: OrgTodoConfig, style: TextStyle = MaterialTheme.typography.bodyMedium) {
+    Text(
+        text = buildOrgHighlightedString(line, MaterialTheme.colorScheme.primary, todoConfig, viewMode = true),
+        style = style
+    )
+}
+
+private fun isBlankLine(line: String) = line.isBlank()
+
+private fun isSpecialLine(line: String): Boolean =
+    isBlankLine(line) ||
+        OrgSyntax.heading.containsMatchIn(line) ||
+        OrgSyntax.blockBegin.containsMatchIn(line) ||
+        OrgSyntax.blockEnd.containsMatchIn(line) ||
+        OrgSyntax.keyword.containsMatchIn(line) ||
+        OrgSyntax.comment.containsMatchIn(line) ||
+        OrgSyntax.drawerBegin.containsMatchIn(line) ||
+        OrgSyntax.planning.containsMatchIn(line) ||
+        OrgSyntax.isTableLine(line) ||
+        OrgSyntax.horizontalRule.containsMatchIn(line) ||
+        OrgSyntax.listItem.containsMatchIn(line)
+
+/**
+ * Renders raw Org text (section content or a paragraph) by grouping lines into tables, blocks,
+ * drawers, paragraphs and single special lines.
+ */
+@Composable
+fun OrgBody(text: String, todoConfig: OrgTodoConfig = DefaultOrgTodoConfig) {
+    val lines = text.split('\n')
+    Column(horizontalAlignment = Alignment.Start) {
+        var i = 0
+        while (i < lines.size) {
+            val line = lines[i]
+            val blockBegin = OrgSyntax.blockBegin.find(line)
+            when {
+                blockBegin != null -> {
+                    var j = i + 1
+                    while (j < lines.size && !OrgSyntax.blockEnd.containsMatchIn(lines[j])) j++
+                    OrgBlockView(
+                        type = blockBegin.groupValues[1].lowercase(),
+                        params = blockBegin.groupValues[2].trim(),
+                        lines = lines.subList(i + 1, j)
+                    )
+                    i = j + 1
+                }
+
+                OrgSyntax.isTableLine(line) -> {
+                    var j = i
+                    while (j < lines.size && OrgSyntax.isTableLine(lines[j])) j++
+                    OrgTableView(parseOrgTable(lines.subList(i, j)))
+                    i = j
+                }
+
+                OrgSyntax.drawerBegin.containsMatchIn(line) && !OrgSyntax.drawerEnd.containsMatchIn(line) -> {
+                    var j = i + 1
+                    while (j < lines.size && !OrgSyntax.drawerEnd.containsMatchIn(lines[j])) j++
+                    OrgDrawerView(name = line.trim(), lines = lines.subList(i + 1, j))
+                    i = j + 1
+                }
+
+                OrgSyntax.horizontalRule.containsMatchIn(line) -> {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                    i++
+                }
+
+                isBlankLine(line) -> {
+                    Spacer(Modifier.height(6.dp))
+                    i++
+                }
+
+                isSpecialLine(line) -> {
+                    OrgLine(line, todoConfig)
+                    i++
+                }
+
+                else -> {
+                    // Paragraph: consecutive plain lines are joined into one wrapped text
+                    var j = i + 1
+                    while (j < lines.size && !isSpecialLine(lines[j])) j++
+                    val paragraph = lines.subList(i, j).joinToString(" ") { it.trim() }
+                    Text(text = buildOrgInlineString(paragraph), style = MaterialTheme.typography.bodyMedium)
+                    i = j
                 }
             }
         }
+    }
+}
 
-        is OrgTableRow -> {
-            val line = node.cells.joinToString(" | ") { (it as? OrgRaw)?.content ?: "" }
-            Text(text = buildOrgAnnotatedString(line), style = MaterialTheme.typography.bodyMedium)
+@Composable
+private fun OrgBlockView(type: String, params: String, lines: List<String>) {
+    val label = listOf(type, params).filter { it.isNotBlank() }.joinToString(" ")
+    val body = lines.joinToString("\n")
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(6.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            when (type) {
+                in OrgSyntax.monospaceBlocks -> Text(
+                    text = body,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    softWrap = false,
+                    modifier = Modifier.horizontalScroll(rememberScrollState())
+                )
+
+                "quote", "verse" -> Text(
+                    text = buildOrgInlineString(if (type == "verse") body else body.replace('\n', ' ')),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic)
+                )
+
+                else -> Text(text = buildOrgInlineString(body), style = MaterialTheme.typography.bodyMedium)
+            }
         }
+    }
+}
+
+@Composable
+private fun OrgDrawerView(name: String, lines: List<String>) {
+    var expanded by remember { mutableStateOf(false) }
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.clickable { expanded = !expanded }
+        ) {
+            Icon(
+                imageVector = if (expanded) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight,
+                contentDescription = if (expanded) "Collapse drawer" else "Expand drawer",
+                tint = OrgColors.drawer,
+                modifier = Modifier.width(16.dp)
+            )
+            Text(
+                text = name,
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                color = OrgColors.drawer
+            )
+        }
+        if (expanded) {
+            Text(
+                text = buildOrgHighlightedString(
+                    (listOf(name) + lines + ":END:").joinToString("\n"),
+                    MaterialTheme.colorScheme.primary,
+                    viewMode = true
+                ),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                modifier = Modifier.padding(start = 16.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Renders an Org table as a grid: columns are as wide as their widest cell, numeric cells are
+ * right-aligned, rows before the first horizontal rule are treated as header and horizontal rules
+ * become separator lines. Wide tables scroll horizontally.
+ */
+@Composable
+fun OrgTableView(table: OrgTable, modifier: Modifier = Modifier) {
+    val cols = table.columnCount
+    if (cols == 0) return
+    val lineColor = MaterialTheme.colorScheme.outlineVariant
+    val firstDataRow = table.rows.indexOfFirst { !it.isRule }
+    val ruleAfterFirstData = table.rows.withIndex().indexOfFirst { (idx, row) -> idx > firstDataRow && row.isRule }
+    val headerRange = if (firstDataRow >= 0 && ruleAfterFirstData > firstDataRow) firstDataRow until ruleAfterFirstData else IntRange.EMPTY
+
+    Box(
+        modifier = modifier
+            .padding(vertical = 4.dp)
+            .horizontalScroll(rememberScrollState())
+            .border(1.dp, lineColor)
+    ) {
+        Layout(
+            content = {
+                table.rows.forEachIndexed { r, row ->
+                    if (row.isRule) {
+                        Box(Modifier.height(1.dp).background(lineColor))
+                    } else {
+                        for (c in 0 until cols) {
+                            val cell = row.cells.getOrNull(c)
+                            val text = (cell as? OrgRaw)?.content ?: cell?.toOrgString().orEmpty()
+                            TableCell(
+                                text = text,
+                                header = r in headerRange,
+                                drawRightBorder = c < cols - 1,
+                                lineColor = lineColor
+                            )
+                        }
+                    }
+                }
+            }
+        ) { measurables, _ ->
+            var idx = 0
+            val rowMeasurables = table.rows.map { row ->
+                if (row.isRule) listOf(measurables[idx++]) else List(cols) { measurables[idx++] }
+            }
+            val colWidths = IntArray(cols)
+            table.rows.forEachIndexed { r, row ->
+                if (!row.isRule) rowMeasurables[r].forEachIndexed { c, m ->
+                    colWidths[c] = maxOf(colWidths[c], m.maxIntrinsicWidth(Constraints.Infinity))
+                }
+            }
+            val totalWidth = colWidths.sum()
+            val rowHeights = IntArray(table.rows.size)
+            val placeables = table.rows.mapIndexed { r, row ->
+                if (row.isRule) {
+                    val p = rowMeasurables[r][0].measure(Constraints.fixedWidth(totalWidth))
+                    rowHeights[r] = p.height
+                    listOf(p)
+                } else {
+                    val h = rowMeasurables[r].withIndex().maxOf { (c, m) -> m.minIntrinsicHeight(colWidths[c]) }
+                    rowHeights[r] = h
+                    rowMeasurables[r].mapIndexed { c, m -> m.measure(Constraints.fixed(colWidths[c], h)) }
+                }
+            }
+            layout(totalWidth, rowHeights.sum()) {
+                var y = 0
+                placeables.forEachIndexed { r, row ->
+                    var x = 0
+                    row.forEachIndexed { c, p ->
+                        p.placeRelative(x, y)
+                        if (!table.rows[r].isRule) x += colWidths[c]
+                    }
+                    y += rowHeights[r]
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TableCell(text: String, header: Boolean, drawRightBorder: Boolean, lineColor: Color) {
+    Box(
+        modifier = Modifier
+            .drawBehind {
+                if (drawRightBorder) {
+                    drawLine(lineColor, Offset(size.width, 0f), Offset(size.width, size.height))
+                }
+            }
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        contentAlignment = if (text.isNumeric()) Alignment.CenterEnd else Alignment.CenterStart
+    ) {
+        Text(
+            text = buildOrgInlineString(text),
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = if (header) FontWeight.Bold else FontWeight.Normal
+            ),
+            softWrap = false
+        )
     }
 }
 
@@ -172,32 +487,6 @@ private fun CheckboxLine(
     Row(verticalAlignment = Alignment.CenterVertically) {
         Checkbox(checked = checked, onCheckedChange = { newValue: Boolean -> onCheckedChange(newValue) })
         Spacer(Modifier.width(6.dp))
-        Text(text = buildOrgAnnotatedString(text), style = MaterialTheme.typography.bodyMedium)
-    }
-}
-
-fun buildOrgAnnotatedString(text: String): AnnotatedString {
-    // Highlight TODO (green) and DONE (grey) tokens as whole words
-    val tokens = listOf("TODO" to OrgColors.todo, "DONE" to OrgColors.done)
-    return buildAnnotatedString {
-        var i = 0
-        while (i < text.length) {
-            var matched = false
-            for ((token, color) in tokens) {
-                if (text.regionMatches(i, token, 0, token.length)) {
-                    val beforeOk = i == 0 || !text[i - 1].isLetterOrDigit()
-                    val afterOk = i + token.length >= text.length || !text[i + token.length].isLetterOrDigit()
-                    if (beforeOk && afterOk) {
-                        withStyle(SpanStyle(color = color, fontWeight = FontWeight.Bold)) { append(token) }
-                        i += token.length
-                        matched = true
-                        break
-                    }
-                }
-            }
-            if (!matched) {
-                append(text[i]); i++
-            }
-        }
+        Text(text = buildOrgItemString(text), style = MaterialTheme.typography.bodyMedium)
     }
 }

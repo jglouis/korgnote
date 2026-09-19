@@ -53,9 +53,9 @@ class OrgModePrintTests {
         """.trimIndent()
         val doc = input.toOrgDocument()
         val printed = doc.toOrgString()
-        // Since we do not preserve heading level, we expect single-star in output
+        // Heading level is preserved in output
         val expected = """
-            * DONE Ship it
+            ** DONE Ship it
             Body line 1
             Body line 2
         """.trimIndent()
@@ -70,13 +70,37 @@ class OrgModePrintTests {
         """.trimIndent()
         val doc = input.toOrgDocument()
         val printed = doc.toOrgString()
-        // Our model flattens rows to cells containing joined text; printing reconstructs simple pipe lines per row
-        // The first cell becomes first printed line, etc.
         val expected = """
             | A | B |
             | 1 | 2 |
         """.trimIndent()
         assertEquals(expected, printed)
+    }
+
+    @Test
+    fun printsTableAlignedWithRules() {
+        val input = """
+            | Name | Qty |
+            |-
+            | Apples | 10 |
+        """.trimIndent()
+        val expected = """
+            | Name   | Qty |
+            |--------+-----|
+            | Apples |  10 |
+        """.trimIndent()
+        assertEquals(expected, input.toOrgDocument().toOrgString())
+    }
+
+    @Test
+    fun printsHeadingWithLevelAndTags() {
+        val input = "*** TODO Call mom :Family:Phone:\nBody"
+        val doc = input.toOrgDocument()
+        val sec = doc.children[0] as OrgSection
+        assertEquals(3, sec.level)
+        assertEquals("Call mom", sec.title)
+        assertEquals(listOf("Family", "Phone"), sec.tags)
+        assertEquals(input, doc.toOrgString())
     }
 
     @Test
@@ -97,7 +121,7 @@ class OrgModePrintTests {
             Intro line
             - a
             - [x] b
-            * TODO Task
+            ** TODO Task
             Work
         """.trimIndent()
         assertEquals(expected, doc.toOrgString())
