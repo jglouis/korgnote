@@ -66,6 +66,37 @@ data class OrgTable(val rows: List<OrgTableRow>) : OrgNode() {
 
 data class OrgTableRow(val cells: List<OrgNode>, val isRule: Boolean = false) : OrgNode()
 
+/**
+ * A heading line split into its parts, exactly as [OrgSection] records them.
+ *
+ * Public and shared on purpose: anything that has to recognise the heading a parsed [OrgSection]
+ * came from — the calendar opening an entry, for one — must agree with the parser about where the
+ * TODO keyword and the trailing tags end and the title begins. Two separate notions of "the title"
+ * silently fail to match the moment a heading carries a tag.
+ */
+data class OrgHeading(
+    val level: Int,
+    /** The TODO-like keyword, or `""` when the heading has none. */
+    val todo: String?,
+    val title: String,
+    val tags: List<String>,
+)
+
+/** Splits a heading line — with or without its leading stars — into [OrgHeading]. */
+fun orgHeadingOf(line: String): OrgHeading {
+    val trimmed = line.trim()
+    val m = headingLineRegex.find(trimmed)
+    val level = m?.groupValues?.getOrNull(1)?.length?.coerceAtLeast(1) ?: 1
+    val todo = m?.groupValues?.getOrNull(2)
+    var title = m?.groupValues?.getOrNull(3)?.ifBlank { null } ?: trimmed
+    // Trailing :tag1:tag2: are stripped from the title and kept separately
+    val tags = headingTagsRegex.find(title)?.let { tm ->
+        title = title.substring(0, tm.range.first).trimEnd()
+        tm.groupValues[1].split(':')
+    } ?: emptyList()
+    return OrgHeading(level = level, todo = todo, title = title, tags = tags)
+}
+
 private val headingLineRegex = Regex("^(\\*+)\\s+(?:([A-Z][A-Z0-9_-]*)\\s+)?(.*)")
 private val headingTagsRegex = Regex("\\s+:([\\p{L}\\p{N}_@#%]+(?::[\\p{L}\\p{N}_@#%]+)*):\\s*$")
 
@@ -168,17 +199,12 @@ fun String.toOrgDocument(): OrgDocument {
 
     fun parseSection(start: Int): Pair<OrgNode, Int> {
         val heading = lines[start]
-        val m = headingLineRegex.find(heading.trim())
-        val level = m?.groupValues?.getOrNull(1)?.length?.coerceAtLeast(1) ?: 1
-        val token = m?.groupValues?.getOrNull(2)
-        var title = m?.groupValues?.getOrNull(3)?.ifBlank { null } ?: heading.trim()
-        // Trailing :tag1:tag2: are stripped from the title and kept separately
-        val tags = headingTagsRegex.find(title)?.let { tm ->
-            title = title.substring(0, tm.range.first).trimEnd()
-            tm.groupValues[1].split(':')
-        } ?: emptyList()
+        val parsed = orgHeadingOf(heading)
+        val level = parsed.level
+        val title = parsed.title
+        val tags = parsed.tags
         // Capture TODO-like token as-is (arbitrary, defined by metadata)
-        val todo: String? = token
+        val todo: String? = parsed.todo
         val contentSb = StringBuilder()
         var idx = start + 1
         while (idx < lines.size) {

@@ -124,11 +124,18 @@ the text before an insertion so that discarding removes it. Covered by `ElementE
   seconds".
 - Creating, renaming and deleting **files** is still impossible — the server rejects any path it did
   not see at startup (D11). That is the next gap once adding sections feels good.
-- The calendar's "scroll to this heading" matches an element by level and title, because the agenda
-  index holds parsed nodes with no source ranges. Now that T3 gives every node a range, this can
-  become exact — the match is still by title today.
+- The calendar's "scroll to this heading" is now exact, using the source range T3 gives every node:
+  the element containing the section's first character is the one to show. It falls back to a title
+  search when that range no longer fits the file, which happens if the file changed after the agenda
+  indexed it. This was two separate bugs, both fixed and both covered by `CalendarNavigationTest`:
 
-  The lookup itself moved into `FileTreeViewModel.onFileSelected(path, scrollToHeading)`. It used to
-  run at the call site in `App.kt`, immediately after `onFileSelected`, which fetches the file's text
-  asynchronously — so it searched the *previously* open file and scrolled to the wrong heading, or to
-  none. `CalendarNavigationTest` pins this down.
+  - The lookup ran at the call site in `App.kt`, immediately after `onFileSelected` — which fetches
+    the file's text *asynchronously*. So it searched the file being left, not the one being opened.
+    It now lives in `FileTreeViewModel.onFileSelected(path, scrollToHeading)` and runs when the text
+    arrives.
+  - The match was `element.title.endsWith(section.title)`, and those two titles are not the same
+    kind of string: `OrgSection.title` has the TODO keyword and the trailing `:tags:` stripped,
+    while `OrgElement.title` keeps both. Any heading carrying a tag therefore never matched, and
+    `Review` would happily match `Final Review`. Heading lines are now split by one shared
+    `orgHeadingOf`, used by both the parser and this lookup, so the two cannot drift again — the
+    smallest instance of the "one grammar" idea behind T6.

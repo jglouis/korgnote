@@ -4,6 +4,7 @@ import com.korgnote.app.data.OrgRepository
 import com.korgnote.common.fs.Folder
 import com.korgnote.common.fs.TreeUtils
 import com.korgnote.common.org.OrgSection
+import com.korgnote.common.org.toOrgDocument
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -35,14 +36,15 @@ class CalendarNavigationTest {
         #+TITLE: Agenda
 
         * TODO Alpha
-        * TODO Beta
+        * TODO Final Review                          :work:
+        * TODO Review                                :work:home:
         * TODO Gamma
     """.trimIndent() + "\n"
 
     private val otherText = """
         #+TITLE: Other
 
-        * TODO Gamma
+        * TODO Gamma                                 :work:
         * TODO Delta
     """.trimIndent() + "\n"
 
@@ -76,14 +78,43 @@ class CalendarNavigationTest {
 
     private fun heading(title: String) = OrgSection(title = title, content = "", todo = "TODO", level = 1)
 
+    /**
+     * The heading as the calendar actually supplies it: taken from the parsed document, so its title
+     * has both the TODO keyword and the trailing tags stripped off.
+     */
+    private fun headingFromCalendar(file: String, title: String): OrgSection {
+        val document = (if (file == agenda) agendaText else otherText).toOrgDocument()
+        return document.children.filterIsInstance<OrgSection>().first { it.title == title }
+    }
+
     @Test
     fun opensTheRequestedHeadingInTheRequestedFile() = runTest {
         viewModel.loadFromServer()
 
-        viewModel.onFileSelected(agenda, scrollToHeading = heading("Beta"))
+        viewModel.onFileSelected(agenda, scrollToHeading = heading("Gamma"))
 
-        // preamble, Alpha, Beta
-        assertEquals(2, viewModel.scrollToElementIndex)
+        // preamble, Alpha, Final Review, Review, Gamma
+        assertEquals(4, viewModel.scrollToElementIndex)
+    }
+
+    /** Real headings carry tags, and the parsed section's title has them stripped. */
+    @Test
+    fun findsAHeadingThatCarriesTags() = runTest {
+        viewModel.loadFromServer()
+
+        viewModel.onFileSelected(agenda, scrollToHeading = headingFromCalendar(agenda, "Review"))
+
+        assertEquals(3, viewModel.scrollToElementIndex)
+    }
+
+    /** "Review" must not match "Final Review", which appears first. */
+    @Test
+    fun doesNotMatchAHeadingThatMerelyEndsWithTheSameWords() = runTest {
+        viewModel.loadFromServer()
+
+        viewModel.onFileSelected(agenda, scrollToHeading = headingFromCalendar(agenda, "Review"))
+
+        assertEquals(3, viewModel.scrollToElementIndex, "matched 'Final Review' instead of 'Review'")
     }
 
     /** The regression: the heading must be found in the file being opened, not the one being left. */
@@ -96,6 +127,21 @@ class CalendarNavigationTest {
 
         // "Gamma" is index 3 in agenda.org but index 1 in other.org.
         assertEquals(otherText, viewModel.selectedFileContent)
+        assertEquals(1, viewModel.scrollToElementIndex)
+    }
+
+    /**
+     * A section's range belongs to the text the calendar indexed. When that no longer describes the
+     * file — here the same title lives at a different offset in a different file — the title search
+     * has to take over rather than the stale offset winning.
+     */
+    @Test
+    fun fallsBackToTheTitleWhenTheRangeNoLongerFits() = runTest {
+        viewModel.loadFromServer()
+
+        viewModel.onFileSelected(other, scrollToHeading = headingFromCalendar(agenda, "Gamma"))
+
+        // preamble, Gamma, Delta
         assertEquals(1, viewModel.scrollToElementIndex)
     }
 

@@ -102,15 +102,33 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     /**
      * Finds the element rendering [section], or null if it is not in this text.
      *
-     * Matched on level plus title rather than on identity: the section comes from the parsed document
-     * held for the calendar, while elements are cut from the file's raw text, so the two are different
-     * objects describing the same heading. [OrgElement.title] keeps the heading's TODO keyword, which
-     * [OrgSection.title] does not, hence the suffix match.
+     * The section comes from the document parsed for the calendar, while elements are cut from the
+     * file's raw text, so the two are different objects describing the same heading and have to be
+     * matched rather than compared.
+     *
+     * Preferred match is the section's source range, which T3 gives it: the element containing that
+     * character is unambiguously the right one. Titles are not — two headings can share a title, and
+     * one can be a suffix of another. The range is only trusted when the heading found there really
+     * is the section's, because the file may have changed since the calendar indexed it; otherwise
+     * this falls back to searching by title.
      */
-    private fun String.elementIndexOf(section: OrgSection): Int? =
-        orgElements()
-            .indexOfFirst { it.level == section.level && it.title.endsWith(section.title) }
-            .takeIf { it >= 0 }
+    private fun String.elementIndexOf(section: OrgSection): Int? {
+        val text = this
+        val elements = orgElements()
+
+        fun isSection(element: OrgElement): Boolean {
+            if (element.isPreamble || element.level != section.level) return false
+            val headingLine = element.sliceOf(text).lineSequence().firstOrNull() ?: return false
+            return orgHeadingOf(headingLine).title == section.title
+        }
+
+        val offset = section.range.first
+        if (!section.range.isEmpty() && offset in text.indices) {
+            val atOffset = elements.indexOfFirst { offset >= it.start && offset < it.endExclusive }
+            if (atOffset >= 0 && isSection(elements[atOffset])) return atOffset
+        }
+        return elements.indexOfFirst { isSection(it) }.takeIf { it >= 0 }
+    }
 
     /** Index into [selectedFileContent]'s elements, or null when not editing one. */
     var editingElementIndex: Int? by mutableStateOf(null)
