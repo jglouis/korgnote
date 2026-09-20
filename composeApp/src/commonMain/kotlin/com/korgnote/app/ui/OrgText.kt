@@ -82,8 +82,9 @@ private class Ord(var i: Int)
 fun OrgText(
     content: OrgNode,
     modifier: Modifier = Modifier,
-    // Int parameter represents the ordinal index of the checkbox item in the original text
-    onToggleCheckbox: ((ordinalIndex: Int, checked: Boolean) -> Unit)? = null,
+    // The item itself, not its position: a node carries the source range it was parsed from, while
+    // an ordinal shifts whenever anything above it changes.
+    onToggleCheckbox: ((item: OrgCheckboxItem) -> Unit)? = null,
     // Index into content.children (when content is an OrgDocument) to scroll into view, e.g. after
     // opening a file from a calendar entry. Consumed once via onScrolledToChildIndex.
     scrollToChildIndex: Int? = null,
@@ -130,7 +131,7 @@ private fun RenderNode(
     node: OrgNode,
     ordinal: Ord,
     todoConfig: OrgTodoConfig,
-    onToggleCheckbox: ((Int, Boolean) -> Unit)?
+    onToggleCheckbox: ((OrgCheckboxItem) -> Unit)?
 ) {
     when (node) {
         is OrgDocument -> {
@@ -180,7 +181,7 @@ private fun RenderNode(
                     val marker = if (node.ordered) "${index + 1}${node.bulletType}" else "${node.bulletType}"
                     when (child) {
                         is OrgCheckboxItem -> {
-                            RenderCheckboxItem(child.checked, child.text, ordinal, onToggleCheckbox)
+                            RenderCheckboxItem(child, onToggleCheckbox)
                             child.children.forEach { RenderNode(it, ordinal, todoConfig, onToggleCheckbox) }
                         }
 
@@ -201,7 +202,7 @@ private fun RenderNode(
         }
 
         is OrgCheckboxItem -> {
-            RenderCheckboxItem(node.checked, node.text, ordinal, onToggleCheckbox)
+            RenderCheckboxItem(node, onToggleCheckbox)
         }
 
         is OrgKeyword -> {
@@ -539,18 +540,15 @@ private fun TableCell(text: String, header: Boolean, drawRightBorder: Boolean, l
 
 @Composable
 private fun RenderCheckboxItem(
-    checked: Boolean,
-    text: String,
-    ordinal: Ord,
-    onToggleCheckbox: ((Int, Boolean) -> Unit)?
+    item: OrgCheckboxItem,
+    onToggleCheckbox: ((OrgCheckboxItem) -> Unit)?
 ) {
-    val idx = ordinal.i
-    key(idx) {
-        CheckboxLine(checked = checked, text = text, onCheckedChange = { c ->
-            onToggleCheckbox?.invoke(idx, c)
+    // Keyed by where the item came from: two items with the same text are still different items.
+    key(item.range.first) {
+        CheckboxLine(checked = item.checked, text = item.text, onCheckedChange = {
+            onToggleCheckbox?.invoke(item)
         })
     }
-    ordinal.i = idx + 1
 }
 
 @Composable

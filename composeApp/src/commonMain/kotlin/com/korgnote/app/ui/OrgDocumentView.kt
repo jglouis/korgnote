@@ -40,7 +40,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import com.korgnote.common.org.orgCheckboxesBefore
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.sliceOf
 import com.korgnote.common.org.toOrgDocument
@@ -58,7 +57,8 @@ import com.korgnote.common.org.toOrgDocument
 fun OrgDocumentView(
     text: String,
     modifier: Modifier = Modifier,
-    onToggleCheckbox: ((ordinalIndex: Int, checked: Boolean) -> Unit)? = null,
+    // The offset of the tapped checkbox in [text]; the view model finds the node there.
+    onToggleCheckbox: ((offsetInDocument: Int) -> Unit)? = null,
     editingElementIndex: Int? = null,
     elementDraft: String = "",
     elementDraftCaret: Int = 0,
@@ -109,13 +109,13 @@ fun OrgDocumentView(
                     ) {
                         Box(modifier = Modifier.weight(1f)) {
                             val document = remember(slice) { slice.toOrgDocument() }
-                            val checkboxBase = remember(text, element) {
-                                text.orgCheckboxesBefore(element.start)
-                            }
                             OrgText(
                                 content = document,
+                                // The element was parsed from its own slice, so its nodes carry
+                                // slice-relative ranges; shifting by the element's start makes them
+                                // offsets into the whole document.
                                 onToggleCheckbox = onToggleCheckbox?.let { toggle ->
-                                    { localOrdinal, checked -> toggle(checkboxBase + localOrdinal, checked) }
+                                    { item -> toggle(element.start + item.range.first) }
                                 },
                             )
                         }

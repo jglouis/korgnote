@@ -1,7 +1,6 @@
 package com.korgnote.common
 
 import com.korgnote.common.org.OrgSection
-import com.korgnote.common.org.orgCheckboxesBefore
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.replaceOrgElement
 import com.korgnote.common.org.sliceOf
@@ -199,11 +198,4 @@ class OrgElementsTests {
         assertEquals(2, inserted.level)
     }
 
-    @Test
-    fun checkboxesBeforeCountsWholeLinesOnly() {
-        val elements = document.orgElements()
-        assertEquals(0, document.orgCheckboxesBefore(elements[1].start))
-        // Two checkboxes live in the first task, so the second task's numbering starts at 2.
-        assertEquals(2, document.orgCheckboxesBefore(elements.last().start))
-    }
 }

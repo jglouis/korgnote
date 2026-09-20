@@ -14,6 +14,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import com.korgnote.common.org.*
+import com.korgnote.common.org.edit.nodeAt
+import com.korgnote.common.org.edit.toggleCheckbox
 import kotlinx.datetime.LocalDate
 import com.korgnote.common.fs.File as SharedFile
 import com.korgnote.common.fs.Folder as SharedFolder
@@ -250,13 +252,20 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     // Map of scheduled entries by LocalDate, computed from all contents
     var scheduledByDate by mutableStateOf(buildScheduledIndex(orgContents))
 
-    fun toggleCheckboxByOrdinal(ordinal: Int, checked: Boolean, scope: CoroutineScope? = null) {
+    /**
+     * Ticks the checkbox whose source contains [offsetInDocument].
+     *
+     * The offset identifies the node rather than counting boxes: an ordinal shifts whenever anything
+     * above it changes. The edit itself is a range replacement, so every other character in the file
+     * — blank lines, trailing whitespace, formatting — is left exactly as it was on disk.
+     */
+    fun toggleCheckboxAt(offsetInDocument: Int, scope: CoroutineScope? = null) {
         val file = currentFile ?: return
-        // Patch only the toggled checkbox's marker in the raw text; every other character in the
-        // file (blank lines, trailing whitespace, formatting) is left exactly as it was on disk.
-        val updatedText = selectedFileContent.toggleNthCheckbox(ordinal, checked) ?: return
+        val document = selectedFileContent.toOrgDocument()
+        val item = document.nodeAt<OrgCheckboxItem>(offsetInDocument) ?: return
+        val updatedDoc = document.toggleCheckbox(item)
+        val updatedText = updatedDoc.text
         selectedFileContent = updatedText
-        val updatedDoc = updatedText.toOrgDocument()
         orgContents[file] = updatedDoc
         selectedOrgNode = updatedDoc
 

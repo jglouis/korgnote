@@ -8,6 +8,10 @@ done in any order.
 and T8–T10 (local-first sync). Everything else is improvement; those three
 are the architecture.
 
+Phase 1 (the Org core, T3–T7) is complete: the model is source-mapped and lossless, headings nest,
+the grammar covers the constructs these notes actually use, Org syntax is defined in one place, and
+edits are range replacements. Next is **T2** (transport hygiene) or **Phase 2** (T8–T10).
+
 ## Status
 
 Updated 2026-09-20.
@@ -22,7 +26,8 @@ Updated 2026-09-20.
 | ✅ | T4 Nested headings | Done — sections own their body and sub-headings; subtree = one range |
 | ✅ | T5 Complete the grammar | Done — blocks, drawers, lists, priorities; `OrgSyntax` now shared |
 | ✅ | T6 One grammar | Done — `orgSpans()` in shared; no Org pattern left in `composeApp/` |
-| ❌ | T2, T7, T8–T11, T13–T18 | Not started |
+| ✅ | T7 Structural edit API | Done — `org.edit`; ordinals replaced by node identity |
+| ❌ | T2, T8–T11, T13–T18 | Not started |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -188,7 +193,29 @@ existing highlighting tests as the contract.
 **Done when** Highlighting output is unchanged for the existing test cases and Org syntax
 is defined in exactly one place (D5).
 
-### T7 · Structural edit API
+### T7 · Structural edit API — ✅ **done**
+**Landed** `com.korgnote.common.org.edit` with one primitive — `replace(range, replacement)`, which
+is invariant I4 — and every operation built on it: `toggleCheckbox`, `setCheckbox`, `setTodo`,
+`cycleTodo`, `setTags`, `setPlanning`, `promote`, `demote`. Because they all reduce to a range
+replacement, the rest of the file is untouched *by construction* rather than by care: the bug that
+started this whole line of work, where saving rewrote blank lines nobody had edited, is now
+unrepresentable. `promote`/`demote` are subtree-aware — T4 made a heading's range cover its subtree,
+so moving a heading takes its children with it in a single replacement — and they leave stars inside
+a source block alone, because those are code.
+**The ordinal path is gone.** `String.toggleNthCheckbox`, `orgCheckboxesBefore` and
+`toggleCheckboxByOrdinal` are deleted. Reading mode now hands back the `OrgCheckboxItem` it rendered
+and the view model edits the node at that offset. This also removed the O(n²) checkbox counting the
+reading view did per element (12 ms on the biggest real file), since nothing counts boxes any more.
+**Verified** 24 `OrgEditTests`, each of the before/after shape the roadmap asked for, most asserting
+that *exactly one line* changed and the line count did not. Two cases were ported from the deleted
+ordinal tests rather than dropped. Exercised across the real notes directory: 366 files, 127
+checkboxes and 2397 headings, every toggle changing exactly one line, every `setTodo` and `cycleTodo`
+preserving the line count, and every demote/promote round-tripping to the original bytes. Breaking
+block-awareness in `demote` fails a test, so the guard is load-bearing.
+**Note** The one apparent failure in that sweep was the verification script's own fault: it located
+the demoted heading by title and level, which is ambiguous when two headings share a title. Locating
+it by range — node identity, the thing T7 exists to provide — there is no failure. A neat illustration
+of why ordinals and titles were the wrong handle.
 **Depends** T4
 **Note** Partly anticipated: `OrgElements.replaceOrgElement` already applies the "mutations are text
 edits over ranges" principle for whole elements ([09](09-element-editing.md)). T7 extends it to

@@ -24,8 +24,6 @@ import com.korgnote.common.org.OrgSpanKind
 import com.korgnote.common.org.orgSpansForLine
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgTodoConfig
-import com.korgnote.common.org.isOrgTableLine
-import com.korgnote.common.org.isOrgTableRuleLine
 import com.korgnote.common.org.parseTodoConfigFrom
 import io.ktor.http.encodeURLQueryComponent
 
@@ -89,8 +87,8 @@ fun googleMapsUrl(location: String): String =
     "https://www.google.com/maps/search/?api=1&query=" + location.encodeURLQueryComponent(encodeFull = true, spaceToPlus = true)
 
 // `\]` must stay escaped: see the note on [OrgSyntax] (JavaScript `u`-mode regexes).
-@Suppress("RegExpRedundantEscape")
 /** How one emphasis marker is painted. What matches it is [OrgSyntax.emphasis]'s business. */
+@Suppress("RegExpRedundantEscape")
 private class EmphasisSpec(val marker: Char, val style: SpanStyle, val markupColor: Color)
 
 /** What each emphasis marker looks like. The markers themselves are defined in [OrgSyntax]. */

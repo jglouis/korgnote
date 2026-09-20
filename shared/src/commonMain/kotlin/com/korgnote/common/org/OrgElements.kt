@@ -152,19 +152,3 @@ fun String.withNewOrgElement(at: Int, level: Int): OrgInsertion {
 @Suppress("RegExpRedundantEscape")
 private val checkboxLineRegex = Regex("^\\s*[-+]\\s+\\[([ xX])\\]\\s*.*")
 
-/**
- * How many checkbox items precede [offset].
- *
- * Reading mode renders each element separately but reports checkbox toggles by their position in
- * the whole document, so each element needs to know where its own numbering starts.
- */
-fun String.orgCheckboxesBefore(offset: Int): Int {
-    var count = 0
-    var lineStart = 0
-    for (line in splitToSequence('\n')) {
-        if (lineStart >= offset) break
-        if (checkboxLineRegex.matches(line)) count++
-        lineStart += line.length + 1
-    }
-    return count
-}

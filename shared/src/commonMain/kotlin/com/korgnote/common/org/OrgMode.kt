@@ -598,24 +598,6 @@ private val rawCheckboxLineRegex = Regex("^\\s*[-+]\\s+\\[([ xX])]\\s*.*")
 // text, changing only that line's "[ ]"/"[x]" marker and leaving every other character - including
 // blank lines, trailing whitespace, and indentation elsewhere in the file - untouched.
 // Returns null if there is no such checkbox (ordinal out of range).
-fun String.toggleNthCheckbox(ordinal: Int, checked: Boolean): String? {
-    val lines = this.split('\n').toMutableList()
-    var count = 0
-    for (idx in lines.indices) {
-        val line = lines[idx]
-        // Section content bodies never contain checkbox lines (parseSection stops before them),
-        // so a plain line scan visits checkbox lines in the same order toOrgDocument() would.
-        if (!rawCheckboxLineRegex.matches(line)) continue
-        if (count == ordinal) {
-            val newMark = if (checked) "x" else " "
-            lines[idx] = line.replaceFirst(Regex("\\[[ xX]]"), "[$newMark]")
-            return lines.joinToString("\n")
-        }
-        count++
-    }
-    return null
-}
-
 // Convenience helpers to classify a section's state according to document metadata.
 fun OrgDocument.todoConfig(): OrgTodoConfig = parseTodoConfigFrom(this.metadata)
 fun OrgSection.isTodo(doc: OrgDocument): Boolean = this.todo != null && this.todo in doc.todoConfig().todo

@@ -255,13 +255,7 @@ fun App() {
                                     onAddElementAfter = { vm.addElementAfter(it) },
                                     scrollToElementIndex = vm.scrollToElementIndex,
                                     onScrolledToElement = { vm.onScrolledToElement() },
-                                    onToggleCheckbox = { ordinalIndex, checked ->
-                                        vm.toggleCheckboxByOrdinal(
-                                            ordinalIndex,
-                                            checked,
-                                            scope
-                                        )
-                                    }
+                                    onToggleCheckbox = { offset -> vm.toggleCheckboxAt(offset, scope) }
                                 )
                             }
                         }

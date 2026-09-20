@@ -80,7 +80,7 @@ private fun PreviewSurface(content: @Composable () -> Unit) {
 @Composable
 fun OrgText_Preview() {
     PreviewSurface {
-        OrgText(content = OrgSampleDocument.toOrgDocument(), onToggleCheckbox = { _, _ -> })
+        OrgText(content = OrgSampleDocument.toOrgDocument(), onToggleCheckbox = { })
     }
 }
 
