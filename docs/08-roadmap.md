@@ -19,7 +19,7 @@ before investing in editor features.
 file on a real device: scrolling, caret placement, selection handles, autocorrect,
 external keyboard, a popup anchored at the caret.
 **Done when** A written verdict in `docs/notes/ios-text-spike.md`: usable as-is / usable
-with workarounds / not viable. If not viable, stop and re-plan before T12–T13.
+with workarounds / not viable. If not viable, stop and re-plan before T12b–T13.
 **Why first** It is the only finding that could change the stack, and it is cheap now.
 
 ### T0b · Web text-editing spike
@@ -147,15 +147,30 @@ action; editing the same line yields a conflict copy and never loses either vers
 
 ## Phase 3 — Editor ([06](06-editor.md))
 
-### T12 · Editor surface
-**Depends** T6, T0 verdict
-**Scope** `BasicTextField` + `TextFieldState`; viewport-scoped highlighting; lazy read
-mode; resolve the single-scroll-owner constraint in `App.kt`.
-**Done when** Typing in a 1 MB file stays responsive on a mid-range phone, and switching
-read/edit keeps position.
+### T12a · Editor performance diagnostic
+**Depends** —
+**Scope** One-line experiment: run with `visualTransformation = VisualTransformation.None`
+and type in a 40 KB file on iOS and wasm. Record timings with and without, plus span count
+and time spent in `filter`, in `docs/notes/editor-perf.md`.
+**Why separate** It decides whether T12b is a day (highlighting scope) or a fortnight
+(editor virtualisation). Slowness on 40 KB files is already observed, so this is
+measurement, not speculation.
+**Done when** The dominant cost — A (highlighting) or B (layout) — is written down with
+numbers.
+
+### T12b · Editor surface
+**Depends** T6, T12a, T0/T0b verdicts
+**Scope** `BasicTextField` + `TextFieldState` (removes the per-keystroke full-string copy);
+viewport-scoped highlighting via `spans(range)`; debounced, cancellable re-parse; lazy read
+mode; resolve the single-scroll-owner constraint in `App.kt`. **If T12a says Cost B**, add
+block virtualisation per [06](06-editor.md#if-layout-is-the-wall-block-virtualisation) —
+and prototype cross-block selection, find/replace, caret movement and undo before
+committing to it.
+**Done when** Typing in a 200 KB file is comfortable on iOS and in the browser, and
+switching read/edit keeps position.
 
 ### T13 · Completion
-**Depends** T12
+**Depends** T12b
 **Scope** `org.complete` engine plus popup (desktop) / suggestion strip (mobile), covering
 the trigger table in [06](06-editor.md#completion-g3).
 **Done when** Each trigger row has a unit test, and typing `* ` then `TO` offers the
