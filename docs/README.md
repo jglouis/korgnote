@@ -27,11 +27,13 @@ agent) one document — or one task — at a time.
 | [05-sync-protocol.md](05-sync-protocol.md) | Offline store, sync protocol, conflicts, auth, bandwidth budget. |
 | [06-editor.md](06-editor.md) | Editing at scale, keyword completion, search. |
 | [07-calendar-agenda.md](07-calendar-agenda.md) | Timestamp/agenda engine, day & week views, local notifications. |
-| [08-roadmap.md](08-roadmap.md) | The work, sequenced into independently shippable tasks with acceptance criteria. |
+| [09-element-editing.md](09-element-editing.md) | **Built.** Editing one heading at a time as a range splice — now the primary editing surface. |
+| [08-roadmap.md](08-roadmap.md) | The work, sequenced into tasks with acceptance criteria, and **current status**. |
 
 ## How to use these with an agent
 
-Documents 04–07 are self-contained designs, one per subsystem.
+Documents 04–07 and 09 are self-contained designs, one per subsystem; 09 describes something already
+built, the rest are plans.
 [08-roadmap.md](08-roadmap.md) slices those designs into tasks (T1, T2, …) sized for one
 session each. A task prompt should normally be: *"Read `docs/0X-….md` and
 `docs/08-roadmap.md`, implement task TN, and nothing else."*
@@ -41,6 +43,9 @@ depends on another, the dependency is stated explicitly.
 
 ## Status
 
-Written 2026-09-20 against commit `2cc66f7`, plus the uncommitted raw-text editing fix
-described in [01-current-state.md](01-current-state.md#in-flight-uncommitted-change).
-Producing these documents changed no code.
+Written 2026-09-20 against commit `2cc66f7`; revised the same day once the editor work landed.
+
+For what is built versus planned, see the status table in
+[08-roadmap.md](08-roadmap.md#status). The short version: the editor is done, per-element editing
+was added unplanned, and **T1 — the server reading its notes directory only once at startup — is
+untouched and is the one item that can lose data.**

@@ -8,6 +8,26 @@ done in any order.
 model lossless), and T8–T10 (local-first sync). Everything else is improvement; those three
 are the architecture.
 
+## Status
+
+Updated 2026-09-20.
+
+| | Task | State |
+|---|---|---|
+| ✅ | T12a Editor performance diagnostic | Done — [notes/editor-perf.md](notes/editor-perf.md) |
+| 🟡 | T12b Editor surface | Partly — see the task for what landed and what did not |
+| 🟡 | T0 / T0b Text-editing spikes | Answered in practice, findings in [06](06-editor.md#editor-surface) |
+| ❌ | T1 Server reads the disk | **Not started. Still the only item that can lose data.** |
+| ❌ | T2, T3–T7, T8–T11, T13–T18 | Not started |
+
+**Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
+how the app is actually used — most edits add one TODO — and dissolved the performance problem
+instead of solving it, retiring the block-virtualisation branch of T12b along with its UX tail. It
+also establishes the range-based text-edit principle that T7 was meant to introduce.
+
+Two prerequisites turned out to be wrong and have been corrected in [06](06-editor.md):
+`TextFieldState` cannot carry styling, and editor styling cannot change text metrics.
+
 ---
 
 ## Phase 0 — Urgent and de-risking
@@ -85,6 +105,9 @@ is defined in exactly one place (D5).
 
 ### T7 · Structural edit API
 **Depends** T4
+**Note** Partly anticipated: `OrgElements.replaceOrgElement` already applies the "mutations are text
+edits over ranges" principle for whole elements ([09](09-element-editing.md)). T7 extends it to
+individual nodes, which needs source-mapped nodes from T3/T4.
 **Scope** `org.edit`: `toggleCheckbox`, `setTodo`, `cycleTodo`, `setPlanning`, `setTags`,
 `promote`, `demote` — all as range replacements. Replace the ordinal-based
 `String.toggleNthCheckbox` and the `toggleCheckboxByOrdinal` path in the ViewModel.
@@ -147,7 +170,7 @@ action; editing the same line yields a conflict copy and never loses either vers
 
 ## Phase 3 — Editor ([06](06-editor.md))
 
-### T12a · Editor performance diagnostic
+### T12a · Editor performance diagnostic — ✅ **done**
 **Depends** —
 **Scope** One-line experiment: run with `visualTransformation = VisualTransformation.None`
 and type in a 40 KB file on iOS and wasm. Record timings with and without, plus span count
@@ -158,16 +181,25 @@ measurement, not speculation.
 **Done when** The dominant cost — A (highlighting) or B (layout) — is written down with
 numbers.
 
-### T12b · Editor surface
-**Depends** T6, T12a, T0/T0b verdicts
-**Scope** `BasicTextField` + `TextFieldState` (removes the per-keystroke full-string copy);
-viewport-scoped highlighting via `spans(range)`; debounced, cancellable re-parse; lazy read
-mode; resolve the single-scroll-owner constraint in `App.kt`. **If T12a says Cost B**, add
-block virtualisation per [06](06-editor.md#if-layout-is-the-wall-block-virtualisation) —
-and prototype cross-block selection, find/replace, caret movement and undo before
-committing to it.
-**Done when** Typing in a 200 KB file is comfortable on iOS and in the browser, and
-switching read/edit keeps position.
+### T12b · Editor surface — 🟡 **partly done**
+**Depends** T12a
+
+**Landed:** per-line highlight cache with memoisation; viewport-scoped styling driven by
+`onTextLayout`; monospace editor; `BasicTextField` with `OutlinedTextFieldDefaults.DecorationBox`;
+`TextFieldValue` in the element editor for caret control; metric-neutral editor styling.
+
+**Dropped as impossible:** the `TextFieldState` migration — that API has no styling hook
+([06](06-editor.md#the-state-based-api-cannot-be-used)).
+
+**Dropped as unnecessary:** block virtualisation — T12a came back as Cost A, and per-element editing
+([09](09-element-editing.md)) removed document size as a concern.
+
+**Still outstanding:**
+- Lazy reading mode. `OrgDocumentView` renders every element eagerly in a `Column`; a `LazyColumn`
+  keyed by element is the natural fix now that elements are the unit.
+- The single-scroll-owner constraint in `App.kt`, and read↔edit scroll mapping for the *whole-file*
+  editor. Per-element editing made this moot for the main path.
+- Debounced, cancellable re-parse. Not needed at current costs; revisit if it regresses.
 
 ### T13 · Completion
 **Depends** T12b

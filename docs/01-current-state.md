@@ -119,32 +119,32 @@ maintained separately and can disagree.
   scanning for `OrgPlanning` nodes whose `planType == "SCHEDULED"` and whose timestamp
   matches `<(\d{4})-(\d{2})-(\d{2})`.
 
-### In-flight, uncommitted change
+### Since this document was written
 
-The working tree carries an uncommitted fix (branch `worktree-fix-org-raw-text-edit`, PR #1):
-the edit buffer is now loaded from `GET /api/content/{path}` as raw text instead of from
-`doc.toOrgString()`, and checkbox toggling patches the raw text via
-`String.toggleNthCheckbox` instead of re-serialising the whole document. It exists because
-`toOrgString()` is lossy: opening a file and saving it unchanged rewrote blank lines and
-trailing whitespace on disk.
+Three things landed that change the picture:
 
-That fix removes the symptom at the edit-buffer level. The underlying cause — a model that
-cannot reproduce its own source text — is still present, and is the subject of
-[04-org-core.md](04-org-core.md).
+- **Raw-text editing** — the edit buffer is the file's bytes, not a re-render of the AST (commit
+  `c518b21`). This was the fix for the whitespace-rewriting bug and the reason D4 is mitigated.
+- **Editor performance** — per-line highlight cache, memoisation, viewport-scoped styling, monospace
+  editor. See [notes/editor-perf.md](notes/editor-perf.md) for measurements.
+- **Per-element editing** — reading mode became the primary surface, with each heading editable in
+  place as a range splice, plus adding sections. See [09-element-editing.md](09-element-editing.md).
 
 ## Known defects and limitations
+
+Status added 2026-09-20. Everything unmarked is unchanged since the documents were written.
 
 | # | Issue | Where | Impact |
 |---|-------|-------|--------|
 | D1 | Server caches files at startup and never re-reads disk | `Application.kt:81,112` | Edits made in Emacs or arriving via Syncthing are invisible until the server restarts; a `POST` can silently overwrite them with stale content |
 | D2 | Whole corpus is parsed and shipped as JSON on every cold start | `Application.kt:169` | Bandwidth and CPU grow with corpus size; directly opposes G5 |
 | D3 | No local persistence of documents on the client | `composeApp/…/data/` | Offline use (G4) is impossible today |
-| D4 | AST cannot round-trip to its own source text | `OrgMode.kt:329` | Caused the whitespace-rewriting bug; blocks structural editing |
-| D5 | Two independent Org grammars | `OrgMode.kt` vs `OrgSyntaxHighlighting.kt:85` | Rendering, highlighting and parsing can disagree; every syntax addition is done twice |
-| D6 | Full-document re-highlight per keystroke; whole document composed eagerly | `OrgSyntaxHighlighting.kt:481`, `OrgText.kt:88` | Editing large files will degrade; opposes G2 |
+| D4 | AST cannot round-trip to its own source text | `OrgMode.kt:329` | **Mitigated, not fixed.** Editing and saving now work on raw text, and element edits are range splices ([09](09-element-editing.md)), so no path rewrites a file from the AST. The model itself is still lossy — T3 remains |
+| D5 | Two independent Org grammars | `OrgMode.kt` vs `OrgSyntaxHighlighting.kt:85` | **Worse: now three.** `OrgElements.kt` adds a heading rule, deliberately matching the parser's rather than Org's, with a test pinning the agreement ([09](09-element-editing.md#a-deliberate-compromise)). T5/T6 should collapse all three |
+| D6 | Full-document re-highlight per keystroke; whole document composed eagerly | `OrgSyntaxHighlighting.kt`, `OrgDocumentView.kt` | **Highlighting fixed** (cache + viewport scoping + per-element editing). **Eager composition still open**: reading mode renders every element in a `Column` |
 | D7 | Calendar only understands `SCHEDULED` with a plain date | `FileTreeViewModel.kt:230` | No `DEADLINE`, no ranges, no times, no repeaters; opposes G6 |
 | D8 | No authentication, no TLS, binds `0.0.0.0` | `Application.kt:36` | Personal notes are readable and writable by anyone who can reach the port |
 | D9 | No conflict detection on save | `Application.kt:189` | Last writer wins; concurrent edits from two devices lose data |
 | D10 | No compression on server responses | `Application.kt` | Org text compresses ~4–5×; free bandwidth win being left on the table |
-| D11 | Cannot create, rename or delete files from the app | `Application.kt:189` | Capture/new-note workflows are impossible |
+| D11 | Cannot create, rename or delete files from the app | `Application.kt:189` | Still open. Adding *sections* now works ([09](09-element-editing.md)); adding *files* does not |
 | D12 | Flat document model (sections are not nested) | `OrgMode.kt:19,93` | Subtree operations (fold, promote, filter by ancestor tag) cannot be expressed |

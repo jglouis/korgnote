@@ -3,20 +3,27 @@
 Addresses G2, G3 and defect D6. Depends on the source-mapped model from
 [04-org-core.md](04-org-core.md).
 
-## Where it hurts today
+> **Status.** The performance work is done and the findings below are measurements, not plans.
+> Per-element editing ([09](09-element-editing.md)) has since become the primary editing surface and
+> removed document size as a concern; the whole-file editor described here remains as an escape
+> hatch. Completion and search are still unbuilt.
 
-| Symptom | Cause |
-|---|---|
-| Typing cost grows with document size | `OrgSyntaxHighlightTransformation.filter` re-highlights the **entire** document on every keystroke (`OrgSyntaxHighlighting.kt:481`) |
-| Opening a large file composes everything at once | `OrgText` renders into a plain `Column` (`OrgText.kt:88`) inside an outer `verticalScroll` (`App.kt`) |
-| Programmatic edits are awkward | The `String`-valued `OutlinedTextField` gives no cursor/selection control, so commands cannot insert at the caret |
-| Structural actions are ordinal-based | Checkbox toggling addresses the *N*th checkbox instead of a node |
+## Where it hurt
+
+| Symptom | Cause | Status |
+|---|---|---|
+| Typing cost grows with document size | `OrgSyntaxHighlightTransformation.filter` re-highlighted the **entire** document on every keystroke | Fixed — per-line cache + viewport scoping |
+| Redundant work per keystroke | `filter` ran 3× per keystroke, all on identical text | Fixed — memoised |
+| Opening a large file composes everything at once | `OrgText` renders into a plain `Column` inside an outer `verticalScroll` | **Still open** — see [Reading mode at scale](#reading-mode-at-scale) |
+| Programmatic edits are awkward | The `String`-valued field gave no cursor control | Fixed for the element editor — it uses `TextFieldValue` |
+| Structural actions are ordinal-based | Checkbox toggling addresses the *N*th checkbox instead of a node | **Still open** — needs T7 |
 
 ## Performance: where the time actually goes
 
-Observed today: documents over ~40 KB are noticeably slow to type in, worst on iOS and
-wasm. Two independent costs are in play, and they need completely different fixes, so
-**measure which one dominates before choosing**.
+Documents over ~40 KB were noticeably slow to type in, worst on iOS and wasm. Two independent costs
+were in play, needing completely different fixes, so the rule was **measure which one dominates
+before choosing**. Measured results are in
+[notes/editor-perf.md](notes/editor-perf.md); the answer was Cost A.
 
 ### Cost A — highlighting the whole document on every keystroke
 
@@ -86,7 +93,11 @@ the work. The wins below come from doing less.
 
 ### If layout is the wall: block virtualisation
 
-If the diagnostic shows Cost B, the document must stop being one text field:
+**Not needed, and superseded.** The diagnostic came back as Cost A, and per-element editing
+([09](09-element-editing.md)) later removed the problem entirely by making the edited text small.
+Kept here because the reasoning explains why element editing was the better answer.
+
+Had the diagnostic shown Cost B, the document would have had to stop being one text field:
 
 - Split the document into blocks at top-level headings — natural once nodes carry source
   ranges ([04](04-org-core.md)).
@@ -99,40 +110,69 @@ doing. Budget for the UX consequences, which are the real cost: selection across
 boundaries, find-and-replace spanning blocks, caret movement over edges, and undo across
 splices. Prototype those four before committing.
 
-An interim measure, if virtualisation is too big a step: keep the full text field for files
-under a threshold (say 100 KB) and fall back to block mode above it. Ugly, but it buys time
-and matches how the slowness actually presents.
+Those four UX costs are exactly what per-element editing avoids: they all come from wanting the
+split to be *invisible*. Making it an explicit "edit this item" removes the requirement rather than
+solving it.
 
 ## Editor surface
 
-Move to the state-based text field API (Compose Multiplatform 1.12 has it):
+**Settled by implementation. Two constraints were found the hard way; both are load-bearing.**
 
-```kotlin
-val state = rememberTextFieldState(initialText = document.text)
+### The state-based API cannot be used
 
-BasicTextField(
-    state = state,
-    inputTransformation = null,
-    outputTransformation = null,          // highlighting no longer goes through a transformation
-    textStyle = monospace,
-    modifier = Modifier.fillMaxSize(),
-)
-```
+An earlier draft of this document recommended migrating to `BasicTextField(state = TextFieldState)`.
+**That is a dead end for a highlighted editor.** The state-based API has no styling hook at all:
+`OutputTransformation` rewrites *text*, `codepointTransformation` is a 1:1 codepoint mapping, and
+neither can attach spans. Verified against the Compose Multiplatform version in
+`libs.versions.toml`.
 
-What this buys:
+Syntax highlighting therefore requires the classic `value`/`onValueChange` field and a
+`VisualTransformation`, and we accept its costs: the string round-trip per keystroke, and the
+constraint below.
 
-- **No full-string recomposition per keystroke.** `TextFieldState` mutates a buffer; the
-  UI observes edits rather than round-tripping an immutable `String` through the ViewModel.
-  This removes the 40 KB copy-and-invalidate described in Cost A.
-- **A caret you can program against.** `state.edit { replace(start, end, text); placeCursorAfterCharAt(…) }`
-  is what completion insertion and structural commands need.
-- **Undo/redo** for free.
+The editor uses `BasicTextField` rather than `OutlinedTextField` because only the former exposes
+`onTextLayout`, which is how the visible range for viewport highlighting is obtained. The Material
+look is preserved with `OutlinedTextFieldDefaults.DecorationBox` — pass it
+`VisualTransformation.None`, or it runs the highlighter a second time on every keystroke just to
+decide whether to show a placeholder.
 
-What it does **not** buy: a solution to syntax highlighting. The state-based API changes how
-text is edited, not how spans are applied, and the styling hooks differ between Compose
-versions — check what the version in `libs.versions.toml` actually offers before designing
-around it. Scoping the styling to the viewport (below) is the part that matters, and it is
-required either way.
+### Editor styling must not change text metrics
+
+**A span that changes font size, weight, style or family makes the text field mis-place its caret on
+the keystroke that first applies it.**
+
+It surfaces as "typed spaces are swallowed": typing the space that turns a line into a heading
+changes the line's metrics, the caret fails to advance, and because a space has no glyph nothing
+appears to happen until the next character re-lays the line out. Saved text was always correct — it
+is purely visual.
+
+Bold is **not** exempt. Bold selects a different font face with its own metrics, even within a
+monospace family; that was tested and disproved, not assumed.
+
+Reproduced on desktop, iOS and web — the three targets sharing the Skia text backend. Android uses a
+different one and is unaffected.
+
+`editorSpanStyle` in `OrgSyntaxHighlighting.kt` therefore keeps **colour, background fills and
+underline/strikethrough** — all painted over the same glyphs — and drops everything else. Reading
+mode does not go through the transformation and keeps the full styling, heading sizes included.
+
+Consequences to keep in mind:
+
+- Heading levels in the editor can only be distinguished by colour or background, not size or weight.
+- Any future editor decoration must pass the same test. `OrgEditorMetricsTest` enforces it.
+- Viewport scoping got *simpler* because of this: with nothing varying metrics, off-screen lines can
+  be left entirely unstyled without the document shifting as the window moves.
+
+The only way to lift the constraint is to stop using a text field for display — render styled text
+and overlay a transparent field for input — which means owning caret placement, selection handles
+and IME behaviour by hand. Not worth it to win back bold.
+
+### What the classic field still costs
+
+The `String`-valued field copies the whole document through `onValueChange` on every keystroke and
+invalidates the field. At 45 KB this is measurable but not dominant — the ~27 ms floor is text
+layout, not the copy. Per-element editing ([09](09-element-editing.md)) removes it as a concern by
+making the edited text small.
 
 ### Viewport highlighting
 
