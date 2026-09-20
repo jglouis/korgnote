@@ -4,7 +4,7 @@ Tasks are sized for one working session each and ordered so that the app keeps w
 after every one. Dependencies are explicit; anything without a shared dependency can be
 done in any order.
 
-**If you only do three things:** T1 (stop the server losing your Emacs edits), T3 (make the
+**If you only do three things:** ~~T1~~ (done), T3 (make the
 model lossless), and T8–T10 (local-first sync). Everything else is improvement; those three
 are the architecture.
 
@@ -17,7 +17,7 @@ Updated 2026-09-20.
 | ✅ | T12a Editor performance diagnostic | Done — [notes/editor-perf.md](notes/editor-perf.md) |
 | 🟡 | T12b Editor surface | Partly — see the task for what landed and what did not |
 | 🟡 | T0 / T0b Text-editing spikes | Answered in practice, findings in [06](06-editor.md#editor-surface) |
-| ❌ | T1 Server reads the disk | **Not started. Still the only item that can lose data.** |
+| ✅ | T1 Server reads the disk | Done — `FileStore`, plus conflict refusal and path validation |
 | ❌ | T2, T3–T7, T8–T11, T13–T18 | Not started |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
@@ -51,7 +51,15 @@ keys, browser shortcuts, scrolling a long document, and behaviour on a mobile br
 **Done when** A verdict in `docs/notes/web-text-spike.md`. The architecture work (T8–T10)
 does not depend on the answer — only the decision to keep editing on web does.
 
-### T1 · Server reads the disk, not a boot snapshot
+### T1 · Server reads the disk, not a boot snapshot — ✅ **done**
+**Landed** `FileStore` answers from disk on every request, hashing content for ETags with an
+`(size, mtime)` cache so unchanged files are not re-read. Writes are atomic (temp file + move) and
+refuse when the file changed underneath — checked against `If-Match` when the client sends one, and
+otherwise against the version this server last handed out, which is what catches an edit made in
+Emacs. Path validation rejects traversal, absolute paths and non-`.org` extensions. `/api/org-content`
+caches parsed documents by content hash. API shape unchanged.
+**Not included** The file watcher and SSE stream belong to T9. Two *app* clients racing on one file
+is D9, and waits for T11.
 **Goal** Fix D1 — the server currently answers from a map built at startup and can
 overwrite edits made in Emacs or delivered by Syncthing.
 **Scope** Introduce `FileStore` ([05](05-sync-protocol.md#server-a-file-store-that-tells-the-truth)):
