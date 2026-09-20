@@ -84,6 +84,102 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         selectedFileContent = newContent
     }
 
+    // --- Editing a single element (a heading and its own body) ---
+
+    /** Index into [selectedFileContent]'s elements, or null when not editing one. */
+    var editingElementIndex: Int? by mutableStateOf(null)
+        private set
+
+    /** The element's text as it is being edited. */
+    var elementDraft by mutableStateOf("")
+        private set
+
+    /** Where the caret should start when the editor opens; after the stars of a new heading. */
+    var elementDraftCaret by mutableStateOf(0)
+        private set
+
+    /** The element's text when editing began, used to refuse a splice if the document moved. */
+    private var elementOriginal: String? = null
+
+    /** Set when editing a heading that was just inserted, so cancelling removes it again. */
+    private var textBeforeInsertion: String? = null
+
+    fun beginElementEdit(index: Int) {
+        val element = selectedFileContent.orgElements().getOrNull(index) ?: return
+        val original = element.sliceOf(selectedFileContent)
+        textBeforeInsertion = null
+        elementOriginal = original
+        elementDraft = original
+        elementDraftCaret = original.length
+        editingElementIndex = index
+    }
+
+    /** Adds a heading at the end of the document and opens it for editing. */
+    fun addElementAtEnd() = insertElementAndEdit(selectedFileContent.length, level = 1)
+
+    /** Adds a sibling heading directly after [index] and opens it for editing. */
+    fun addElementAfter(index: Int) {
+        val element = selectedFileContent.orgElements().getOrNull(index) ?: return
+        insertElementAndEdit(element.endExclusive, level = element.level)
+    }
+
+    private fun insertElementAndEdit(at: Int, level: Int) {
+        val previousText = selectedFileContent
+        val insertion = previousText.withNewOrgElement(at, level)
+        val elements = insertion.text.orgElements()
+        val index = elements.indexOfFirst { it.start == insertion.elementStart }
+        if (index < 0) return
+        val element = elements[index]
+
+        selectedFileContent = insertion.text
+        // Nothing is written to disk yet, and cancelling must not leave an empty heading behind.
+        textBeforeInsertion = previousText
+        elementOriginal = element.sliceOf(insertion.text)
+        elementDraft = elementOriginal.orEmpty()
+        elementDraftCaret = insertion.caret - element.start
+        editingElementIndex = index
+    }
+
+    fun onElementDraftChanged(newDraft: String) {
+        elementDraft = newDraft
+    }
+
+    fun cancelElementEdit() {
+        // A heading that was inserted for this edit never made it to disk, so discarding the edit
+        // discards the heading too.
+        textBeforeInsertion?.let { selectedFileContent = it }
+        clearElementEdit()
+    }
+
+    /**
+     * Forgets the edit without touching the document.
+     *
+     * Kept separate from [cancelElementEdit] deliberately: committing must not run that method's
+     * undo, or saving a newly added heading would restore the text from before it was inserted.
+     */
+    private fun clearElementEdit() {
+        textBeforeInsertion = null
+        editingElementIndex = null
+        elementOriginal = null
+        elementDraft = ""
+        elementDraftCaret = 0
+    }
+
+    /** Splices the draft back into the document and saves. Leaves the editor open if it cannot. */
+    suspend fun commitElementEdit() {
+        val index = editingElementIndex ?: return
+        val original = elementOriginal ?: return
+        val element = selectedFileContent.orgElements().getOrNull(index)
+        val updated = element?.let { selectedFileContent.replaceOrgElement(it, original, elementDraft) }
+        if (updated == null) {
+            lastErrorMessage = "The document changed while you were editing; nothing was written."
+            return
+        }
+        selectedFileContent = updated
+        clearElementEdit()
+        saveCurrentFile()
+    }
+
     suspend fun saveCurrentFile() {
         val path = currentFile ?: return
         try {

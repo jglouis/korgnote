@@ -1,0 +1,213 @@
+package com.korgnote.app.ui
+
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+import com.korgnote.common.org.orgCheckboxesBefore
+import com.korgnote.common.org.orgElements
+import com.korgnote.common.org.sliceOf
+import com.korgnote.common.org.toOrgDocument
+
+/**
+ * Reading view of a whole document, rendered one editable element at a time.
+ *
+ * Each element is parsed and rendered from its own slice of [text] rather than from a single parse
+ * of the document. That costs a little more parsing and buys the property this screen depends on:
+ * every rendered element knows the exact character range it came from, so editing one is a text
+ * replacement over that range and can never disturb its neighbours.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun OrgDocumentView(
+    text: String,
+    modifier: Modifier = Modifier,
+    onToggleCheckbox: ((ordinalIndex: Int, checked: Boolean) -> Unit)? = null,
+    editingElementIndex: Int? = null,
+    elementDraft: String = "",
+    elementDraftCaret: Int = 0,
+    onElementDraftChange: (String) -> Unit = {},
+    onEditElement: ((elementIndex: Int) -> Unit)? = null,
+    onAddElementAfter: ((elementIndex: Int) -> Unit)? = null,
+    scrollToElementIndex: Int? = null,
+    onScrolledToElement: () -> Unit = {},
+) {
+    val elements = remember(text) { text.orgElements() }
+    val requesters = remember(elements) { elements.map { BringIntoViewRequester() } }
+
+    Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
+        elements.forEachIndexed { index, element ->
+            val slice = remember(text, element) { element.sliceOf(text) }
+            // An empty preamble has nothing to show and nothing worth editing.
+            if (element.isPreamble && slice.isBlank()) return@forEachIndexed
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .bringIntoViewRequester(requesters[index]),
+                horizontalAlignment = Alignment.Start,
+            ) {
+                if (index == editingElementIndex) {
+                    OrgElementEditor(
+                        elementKey = index,
+                        value = elementDraft,
+                        initialCaret = elementDraftCaret,
+                        onValueChange = onElementDraftChange,
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .combinedClickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                // Plain taps are left alone: checkboxes and links already use them.
+                                onClick = {},
+                                onLongClick = { onEditElement?.invoke(index) },
+                            ),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            val document = remember(slice) { slice.toOrgDocument() }
+                            val checkboxBase = remember(text, element) {
+                                text.orgCheckboxesBefore(element.start)
+                            }
+                            OrgText(
+                                content = document,
+                                onToggleCheckbox = onToggleCheckbox?.let { toggle ->
+                                    { localOrdinal, checked -> toggle(checkboxBase + localOrdinal, checked) }
+                                },
+                            )
+                        }
+                        Column {
+                            if (onEditElement != null) {
+                                IconButton(
+                                    onClick = { onEditElement(index) },
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Edit,
+                                        contentDescription = "Edit this element",
+                                        tint = MaterialTheme.colorScheme.outline,
+                                    )
+                                }
+                            }
+                            if (onAddElementAfter != null) {
+                                IconButton(
+                                    onClick = { onAddElementAfter(index) },
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Add,
+                                        contentDescription = "Add a heading after this element",
+                                        tint = MaterialTheme.colorScheme.outline,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(scrollToElementIndex, requesters) {
+        val index = scrollToElementIndex
+        if (index != null && index in requesters.indices) {
+            requesters[index].bringIntoView()
+            onScrolledToElement()
+        }
+    }
+}
+
+/**
+ * Editor for a single element.
+ *
+ * Deliberately simpler than the whole-file editor: an element holds a heading and its own body, so
+ * there is no need to scope highlighting to the viewport — the per-line cache already makes a
+ * keystroke cost one line, and the text is small enough that laying it out is cheap.
+ */
+@Composable
+private fun OrgElementEditor(
+    elementKey: Int,
+    value: String,
+    initialCaret: Int,
+    onValueChange: (String) -> Unit,
+) {
+    val headingColor = MaterialTheme.colorScheme.primary
+    val highlighting = remember(headingColor) { OrgSyntaxHighlightTransformation(headingColor) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val textStyle = LocalTextStyle.current.merge(
+        TextStyle(fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface)
+    )
+
+    // TextFieldValue rather than a plain String so the caret can start after the stars of a newly
+    // added heading. It is the local source of truth for the session; the text is mirrored upward.
+    var field by remember(elementKey) {
+        mutableStateOf(TextFieldValue(value, TextRange(initialCaret.coerceIn(0, value.length))))
+    }
+    val focusRequester = remember(elementKey) { FocusRequester() }
+    LaunchedEffect(elementKey) { focusRequester.requestFocus() }
+
+    BasicTextField(
+        value = field,
+        onValueChange = {
+            field = it
+            onValueChange(it.text)
+        },
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).focusRequester(focusRequester),
+        textStyle = textStyle,
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        interactionSource = interactionSource,
+        visualTransformation = highlighting,
+        decorationBox = { innerTextField ->
+            OutlinedTextFieldDefaults.DecorationBox(
+                value = field.text,
+                innerTextField = innerTextField,
+                enabled = true,
+                singleLine = false,
+                // None on purpose: the decoration box would otherwise run the highlighter a second
+                // time on every keystroke, just to decide whether to show a placeholder.
+                visualTransformation = VisualTransformation.None,
+                interactionSource = interactionSource,
+                label = { Text("Editing element") },
+            )
+        },
+    )
+}

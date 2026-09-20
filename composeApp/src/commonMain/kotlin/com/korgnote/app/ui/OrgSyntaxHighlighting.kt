@@ -190,6 +190,184 @@ private class LineState {
     var inDrawer: Boolean = false
 }
 
+/**
+ * Heading sizes, shared by the fully styled path and the metrics-only path used off screen: a
+ * heading must occupy the same height whether or not it is currently visible, or the document's
+ * total height would change as the styled window follows the viewport.
+ */
+private fun headingFontSize(level: Int): TextUnit = when (level) {
+    1 -> 1.3.em
+    2 -> 1.15.em
+    3 -> 1.05.em
+    else -> TextUnit.Unspecified
+}
+
+/**
+ * Appends a line that lies outside the styled window: its characters, plus only the styling that
+ * affects layout metrics (heading size and weight). Colour is skipped — it costs spans without
+ * changing where anything sits.
+ *
+ * Mirrors [appendHighlightedLine]'s branch order so [state] advances identically, which is what
+ * lets a visible line inside a block or drawer still be styled correctly.
+ *
+ * Everything else is metric-neutral because the editor renders in a monospace font, where bold and
+ * regular glyphs share the same advance width.
+ */
+private fun AnnotatedString.Builder.appendMetricsOnlyLine(line: String, state: LineState) {
+    if (state.blockType != null) {
+        if (OrgSyntax.blockEnd.containsMatchIn(line)) state.blockType = null
+        append(line)
+        return
+    }
+    if (state.inDrawer) {
+        if (OrgSyntax.drawerEnd.containsMatchIn(line)) state.inDrawer = false
+        append(line)
+        return
+    }
+    when {
+        OrgSyntax.heading.containsMatchIn(line) -> {
+            val stars = OrgSyntax.heading.find(line)!!.groupValues[1]
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = headingFontSize(stars.length))) {
+                append(line)
+            }
+        }
+
+        OrgSyntax.blockBegin.containsMatchIn(line) -> {
+            state.blockType = OrgSyntax.blockBegin.find(line)!!.groupValues[1].lowercase()
+            append(line)
+        }
+
+        OrgSyntax.drawerBegin.containsMatchIn(line) -> {
+            state.inDrawer = !OrgSyntax.drawerEnd.containsMatchIn(line)
+            append(line)
+        }
+
+        else -> append(line)
+    }
+}
+
+private data class LineStateSnapshot(val blockType: String?, val inDrawer: Boolean)
+
+private fun LineState.snapshot() = LineStateSnapshot(blockType, inDrawer)
+
+private fun LineState.restore(snapshot: LineStateSnapshot) {
+    blockType = snapshot.blockType
+    inDrawer = snapshot.inDrawer
+}
+
+/**
+ * Highlights a document by caching each line's styled result, keyed on the line's text and the
+ * block/drawer state the line starts in. A keystroke changes one line, so every other line is
+ * reused instead of re-running the grammar over the whole document.
+ *
+ * Output is identical to [buildOrgHighlightedString] for the same input; the cache only decides how
+ * much work is repeated.
+ */
+private class OrgHighlightCache(private val headingColor: Color) {
+    private var sourceText: String? = null
+    private var sourceResult: AnnotatedString? = null
+    private var todoConfig: OrgTodoConfig? = null
+    private var lines: List<String> = emptyList()
+    private var lineResults: List<AnnotatedString> = emptyList()
+    private var statesBefore: List<LineStateSnapshot> = emptyList()
+    private var statesAfter: List<LineStateSnapshot> = emptyList()
+    private var lineStyled: List<Boolean> = emptyList()
+    private var cachedVisible: IntRange? = null
+    private var hasCachedVisible = false
+
+    /**
+     * [visible] limits full styling to the characters in that range; lines outside it get
+     * [appendMetricsOnlyLine]. Passing null styles the whole document.
+     */
+    fun highlight(text: String, visible: IntRange?): AnnotatedString {
+        if (visible == cachedVisible) {
+            sourceResult?.let { if (sourceText == text) return it }
+        }
+
+        val newLines = text.split('\n')
+        val config = orgTodoConfigOf(text)
+        // A changed #+TODO: configuration restyles keywords anywhere in the document, so no cached
+        // line survives it. A moved window does not invalidate anything by itself: each line is
+        // cached along with whether it was styled, so only the lines crossing the window's edge are
+        // recomputed.
+        val oldLines = if (config == todoConfig) lines else emptyList()
+
+        val prefix = commonPrefixLength(oldLines, newLines)
+        val suffix = commonSuffixLength(oldLines, newLines, prefix)
+
+        val results = ArrayList<AnnotatedString>(newLines.size)
+        val before = ArrayList<LineStateSnapshot>(newLines.size)
+        val after = ArrayList<LineStateSnapshot>(newLines.size)
+        val styledFlags = ArrayList<Boolean>(newLines.size)
+        val state = LineState()
+        var lineStart = 0
+
+        for (i in newLines.indices) {
+            val incoming = state.snapshot()
+            before.add(incoming)
+            val lineEnd = lineStart + newLines[i].length
+            val styled = visible == null || (lineStart <= visible.last && lineEnd >= visible.first)
+            lineStart = lineEnd + 1
+            val oldIndex = when {
+                i < prefix -> i
+                i >= newLines.size - suffix -> oldLines.size - (newLines.size - i)
+                else -> -1
+            }
+            // A line's styling depends on the state it starts in and on whether it was inside
+            // the window, so a matching text is only reusable when both of those match too.
+            val reusable = oldIndex >= 0 && oldIndex < lineResults.size &&
+                statesBefore[oldIndex] == incoming && lineStyled[oldIndex] == styled
+            if (reusable) {
+                results.add(lineResults[oldIndex])
+                state.restore(statesAfter[oldIndex])
+            } else if (styled) {
+                results.add(
+                    buildAnnotatedString {
+                        appendHighlightedLine(newLines[i], headingColor, config, viewMode = false, state)
+                    }
+                )
+            } else {
+                results.add(buildAnnotatedString { appendMetricsOnlyLine(newLines[i], state) })
+            }
+            after.add(state.snapshot())
+            styledFlags.add(styled)
+        }
+
+        val assembled = buildAnnotatedString {
+            for (i in results.indices) {
+                if (i > 0) append('\n')
+                append(results[i])
+            }
+        }
+
+        sourceText = text
+        sourceResult = assembled
+        todoConfig = config
+        lines = newLines
+        lineResults = results
+        statesBefore = before
+        statesAfter = after
+        lineStyled = styledFlags
+        cachedVisible = visible
+        hasCachedVisible = true
+        return assembled
+    }
+}
+
+private fun commonPrefixLength(old: List<String>, new: List<String>): Int {
+    val max = minOf(old.size, new.size)
+    var i = 0
+    while (i < max && old[i] == new[i]) i++
+    return i
+}
+
+private fun commonSuffixLength(old: List<String>, new: List<String>, prefix: Int): Int {
+    val max = minOf(old.size, new.size) - prefix
+    var i = 0
+    while (i < max && old[old.size - 1 - i] == new[new.size - 1 - i]) i++
+    return i
+}
+
 private fun AnnotatedString.Builder.appendHighlightedLine(
     line: String,
     headingColor: Color,
@@ -288,12 +466,7 @@ private fun AnnotatedString.Builder.appendHeading(
     viewMode: Boolean,
 ) {
     val stars = OrgSyntax.heading.find(line)!!.groupValues[1]
-    val size: TextUnit = when (stars.length) {
-        1 -> 1.3.em
-        2 -> 1.15.em
-        3 -> 1.05.em
-        else -> TextUnit.Unspecified
-    }
+    val size: TextUnit = headingFontSize(stars.length)
     withStyle(SpanStyle(color = headingColor, fontWeight = FontWeight.Bold, fontSize = size)) {
         withStyle(SpanStyle(color = OrgColors.stars)) { append(stars) }
         var rest = line.substring(stars.length)
@@ -490,15 +663,36 @@ private fun AnnotatedString.Builder.appendUrl(target: String, label: String, vie
     }
 }
 
-/**
- * [VisualTransformation] that applies Org-mode syntax colors to the text of a text field while
- * keeping the underlying text untouched (identity offset mapping).
- */
+///**
+// * [VisualTransformation] that applies Org-mode syntax colors to the text of a text field while
+// * keeping the underlying text untouched (identity offset mapping).
+// */
+//class OrgSyntaxHighlightTransformation(private val headingColor: Color) : VisualTransformation {
+//    override fun filter(text: AnnotatedString): TransformedText {
+//        return TransformedText(
+//            buildOrgHighlightedString(text.text, headingColor),
+//            OffsetMapping.Identity
+//        )
+//    }
+//}
+
 class OrgSyntaxHighlightTransformation(private val headingColor: Color) : VisualTransformation {
+    private val cache = OrgHighlightCache(headingColor)
+
+    /**
+     * Character range to style fully; lines outside it receive layout-affecting styling only. The
+     * editor updates this as the viewport moves; null styles the whole document.
+     *
+     * A plain property rather than Compose state on purpose: [filter] is not a composable and could
+     * not observe state anyway. The editor writes it during recomposition, which is exactly when
+     * the field is about to re-run [filter].
+     */
+    var visibleChars: IntRange? = null
+
     override fun filter(text: AnnotatedString): TransformedText {
-        return TransformedText(
-            buildOrgHighlightedString(text.text, headingColor),
-            OffsetMapping.Identity
-        )
+        val mark = kotlin.time.TimeSource.Monotonic.markNow()
+        val highlighted = cache.highlight(text.text, visibleChars)
+        println("[PERF] filter chars=${text.text.length} spans=${highlighted.spanStyles.size} took=${mark.elapsedNow()}")
+        return TransformedText(highlighted, OffsetMapping.Identity)
     }
 }
