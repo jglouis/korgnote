@@ -14,6 +14,9 @@ import io.ktor.server.application.log
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.http.content.staticFiles
 import io.ktor.server.netty.Netty
+import io.ktor.server.plugins.compression.Compression
+import io.ktor.server.plugins.compression.deflate
+import io.ktor.server.plugins.compression.gzip
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.origin
 import io.ktor.server.request.httpMethod
@@ -34,12 +37,42 @@ import java.io.File
 import java.nio.file.Paths
 
 fun main() {
-    embeddedServer(Netty, port = SERVER_PORT, host = "0.0.0.0", module = Application::module)
+    val security = ServerSecurity.fromEnvironment()
+    embeddedServer(Netty, port = SERVER_PORT, host = security.bindHost) { module(security) }
         .start(wait = true)
 }
 
-fun Application.module() {
+/**
+ * [security] defaults to open because that is what the test host and a plain local run want; `main`
+ * passes what the environment actually asks for.
+ */
+fun Application.module(security: ServerSecurity = ServerSecurity.open()) {
+    log.info(security.describe())
+
     install(ContentNegotiation) { json() }
+
+    // Org files are text and compress well; the whole-library endpoint is over a megabyte.
+    install(Compression) {
+        gzip()
+        deflate()
+    }
+
+    if (security.requiresToken) {
+        intercept(ApplicationCallPipeline.Plugins) {
+            if (call.request.uri.startsWith("/api")) {
+                val offered = call.request.header(HttpHeaders.Authorization)
+                    ?.removePrefix("Bearer ")
+                    ?.trim()
+                if (offered != security.token) {
+                    call.respondText(
+                        "Unauthorized. Send 'Authorization: Bearer <token>'.",
+                        status = HttpStatusCode.Unauthorized,
+                    )
+                    return@intercept finish()
+                }
+            }
+        }
+    }
 
     intercept(ApplicationCallPipeline.Monitoring) {
         val origin = call.request.origin

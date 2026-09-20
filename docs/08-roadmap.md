@@ -10,7 +10,8 @@ are the architecture.
 
 Phase 1 (the Org core, T3–T7) is complete: the model is source-mapped and lossless, headings nest,
 the grammar covers the constructs these notes actually use, Org syntax is defined in one place, and
-edits are range replacements. Next is **T2** (transport hygiene) or **Phase 2** (T8–T10).
+edits are range replacements. T2 is done too, so everything before Phase 2 is finished. Next is
+**Phase 2** (T8–T10, local-first sync).
 
 ## Status
 
@@ -27,7 +28,8 @@ Updated 2026-09-20.
 | ✅ | T5 Complete the grammar | Done — blocks, drawers, lists, priorities; `OrgSyntax` now shared |
 | ✅ | T6 One grammar | Done — `orgSpans()` in shared; no Org pattern left in `composeApp/` |
 | ✅ | T7 Structural edit API | Done — `org.edit`; ordinals replaced by node identity |
-| ❌ | T2, T8–T11, T13–T18 | Not started |
+| ✅ | T2 Transport hygiene | Done — gzip, bearer token, loopback default, LAN opt-in for testing |
+| ❌ | T8–T11, T13–T18 | Not started |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -79,7 +81,25 @@ Keep the current API shape — this is a behaviour fix, not the protocol change.
 the next request; a save never clobbers a newer on-disk version silently; tests cover
 external modification and path-traversal attempts.
 
-### T2 · Transport hygiene
+### T2 · Transport hygiene — ✅ **done**
+**Landed** Ktor `Compression` (gzip/deflate), bearer-token auth on `/api` from `KORGNOTE_TOKEN`, and
+a bind host chosen by configuration: loopback by default, all interfaces once a token is set. The
+token is a field in the app's settings and rides on every request. README documents the variables
+and TLS via a reverse proxy.
+**The testing escape hatch** `KORGNOTE_ALLOW_LAN=1` serves the LAN with **no** token. Without it the
+safe default — loopback only — would break testing against a phone, which is how this app is actually
+developed; requiring a token there means re-entering it on every device after every reinstall. It is
+opt-in, and the server logs one line on startup naming which of the three modes it is in, including
+the words "NO authentication" when that is what is happening.
+**Verified** 11 `TransportSecurityTest` cases: where it binds in each configuration, that an
+unauthenticated or wrongly-authenticated `/api` request is refused while the right one is accepted,
+that writes are protected as well as reads, and that responses are gzipped when asked for and not
+when they are not. 4 `KtorOrgRepositoryAuthTest` cases prove the client actually puts the token on
+the wire — on every call — and sends no header at all when the token is blank, using a mock engine
+rather than trusting the code by reading. Removing the loopback default fails 2 tests.
+**Not verified by socket** The bind address is covered by unit tests and one line of wiring in
+`main`; I did not start a second server to watch it bind, because port 8080 was in use by the
+running instance.
 **Goal** D8, D10.
 **Scope** Install Ktor `Compression`. Add bearer-token auth (`KORGNOTE_TOKEN`), add the
 token to client settings. Bind `127.0.0.1` unless a token is configured. README section on

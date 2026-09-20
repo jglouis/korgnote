@@ -20,6 +20,7 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
     val scope = rememberCoroutineScope()
     var host by remember { mutableStateOf("") }
     var portText by remember { mutableStateOf("") }
+    var token by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     var saved by remember { mutableStateOf(false) }
@@ -27,6 +28,7 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
     LaunchedEffect(Unit) {
         host = repo.getServerHost()
         portText = repo.getServerPort().toString()
+        token = repo.getServerToken()
     }
 
     Column {
@@ -47,6 +49,14 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
             label = { Text("Port") },
             singleLine = true
         )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = token,
+            onValueChange = { token = it },
+            label = { Text("Access token (leave empty if the server does not require one)") },
+            singleLine = true,
+        )
         if (error != null) {
             Spacer(Modifier.height(8.dp))
             Text(error!!)
@@ -64,6 +74,7 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
                 try {
                     repo.setServerHost(host.trim())
                     repo.setServerPort(port)
+                    repo.setServerToken(token.trim())
                     saved = true
                     onSaved?.invoke()
                 } finally {

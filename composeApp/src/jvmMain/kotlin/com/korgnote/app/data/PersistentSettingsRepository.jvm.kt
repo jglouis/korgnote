@@ -10,12 +10,15 @@ class PersistentSettingsRepository : SettingsRepository {
 
     private val hostFlow = MutableStateFlow(loadHost())
     private val portFlow = MutableStateFlow(loadPort())
+    private val tokenFlow = MutableStateFlow(prefs.get(KEY_TOKEN, ""))
 
     override val serverHostFlow: Flow<String> = hostFlow
     override val serverPortFlow: Flow<Int> = portFlow
+    override val serverTokenFlow: Flow<String> = tokenFlow
 
     override fun getServerHost(): String = hostFlow.value
     override fun getServerPort(): Int = portFlow.value
+    override fun getServerToken(): String = tokenFlow.value
 
     override fun setServerHost(host: String) {
         hostFlow.value = host
@@ -25,6 +28,11 @@ class PersistentSettingsRepository : SettingsRepository {
     override fun setServerPort(port: Int) {
         portFlow.value = port
         prefs.putInt(KEY_PORT, port)
+    }
+
+    override fun setServerToken(token: String) {
+        tokenFlow.value = token
+        prefs.put(KEY_TOKEN, token)
     }
 
     private fun loadHost(): String {
@@ -39,5 +47,6 @@ class PersistentSettingsRepository : SettingsRepository {
     companion object {
         private const val KEY_HOST = "server_host"
         private const val KEY_PORT = "server_port"
+        private const val KEY_TOKEN = "server_token"
     }
 }

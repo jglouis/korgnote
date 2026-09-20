@@ -10,15 +10,19 @@ class InMemorySettingsRepository(
         .removePrefix("https://")
         .substringBefore(":"),
     initialPort: Int = SERVER_PORT,
+    initialToken: String = "",
 ) : SettingsRepository {
     private val host = MutableStateFlow(initialHost)
     private val port = MutableStateFlow(initialPort)
+    private val token = MutableStateFlow(initialToken)
 
     override val serverHostFlow: Flow<String> = host
     override val serverPortFlow: Flow<Int> = port
+    override val serverTokenFlow: Flow<String> = token
 
     override fun getServerHost(): String = host.value
     override fun getServerPort(): Int = port.value
+    override fun getServerToken(): String = token.value
 
     override fun setServerHost(host: String) {
         this.host.value = host
@@ -26,5 +30,9 @@ class InMemorySettingsRepository(
 
     override fun setServerPort(port: Int) {
         this.port.value = port
+    }
+
+    override fun setServerToken(token: String) {
+        this.token.value = token
     }
 }

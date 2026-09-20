@@ -11,5 +11,17 @@ interface SettingsRepository {
 
     fun setServerHost(host: String)
     fun setServerPort(port: Int)
+
+    /**
+     * Bearer token for the server, or empty when it does not ask for one.
+     *
+     * A server started without `KORGNOTE_TOKEN` serves loopback only, or the LAN if it was told to;
+     * either way it accepts requests without a token, so leaving this blank is normal while testing.
+     */
+    val serverTokenFlow: Flow<String>
+
+    fun getServerToken(): String
+
+    fun setServerToken(token: String)
 }
 

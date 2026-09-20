@@ -21,7 +21,7 @@ val appModule = module {
     single {
         val repo = get<SettingsRepository>()
         val baseUrlProvider = { buildBaseUrl(repo.getServerHost(), repo.getServerPort()) }
-        KtorOrgRepository(get(), baseUrlProvider)
+        KtorOrgRepository(get(), baseUrlProvider, repo::getServerToken)
     } bind OrgRepository::class
     // ViewModel uses repository
     viewModel { FileTreeViewModel(get<OrgRepository>()) }

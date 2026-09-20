@@ -60,6 +60,62 @@ in your IDE’s toolbar or run it directly from the terminal:
   .\gradlew.bat :server:run
   ```
 
+#### Server options
+
+| Variable | Effect |
+|---|---|
+| `NOTES_DIR` | Directory of `.org` files to serve. Defaults to the bundled samples. |
+| `KORGNOTE_TOKEN` | Require `Authorization: Bearer <token>` on `/api`, and listen on all interfaces. |
+| `KORGNOTE_ALLOW_LAN` | `1` to listen on all interfaces **without** a token. For testing only. |
+
+With no variables set the server listens on **127.0.0.1 only**, so an unauthenticated server is not
+reachable from the network. It logs, on startup, one line saying which of these three modes it is in.
+
+Testing against a phone or another machine needs one of the two open modes:
+
+```shell
+# Convenient: reachable on the LAN, no token to type into the app.
+NOTES_DIR=~/notes KORGNOTE_ALLOW_LAN=1 ./gradlew :server:run
+
+# Safer: reachable on the LAN, but every request must carry the token.
+NOTES_DIR=~/notes KORGNOTE_TOKEN=$(openssl rand -hex 16) ./gradlew :server:run
+```
+
+With a token, put the same value in the app under **Settings → Access token**. Leave that field empty
+when the server runs without one.
+
+`KORGNOTE_ALLOW_LAN` is a deliberate hole, kept because developing against a real device otherwise
+means re-entering a token on every device after every reinstall. It is safe on a home network you
+control and unsafe on anything shared — a café, an office, a conference.
+
+#### TLS
+
+The server speaks plain HTTP and does not terminate TLS. Traffic on a LAN you control is usually
+fine; anything crossing a network you do not control should go through a reverse proxy that holds
+the certificate, with the server bound to loopback behind it:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name notes.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/notes.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/notes.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+```
+
+Set `KORGNOTE_TOKEN` as well: the proxy protects the traffic, the token protects the endpoint. Point
+the app at `https://notes.example.com` (host field) with port `443`.
+
+Responses are gzipped when the client asks for it, which matters most for `/api/org-content` — over a
+megabyte of text for a real notes directory.
+
 ### Build and Run Web Application
 
 The Ktor server is configured to host an existing wasm distribution of the Compose app.
