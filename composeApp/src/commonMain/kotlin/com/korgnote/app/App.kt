@@ -142,13 +142,22 @@ fun App() {
                     }
                 }
             ) { paddingValues ->
-                // Main content area
+                // Reading mode scrolls itself, one element at a time, so that opening a large file
+                // does not have to lay out every element first. A lazy list cannot be nested in a
+                // vertically scrolling parent, so this Column yields its scroll while reading; every
+                // other screen, and the whole-file editor, still scroll here as before.
+                val readingDocument = selectedScreen == BottomItem.HOME &&
+                    !isEditing &&
+                    vm.selectedFileContent.isNotBlank()
+                val screenScrollState = rememberScrollState()
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues)
                         .padding(16.dp)
-                        .verticalScroll(rememberScrollState()),
+                        .then(
+                            if (readingDocument) Modifier else Modifier.verticalScroll(screenScrollState)
+                        ),
                     verticalArrangement = Arrangement.Top,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -234,6 +243,9 @@ fun App() {
                                 Text("Select an .org file to view its content")
                             } else {
                                 OrgDocumentView(
+                                    // weight, not wrap: the lazy list needs a bounded height to
+                                    // know what is on screen, and fills what the header leaves.
+                                    modifier = Modifier.weight(1f).fillMaxWidth(),
                                     text = vm.selectedFileContent,
                                     editingElementIndex = vm.editingElementIndex,
                                     elementDraft = vm.elementDraft,

@@ -10,8 +10,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -68,18 +69,21 @@ fun OrgDocumentView(
     onScrolledToElement: () -> Unit = {},
 ) {
     val elements = remember(text) { text.orgElements() }
-    val requesters = remember(elements) { elements.map { BringIntoViewRequester() } }
+    val listState = rememberLazyListState()
 
-    Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
-        elements.forEachIndexed { index, element ->
+    LazyColumn(
+        modifier = modifier,
+        state = listState,
+        horizontalAlignment = Alignment.Start,
+    ) {
+        // Every element gets an item, including a blank preamble that renders nothing, so that an
+        // item's index is its element's index and a scroll target needs no translation.
+        itemsIndexed(elements, key = { index, _ -> index }) { index, element ->
             val slice = remember(text, element) { element.sliceOf(text) }
-            // An empty preamble has nothing to show and nothing worth editing.
-            if (element.isPreamble && slice.isBlank()) return@forEachIndexed
+            if (element.isPreamble && slice.isBlank()) return@itemsIndexed
 
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .bringIntoViewRequester(requesters[index]),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.Start,
             ) {
                 if (index == editingElementIndex) {
@@ -147,10 +151,12 @@ fun OrgDocumentView(
         }
     }
 
-    LaunchedEffect(scrollToElementIndex, requesters) {
+    LaunchedEffect(scrollToElementIndex, elements) {
         val index = scrollToElementIndex
-        if (index != null && index in requesters.indices) {
-            requesters[index].bringIntoView()
+        if (index != null && index in elements.indices) {
+            // scrollToItem, not bringIntoView: the target is usually far off screen and has not been
+            // composed yet, so there is no node to bring anywhere — the list has to go to it.
+            listState.scrollToItem(index)
             onScrolledToElement()
         }
     }

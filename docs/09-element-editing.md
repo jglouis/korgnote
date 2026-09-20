@@ -104,24 +104,32 @@ the text before an insertion so that discarding removes it. Covered by `ElementE
 
 ## Known gaps
 
-- Reading mode still renders every element eagerly in a `Column`, and this is now the dominant cost
-  of opening a large file. Measured on desktop JVM with a 115 KB, 2700-line, 300-heading document:
+- ~~Reading mode renders every element eagerly~~ **Fixed.** `OrgDocumentView` is a `LazyColumn`, so
+  opening a document composes only what is on screen. Measured warm on desktop JVM against the real
+  notes directory, biggest file 60 515 chars / 283 elements:
 
-  | rendering | first composition |
+  | reading mode | first composition |
   |---|---|
-  | `OrgText` over the whole document (pre-element-editing read mode) | 211 ms |
-  | `OrgDocumentView`, per-element affordances switched off | 329 ms |
-  | `OrgDocumentView` as shipped | 1449 ms |
+  | eager `Column` (every element) | 234 ms |
+  | `LazyColumn` (visible elements) | 38 ms |
+  | empty document (framework floor) | 7 ms |
 
-  The affordances cost roughly 1.1 s of that, but **not** because the widgets are expensive: replacing
-  `IconButton` with a plain icon, hoisting the vector painters, dropping the `clickable`, and finally
-  replacing the icons with empty boxes each changed almost nothing (1449 → 1132 ms). The cost is
-  having a second child in each element's `Row` at all, and it scales with document size either way.
-  So micro-tuning the row is not the fix: a `LazyColumn` keyed by element is, as
-  [06](06-editor.md#reading-mode-at-scale) already wanted. It needs the screen's shared
-  `verticalScroll` in `App.kt` to become the lazy list itself, which is why it has not been done in
-  passing. On Skia-backed targets (iOS, wasm) these figures are the ones users feel as "a few
-  seconds".
+  A lazy list cannot be nested inside a vertically scrolling parent, so the screen `Column` in
+  `App.kt` gives up its own scroll while a document is being read, and keeps it for the whole-file
+  editor and every other screen. Each element gets an item even when it renders nothing, so an
+  item's index is its element's index and a scroll target needs no translation — which is also why
+  the calendar's jump uses `scrollToItem` rather than `BringIntoViewRequester`: the target is
+  normally far off screen and has not been composed yet, so there is no node to bring anywhere.
+
+  Worth recording, because it cost time to learn: the slowness was **not** caused by T3. Measured on
+  the real corpus, every path T3 touched is negligible — the server answers `/api/org-content` in
+  33 ms for 1.26 MB, parsing all 366 files client-side costs 12 ms, and opening one file costs 14 ms
+  of parsing. Two plausible-sounding culprits were also measured and cleared: the per-element edit
+  and add affordances (removing the icons entirely changed 1449 ms to 1132 ms), and Compose
+  stability — T3 really did make `OrgNode` unstable by giving it a `var range`, which the compiler
+  report confirms, but it changed recomposition not at all (13/5/5 ms either way), because `remember`
+  hands back the same instance. Only eager composition ever mattered.
+
 - Creating, renaming and deleting **files** is still impossible — the server rejects any path it did
   not see at startup (D11). That is the next gap once adding sections feels good.
 - The calendar's "scroll to this heading" is now exact, using the source range T3 gives every node:
