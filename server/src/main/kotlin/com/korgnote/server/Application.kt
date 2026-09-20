@@ -178,16 +178,19 @@ fun Application.module() {
             get("/") {
                 call.respondText("Ktor: ${Greeting().greet()}")
             }
-            // Returns a JSON object mapping filename -> parsed OrgDocument
+            // Returns a JSON object mapping filename -> raw file text.
+            //
+            // The server deliberately does not parse: the client has the same parser and needs the
+            // source text anyway to edit it, so sending text is both smaller and lossless.
             get("/org-content") {
-                val parsed = buildMap {
+                val contents = buildMap {
                     for (meta in store.list()) {
-                        val document = parsedDocument(meta) ?: continue
+                        val text = store.read(meta.path) ?: continue
                         lastServed[meta.path] = meta.etag
-                        put(meta.path, document)
+                        put(meta.path, text)
                     }
                 }
-                call.respond(parsed)
+                call.respond(contents)
             }
             // Returns a JSON serializable Folder tree instead of raw paths
             get("/org-tree-paths") {

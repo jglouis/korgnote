@@ -1,69 +1,70 @@
 package com.korgnote.common.org
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-
-// An immutable node in an org document.
-@Serializable
-sealed interface OrgNode
+/**
+ * A node in an org document.
+ *
+ * [range] is where this node's source sits in the document it came from, so that changing a node is
+ * a text replacement over that range rather than a re-render of the tree — see
+ * `docs/04-org-core.md`.
+ *
+ * It is deliberately not a constructor property. These are data classes, so a constructor property
+ * would join `equals`, and every expected node in every parser test would have to spell out exact
+ * offsets. Parsing fills the range in; a node built by hand keeps an empty one.
+ */
+sealed class OrgNode {
+    var range: IntRange = IntRange.EMPTY
+        internal set
+}
 
 // Top-level org document with parsed children and collected file keywords (#+TITLE, #+AUTHOR, etc.).
-@Serializable
-@SerialName("document")
-data class OrgDocument(val children: List<OrgNode>, val metadata: List<String>) : OrgNode
+data class OrgDocument(val children: List<OrgNode>, val metadata: List<String>) : OrgNode() {
+    /**
+     * The exact text this document was parsed from; empty when it was built by hand.
+     *
+     * Holding the source is what makes the model lossless: a construct the parser does not model
+     * still survives an edit, because edits apply to this text rather than being regenerated from
+     * the tree.
+     */
+    var text: String = ""
+        internal set
+}
 
 // A section is a heading with its inline content (paragraph text after heading line until next heading).
 // level is the number of leading stars; tags are the trailing :tag1:tag2: of the heading line (without colons).
-@Serializable
-@SerialName("section")
 data class OrgSection(
     val title: String,
     val content: String,
     val todo: String? = null,
     val level: Int = 1,
     val tags: List<String> = emptyList(),
-) : OrgNode
+) : OrgNode()
 
 // A flat list of items where each child is typically OrgRaw or OrgSection; bulletType is '-', '+', or '*'.
-@Serializable
-@SerialName("list")
-data class OrgList(val bulletType: Char, val children: List<OrgNode>) : OrgNode
+data class OrgList(val bulletType: Char, val children: List<OrgNode>) : OrgNode()
 
-// Lines that start with #+...
-@Serializable
-@SerialName("keyword")
-data class OrgKeyword(val content: String) : OrgNode
+// Lines that start with #+
+data class OrgKeyword(val content: String) : OrgNode()
 
 // SCHEDULED or DEADLINE timestamp line under a heading
-@Serializable
-@SerialName("planning")
-data class OrgPlanning(@SerialName("planType") val planType: String, val timestamp: String) : OrgNode
+data class OrgPlanning(val planType: String, val timestamp: String) : OrgNode()
 
 // Any raw text paragraph or line content that doesn't fit another construct.
-@Serializable
-@SerialName("raw")
-data class OrgRaw(val content: String) : OrgNode
+data class OrgRaw(val content: String) : OrgNode()
 
 // TODO state for headings is a free-form string (e.g., TODO, DONE, WAITING) defined by document metadata.
 // We intentionally avoid an enum to allow arbitrary states.
 
 // Checkbox list item like: - [ ] Task or - [X] Done
 // Only supports simple on/off state; nested states are out of scope for now.
-@Serializable
-@SerialName("checkboxItem")
-data class OrgCheckboxItem(val checked: Boolean, val text: String) : OrgNode
+data class OrgCheckboxItem(val checked: Boolean, val text: String) : OrgNode()
 
 // Table model: consecutive lines starting with '|' become a single table. Each line is a row; a line
 // starting with "|-" is a horizontal rule row (isRule = true, no cells).
-@Serializable
-@SerialName("table")
-data class OrgTable(val rows: List<OrgTableRow>) : OrgNode {
+data class OrgTable(val rows: List<OrgTableRow>) : OrgNode() {
     val columnCount: Int get() = rows.maxOfOrNull { it.cells.size } ?: 0
 }
 
-@Serializable
-@SerialName("tableRow")
-data class OrgTableRow(val cells: List<OrgNode>, val isRule: Boolean = false) : OrgNode
+data class OrgTableRow(val cells: List<OrgNode>, val isRule: Boolean = false) : OrgNode()
 
 private val headingLineRegex = Regex("^(\\*+)\\s+(?:([A-Z][A-Z0-9_-]*)\\s+)?(.*)")
 private val headingTagsRegex = Regex("\\s+:([\\p{L}\\p{N}_@#%]+(?::[\\p{L}\\p{N}_@#%]+)*):\\s*$")
@@ -91,16 +92,39 @@ fun parseOrgTable(lines: List<String>): OrgTable {
 
 // Parse a String into a very small subset of Org-mode constructs supported by the data model above.
 fun String.toOrgDocument(): OrgDocument {
-    val lines = this.split('\n')
+    val source = this
+    val lines = source.split('\n')
     val children = mutableListOf<OrgNode>()
     val metadata = mutableListOf<String>()
 
+    // Offset of each line's first character, so a span of lines converts to a span of characters.
+    val lineStarts = IntArray(lines.size)
+    var offset = 0
+    for (index in lines.indices) {
+        lineStarts[index] = offset
+        offset += lines[index].length + 1
+    }
+
+    /** Source range covering lines `[first, lastExclusive)`, including their line breaks. */
+    fun span(first: Int, lastExclusive: Int): IntRange {
+        if (first >= lines.size) return IntRange.EMPTY
+        val from = lineStarts[first]
+        val to = if (lastExclusive >= lines.size) source.length else lineStarts[lastExclusive]
+        return from until to
+    }
+
+    fun <T : OrgNode> T.spanning(first: Int, lastExclusive: Int): T {
+        range = span(first, lastExclusive)
+        return this
+    }
+
     var i = 0
     var pendingParagraph = StringBuilder()
+    var paragraphStart = 0
 
     fun flushParagraph() {
         if (pendingParagraph.isNotEmpty()) {
-            children.add(OrgRaw(pendingParagraph.toString().trimEnd()))
+            children.add(OrgRaw(pendingParagraph.toString().trimEnd()).spanning(paragraphStart, i))
             pendingParagraph = StringBuilder()
         }
     }
@@ -108,7 +132,11 @@ fun String.toOrgDocument(): OrgDocument {
     fun parseTable(start: Int): Pair<OrgNode, Int> {
         var idx = start
         while (idx < lines.size && lines[idx].isOrgTableLine()) idx++
-        return parseOrgTable(lines.subList(start, idx)) to idx
+        val table = parseOrgTable(lines.subList(start, idx))
+        // Cells keep an empty range: locating them needs intra-line offsets, which waits for the
+        // real table grammar in T5.
+        table.rows.forEachIndexed { row, tableRow -> tableRow.spanning(start + row, start + row + 1) }
+        return table.spanning(start, idx) to idx
     }
 
     fun parseList(start: Int, bullet: Char): Pair<OrgNode, Int> {
@@ -128,14 +156,14 @@ fun String.toOrgDocument(): OrgDocument {
                 val mark = cb.groupValues[1]
                 val text = cb.groupValues[2]
                 val checked = mark.equals("x", ignoreCase = true)
-                items.add(OrgCheckboxItem(checked, text))
+                items.add(OrgCheckboxItem(checked, text).spanning(idx, idx + 1))
             } else {
                 val itemText = m.groupValues[1]
-                items.add(OrgRaw(itemText))
+                items.add(OrgRaw(itemText).spanning(idx, idx + 1))
             }
             idx++
         }
-        return OrgList(bullet, items) to idx
+        return OrgList(bullet, items).spanning(start, idx) to idx
     }
 
     fun parseSection(start: Int): Pair<OrgNode, Int> {
@@ -170,7 +198,8 @@ fun String.toOrgDocument(): OrgDocument {
             contentSb.appendLine(trim)
             idx++
         }
-        return OrgSection(title, contentSb.toString().trimEnd(), todo, level, tags) to idx
+        val section = OrgSection(title, contentSb.toString().trimEnd(), todo, level, tags)
+        return section.spanning(start, idx) to idx
     }
 
     mainLoop@ while (i < lines.size) {
@@ -184,7 +213,7 @@ fun String.toOrgDocument(): OrgDocument {
         if (line.startsWith("#+")) {
             flushParagraph()
             metadata.add(line)
-            children.add(OrgKeyword(line))
+            children.add(OrgKeyword(line).spanning(i, i + 1))
             i++
             continue
         }
@@ -210,7 +239,7 @@ fun String.toOrgDocument(): OrgDocument {
                 flushParagraph()
                 val type = if (line.trimStart().startsWith("SCHEDULED:")) "SCHEDULED" else "DEADLINE"
                 val ts = pm.groupValues[1].trim()
-                children.add(OrgPlanning(planType = type, timestamp = ts))
+                children.add(OrgPlanning(planType = type, timestamp = ts).spanning(i, i + 1))
                 i++
                 continue@mainLoop
             }
@@ -229,13 +258,17 @@ fun String.toOrgDocument(): OrgDocument {
             continue
         }
         // default: part of a paragraph
+        if (pendingParagraph.isEmpty()) paragraphStart = i
         if (pendingParagraph.isNotEmpty()) pendingParagraph.append('\n')
         pendingParagraph.append(line)
         i++
     }
     flushParagraph()
 
-    return OrgDocument(children, metadata)
+    val document = OrgDocument(children, metadata)
+    document.text = source
+    document.range = if (source.isEmpty()) IntRange.EMPTY else 0 until source.length
+    return document
 }
 
 private fun OrgNode.cellText(): String = (this as? OrgRaw)?.content ?: this.toOrgString()

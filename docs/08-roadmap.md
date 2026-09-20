@@ -4,8 +4,8 @@ Tasks are sized for one working session each and ordered so that the app keeps w
 after every one. Dependencies are explicit; anything without a shared dependency can be
 done in any order.
 
-**If you only do three things:** ~~T1~~ (done), T3 (make the
-model lossless), and T8–T10 (local-first sync). Everything else is improvement; those three
+**If you only do three things:** ~~T1~~ (done), ~~T3~~ (done — the model is lossless),
+and T8–T10 (local-first sync). Everything else is improvement; those three
 are the architecture.
 
 ## Status
@@ -18,7 +18,8 @@ Updated 2026-09-20.
 | 🟡 | T12b Editor surface | Partly — see the task for what landed and what did not |
 | 🟡 | T0 / T0b Text-editing spikes | Answered in practice, findings in [06](06-editor.md#editor-surface) |
 | ✅ | T1 Server reads the disk | Done — `FileStore`, plus conflict refusal and path validation |
-| ❌ | T2, T3–T7, T8–T11, T13–T18 | Not started |
+| ✅ | T3 Source-mapped documents | Done — `range` on every node, `text` on the document, raw-text wire |
+| ❌ | T2, T4–T7, T8–T11, T13–T18 | Not started |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -82,7 +83,22 @@ is refused, and the desktop/mobile clients still work.
 
 ## Phase 1 — Org core ([04](04-org-core.md))
 
-### T3 · Source-mapped documents
+### T3 · Source-mapped documents — ✅ **done**
+**Landed** `OrgNode` became a `sealed class` carrying `range`, and `OrgDocument` carries `text`.
+Both are body properties rather than constructor parameters, deliberately: these are data classes,
+so a constructor property would join `equals` and every expected node in every parser test would
+have to spell out exact offsets. Parsing fills them in; a node built by hand keeps an empty range.
+The parser threads a `lineStarts` array and a `span(first, lastExclusive)` helper through every
+construct. `/api/org-content` now returns raw text instead of a serialised tree, so the wire format
+no longer pins the model — which is what lets T4–T7 reshape it freely. `@Serializable` is gone from
+the node types.
+**Not included** Table *cells* keep an empty range; locating them needs intra-line offsets, which
+waits for the real table grammar in T5.
+**Verified** `OrgSourceRangeTests` covers I1 and I2 over a corpus of edge cases (empty input, no
+trailing newline, bare newlines, trailing whitespace, tags, tables, src blocks). The tests were
+checked against two deliberate parser mutations — dropping the source, and an off-by-one in `span`
+— and caught both. The 12 existing parser test files pass unchanged, and test sources compile for
+JVM, wasm and iOS.
 **Depends** —
 **Scope** `OrgDocument` gains `text`; every node gains `range`. Parser records offsets.
 No shape changes beyond that.

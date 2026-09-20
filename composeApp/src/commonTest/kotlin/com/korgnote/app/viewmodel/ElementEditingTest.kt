@@ -3,8 +3,6 @@ package com.korgnote.app.viewmodel
 import com.korgnote.app.data.OrgRepository
 import com.korgnote.common.fs.Folder
 import com.korgnote.common.fs.TreeUtils
-import com.korgnote.common.org.OrgDocument
-import com.korgnote.common.org.toOrgDocument
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -39,8 +37,7 @@ class ElementEditingTest {
     private class FakeRepository(private val files: MutableMap<String, String>) : OrgRepository {
         val saves = mutableListOf<Pair<String, String>>()
 
-        override suspend fun fetchAllContents(): Map<String, OrgDocument> =
-            files.mapValues { (_, text) -> text.toOrgDocument() }
+        override suspend fun fetchAllContents(): Map<String, String> = files.toMap()
 
         override suspend fun fetchTree(): Folder =
             TreeUtils.buildFromPaths(files.keys.sorted(), rootName = "Org")

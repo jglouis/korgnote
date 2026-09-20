@@ -25,7 +25,6 @@ import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.ui.*
 import com.korgnote.app.viewmodel.FileTreeViewModel
 import com.korgnote.common.org.OrgSection
-import com.korgnote.common.org.orgElements
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
@@ -36,8 +35,6 @@ fun App() {
     MaterialTheme {
         var selectedScreen by remember { mutableStateOf(BottomItem.HOME) }
         var isEditing by remember { mutableStateOf(false) }
-        // Set when a calendar entry is opened; consumed by OrgText to scroll that heading into view.
-        var pendingScrollIndex by remember { mutableStateOf<Int?>(null) }
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val scope = rememberCoroutineScope()
         val vm = koinViewModel<FileTreeViewModel>()
@@ -65,7 +62,6 @@ fun App() {
                                 scope.launch {
                                     vm.onFileSelected(name)
                                     isEditing = false
-                                    pendingScrollIndex = null
                                     drawerState.close()
                                 }
                             },
@@ -245,8 +241,8 @@ fun App() {
                                     onElementDraftChange = { vm.onElementDraftChanged(it) },
                                     onEditElement = { vm.beginElementEdit(it) },
                                     onAddElementAfter = { vm.addElementAfter(it) },
-                                    scrollToElementIndex = pendingScrollIndex,
-                                    onScrolledToElement = { pendingScrollIndex = null },
+                                    scrollToElementIndex = vm.scrollToElementIndex,
+                                    onScrolledToElement = { vm.onScrolledToElement() },
                                     onToggleCheckbox = { ordinalIndex, checked ->
                                         vm.toggleCheckboxByOrdinal(
                                             ordinalIndex,
@@ -263,16 +259,11 @@ fun App() {
                                 modifier = Modifier.fillMaxSize(),
                                 scheduledByDate = vm.scheduledByDate,
                                 onOpenScheduled = { pair ->
-                                    val fileName = pair.first
-                                    vm.onFileSelected(fileName)
+                                    // The heading is resolved by the view model once the file's text
+                                    // has loaded: that text arrives asynchronously, so working it out
+                                    // here would search the previously open file.
+                                    vm.onFileSelected(pair.first, scrollToHeading = pair.second as? OrgSection)
                                     isEditing = false
-                                    // Elements, not parsed children, drive reading mode now, so
-                                    // find the element whose heading is the one the calendar opened.
-                                    pendingScrollIndex = (pair.second as? OrgSection)?.let { section ->
-                                        vm.selectedFileContent.orgElements()
-                                            .indexOfFirst { it.level == section.level && it.title.endsWith(section.title) }
-                                            .takeIf { it >= 0 }
-                                    }
                                     selectedScreen = BottomItem.HOME
                                 }
                             )

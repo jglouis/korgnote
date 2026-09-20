@@ -88,6 +88,30 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
 
     // --- Editing a single element (a heading and its own body) ---
 
+    /**
+     * Element to bring into view, set when a file is opened at a particular heading — currently from
+     * a calendar entry. Consumed once, via [onScrolledToElement].
+     */
+    var scrollToElementIndex: Int? by mutableStateOf(null)
+        private set
+
+    fun onScrolledToElement() {
+        scrollToElementIndex = null
+    }
+
+    /**
+     * Finds the element rendering [section], or null if it is not in this text.
+     *
+     * Matched on level plus title rather than on identity: the section comes from the parsed document
+     * held for the calendar, while elements are cut from the file's raw text, so the two are different
+     * objects describing the same heading. [OrgElement.title] keeps the heading's TODO keyword, which
+     * [OrgSection.title] does not, hence the suffix match.
+     */
+    private fun String.elementIndexOf(section: OrgSection): Int? =
+        orgElements()
+            .indexOfFirst { it.level == section.level && it.title.endsWith(section.title) }
+            .takeIf { it >= 0 }
+
     /** Index into [selectedFileContent]'s elements, or null when not editing one. */
     var editingElementIndex: Int? by mutableStateOf(null)
         private set
@@ -235,11 +259,19 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     }
 
 
-    fun onFileSelected(path: String) {
+    /**
+     * Opens [path], and optionally brings [scrollToHeading] into view once its text has arrived.
+     *
+     * The heading is resolved here rather than by the caller because the text loads asynchronously:
+     * resolving it at the call site reads whichever file was open *before* this one and scrolls to
+     * the wrong place, or nowhere at all.
+     */
+    fun onFileSelected(path: String, scrollToHeading: OrgSection? = null) {
         selectedFileLabel = "Selected: $path"
         val doc = orgContents[path]
         selectedOrgNode = doc
         currentFile = path
+        scrollToElementIndex = null
         if (doc == null) {
             selectedFileContent = "* ${path}\nNo content yet."
             return
@@ -249,7 +281,10 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         viewModelScope.launch {
             try {
                 val raw = repository.fetchRawContent(path)
-                if (currentFile == path) selectedFileContent = raw
+                if (currentFile == path) {
+                    selectedFileContent = raw
+                    scrollToElementIndex = scrollToHeading?.let { raw.elementIndexOf(it) }
+                }
             } catch (t: Throwable) {
                 // Rethrows if this job was cancelled, so cancellation stays cancellation
                 // instead of being reported as a failure.
@@ -266,7 +301,7 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
             val sharedTree = repository.fetchTree()
             val data = repository.fetchAllContents()
             orgContents.clear()
-            orgContents.putAll(data)
+            orgContents.putAll(data.mapValues { (_, text) -> text.toOrgDocument() })
             tree = mapRootToUiFolder(sharedTree)
             scheduledByDate = buildScheduledIndex(orgContents)
             // clear error on success

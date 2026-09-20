@@ -104,9 +104,31 @@ the text before an insertion so that discarding removes it. Covered by `ElementE
 
 ## Known gaps
 
-- Reading mode still renders every element eagerly in a `Column`. A `LazyColumn` keyed by element is
-  the obvious next step and was already wanted by [06](06-editor.md#reading-mode-at-scale).
+- Reading mode still renders every element eagerly in a `Column`, and this is now the dominant cost
+  of opening a large file. Measured on desktop JVM with a 115 KB, 2700-line, 300-heading document:
+
+  | rendering | first composition |
+  |---|---|
+  | `OrgText` over the whole document (pre-element-editing read mode) | 211 ms |
+  | `OrgDocumentView`, per-element affordances switched off | 329 ms |
+  | `OrgDocumentView` as shipped | 1449 ms |
+
+  The affordances cost roughly 1.1 s of that, but **not** because the widgets are expensive: replacing
+  `IconButton` with a plain icon, hoisting the vector painters, dropping the `clickable`, and finally
+  replacing the icons with empty boxes each changed almost nothing (1449 → 1132 ms). The cost is
+  having a second child in each element's `Row` at all, and it scales with document size either way.
+  So micro-tuning the row is not the fix: a `LazyColumn` keyed by element is, as
+  [06](06-editor.md#reading-mode-at-scale) already wanted. It needs the screen's shared
+  `verticalScroll` in `App.kt` to become the lazy list itself, which is why it has not been done in
+  passing. On Skia-backed targets (iOS, wasm) these figures are the ones users feel as "a few
+  seconds".
 - Creating, renaming and deleting **files** is still impossible — the server rejects any path it did
   not see at startup (D11). That is the next gap once adding sections feels good.
 - The calendar's "scroll to this heading" matches an element by level and title, because the agenda
-  index holds parsed nodes with no source ranges. Source-mapped nodes (T3) would make it exact.
+  index holds parsed nodes with no source ranges. Now that T3 gives every node a range, this can
+  become exact — the match is still by title today.
+
+  The lookup itself moved into `FileTreeViewModel.onFileSelected(path, scrollToHeading)`. It used to
+  run at the call site in `App.kt`, immediately after `onFileSelected`, which fetches the file's text
+  asynchronously — so it searched the *previously* open file and scrolled to the wrong heading, or to
+  none. `CalendarNavigationTest` pins this down.
