@@ -18,6 +18,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
 import com.korgnote.common.org.OrgDocument
+import com.korgnote.common.org.OrgLineState
+import com.korgnote.common.org.OrgSpan
+import com.korgnote.common.org.OrgSpanKind
+import com.korgnote.common.org.orgSpansForLine
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.isOrgTableLine
@@ -86,34 +90,18 @@ fun googleMapsUrl(location: String): String =
 
 // `\]` must stay escaped: see the note on [OrgSyntax] (JavaScript `u`-mode regexes).
 @Suppress("RegExpRedundantEscape")
-private val linkRegex = Regex("\\[\\[([^\\[\\]]+)\\](?:\\[([^\\[\\]]*)\\])?\\]")
-@Suppress("RegExpRedundantEscape")
-private val urlRegex = Regex("(?:https?|ftp|mailto):[^\\s<>\\[\\]()\"']+")
-@Suppress("RegExpRedundantEscape")
-private val timestampRegex = Regex("[<\\[]\\d{4}-\\d{2}-\\d{2}(?: [^\\]>\\n]*)?[>\\]]")
-@Suppress("RegExpRedundantEscape")
-private val footnoteRegex = Regex("\\[fn:[^\\]]+\\]")
-@Suppress("RegExpRedundantEscape")
-private val statisticsRegex = Regex("\\[(?:\\d+/\\d+|\\d+%)\\]")
+/** How one emphasis marker is painted. What matches it is [OrgSyntax.emphasis]'s business. */
+private class EmphasisSpec(val marker: Char, val style: SpanStyle, val markupColor: Color)
 
-private class EmphasisSpec(val marker: Char, val regex: Regex, val style: SpanStyle, val markupColor: Color)
-
-private val emphasisSpecs: Map<Char, EmphasisSpec> = listOf(
-    '*' to SpanStyle(fontWeight = FontWeight.Bold),
-    '/' to SpanStyle(fontStyle = FontStyle.Italic),
-    '_' to SpanStyle(textDecoration = TextDecoration.Underline),
-    '+' to SpanStyle(textDecoration = TextDecoration.LineThrough),
-    '=' to SpanStyle(color = OrgColors.verbatim, fontFamily = FontFamily.Monospace),
-    '~' to SpanStyle(color = OrgColors.code, fontFamily = FontFamily.Monospace),
-).associate { (m, style) ->
-    val lit = if (m == '*' || m == '+') "\\$m" else "$m"
-    // marker, non-space, (anything not the marker, lazily, ending with non-space)?, marker
-    val regex = Regex("$lit([^\\s$m](?:[^$m\\n]*?[^\\s$m])?)$lit")
-    m to EmphasisSpec(m, regex, style, OrgColors.markup)
-}
-
-private const val EMPHASIS_PRE = " \t-('\"{"
-private const val EMPHASIS_POST = " \t-.,:!?;'\")}["
+/** What each emphasis marker looks like. The markers themselves are defined in [OrgSyntax]. */
+private val emphasisStyles: Map<Char, EmphasisSpec> = mapOf(
+    '*' to EmphasisSpec('*', SpanStyle(fontWeight = FontWeight.Bold), OrgColors.markup),
+    '/' to EmphasisSpec('/', SpanStyle(fontStyle = FontStyle.Italic), OrgColors.markup),
+    '_' to EmphasisSpec('_', SpanStyle(textDecoration = TextDecoration.Underline), OrgColors.markup),
+    '+' to EmphasisSpec('+', SpanStyle(textDecoration = TextDecoration.LineThrough), OrgColors.markup),
+    '=' to EmphasisSpec('=', SpanStyle(color = OrgColors.verbatim, fontFamily = FontFamily.Monospace), OrgColors.markup),
+    '~' to EmphasisSpec('~', SpanStyle(color = OrgColors.code, fontFamily = FontFamily.Monospace), OrgColors.markup),
+)
 
 private val linkStyle = SpanStyle(color = OrgColors.link, textDecoration = TextDecoration.Underline)
 
@@ -141,7 +129,7 @@ fun buildOrgHighlightedString(
     viewMode: Boolean = false,
 ): AnnotatedString {
     return buildAnnotatedString {
-        val state = LineState()
+        val state = OrgLineState()
         var lineStart = 0
         while (lineStart <= text.length) {
             val newline = text.indexOf('\n', lineStart)
@@ -153,11 +141,6 @@ fun buildOrgHighlightedString(
             lineStart = newline + 1
         }
     }
-}
-
-private class LineState {
-    var blockType: String? = null
-    var inDrawer: Boolean = false
 }
 
 /** Heading sizes for reading mode; the editor drops them, see [editorSpanStyle]. */
@@ -178,52 +161,19 @@ private fun headingFontSize(level: Int): TextUnit = when (level) {
  * The branch order still mirrors [appendHighlightedLine] so [state] advances identically, which is
  * what lets a visible line inside a block or drawer be styled correctly.
  */
-private fun AnnotatedString.Builder.appendUnstyledLine(line: String, state: LineState) {
-    if (state.blockType != null) {
-        if (OrgSyntax.blockEnd.containsMatchIn(line)) state.blockType = null
-        append(line)
-        return
-    }
-    if (state.inDrawer) {
-        if (OrgSyntax.drawerEnd.containsMatchIn(line)) state.inDrawer = false
-        append(line)
-        return
-    }
-    when {
-        OrgSyntax.blockBegin.containsMatchIn(line) ->
-            state.blockType = OrgSyntax.blockBegin.find(line)!!.groupValues[1].lowercase()
-
-        OrgSyntax.drawerBegin.containsMatchIn(line) ->
-            state.inDrawer = !OrgSyntax.drawerEnd.containsMatchIn(line)
-    }
+private fun AnnotatedString.Builder.appendUnstyledLine(line: String, state: OrgLineState) {
+    orgSpansForLine(line, state, classify = false)
     append(line)
 }
 
-private data class LineStateSnapshot(val blockType: String?, val inDrawer: Boolean)
-
-private fun LineState.snapshot() = LineStateSnapshot(blockType, inDrawer)
-
-private fun LineState.restore(snapshot: LineStateSnapshot) {
-    blockType = snapshot.blockType
-    inDrawer = snapshot.inDrawer
-}
-
-/**
- * Highlights a document by caching each line's styled result, keyed on the line's text and the
- * block/drawer state the line starts in. A keystroke changes one line, so every other line is
- * reused instead of re-running the grammar over the whole document.
- *
- * Output is identical to [buildOrgHighlightedString] for the same input; the cache only decides how
- * much work is repeated.
- */
 private class OrgHighlightCache(private val headingColor: Color) {
     private var sourceText: String? = null
     private var sourceResult: AnnotatedString? = null
     private var todoConfig: OrgTodoConfig? = null
     private var lines: List<String> = emptyList()
     private var lineResults: List<AnnotatedString> = emptyList()
-    private var statesBefore: List<LineStateSnapshot> = emptyList()
-    private var statesAfter: List<LineStateSnapshot> = emptyList()
+    private var statesBefore: List<OrgLineState> = emptyList()
+    private var statesAfter: List<OrgLineState> = emptyList()
     private var lineStyled: List<Boolean> = emptyList()
     private var cachedVisible: IntRange? = null
     private var hasCachedVisible = false
@@ -249,14 +199,14 @@ private class OrgHighlightCache(private val headingColor: Color) {
         val suffix = commonSuffixLength(oldLines, newLines, prefix)
 
         val results = ArrayList<AnnotatedString>(newLines.size)
-        val before = ArrayList<LineStateSnapshot>(newLines.size)
-        val after = ArrayList<LineStateSnapshot>(newLines.size)
+        val before = ArrayList<OrgLineState>(newLines.size)
+        val after = ArrayList<OrgLineState>(newLines.size)
         val styledFlags = ArrayList<Boolean>(newLines.size)
-        val state = LineState()
+        val state = OrgLineState()
         var lineStart = 0
 
         for (i in newLines.indices) {
-            val incoming = state.snapshot()
+            val incoming = state.copy()
             before.add(incoming)
             val lineEnd = lineStart + newLines[i].length
             val styled = visible == null || (lineStart <= visible.last && lineEnd >= visible.first)
@@ -272,7 +222,7 @@ private class OrgHighlightCache(private val headingColor: Color) {
                 statesBefore[oldIndex] == incoming && lineStyled[oldIndex] == styled
             if (reusable) {
                 results.add(lineResults[oldIndex])
-                state.restore(statesAfter[oldIndex])
+                state.restoreFrom(statesAfter[oldIndex])
             } else if (styled) {
                 results.add(
                     buildAnnotatedString {
@@ -282,7 +232,7 @@ private class OrgHighlightCache(private val headingColor: Color) {
             } else {
                 results.add(buildAnnotatedString { appendUnstyledLine(newLines[i], state) })
             }
-            after.add(state.snapshot())
+            after.add(state.copy())
             styledFlags.add(styled)
         }
 
@@ -321,12 +271,41 @@ private fun commonSuffixLength(old: List<String>, new: List<String>, prefix: Int
     return i
 }
 
+/**
+ * Appends one line, styled from the spans `shared/` produces for it.
+ *
+ * All the knowledge of *what* Org constructs are now lives in `orgSpansForLine`; everything here is
+ * the mapping from a kind to a colour. That is D5: one grammar, and a client that only paints.
+ */
 private fun AnnotatedString.Builder.appendHighlightedLine(
     line: String,
     headingColor: Color,
     todoConfig: OrgTodoConfig,
     viewMode: Boolean,
-    state: LineState,
+    state: OrgLineState,
+) {
+    // Reading mode rewrites the text as well as styling it — it hides emphasis markers and link
+    // targets, and turns a LOCATION property into a link — which a list of spans over the original
+    // text cannot express. That renderer still walks the line itself; see docs/08-roadmap.md (T6).
+    if (viewMode) {
+        appendViewModeLine(line, headingColor, todoConfig, state)
+        return
+    }
+    val spans = orgSpansForLine(line, state)
+    val base = length
+    append(line)
+    for (span in spans) {
+        val style = spanStyleFor(span, line, headingColor, todoConfig, viewMode) ?: continue
+        addStyle(style, base + span.range.first, base + span.range.last + 1)
+    }
+}
+
+/** The reading-mode renderer: it rewrites the line as well as styling it. */
+private fun AnnotatedString.Builder.appendViewModeLine(
+    line: String,
+    headingColor: Color,
+    todoConfig: OrgTodoConfig,
+    state: OrgLineState,
 ) {
     val blockType = state.blockType
     if (blockType != null) {
@@ -340,47 +319,101 @@ private fun AnnotatedString.Builder.appendHighlightedLine(
     }
     if (state.inDrawer) {
         if (OrgSyntax.drawerEnd.containsMatchIn(line)) state.inDrawer = false
-        appendDrawerLine(line, viewMode)
+        appendDrawerLine(line, viewMode = true)
         return
     }
     when {
-        OrgSyntax.heading.containsMatchIn(line) -> appendHeading(line, headingColor, todoConfig, viewMode)
+        OrgSyntax.heading.containsMatchIn(line) -> appendHeading(line, headingColor, todoConfig, true)
 
         OrgSyntax.blockBegin.containsMatchIn(line) -> {
             state.blockType = OrgSyntax.blockBegin.find(line)!!.groupValues[1].lowercase()
             withStyle(SpanStyle(color = OrgColors.blockDelimiter)) { append(line) }
         }
 
-        OrgSyntax.blockEnd.containsMatchIn(line) -> {
+        OrgSyntax.blockEnd.containsMatchIn(line) ->
             withStyle(SpanStyle(color = OrgColors.blockDelimiter)) { append(line) }
-        }
 
-        OrgSyntax.keyword.containsMatchIn(line) -> {
+        OrgSyntax.keyword.containsMatchIn(line) ->
             withStyle(SpanStyle(color = OrgColors.keyword)) { append(line) }
-        }
 
-        OrgSyntax.comment.containsMatchIn(line) -> {
+        OrgSyntax.comment.containsMatchIn(line) ->
             withStyle(SpanStyle(color = OrgColors.comment, fontStyle = FontStyle.Italic)) { append(line) }
-        }
 
         OrgSyntax.drawerBegin.containsMatchIn(line) -> {
             state.inDrawer = !OrgSyntax.drawerEnd.containsMatchIn(line)
-            appendDrawerLine(line, viewMode)
+            appendDrawerLine(line, viewMode = true)
         }
 
-        OrgSyntax.planning.containsMatchIn(line) -> appendPlanning(line, viewMode)
+        OrgSyntax.planning.containsMatchIn(line) -> appendPlanning(line, viewMode = true)
 
-        OrgSyntax.isTableLine(line) -> appendTableLine(line, viewMode)
+        OrgSyntax.isTableLine(line) -> appendTableLine(line, viewMode = true)
 
-        OrgSyntax.horizontalRule.containsMatchIn(line) -> {
+        OrgSyntax.horizontalRule.containsMatchIn(line) ->
             withStyle(SpanStyle(color = OrgColors.horizontalRule)) { append(line) }
-        }
 
         else -> {
             val item = OrgSyntax.listItem.find(line)
-            if (item != null) appendListItem(line, item, viewMode) else appendInline(line, viewMode)
+            if (item != null) appendListItem(line, item, true) else appendInline(line, true)
         }
     }
+}
+
+/**
+ * The colour (and, in reading mode, the weight or size) for one classified span.
+ *
+ * Returning null leaves the text unstyled, which is how a heading's first word stays plain when it
+ * is not one of the document's TODO keywords.
+ */
+private fun spanStyleFor(
+    span: OrgSpan,
+    line: String,
+    headingColor: Color,
+    todoConfig: OrgTodoConfig,
+    viewMode: Boolean,
+): SpanStyle? = when (span.kind) {
+    OrgSpanKind.Heading -> SpanStyle(
+        color = headingColor,
+        fontWeight = FontWeight.Bold,
+        fontSize = headingFontSize(span.nesting),
+    )
+    OrgSpanKind.Stars -> SpanStyle(color = OrgColors.stars)
+    // Whether the heading's keyword is a TODO keyword is the document's business, not the grammar's.
+    OrgSpanKind.Todo -> todoConfig.colorFor(line.substring(span.range.first, span.range.last + 1).trim())
+        ?.let { SpanStyle(color = it) }
+    OrgSpanKind.Done -> SpanStyle(color = OrgColors.done)
+    OrgSpanKind.Priority -> SpanStyle(color = OrgColors.priority)
+    OrgSpanKind.Tag -> SpanStyle(color = OrgColors.tag, fontWeight = FontWeight.Normal)
+    OrgSpanKind.Planning -> SpanStyle(color = OrgColors.planning)
+    OrgSpanKind.PlanningKeyword -> SpanStyle(fontWeight = FontWeight.Bold)
+    OrgSpanKind.Keyword -> SpanStyle(color = OrgColors.keyword)
+    OrgSpanKind.Comment -> SpanStyle(color = OrgColors.comment, fontStyle = FontStyle.Italic)
+    OrgSpanKind.HorizontalRule -> SpanStyle(color = OrgColors.horizontalRule)
+    OrgSpanKind.Drawer -> SpanStyle(color = OrgColors.drawer)
+    OrgSpanKind.DrawerKey -> SpanStyle(fontWeight = FontWeight.Bold)
+    OrgSpanKind.DrawerValue -> null
+    OrgSpanKind.BlockDelimiter -> SpanStyle(color = OrgColors.blockDelimiter)
+    OrgSpanKind.BlockBody -> SpanStyle(background = OrgColors.blockBackground)
+    OrgSpanKind.BlockBodyMonospace ->
+        SpanStyle(fontFamily = FontFamily.Monospace, background = OrgColors.blockBackground)
+    OrgSpanKind.BlockBodyQuote -> SpanStyle(fontStyle = FontStyle.Italic)
+    OrgSpanKind.Bullet -> SpanStyle(color = OrgColors.bullet)
+    OrgSpanKind.Checkbox -> SpanStyle(color = OrgColors.checkbox, fontWeight = FontWeight.Bold)
+    OrgSpanKind.DescriptionTerm -> SpanStyle(color = OrgColors.descriptionTerm, fontWeight = FontWeight.Bold)
+    OrgSpanKind.TableLine -> SpanStyle(fontFamily = FontFamily.Monospace)
+    OrgSpanKind.TablePipe -> SpanStyle(color = OrgColors.table)
+    OrgSpanKind.TableRule -> SpanStyle(color = OrgColors.tableRule)
+    OrgSpanKind.Timestamp -> SpanStyle(color = OrgColors.timestamp)
+    OrgSpanKind.Footnote -> SpanStyle(color = OrgColors.footnote)
+    OrgSpanKind.Statistics -> SpanStyle(color = OrgColors.statistics)
+    OrgSpanKind.LinkMarkup -> null
+    OrgSpanKind.LinkTarget, OrgSpanKind.LinkDescription, OrgSpanKind.Url -> linkStyle
+    OrgSpanKind.Markup -> if (viewMode) null else SpanStyle(color = OrgColors.markup)
+    OrgSpanKind.Bold -> SpanStyle(fontWeight = FontWeight.Bold)
+    OrgSpanKind.Italic -> SpanStyle(fontStyle = FontStyle.Italic)
+    OrgSpanKind.Underline -> SpanStyle(textDecoration = TextDecoration.Underline)
+    OrgSpanKind.StrikeThrough -> SpanStyle(textDecoration = TextDecoration.LineThrough)
+    OrgSpanKind.Verbatim -> SpanStyle(color = OrgColors.verbatim, fontFamily = FontFamily.Monospace)
+    OrgSpanKind.Code -> SpanStyle(color = OrgColors.code, fontFamily = FontFamily.Monospace)
 }
 
 private fun AnnotatedString.Builder.appendBlockBody(line: String, blockType: String) {
@@ -557,8 +590,8 @@ private fun AnnotatedString.Builder.appendItemText(text: String, viewMode: Boole
 /** Highlights the text of a list item (without its bullet/checkbox) for reading mode. */
 fun buildOrgItemString(text: String): AnnotatedString = buildAnnotatedString { appendItemText(text, viewMode = true) }
 
-private fun isEmphasisPre(text: String, i: Int) = i == 0 || text[i - 1] in EMPHASIS_PRE
-private fun isEmphasisPost(text: String, end: Int) = end >= text.length || text[end] in EMPHASIS_POST
+private fun isEmphasisPre(text: String, i: Int) = OrgSyntax.emphasisMayOpenAt(text, i)
+private fun isEmphasisPost(text: String, end: Int) = OrgSyntax.emphasisMayCloseAt(text, end)
 
 private fun AnnotatedString.Builder.appendInline(text: String, viewMode: Boolean) {
     var i = 0
@@ -567,36 +600,36 @@ private fun AnnotatedString.Builder.appendInline(text: String, viewMode: Boolean
         var consumed = 0
         when (c) {
             '[' -> {
-                linkRegex.matchAt(text, i)?.let { m ->
+                OrgSyntax.link.matchAt(text, i)?.let { m ->
                     appendLink(m, viewMode)
                     consumed = m.value.length
-                } ?: footnoteRegex.matchAt(text, i)?.let { m ->
+                } ?: OrgSyntax.footnoteReference.matchAt(text, i)?.let { m ->
                     withStyle(SpanStyle(color = OrgColors.footnote)) { append(m.value) }
                     consumed = m.value.length
-                } ?: statisticsRegex.matchAt(text, i)?.let { m ->
+                } ?: OrgSyntax.statistics.matchAt(text, i)?.let { m ->
                     withStyle(SpanStyle(color = OrgColors.statistics)) { append(m.value) }
                     consumed = m.value.length
-                } ?: timestampRegex.matchAt(text, i)?.let { m ->
+                } ?: OrgSyntax.timestamp.matchAt(text, i)?.let { m ->
                     withStyle(SpanStyle(color = OrgColors.timestamp)) { append(m.value) }
                     consumed = m.value.length
                 }
             }
 
-            '<' -> timestampRegex.matchAt(text, i)?.let { m ->
+            '<' -> OrgSyntax.timestamp.matchAt(text, i)?.let { m ->
                 withStyle(SpanStyle(color = OrgColors.timestamp)) { append(m.value) }
                 consumed = m.value.length
             }
 
             'h', 'f', 'm' -> if (i == 0 || !text[i - 1].isLetterOrDigit()) {
-                urlRegex.matchAt(text, i)?.let { m ->
+                OrgSyntax.url.matchAt(text, i)?.let { m ->
                     appendUrl(m.value, m.value, viewMode)
                     consumed = m.value.length
                 }
             }
 
             '*', '/', '_', '+', '=', '~' -> if (isEmphasisPre(text, i)) {
-                val spec = emphasisSpecs.getValue(c)
-                spec.regex.matchAt(text, i)?.let { m ->
+                val spec = emphasisStyles.getValue(c)
+                OrgSyntax.emphasis.getValue(c).matchAt(text, i)?.let { m ->
                     val end = i + m.value.length
                     if (isEmphasisPost(text, end)) {
                         appendEmphasis(spec, m.groupValues[1], viewMode)

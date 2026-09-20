@@ -392,7 +392,6 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     private fun mapRootToUiFolder(shared: SharedFolder): Folder = mapSharedToUi(shared) as Folder
 
     private fun buildScheduledIndex(contents: Map<String, OrgDocument>): Map<LocalDate, List<Pair<String, OrgNode>>> {
-        val dateRegex = Regex("<(\\d{4})-(\\d{2})-(\\d{2})")
         val result = mutableMapOf<LocalDate, MutableList<Pair<String, OrgNode>>>()
 
         // A planning line is a child of the heading it was written under, so the walk carries the
@@ -401,7 +400,7 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         fun visit(fileName: String, node: OrgNode, enclosing: OrgSection?) {
             val section = node as? OrgSection ?: enclosing
             if (node is OrgPlanning && node.planType == "SCHEDULED" && section != null) {
-                dateRegex.find(node.timestamp)?.let { m ->
+                OrgSyntax.timestampDate.find(node.timestamp)?.let { m ->
                     val date = LocalDate(
                         m.groupValues[1].toInt(),
                         m.groupValues[2].toInt(),

@@ -21,7 +21,8 @@ Updated 2026-09-20.
 | ✅ | T3 Source-mapped documents | Done — `range` on every node, `text` on the document, raw-text wire |
 | ✅ | T4 Nested headings | Done — sections own their body and sub-headings; subtree = one range |
 | ✅ | T5 Complete the grammar | Done — blocks, drawers, lists, priorities; `OrgSyntax` now shared |
-| ❌ | T2, T6–T7, T8–T11, T13–T18 | Not started |
+| ✅ | T6 One grammar | Done — `orgSpans()` in shared; no Org pattern left in `composeApp/` |
+| ❌ | T2, T7, T8–T11, T13–T18 | Not started |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -162,7 +163,24 @@ description lists, footnotes — porting regexes from `OrgSyntax` rather than in
 ones. Unknown constructs must parse as preserved raw text, never as errors.
 **Done when** A corpus round-trips losslessly and the new constructs appear in the tree.
 
-### T6 · One grammar
+### T6 · One grammar — ✅ **done**
+**Landed** `orgSpans(text)` and `orgSpansForLine(line, state)` in `shared/` say what a stretch of Org
+text *is*, as `OrgSpan(range, kind, nesting)`; `composeApp/` only maps a kind to a colour. The
+editor's `OrgSyntaxHighlightTransformation` now paints from those spans, and **no Org pattern remains
+anywhere in `composeApp/`** — the last two, `#+TITLE:` and the timestamp date, moved to `OrgSyntax`
+with the rest. That is D5 closed. `OrgLineState` is public so a client keeping a per-line cache can
+thread the state itself, which is what let the editor's incremental cache survive the change
+untouched.
+**Not included** Reading mode still walks the line itself. It does not just style text, it *rewrites*
+it — hiding emphasis markers and link targets, turning a `LOCATION` property into a Google Maps link
+— and a list of spans over the original text cannot express a text substitution. Spans could grow a
+"replace this range with this text" facet; until then the reading renderer consumes the same shared
+patterns but keeps its own walk. The *grammar* is unified; the second *renderer* is not.
+**Verified** All 23 `OrgSyntaxHighlightingTest` cases pass unchanged — they were the contract — plus
+the 8 cache, 8 viewport, 4 whitespace and 5 metrics tests, so the editor's incremental path and the
+zero-width-whitespace-run invariant both still hold. 14 new `OrgSpansTests` cover the span layer
+directly. Breaking it (emphasis spanning its markers instead of its content) fails 2 highlighting
+tests, so the new layer is load-bearing rather than decorative.
 **Depends** T5
 **Scope** Add `OrgDocument.spans(range)`; rewrite `OrgSyntaxHighlightTransformation` to use
 it; delete the duplicate grammar in `OrgSyntaxHighlighting.kt`, keeping `OrgColors` and the

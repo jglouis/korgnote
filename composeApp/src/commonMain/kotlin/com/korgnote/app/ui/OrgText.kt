@@ -73,7 +73,6 @@ import com.korgnote.common.org.toOrgString
 
 private class Ord(var i: Int)
 
-private val titleKeywordRegex = Regex("^#\\+TITLE:\\s*(.*)$", RegexOption.IGNORE_CASE)
 
 /**
  * Reading-mode renderer for an Org node: headings are sized by level, tables become grids,
@@ -206,7 +205,7 @@ private fun RenderNode(
         }
 
         is OrgKeyword -> {
-            val title = titleKeywordRegex.find(node.content.trim())?.groupValues?.get(1)
+            val title = OrgSyntax.titleKeyword.find(node.content.trim())?.groupValues?.get(1)
             if (title != null) {
                 Text(
                     text = buildOrgInlineString(title),

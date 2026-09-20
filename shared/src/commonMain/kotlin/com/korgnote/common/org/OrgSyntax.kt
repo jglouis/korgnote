@@ -31,6 +31,37 @@ object OrgSyntax {
     val tags = Regex("\\s+(:[\\p{L}\\p{N}_@#%]+(?::[\\p{L}\\p{N}_@#%]+)*:)\\s*$")
     val footnoteDefinition = Regex("^\\[fn:([^\\]]+)\\]\\s*(.*)$")
 
+    // --- Inline (intra-line) constructs ---
+
+    val link = Regex("\\[\\[([^\\[\\]]+)\\](?:\\[([^\\[\\]]*)\\])?\\]")
+    val url = Regex("(?:https?|ftp|mailto):[^\\s<>\\[\\]()\"']+")
+    val timestamp = Regex("[<\\[]\\d{4}-\\d{2}-\\d{2}(?: [^\\]>\\n]*)?[>\\]]")
+    val footnoteReference = Regex("\\[fn:[^\\]]+\\]")
+    val statistics = Regex("\\[(?:\\d+/\\d+|\\d+%)\\]")
+
+    /** Characters an emphasis run may open after, and close before. */
+    const val EMPHASIS_PRE = " \t-('\"{"
+    const val EMPHASIS_POST = " \t-.,:!?;'\")}["
+
+    /** Emphasis markers and what each one means, with the regex that matches a run of it. */
+    val emphasis: Map<Char, Regex> = listOf('*', '/', '_', '+', '=', '~').associateWith { m ->
+        val lit = if (m == '*' || m == '+') "\\$m" else "$m"
+        // marker, non-space, (anything not the marker, lazily, ending with non-space)?, marker
+        Regex("$lit([^\\s$m](?:[^$m\\n]*?[^\\s$m])?)$lit")
+    }
+
+    /** True when an emphasis run may open at [index]. */
+    fun emphasisMayOpenAt(text: String, index: Int) = index == 0 || text[index - 1] in EMPHASIS_PRE
+
+    /** True when an emphasis run may close at [end]. */
+    fun emphasisMayCloseAt(text: String, end: Int) = end >= text.length || text[end] in EMPHASIS_POST
+
+    /** The `#+TITLE:` keyword, capturing the title. */
+    val titleKeyword = Regex("^#\\+TITLE:\\s*(.*)$", RegexOption.IGNORE_CASE)
+
+    /** The date at the start of a timestamp, capturing year, month and day. */
+    val timestampDate = Regex("<(\\d{4})-(\\d{2})-(\\d{2})")
+
     /** Block types whose content is rendered verbatim in a monospace font. */
     val monospaceBlocks = setOf("src", "example", "export")
 
