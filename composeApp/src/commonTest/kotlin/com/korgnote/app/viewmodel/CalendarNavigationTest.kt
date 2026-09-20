@@ -79,11 +79,11 @@ class CalendarNavigationTest {
     private fun heading(title: String) = OrgSection(title = title, content = "", todo = "TODO", level = 1)
 
     /**
-     * The heading as the calendar actually supplies it: taken from the parsed document, so its title
-     * has both the TODO keyword and the trailing tags stripped off.
+     * The heading as the calendar actually supplies it: taken from agenda.org's parsed document, so
+     * its title has both the TODO keyword and the trailing tags stripped off.
      */
-    private fun headingFromCalendar(file: String, title: String): OrgSection {
-        val document = (if (file == agenda) agendaText else otherText).toOrgDocument()
+    private fun agendaHeadingFromCalendar(title: String): OrgSection {
+        val document = agendaText.toOrgDocument()
         return document.children.filterIsInstance<OrgSection>().first { it.title == title }
     }
 
@@ -102,7 +102,7 @@ class CalendarNavigationTest {
     fun findsAHeadingThatCarriesTags() = runTest {
         viewModel.loadFromServer()
 
-        viewModel.onFileSelected(agenda, scrollToHeading = headingFromCalendar(agenda, "Review"))
+        viewModel.onFileSelected(agenda, scrollToHeading = agendaHeadingFromCalendar("Review"))
 
         assertEquals(3, viewModel.scrollToElementIndex)
     }
@@ -112,7 +112,7 @@ class CalendarNavigationTest {
     fun doesNotMatchAHeadingThatMerelyEndsWithTheSameWords() = runTest {
         viewModel.loadFromServer()
 
-        viewModel.onFileSelected(agenda, scrollToHeading = headingFromCalendar(agenda, "Review"))
+        viewModel.onFileSelected(agenda, scrollToHeading = agendaHeadingFromCalendar("Review"))
 
         assertEquals(3, viewModel.scrollToElementIndex, "matched 'Final Review' instead of 'Review'")
     }
@@ -139,7 +139,7 @@ class CalendarNavigationTest {
     fun fallsBackToTheTitleWhenTheRangeNoLongerFits() = runTest {
         viewModel.loadFromServer()
 
-        viewModel.onFileSelected(other, scrollToHeading = headingFromCalendar(agenda, "Gamma"))
+        viewModel.onFileSelected(other, scrollToHeading = agendaHeadingFromCalendar("Gamma"))
 
         // preamble, Gamma, Delta
         assertEquals(1, viewModel.scrollToElementIndex)

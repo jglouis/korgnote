@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.di.buildBaseUrl
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
@@ -67,7 +68,7 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
                     onSaved?.invoke()
                 } finally {
                     // show saved feedback briefly
-                    kotlinx.coroutines.delay(1200)
+                    kotlinx.coroutines.delay(1200.milliseconds)
                     saved = false
                     saving = false
                 }

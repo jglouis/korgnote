@@ -355,7 +355,7 @@ fun parseTodoConfigFrom(metadata: List<String>): OrgTodoConfig {
 // Returns true when a line (as it appears in the raw text) is recognized as a checkbox list
 // item by the parser above: a top-level "- "/"+ " bullet whose text starts with "[ ]"/"[x]"/"[X]".
 // Kept in sync with parseList()'s checkboxRegex so raw-text ordinals match the parsed document.
-private val rawCheckboxLineRegex = Regex("^\\s*[-+]\\s+\\[([ xX])\\]\\s*.*")
+private val rawCheckboxLineRegex = Regex("^\\s*[-+]\\s+\\[([ xX])]\\s*.*")
 
 // Flips the checked state of the nth (0-based, document order) checkbox item directly in the raw
 // text, changing only that line's "[ ]"/"[x]" marker and leaving every other character - including
@@ -371,7 +371,7 @@ fun String.toggleNthCheckbox(ordinal: Int, checked: Boolean): String? {
         if (!rawCheckboxLineRegex.matches(line)) continue
         if (count == ordinal) {
             val newMark = if (checked) "x" else " "
-            lines[idx] = line.replaceFirst(Regex("\\[[ xX]\\]"), "[$newMark]")
+            lines[idx] = line.replaceFirst(Regex("\\[[ xX]]"), "[$newMark]")
             return lines.joinToString("\n")
         }
         count++

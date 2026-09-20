@@ -3,8 +3,6 @@ package com.korgnote.server
 import com.korgnote.common.Greeting
 import com.korgnote.common.SERVER_PORT
 import com.korgnote.common.fs.TreeUtils.buildFromPaths
-import com.korgnote.common.org.OrgDocument
-import com.korgnote.common.org.toOrgDocument
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -115,17 +113,6 @@ fun Application.module() {
      * waits for the sync work.
      */
     val lastServed = java.util.concurrent.ConcurrentHashMap<String, String>()
-
-    /** Parsed documents, keyed by the content hash they were parsed from. */
-    val parsedByEtag = java.util.concurrent.ConcurrentHashMap<String, Pair<String, OrgDocument>>()
-
-    fun parsedDocument(meta: FileMeta): OrgDocument? {
-        parsedByEtag[meta.path]?.let { (etag, document) -> if (etag == meta.etag) return document }
-        val text = store.read(meta.path) ?: return null
-        val document = text.toOrgDocument()
-        parsedByEtag[meta.path] = meta.etag to document
-        return document
-    }
 
     routing {
         // Robust resolver for the WASM app output directory (Option A)
