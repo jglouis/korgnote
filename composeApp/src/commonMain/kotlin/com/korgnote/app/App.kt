@@ -66,7 +66,6 @@ import com.korgnote.app.ui.CalendarScreen
 import com.korgnote.app.ui.FileTree
 import com.korgnote.app.ui.OrgSyntaxHighlightTransformation
 import com.korgnote.app.ui.OrgDocumentView
-import com.korgnote.app.ui.OrgText
 import com.korgnote.app.ui.SettingsScreen
 import com.korgnote.app.viewmodel.FileTreeViewModel
 import com.korgnote.common.org.OrgSection

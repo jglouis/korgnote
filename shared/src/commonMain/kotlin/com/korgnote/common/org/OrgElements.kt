@@ -70,10 +70,6 @@ fun String.orgElements(): List<OrgElement> {
     return elements
 }
 
-/** The element containing [offset], or null when the document is empty. */
-fun List<OrgElement>.elementAt(offset: Int): OrgElement? =
-    firstOrNull { offset >= it.start && offset < it.endExclusive } ?: lastOrNull()
-
 /**
  * Replaces [element]'s text with [replacement], returning the whole document.
  *

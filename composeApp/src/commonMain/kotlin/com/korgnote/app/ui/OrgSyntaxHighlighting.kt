@@ -676,7 +676,7 @@ private fun AnnotatedString.Builder.appendUrl(target: String, label: String, vie
 //    }
 //}
 
-class OrgSyntaxHighlightTransformation(private val headingColor: Color) : VisualTransformation {
+class OrgSyntaxHighlightTransformation(headingColor: Color) : VisualTransformation {
     private val cache = OrgHighlightCache(headingColor)
 
     /**
