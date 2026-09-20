@@ -6,6 +6,7 @@ import com.korgnote.common.fs.TreeUtils
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.toOrgDocument
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -21,6 +22,7 @@ import kotlin.test.assertTrue
  * Editing and adding elements is a small state machine over the document text, and getting it wrong
  * silently loses what the user typed — so it is covered here rather than left to manual testing.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ElementEditingTest {
 
     private val path = "notes.org"

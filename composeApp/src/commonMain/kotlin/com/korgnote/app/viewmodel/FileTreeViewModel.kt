@@ -10,6 +10,8 @@ import com.korgnote.app.ui.File
 import com.korgnote.app.ui.Folder
 import com.korgnote.app.ui.Node
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import com.korgnote.common.org.*
 import kotlinx.datetime.LocalDate
@@ -191,6 +193,9 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
             scheduledByDate = buildScheduledIndex(orgContents)
             clearError()
         } catch (t: Throwable) {
+            // Rethrows if this job was cancelled, so cancellation stays cancellation
+            // instead of being reported as a failure.
+            currentCoroutineContext().ensureActive()
             lastErrorMessage = "Failed to save: ${t.message}"
             t.printStackTrace()
         }
@@ -214,16 +219,17 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         selectedOrgNode = updatedDoc
 
         // Persist change to server
-        if (scope != null) {
-            scope.launch {
-                try {
-                    repository.saveContent(file, selectedFileContent)
-                    scheduledByDate = buildScheduledIndex(orgContents)
-                    clearError()
-                } catch (t: Throwable) {
-                    lastErrorMessage = "Failed to save: ${t.message}"
-                    t.printStackTrace()
-                }
+        scope?.launch {
+            try {
+                repository.saveContent(file, selectedFileContent)
+                scheduledByDate = buildScheduledIndex(orgContents)
+                clearError()
+            } catch (t: Throwable) {
+                // Rethrows if this job was cancelled, so cancellation stays cancellation
+                // instead of being reported as a failure.
+                currentCoroutineContext().ensureActive()
+                lastErrorMessage = "Failed to save: ${t.message}"
+                t.printStackTrace()
             }
         }
     }
@@ -245,6 +251,9 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
                 val raw = repository.fetchRawContent(path)
                 if (currentFile == path) selectedFileContent = raw
             } catch (t: Throwable) {
+                // Rethrows if this job was cancelled, so cancellation stays cancellation
+                // instead of being reported as a failure.
+                currentCoroutineContext().ensureActive()
                 lastErrorMessage = "Failed to load file: ${t.message}"
                 t.printStackTrace()
             }
@@ -278,6 +287,9 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
                             val raw = repository.fetchRawContent(current)
                             if (currentFile == current) selectedFileContent = raw
                         } catch (t: Throwable) {
+                            // Rethrows if this job was cancelled, so cancellation stays cancellation
+                            // instead of being reported as a failure.
+                            currentCoroutineContext().ensureActive()
                             lastErrorMessage = "Failed to load file: ${t.message}"
                             t.printStackTrace()
                         }
@@ -285,6 +297,9 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
                 }
             }
         } catch (t: Throwable) {
+            // Rethrows if this job was cancelled, so cancellation stays cancellation
+            // instead of being reported as a failure.
+            currentCoroutineContext().ensureActive()
             // Failure: clear previous data to avoid showing stale content
             orgContents.clear()
             tree = Folder(name = "Documents", path = "", children = emptyList())

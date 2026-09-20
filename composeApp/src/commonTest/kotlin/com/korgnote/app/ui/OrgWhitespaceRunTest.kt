@@ -25,9 +25,9 @@ class OrgWhitespaceRunTest {
      * Runs containing a newline are ignored: line breaks legitimately sit in unstyled runs.
      */
     private fun AnnotatedString.whitespaceOnlyRuns(): List<String> {
-        val boundaries = sortedSetOf(0, text.length)
+        val boundaries = mutableSetOf(0, text.length)
         spanStyles.forEach { boundaries.add(it.start); boundaries.add(it.end) }
-        return boundaries.toList().zipWithNext()
+        return boundaries.sorted().zipWithNext()
             .map { (start, end) -> text.substring(start, end) }
             .filter { it.isNotEmpty() && '\n' !in it && it.isBlank() }
     }
