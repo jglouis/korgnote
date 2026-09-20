@@ -20,8 +20,8 @@ class OrgModeStarBulletListTests {
         // With updated parser, lines starting with '*' are parsed as sections
         assertEquals(2, doc.children.size)
         val sec1 = assertIs<OrgSection>(doc.children[0]); assertEquals("Heading One", sec1.title)
-        assertEquals("Paragraph one line 1\nParagraph one line 2", sec1.content)
+        assertEquals("Paragraph one line 1\nParagraph one line 2", sec1.bodyText())
         val sec2 = assertIs<OrgSection>(doc.children[1]); assertEquals("Heading Two", sec2.title)
-        assertEquals("Content two", sec2.content)
+        assertEquals("Content two", sec2.bodyText())
     }
 }

@@ -15,18 +15,20 @@ class OrgModePlanningTests {
             DEADLINE: <2025-09-15 Mon>
         """.trimIndent()
         val doc = text.toOrgDocument()
-        // Expected: section, planning, raw, planning
-        assertEquals(4, doc.children.size)
+        // The planning lines and the body now belong to the heading they were written under,
+        // which is what lets the agenda read a task's dates off the task itself.
+        assertEquals(1, doc.children.size)
         val sec = assertIs<OrgSection>(doc.children[0]); assertEquals("Task A", sec.title)
-        val s1 = assertIs<OrgPlanning>(doc.children[1]); assertEquals("SCHEDULED", s1.planType); assertEquals("<2025-09-10 Wed 12:00>", s1.timestamp)
-        val raw = assertIs<OrgRaw>(doc.children[2]); assertEquals("Some text", raw.content)
-        val d1 = assertIs<OrgPlanning>(doc.children[3]); assertEquals("DEADLINE", d1.planType); assertEquals("<2025-09-15 Mon>", d1.timestamp)
+        assertEquals(3, sec.children.size)
+        val s1 = assertIs<OrgPlanning>(sec.children[0]); assertEquals("SCHEDULED", s1.planType); assertEquals("<2025-09-10 Wed 12:00>", s1.timestamp)
+        val raw = assertIs<OrgRaw>(sec.children[1]); assertEquals("Some text", raw.content)
+        val d1 = assertIs<OrgPlanning>(sec.children[2]); assertEquals("DEADLINE", d1.planType); assertEquals("<2025-09-15 Mon>", d1.timestamp)
     }
 
     @Test
     fun toOrgStringEmitsPlanningLines() {
         val nodes: List<OrgNode> = listOf(
-            OrgSection(title = "X", content = "", todo = null),
+            OrgSection(title = "X", todo = null),
             OrgPlanning(planType = "SCHEDULED", timestamp = "<2025-09-10 Wed>"),
             OrgPlanning(planType = "DEADLINE", timestamp = "<2025-09-15 Mon>")
         )

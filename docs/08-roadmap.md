@@ -19,7 +19,8 @@ Updated 2026-09-20.
 | 🟡 | T0 / T0b Text-editing spikes | Answered in practice, findings in [06](06-editor.md#editor-surface) |
 | ✅ | T1 Server reads the disk | Done — `FileStore`, plus conflict refusal and path validation |
 | ✅ | T3 Source-mapped documents | Done — `range` on every node, `text` on the document, raw-text wire |
-| ❌ | T2, T4–T7, T8–T11, T13–T18 | Not started |
+| ✅ | T4 Nested headings | Done — sections own their body and sub-headings; subtree = one range |
+| ❌ | T2, T5–T7, T8–T11, T13–T18 | Not started |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -105,7 +106,28 @@ No shape changes beyond that.
 **Done when** Invariants I1/I2 hold as tests, the 12 existing parser test files still pass,
 and a round-trip property test runs over the fixtures plus nasty whitespace cases.
 
-### T4 · Nested headings
+### T4 · Nested headings — ✅ **done**
+**Landed** `OrgSection` lost `content: String` and gained `children`, and headings nest by level, so
+a section owns its body *and* its sub-headings. A heading's `range` therefore covers its whole
+subtree: deleting or moving a heading with everything under it is one text replacement, which
+`OrgNestingTests` demonstrates directly. `OrgNode` gained an open `children`, overridden by the
+nodes that hold others (including a table's rows and a row's cells), so walking the tree no longer
+needs a `when` over every type. Planning lines are now children of the heading they were written
+under, which is what lets the agenda read a task's dates off the task itself instead of inferring
+them from document order — `buildScheduledIndex` walks the tree and attributes a `SCHEDULED:` under a
+sub-heading to that sub-heading, not to its parent. A table under a heading is a real node now
+instead of being swallowed into the section's raw content string.
+**Not included** I3 does not hold in its literal "every line belongs to exactly one leaf" form. A
+heading line is owned by its section, which stops being a leaf once it has children, and blank lines
+are owned by nothing. Both need nodes the grammar does not have — a heading-line node and whitespace
+nodes — which is T5. What is tested is the strongest form that is true now and the one a renderer
+needs: every non-blank line has exactly one *deepest* owner, and the nodes claiming it form a single
+ancestor chain.
+**Verified** All 58 shared tests pass, plus `OrgNestingTests`. The tests were checked against a
+deliberate regression — making every heading close every open one, i.e. the old flat behaviour — and
+5 of them failed, so they are load-bearing. Re-run over the real notes directory: 366 files, 0
+round-trip failures, 0 range violations, 0 nesting violations, deepest tree 7 levels. Compiles for
+JVM, wasm, iOS and Android.
 **Depends** T3
 **Scope** Sections own their bodies and sub-sections (D12); section `content: String`
 becomes child nodes. Update `OrgText` to render the tree.

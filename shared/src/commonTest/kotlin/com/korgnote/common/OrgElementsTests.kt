@@ -94,7 +94,8 @@ class OrgElementsTests {
             "  * indented is not a heading\n* but this is\n",
         )
         for (text in corpus) {
-            val parsedSections = text.toOrgDocument().children.count { it is OrgSection }
+            // Headings nest now, so the parser's count is over the whole tree, not the top level.
+            val parsedSections = text.toOrgDocument().walk().count { it is OrgSection }
             val splitHeadings = text.orgElements().count { !it.isPreamble }
             assertEquals(parsedSections, splitHeadings, "disagreement on:\n$text")
         }

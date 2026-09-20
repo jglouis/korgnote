@@ -3,6 +3,7 @@ package com.korgnote.app.viewmodel
 import com.korgnote.app.data.OrgRepository
 import com.korgnote.common.fs.Folder
 import com.korgnote.common.fs.TreeUtils
+import com.korgnote.common.org.OrgNode
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.toOrgDocument
 import kotlinx.coroutines.Dispatchers
@@ -76,15 +77,19 @@ class CalendarNavigationTest {
         Dispatchers.resetMain()
     }
 
-    private fun heading(title: String) = OrgSection(title = title, content = "", todo = "TODO", level = 1)
+    private fun heading(title: String) = OrgSection(title = title, todo = "TODO", level = 1)
 
     /**
      * The heading as the calendar actually supplies it: taken from agenda.org's parsed document, so
      * its title has both the TODO keyword and the trailing tags stripped off.
      */
     private fun agendaHeadingFromCalendar(title: String): OrgSection {
-        val document = agendaText.toOrgDocument()
-        return document.children.filterIsInstance<OrgSection>().first { it.title == title }
+        // Headings nest, so this searches the tree rather than the document's direct children.
+        fun sectionsIn(node: OrgNode): List<OrgSection> =
+            node.children.flatMap { child ->
+                (if (child is OrgSection) listOf(child) else emptyList()) + sectionsIn(child)
+            }
+        return sectionsIn(agendaText.toOrgDocument()).first { it.title == title }
     }
 
     @Test

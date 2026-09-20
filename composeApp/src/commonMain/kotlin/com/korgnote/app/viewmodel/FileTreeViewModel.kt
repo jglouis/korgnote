@@ -394,28 +394,27 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
     private fun buildScheduledIndex(contents: Map<String, OrgDocument>): Map<LocalDate, List<Pair<String, OrgNode>>> {
         val dateRegex = Regex("<(\\d{4})-(\\d{2})-(\\d{2})")
         val result = mutableMapOf<LocalDate, MutableList<Pair<String, OrgNode>>>()
-        contents.forEach { (fileName, doc) ->
-            var currentSection: OrgNode? = null
-            doc.children.forEach { node ->
-                when (node) {
-                    is OrgSection -> currentSection = node
-                    is OrgPlanning -> if (node.planType == "SCHEDULED") {
-                        val m = dateRegex.find(node.timestamp)
-                        if (m != null) {
-                            val y = m.groupValues[1].toInt()
-                            val mo = m.groupValues[2].toInt()
-                            val d = m.groupValues[3].toInt()
-                            val date = LocalDate(y, mo, d)
-                            if (currentSection != null) {
-                                result.getOrPut(date) { mutableListOf() }.add(fileName to currentSection)
-                            }
-                        }
-                    }
 
-                    else -> {}
+        // A planning line is a child of the heading it was written under, so the walk carries the
+        // enclosing section down with it instead of guessing from document order. Headings nest, so
+        // a SCHEDULED under a sub-heading is attributed to that sub-heading, not to its parent.
+        fun visit(fileName: String, node: OrgNode, enclosing: OrgSection?) {
+            val section = node as? OrgSection ?: enclosing
+            if (node is OrgPlanning && node.planType == "SCHEDULED" && section != null) {
+                dateRegex.find(node.timestamp)?.let { m ->
+                    val date = LocalDate(
+                        m.groupValues[1].toInt(),
+                        m.groupValues[2].toInt(),
+                        m.groupValues[3].toInt(),
+                    )
+                    result.getOrPut(date) { mutableListOf() }.add(fileName to section)
                 }
             }
+            node.children.forEach { visit(fileName, it, section) }
         }
+
+        contents.forEach { (fileName, doc) -> visit(fileName, doc, null) }
+
         return result.mapValues { (_, list) ->
             list.map { it.first to (it.second ) }
         }

@@ -16,10 +16,10 @@ class OrgModeTodoDoneTests {
             Completed details
         """.trimIndent()
         val doc = text.toOrgDocument()
-        // With updated parser, '*' lines are sections with optional TODO/DONE tokens
+        // Two headings at the same level stay siblings; each owns the body beneath it.
         assertEquals(2, doc.children.size)
-        val sec1 = assertIs<OrgSection>(doc.children[0]); assertEquals("Write parser", sec1.title); assertEquals("TODO", sec1.todo); assertEquals("Some content under todo", sec1.content)
-        val sec2 = assertIs<OrgSection>(doc.children[1]); assertEquals("Ship feature", sec2.title); assertEquals("DONE", sec2.todo); assertEquals("Completed details", sec2.content)
+        val sec1 = assertIs<OrgSection>(doc.children[0]); assertEquals("Write parser", sec1.title); assertEquals("TODO", sec1.todo); assertEquals("Some content under todo", sec1.bodyText())
+        val sec2 = assertIs<OrgSection>(doc.children[1]); assertEquals("Ship feature", sec2.title); assertEquals("DONE", sec2.todo); assertEquals("Completed details", sec2.bodyText())
     }
 
     @Test
@@ -32,10 +32,10 @@ class OrgModeTodoDoneTests {
             Sub body
         """.trimIndent()
         val doc = text.toOrgDocument()
-        // With updated parser: two sections parsed from the two headings
-        assertEquals(2, doc.children.size)
-        val sec1 = assertIs<OrgSection>(doc.children[0]); assertEquals("Title one", sec1.title); assertEquals("TODO", sec1.todo); assertEquals("Body", sec1.content)
-        val sec2 = assertIs<OrgSection>(doc.children[1]); assertEquals("Sub heading", sec2.title); assertEquals("DONE", sec2.todo); assertEquals("Sub body", sec2.content)
+        // The deeper heading nests under the first one rather than following it as a sibling.
+        assertEquals(1, doc.children.size)
+        val sec1 = assertIs<OrgSection>(doc.children[0]); assertEquals("Title one", sec1.title); assertEquals("TODO", sec1.todo); assertEquals("Body", sec1.bodyText())
+        val sec2 = sec1.subsections.single(); assertEquals("Sub heading", sec2.title); assertEquals("DONE", sec2.todo); assertEquals("Sub body", sec2.bodyText())
     }
 
     @Test

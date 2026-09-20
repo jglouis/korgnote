@@ -29,7 +29,7 @@ class OrgModeSimpleListsTests {
         assertEquals("plus one", (assertIs<OrgRaw>(list2.children[0])).content)
         assertEquals("plus two", (assertIs<OrgRaw>(list2.children[1])).content)
 
-        val sec1 = assertIs<OrgSection>(doc.children[2]); assertEquals("star one", sec1.title); assertEquals("", sec1.content)
-        val sec2 = assertIs<OrgSection>(doc.children[3]); assertEquals("star two", sec2.title); assertEquals("", sec2.content)
+        val sec1 = assertIs<OrgSection>(doc.children[2]); assertEquals("star one", sec1.title); assertEquals("", sec1.bodyText())
+        val sec2 = assertIs<OrgSection>(doc.children[3]); assertEquals("star two", sec2.title); assertEquals("", sec2.bodyText())
     }
 }

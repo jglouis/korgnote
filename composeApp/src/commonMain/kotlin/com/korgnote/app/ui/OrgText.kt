@@ -133,10 +133,11 @@ private fun RenderNode(
         }
 
         is OrgSection -> {
+            // A section owns its body and its sub-headings as children now, so rendering one renders
+            // its whole subtree. The heading itself carries the level, so nothing here indents:
+            // the visual result is the same flow of blocks the flat model produced.
             OrgHeading(node, todoConfig)
-            if (node.content.isNotBlank()) {
-                OrgBody(node.content, todoConfig)
-            }
+            node.children.forEach { child -> RenderNode(child, ordinal, todoConfig, onToggleCheckbox) }
         }
 
         is OrgList -> {

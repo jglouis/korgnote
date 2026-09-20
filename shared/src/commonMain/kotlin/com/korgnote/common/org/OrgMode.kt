@@ -14,10 +14,21 @@ package com.korgnote.common.org
 sealed class OrgNode {
     var range: IntRange = IntRange.EMPTY
         internal set
+
+    /**
+     * This node's children, so that a walk over the tree does not have to know every node type.
+     *
+     * Leaves keep the empty default. A node that holds others overrides it, including the ones that
+     * name their children something else (a table's rows, a row's cells).
+     */
+    open val children: List<OrgNode> get() = emptyList()
 }
 
 // Top-level org document with parsed children and collected file keywords (#+TITLE, #+AUTHOR, etc.).
-data class OrgDocument(val children: List<OrgNode>, val metadata: List<String>) : OrgNode() {
+data class OrgDocument(
+    override val children: List<OrgNode>,
+    val metadata: List<String>,
+) : OrgNode() {
     /**
      * The exact text this document was parsed from; empty when it was built by hand.
      *
@@ -29,18 +40,25 @@ data class OrgDocument(val children: List<OrgNode>, val metadata: List<String>) 
         internal set
 }
 
-// A section is a heading with its inline content (paragraph text after heading line until next heading).
-// level is the number of leading stars; tags are the trailing :tag1:tag2: of the heading line (without colons).
+/**
+ * A heading together with everything under it: its body and its sub-headings.
+ *
+ * [level] is the number of leading stars; [tags] are the trailing `:tag1:tag2:` without the colons.
+ *
+ * The body is [children], not a pre-trimmed string. That is what makes a section's [range] cover its
+ * whole subtree, so promoting, moving or deleting a heading with everything beneath it is one text
+ * replacement — and it is why a sub-heading is a child of its parent rather than a sibling.
+ */
 data class OrgSection(
     val title: String,
-    val content: String,
     val todo: String? = null,
     val level: Int = 1,
     val tags: List<String> = emptyList(),
+    override val children: List<OrgNode> = emptyList(),
 ) : OrgNode()
 
 // A flat list of items where each child is typically OrgRaw or OrgSection; bulletType is '-', '+', or '*'.
-data class OrgList(val bulletType: Char, val children: List<OrgNode>) : OrgNode()
+data class OrgList(val bulletType: Char, override val children: List<OrgNode>) : OrgNode()
 
 // Lines that start with #+
 data class OrgKeyword(val content: String) : OrgNode()
@@ -62,9 +80,12 @@ data class OrgCheckboxItem(val checked: Boolean, val text: String) : OrgNode()
 // starting with "|-" is a horizontal rule row (isRule = true, no cells).
 data class OrgTable(val rows: List<OrgTableRow>) : OrgNode() {
     val columnCount: Int get() = rows.maxOfOrNull { it.cells.size } ?: 0
+    override val children: List<OrgNode> get() = rows
 }
 
-data class OrgTableRow(val cells: List<OrgNode>, val isRule: Boolean = false) : OrgNode()
+data class OrgTableRow(val cells: List<OrgNode>, val isRule: Boolean = false) : OrgNode() {
+    override val children: List<OrgNode> get() = cells
+}
 
 /**
  * A heading line split into its parts, exactly as [OrgSection] records them.
@@ -153,9 +174,13 @@ fun String.toOrgDocument(): OrgDocument {
     var pendingParagraph = StringBuilder()
     var paragraphStart = 0
 
+    // Declared before the section stack exists, so it asks for the sink through a holder that is
+    // filled in below rather than capturing `children` directly.
+    lateinit var sinkOf: () -> MutableList<OrgNode>
+
     fun flushParagraph() {
         if (pendingParagraph.isNotEmpty()) {
-            children.add(OrgRaw(pendingParagraph.toString().trimEnd()).spanning(paragraphStart, i))
+            sinkOf().add(OrgRaw(pendingParagraph.toString().trimEnd()).spanning(paragraphStart, i))
             pendingParagraph = StringBuilder()
         }
     }
@@ -197,35 +222,39 @@ fun String.toOrgDocument(): OrgDocument {
         return OrgList(bullet, items).spanning(start, idx) to idx
     }
 
-    fun parseSection(start: Int): Pair<OrgNode, Int> {
-        val heading = lines[start]
-        val parsed = orgHeadingOf(heading)
-        val level = parsed.level
-        val title = parsed.title
-        val tags = parsed.tags
-        // Capture TODO-like token as-is (arbitrary, defined by metadata)
-        val todo: String? = parsed.todo
-        val contentSb = StringBuilder()
-        var idx = start + 1
-        while (idx < lines.size) {
-            val l = lines[idx]
-            val trim = l.trimEnd()
-            // stop at next heading of same or higher level (starts with *)
-            if (trim.startsWith("*")) break
-            // stop before a top-level simple list so that lists after headings are parsed as lists, not raw content
-            if (Regex("^\\s*[-+] ").containsMatchIn(trim)) break
-            // stop before planning lines so they are separate nodes
-            if (Regex("^(?:SCHEDULED|DEADLINE):").containsMatchIn(trim)) break
-            if (trim.isBlank()) {
-                contentSb.append('\n')
-                idx++
-                continue
-            }
-            contentSb.appendLine(trim)
-            idx++
+    /**
+     * An open heading: everything parsed after it belongs to it until a heading of the same or a
+     * shallower level closes it. Built as a mutable frame because a section's children and its end
+     * are only known once the following heading — or the end of the file — is reached.
+     */
+    class OpenSection(val startLine: Int, val heading: OrgHeading) {
+        val children = mutableListOf<OrgNode>()
+    }
+
+    val openSections = mutableListOf<OpenSection>()
+
+    /** Where a newly parsed block belongs: the innermost open heading, else the document. */
+    fun sink(): MutableList<OrgNode> = openSections.lastOrNull()?.children ?: children
+    sinkOf = ::sink
+
+    /** Closes the innermost open heading at [endLineExclusive] and hands it to its parent. */
+    fun closeSection(endLineExclusive: Int) {
+        val open = openSections.removeLast()
+        val section = OrgSection(
+            title = open.heading.title,
+            todo = open.heading.todo,
+            level = open.heading.level,
+            tags = open.heading.tags,
+            children = open.children.toList(),
+        ).spanning(open.startLine, endLineExclusive)
+        sink().add(section)
+    }
+
+    /** Closes every open heading at [level] or deeper, so the next one nests under the right parent. */
+    fun closeSectionsDownTo(level: Int, endLineExclusive: Int) {
+        while (openSections.isNotEmpty() && openSections.last().heading.level >= level) {
+            closeSection(endLineExclusive)
         }
-        val section = OrgSection(title, contentSb.toString().trimEnd(), todo, level, tags)
-        return section.spanning(start, idx) to idx
     }
 
     mainLoop@ while (i < lines.size) {
@@ -239,23 +268,25 @@ fun String.toOrgDocument(): OrgDocument {
         if (line.startsWith("#+")) {
             flushParagraph()
             metadata.add(line)
-            children.add(OrgKeyword(line).spanning(i, i + 1))
+            sink().add(OrgKeyword(line).spanning(i, i + 1))
             i++
             continue
         }
         if (line.trimStart().startsWith("|")) {
             flushParagraph()
             val (table, next) = parseTable(i)
-            children.add(table)
+            sink().add(table)
             i = next
             continue
         }
         // Prefer parsing headings (lines starting with one or more '*') as sections before '*' lists
         if (line.startsWith("*")) {
             flushParagraph()
-            val (section, next) = parseSection(i)
-            children.add(section)
-            i = next
+            val heading = orgHeadingOf(line)
+            // A heading ends every open heading at its level or deeper; what remains is its parent.
+            closeSectionsDownTo(heading.level, i)
+            openSections.add(OpenSection(i, heading))
+            i++
             continue
         }
         // Planning lines: SCHEDULED: or DEADLINE:
@@ -265,7 +296,7 @@ fun String.toOrgDocument(): OrgDocument {
                 flushParagraph()
                 val type = if (line.trimStart().startsWith("SCHEDULED:")) "SCHEDULED" else "DEADLINE"
                 val ts = pm.groupValues[1].trim()
-                children.add(OrgPlanning(planType = type, timestamp = ts).spanning(i, i + 1))
+                sink().add(OrgPlanning(planType = type, timestamp = ts).spanning(i, i + 1))
                 i++
                 continue@mainLoop
             }
@@ -279,7 +310,7 @@ fun String.toOrgDocument(): OrgDocument {
         if (listBullet != null) {
             flushParagraph()
             val (listNode, next) = parseList(i, listBullet)
-            children.add(listNode)
+            sink().add(listNode)
             i = next
             continue
         }
@@ -290,6 +321,8 @@ fun String.toOrgDocument(): OrgDocument {
         i++
     }
     flushParagraph()
+    // Whatever is still open runs to the end of the file.
+    closeSectionsDownTo(1, lines.size)
 
     val document = OrgDocument(children, metadata)
     document.text = source
@@ -407,8 +440,11 @@ fun OrgNode.toOrgString(): String = when (this) {
         if (todo != null) append(todo).append(' ')
         append(title)
         if (tags.isNotEmpty()) append(" :").append(tags.joinToString(":")).append(':')
-        appendLine()
-        if (content.isNotBlank()) appendLine(content.trimEnd())
+        // The body and the sub-headings are children now, so printing a section prints its subtree.
+        for (child in children) {
+            appendLine()
+            append(child.toOrgString())
+        }
     }.trimEnd()
     is OrgTable -> toAlignedLines().joinToString("\n")
     is OrgTableRow -> if (isRule) "|-|" else "| " + cells.joinToString(" | ") { it.cellText() } + " |"
