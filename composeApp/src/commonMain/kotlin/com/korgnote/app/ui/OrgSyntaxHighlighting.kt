@@ -18,6 +18,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
 import com.korgnote.common.org.OrgDocument
+import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.isOrgTableLine
 import com.korgnote.common.org.isOrgTableRuleLine
@@ -74,37 +75,6 @@ fun OrgTodoConfig.colorFor(word: String): Color? = when (word) {
     in done -> OrgColors.done
     in todo -> OrgColors.todo
     else -> null
-}
-
-/**
- * Line-level Org syntax patterns shared by the highlighter and the reading-mode renderer.
- *
- * The `\]` escapes are flagged as redundant by the IDE (JVM semantics) but they are required:
- * Kotlin/JS and Kotlin/Wasm compile regexes with the JavaScript `u` flag, where a lone `]` is a SyntaxError.
- */
-@Suppress("RegExpRedundantEscape")
-object OrgSyntax {
-    val heading = Regex("^(\\*+)\\s")
-    val blockBegin = Regex("^\\s*#\\+BEGIN_(\\S+)(.*)$", RegexOption.IGNORE_CASE)
-    val blockEnd = Regex("^\\s*#\\+END_(\\S*)\\s*$", RegexOption.IGNORE_CASE)
-    val keyword = Regex("^\\s*#\\+")
-    val comment = Regex("^\\s*#(\\s|$)")
-    val drawerBegin = Regex("^\\s*:[A-Za-z0-9_-]+:\\s*$")
-    val drawerEnd = Regex("^\\s*:END:\\s*$", RegexOption.IGNORE_CASE)
-    val property = Regex("^(\\s*:[A-Za-z0-9_+-]+:)(.*)$")
-    val planning = Regex("^\\s*(SCHEDULED|DEADLINE|CLOSED):")
-    val planningKeyword = Regex("(SCHEDULED|DEADLINE|CLOSED):")
-    val horizontalRule = Regex("^\\s*-{5,}\\s*$")
-    val listItem = Regex("^(\\s*)([-+*]|\\d+[.)])(\\s+)(?:(\\[[ xX-]\\])(?=\\s|$))?")
-    val descriptionTerm = Regex("^(\\s*)(.+?)(\\s+::)(\\s|$)")
-    val priority = Regex("^\\[#[A-Z0-9]\\]")
-    val tags = Regex("\\s+(:[\\p{L}\\p{N}_@#%]+(?::[\\p{L}\\p{N}_@#%]+)*:)\\s*$")
-
-    /** Block types whose content is rendered verbatim in a monospace font. */
-    val monospaceBlocks = setOf("src", "example", "export")
-
-    fun isTableLine(line: String) = line.isOrgTableLine()
-    fun isTableRuleLine(line: String) = line.isOrgTableRuleLine()
 }
 
 /** True when a `:PROPERTIES:` drawer property key (as captured by [OrgSyntax.property]) is `LOCATION`. */

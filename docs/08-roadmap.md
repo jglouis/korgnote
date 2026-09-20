@@ -20,7 +20,8 @@ Updated 2026-09-20.
 | ✅ | T1 Server reads the disk | Done — `FileStore`, plus conflict refusal and path validation |
 | ✅ | T3 Source-mapped documents | Done — `range` on every node, `text` on the document, raw-text wire |
 | ✅ | T4 Nested headings | Done — sections own their body and sub-headings; subtree = one range |
-| ❌ | T2, T5–T7, T8–T11, T13–T18 | Not started |
+| ✅ | T5 Complete the grammar | Done — blocks, drawers, lists, priorities; `OrgSyntax` now shared |
+| ❌ | T2, T6–T7, T8–T11, T13–T18 | Not started |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -134,7 +135,27 @@ becomes child nodes. Update `OrgText` to render the tree.
 **Done when** Invariant I3 holds; rendering is unchanged visually; subtree operations are
 expressible.
 
-### T5 · Complete the grammar
+### T5 · Complete the grammar — ✅ **done**
+**Landed** `OrgSyntax` moved from `composeApp/` into `shared/`, so the parser and the highlighter
+recognise Org from one set of patterns instead of two — the first half of T6's "one grammar". The
+parser gained blocks, drawers, comments, horizontal rules, footnote definitions, description items,
+ordered lists, nested lists and heading priorities. Blocks and drawers are **opaque**: their contents
+are kept as text and never parsed, because a `* heading` inside a source block is code. `OrgSection`
+gained `priority`; list items became `OrgListItem`/`OrgCheckboxItem` that can own a nested list.
+Unknown constructs still fall through to `OrgRaw`, never to an error.
+**Not included** Inline constructs — emphasis, links, inline timestamps, footnote *references* — are
+span-level, not block-level, and belong with `spans()` in T6. Only footnote *definitions* (a line
+starting `[fn:x]`) are nodes here. Blank lines still belong to no node, so I3 keeps the weaker form
+T4 recorded.
+**Verified** 80 shared tests, including `OrgGrammarTests` covering each construct plus a round-trip
+corpus. Over the real notes directory: 366 files, 0 round-trip failures, 0 range violations, 0
+nesting violations, 0 parser/splitter disagreements. Compiles for JVM, wasm, iOS and Android.
+**Found by the real corpus, not by the tests** The list grammar matches `*` as a bullet, so a plain
+list swallowed every heading that followed it — 272 headings across the real notes, and 23 files where
+the element splitter and the parser then disagreed about where a heading started, which is the
+condition for an edit to splice over the wrong range. A hand-written corpus missed it because the two
+constructs have to be adjacent to trigger it. `aListStopsAtTheNextHeading` and
+`theSplitterAgreesWithTheParserOnTheNewConstructs` now pin it down.
 **Depends** T4
 **Scope** Drawers, blocks, ordered and nested lists, priorities, inactive timestamps,
 description lists, footnotes — porting regexes from `OrgSyntax` rather than inventing new

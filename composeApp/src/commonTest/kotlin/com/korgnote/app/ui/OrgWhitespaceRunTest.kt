@@ -5,6 +5,7 @@ import androidx.compose.ui.text.AnnotatedString
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import com.korgnote.common.org.OrgSyntax
 
 /**
  * The highlighter must never produce a style run consisting only of whitespace.

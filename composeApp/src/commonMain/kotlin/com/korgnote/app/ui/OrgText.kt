@@ -50,11 +50,19 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgDocument
+import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgKeyword
 import com.korgnote.common.org.OrgList
 import com.korgnote.common.org.OrgNode
 import com.korgnote.common.org.OrgPlanning
 import com.korgnote.common.org.OrgRaw
+import com.korgnote.common.org.OrgBlock
+import com.korgnote.common.org.OrgComment
+import com.korgnote.common.org.OrgDescriptionItem
+import com.korgnote.common.org.OrgDrawer
+import com.korgnote.common.org.OrgFootnoteDefinition
+import com.korgnote.common.org.OrgHorizontalRule
+import com.korgnote.common.org.OrgListItem
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTable
 import com.korgnote.common.org.OrgTableRow
@@ -140,15 +148,52 @@ private fun RenderNode(
             node.children.forEach { child -> RenderNode(child, ordinal, todoConfig, onToggleCheckbox) }
         }
 
+        // The grammar models these now, so they render from the node rather than by re-scanning
+        // text. The views themselves are the ones OrgBody already used.
+        is OrgBlock -> OrgBlockView(node.type, node.parameters, node.body.trimEnd('\n').split('\n'))
+
+        is OrgDrawer -> OrgDrawerView(node.name, node.lines)
+
+        is OrgComment -> OrgLine(
+            node.text,
+            todoConfig,
+            MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.outline),
+        )
+
+        is OrgHorizontalRule -> HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+
+        is OrgDescriptionItem -> OrgLine("${node.term} :: ${node.description}", todoConfig)
+
+        is OrgFootnoteDefinition -> OrgLine("[fn:${node.label}] ${node.text}", todoConfig)
+
+        is OrgListItem -> {
+            OrgLine(node.text, todoConfig)
+            node.children.forEach { child -> RenderNode(child, ordinal, todoConfig, onToggleCheckbox) }
+        }
+
         is OrgList -> {
-            Column(horizontalAlignment = Alignment.Start) {
-                node.children.forEach { child ->
+            Column(
+                horizontalAlignment = Alignment.Start,
+                // A nested list is indented by the depth its source had.
+                modifier = Modifier.padding(start = (node.indent * 4).dp),
+            ) {
+                node.children.forEachIndexed { index, child ->
+                    val marker = if (node.ordered) "${index + 1}${node.bulletType}" else "${node.bulletType}"
                     when (child) {
                         is OrgCheckboxItem -> {
                             RenderCheckboxItem(child.checked, child.text, ordinal, onToggleCheckbox)
+                            child.children.forEach { RenderNode(it, ordinal, todoConfig, onToggleCheckbox) }
                         }
 
-                        is OrgRaw -> OrgLine("${node.bulletType} ${child.content}", todoConfig)
+                        is OrgListItem -> {
+                            OrgLine("$marker ${child.text}", todoConfig)
+                            child.children.forEach { RenderNode(it, ordinal, todoConfig, onToggleCheckbox) }
+                        }
+
+                        is OrgDescriptionItem ->
+                            OrgLine("$marker ${child.term} :: ${child.description}", todoConfig)
+
+                        is OrgRaw -> OrgLine("$marker ${child.content}", todoConfig)
 
                         else -> RenderNode(child, ordinal, todoConfig, onToggleCheckbox)
                     }

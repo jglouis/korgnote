@@ -49,8 +49,44 @@ private fun headingTitle(line: String): String = line.dropWhile { it == '*' }.tr
 fun String.orgElements(): List<OrgElement> {
     val headings = mutableListOf<OrgElement>()
     var offset = 0
+    // Blocks and drawers are opaque, exactly as they are to the parser: a `* foo` inside a source
+    // block is code. The two must agree line for line, or the range offered for editing would not be
+    // the range written back — which is what `headingCountMatchesTheParser` guards.
+    var blockType: String? = null
+    var inDrawer = false
+
     for (line in splitToSequence('\n')) {
-        if (isHeadingLine(line)) {
+        val isHeading = when {
+            blockType != null -> {
+                val end = OrgSyntax.blockEnd.find(line)
+                if (end != null && (end.groupValues[1].isEmpty() ||
+                        end.groupValues[1].equals(blockType, ignoreCase = true))
+                ) {
+                    blockType = null
+                }
+                false
+            }
+
+            inDrawer -> when {
+                OrgSyntax.drawerEnd.matches(line) -> { inDrawer = false; false }
+                // A heading closes a drawer that was never terminated, as it does in the parser.
+                isHeadingLine(line) -> { inDrawer = false; true }
+                else -> false
+            }
+
+            else -> {
+                val begin = OrgSyntax.blockBegin.find(line)
+                when {
+                    begin != null -> { blockType = begin.groupValues[1]; false }
+                    OrgSyntax.drawerBegin.matches(line) && !OrgSyntax.drawerEnd.matches(line) -> {
+                        inDrawer = true
+                        false
+                    }
+                    else -> isHeadingLine(line)
+                }
+            }
+        }
+        if (isHeading) {
             // endExclusive is filled in below, once the following heading is known.
             headings.add(OrgElement(offset, offset, headingLevel(line), headingTitle(line)))
         }

@@ -24,7 +24,7 @@ class OrgModeCheckboxListItemsTests {
         val item2 = assertIs<OrgCheckboxItem>(list.children[1])
         assertEquals(true, item2.checked)
         assertEquals("Task two", item2.text)
-        val item3 = assertIs<OrgRaw>(list.children[2])
-        assertEquals("Plain item", item3.content)
+        val item3 = assertIs<OrgListItem>(list.children[2])
+        assertEquals("Plain item", item3.text)
     }
 }

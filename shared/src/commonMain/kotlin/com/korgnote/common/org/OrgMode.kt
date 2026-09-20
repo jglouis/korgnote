@@ -55,10 +55,23 @@ data class OrgSection(
     val level: Int = 1,
     val tags: List<String> = emptyList(),
     override val children: List<OrgNode> = emptyList(),
+    /** The `[#A]` cookie, without its brackets, or null when the heading has none. */
+    val priority: Char? = null,
 ) : OrgNode()
 
-// A flat list of items where each child is typically OrgRaw or OrgSection; bulletType is '-', '+', or '*'.
-data class OrgList(val bulletType: Char, override val children: List<OrgNode>) : OrgNode()
+/**
+ * A list. [bulletType] is the character a plain list is marked with (`-`, `+`, `*`); an ordered list
+ * reports [ordered] instead, since its markers are `1.`/`1)` and differ per item.
+ *
+ * [indent] is the column the list starts at, which is what distinguishes a nested list from a new
+ * one: a more-indented item opens a list that is a child of the item above it.
+ */
+data class OrgList(
+    val bulletType: Char,
+    override val children: List<OrgNode>,
+    val ordered: Boolean = false,
+    val indent: Int = 0,
+) : OrgNode()
 
 // Lines that start with #+
 data class OrgKeyword(val content: String) : OrgNode()
@@ -74,7 +87,61 @@ data class OrgRaw(val content: String) : OrgNode()
 
 // Checkbox list item like: - [ ] Task or - [X] Done
 // Only supports simple on/off state; nested states are out of scope for now.
-data class OrgCheckboxItem(val checked: Boolean, val text: String) : OrgNode()
+data class OrgCheckboxItem(
+    val checked: Boolean,
+    val text: String,
+    override val children: List<OrgNode> = emptyList(),
+) : OrgNode()
+
+/** A plain (non-checkbox) list item, which may own a nested list. */
+data class OrgListItem(
+    val text: String,
+    override val children: List<OrgNode> = emptyList(),
+) : OrgNode()
+
+/**
+ * A `#+BEGIN_x … #+END_x` block.
+ *
+ * [body] is kept as raw text on purpose: the whole point of a block is that its contents are *not*
+ * Org. A `* heading` inside a source block is a line of code, and parsing it as a heading would both
+ * misrender it and let an element edit splice over the wrong range.
+ */
+data class OrgBlock(
+    val type: String,
+    val parameters: String,
+    val body: String,
+    /** True when no `#+END_` was found: the block runs to the end of its enclosing section. */
+    val unterminated: Boolean = false,
+) : OrgNode()
+
+/**
+ * A `:NAME: … :END:` drawer, such as `:PROPERTIES:`.
+ *
+ * Like a block, its lines are kept verbatim; [properties] additionally exposes `:key: value` pairs
+ * in order, because that is what a drawer is normally read for.
+ */
+data class OrgDrawer(
+    val name: String,
+    val lines: List<String>,
+    val properties: List<Pair<String, String>> = emptyList(),
+    val unterminated: Boolean = false,
+) : OrgNode()
+
+/** A `# comment` line (not `#+keyword`). */
+data class OrgComment(val text: String) : OrgNode()
+
+/** A `-----` horizontal rule. */
+class OrgHorizontalRule : OrgNode() {
+    override fun equals(other: Any?) = other is OrgHorizontalRule
+    override fun hashCode() = "OrgHorizontalRule".hashCode()
+    override fun toString() = "OrgHorizontalRule"
+}
+
+/** A `term :: definition` item of a description list. */
+data class OrgDescriptionItem(val term: String, val description: String) : OrgNode()
+
+/** A `[fn:name] text` definition at the start of a line. */
+data class OrgFootnoteDefinition(val label: String, val text: String) : OrgNode()
 
 // Table model: consecutive lines starting with '|' become a single table. Each line is a row; a line
 // starting with "|-" is a horizontal rule row (isRule = true, no cells).
@@ -101,6 +168,8 @@ data class OrgHeading(
     val todo: String?,
     val title: String,
     val tags: List<String>,
+    /** The `[#A]` cookie's letter, or null when the heading carries none. */
+    val priority: Char? = null,
 )
 
 /** Splits a heading line — with or without its leading stars — into [OrgHeading]. */
@@ -115,7 +184,12 @@ fun orgHeadingOf(line: String): OrgHeading {
         title = title.substring(0, tm.range.first).trimEnd()
         tm.groupValues[1].split(':')
     } ?: emptyList()
-    return OrgHeading(level = level, todo = todo, title = title, tags = tags)
+    // A leading [#A] cookie is a priority, not part of the title.
+    val priority = OrgSyntax.priority.find(title)?.let { pm ->
+        title = title.substring(pm.value.length).trimStart()
+        pm.value[2]
+    }
+    return OrgHeading(level = level, todo = todo, title = title, tags = tags, priority = priority)
 }
 
 private val headingLineRegex = Regex("^(\\*+)\\s+(?:([A-Z][A-Z0-9_-]*)\\s+)?(.*)")
@@ -195,31 +269,126 @@ fun String.toOrgDocument(): OrgDocument {
         return table.spanning(start, idx) to idx
     }
 
-    fun parseList(start: Int, bullet: Char): Pair<OrgNode, Int> {
-        val items = mutableListOf<OrgNode>()
-        var idx = start
-        // The bullet goes in a character class: escaping it with a backslash is not portable to JS regexes
-        val itemRegex = Regex("^\\s*[$bullet]\\s+(.*)")
-        // `\]` is not redundant: JS/Wasm regexes run in `u` mode where a lone `]` is a SyntaxError
-        @Suppress("RegExpRedundantEscape")
-        val checkboxRegex = Regex("^\\s*[$bullet]\\s+\\[([ xX])\\]\\s*(.*)")
+    /**
+     * A `#+BEGIN_x … #+END_x` block, consumed whole.
+     *
+     * Everything between the delimiters is kept as text and never looked at again, which is the
+     * point: a `* heading` or a `- item` inside a source block is code, not Org.
+     */
+    fun parseBlock(start: Int, begin: MatchResult): Pair<OrgNode, Int> {
+        val type = begin.groupValues[1]
+        val parameters = begin.groupValues[2]
+        var idx = start + 1
+        val body = StringBuilder()
+        var terminated = false
         while (idx < lines.size) {
-            val l = lines[idx]
-            val m = itemRegex.find(l) ?: break
-            // If it is a checkbox item, parse its state and text
-            val cb = checkboxRegex.find(l)
-            if (cb != null) {
-                val mark = cb.groupValues[1]
-                val text = cb.groupValues[2]
-                val checked = mark.equals("x", ignoreCase = true)
-                items.add(OrgCheckboxItem(checked, text).spanning(idx, idx + 1))
-            } else {
-                val itemText = m.groupValues[1]
-                items.add(OrgRaw(itemText).spanning(idx, idx + 1))
+            val end = OrgSyntax.blockEnd.find(lines[idx])
+            // An empty `#+END_` closes any block; a named one has to match.
+            if (end != null && (end.groupValues[1].isEmpty() || end.groupValues[1].equals(type, ignoreCase = true))) {
+                terminated = true
+                idx++
+                break
+            }
+            body.appendLine(lines[idx])
+            idx++
+        }
+        val node = OrgBlock(
+            type = type,
+            parameters = parameters,
+            body = body.toString(),
+            unterminated = !terminated,
+        )
+        return node.spanning(start, idx) to idx
+    }
+
+    /** A `:NAME: … :END:` drawer, consumed whole for the same reason as a block. */
+    fun parseDrawer(start: Int): Pair<OrgNode, Int> {
+        val name = lines[start].trim().trim(':')
+        var idx = start + 1
+        val body = mutableListOf<String>()
+        val properties = mutableListOf<Pair<String, String>>()
+        var terminated = false
+        while (idx < lines.size) {
+            if (OrgSyntax.drawerEnd.matches(lines[idx])) {
+                terminated = true
+                idx++
+                break
+            }
+            // A heading ends an unterminated drawer rather than swallowing the rest of the file.
+            if (OrgSyntax.heading.containsMatchIn(lines[idx])) break
+            body.add(lines[idx])
+            OrgSyntax.property.find(lines[idx])?.let { m ->
+                properties.add(m.groupValues[1].trim().trim(':') to m.groupValues[2].trim())
             }
             idx++
         }
-        return OrgList(bullet, items).spanning(start, idx) to idx
+        val node = OrgDrawer(
+            name = name,
+            lines = body.toList(),
+            properties = properties.toList(),
+            unterminated = !terminated,
+        )
+        return node.spanning(start, idx) to idx
+    }
+
+    /**
+     * A list starting at [start], together with any lists nested under its items.
+     *
+     * Indentation is what separates a nested list from a new one: an item indented further than the
+     * list it follows belongs to the item above it.
+     */
+    fun parseList(start: Int): Pair<OrgNode, Int> {
+        val first = OrgSyntax.listItem.find(lines[start])!!
+        val indent = first.groupValues[1].length
+        val firstMarker = first.groupValues[2]
+        val ordered = firstMarker.first().isDigit()
+        val bullet = if (ordered) firstMarker.last() else firstMarker.first()
+
+        val items = mutableListOf<OrgNode>()
+        var idx = start
+        while (idx < lines.size) {
+            val m = OrgSyntax.listItem.find(lines[idx]) ?: break
+            val itemIndent = m.groupValues[1].length
+            val marker = m.groupValues[2]
+            // A shallower item belongs to an enclosing list; a deeper one is handled below, as a
+            // child of the item it follows.
+            if (itemIndent != indent) break
+            // A different marker starts a different list, as it does in Org. This is also what keeps
+            // a list from eating the headings after it: the grammar matches `*` as a bullet, so
+            // without this rule a `- ` list swallowed every following `* heading` as an item.
+            if (ordered != marker.first().isDigit()) break
+            if (!ordered && marker.first() != bullet) break
+
+            val itemStart = idx
+            val checkbox = m.groupValues[4]
+
+            // The checkbox group ends before its trailing space (the regex only looks ahead), so
+            // trim it rather than carrying it into the item's text.
+            val text = lines[idx].substring(m.value.length).trimStart()
+            idx++
+
+            // Continuation: a deeper list directly under this item is nested inside it.
+            val nested = mutableListOf<OrgNode>()
+            val deeper = if (idx < lines.size) OrgSyntax.listItem.find(lines[idx]) else null
+            if (deeper != null && deeper.groupValues[1].length > indent) {
+                val (sub, next) = parseList(idx)
+                nested.add(sub)
+                idx = next
+            }
+
+            val description = OrgSyntax.descriptionTerm.find(text)
+            val item: OrgNode = when {
+                checkbox.isNotEmpty() ->
+                    OrgCheckboxItem(checkbox.contains('x', ignoreCase = true), text, nested.toList())
+                description != null -> OrgDescriptionItem(
+                    term = description.groupValues[2].trim(),
+                    description = text.substring(description.value.length).trim(),
+                ).also { if (nested.isNotEmpty()) Unit }
+                else -> OrgListItem(text, nested.toList())
+            }
+            items.add(item.spanning(itemStart, idx))
+        }
+        return OrgList(bullet, items.toList(), ordered, indent).spanning(start, idx) to idx
     }
 
     /**
@@ -246,6 +415,7 @@ fun String.toOrgDocument(): OrgDocument {
             level = open.heading.level,
             tags = open.heading.tags,
             children = open.children.toList(),
+            priority = open.heading.priority,
         ).spanning(open.startLine, endLineExclusive)
         sink().add(section)
     }
@@ -265,12 +435,47 @@ fun String.toOrgDocument(): OrgDocument {
             i++
             continue
         }
+        val blockBegin = OrgSyntax.blockBegin.find(line)
+        if (blockBegin != null) {
+            flushParagraph()
+            val (block, next) = parseBlock(i, blockBegin)
+            sink().add(block)
+            i = next
+            continue
+        }
         if (line.startsWith("#+")) {
             flushParagraph()
             metadata.add(line)
             sink().add(OrgKeyword(line).spanning(i, i + 1))
             i++
             continue
+        }
+        // A `# comment` line, as opposed to a `#+keyword`.
+        if (OrgSyntax.comment.containsMatchIn(line)) {
+            flushParagraph()
+            sink().add(OrgComment(line).spanning(i, i + 1))
+            i++
+            continue
+        }
+        if (OrgSyntax.drawerBegin.matches(line) && !OrgSyntax.drawerEnd.matches(line)) {
+            flushParagraph()
+            val (drawer, next) = parseDrawer(i)
+            sink().add(drawer)
+            i = next
+            continue
+        }
+        if (OrgSyntax.horizontalRule.matches(line)) {
+            flushParagraph()
+            sink().add(OrgHorizontalRule().spanning(i, i + 1))
+            i++
+            continue
+        }
+        OrgSyntax.footnoteDefinition.find(line)?.let { fn ->
+            flushParagraph()
+            val node = OrgFootnoteDefinition(fn.groupValues[1], fn.groupValues[2].trim())
+            sink().add(node.spanning(i, i + 1))
+            i++
+            continue@mainLoop
         }
         if (line.trimStart().startsWith("|")) {
             flushParagraph()
@@ -301,15 +506,11 @@ fun String.toOrgDocument(): OrgDocument {
                 continue@mainLoop
             }
         }
-        val listBullet = when {
-            Regex("^\\s*- ").containsMatchIn(line) -> '-'
-            Regex("^\\s*\\+ ").containsMatchIn(line) -> '+'
-            // Do not treat single '*' as list bullet at top-level anymore; keep '*' out to avoid conflict with sections
-            else -> null
-        }
-        if (listBullet != null) {
+        // Lists come from the shared grammar now, which also covers `1.`/`1)` and nesting. A `*`
+        // marker at column 0 never reaches here: the heading rule above claims it first.
+        if (OrgSyntax.listItem.containsMatchIn(line)) {
             flushParagraph()
-            val (listNode, next) = parseList(i, listBullet)
+            val (listNode, next) = parseList(i)
             sink().add(listNode)
             i = next
             continue
@@ -427,17 +628,46 @@ fun OrgNode.toOrgString(): String = when (this) {
     }
     is OrgKeyword -> this.content
     is OrgRaw -> this.content
-    is OrgCheckboxItem -> "- [" + (if (checked) "x" else " ") + "] " + text
-    is OrgList -> children.joinToString("\n") { child ->
-        when (child) {
-            is OrgCheckboxItem -> "- [" + (if (child.checked) "x" else " ") + "] " + child.text
-            is OrgRaw -> "${this.bulletType} ${child.content}"
-            else -> "${this.bulletType} ${child.toOrgString()}"
-        }
+    is OrgComment -> text
+    is OrgHorizontalRule -> "-----"
+    is OrgDescriptionItem -> "- $term :: $description"
+    is OrgFootnoteDefinition -> "[fn:$label] $text"
+    is OrgBlock -> buildString {
+        append("#+BEGIN_").append(type)
+        if (parameters.isNotBlank()) append(parameters)
+        if (body.isNotEmpty()) { appendLine(); append(body.trimEnd('\n')) }
+        if (!unterminated) { appendLine(); append("#+END_").append(type) }
     }
+    is OrgDrawer -> buildString {
+        append(':').append(name).append(':')
+        lines.forEach { appendLine(); append(it) }
+        if (!unterminated) { appendLine(); append(":END:") }
+    }
+    is OrgCheckboxItem -> buildString {
+        append("- [").append(if (checked) "x" else " ").append("] ").append(text)
+        children.forEach { appendLine(); append(it.toOrgString()) }
+    }
+    is OrgListItem -> buildString {
+        append("- ").append(text)
+        children.forEach { appendLine(); append(it.toOrgString()) }
+    }
+    is OrgList -> children.mapIndexed { index, child ->
+        val pad = " ".repeat(indent)
+        val marker = if (ordered) "${index + 1}$bulletType" else "$bulletType"
+        val body = when (child) {
+            is OrgCheckboxItem -> "[" + (if (child.checked) "x" else " ") + "] " + child.text
+            is OrgListItem -> child.text
+            is OrgDescriptionItem -> "${child.term} :: ${child.description}"
+            is OrgRaw -> child.content
+            else -> child.toOrgString()
+        }
+        val nested = child.children.joinToString("") { "\n" + it.toOrgString() }
+        "$pad$marker $body$nested"
+    }.joinToString("\n")
     is OrgSection -> buildString {
         append("*".repeat(level.coerceAtLeast(1))).append(' ')
         if (todo != null) append(todo).append(' ')
+        if (priority != null) append("[#").append(priority).append("] ")
         append(title)
         if (tags.isNotEmpty()) append(" :").append(tags.joinToString(":")).append(':')
         // The body and the sub-headings are children now, so printing a section prints its subtree.

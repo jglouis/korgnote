@@ -92,6 +92,11 @@ class OrgElementsTests {
             "#+TITLE: x\n* a\n",
             "* a\n\n\n* b\n",
             "  * indented is not a heading\n* but this is\n",
+            // A star inside a block is code, not a heading. If the splitter and the parser disagree
+            // here, editing an element splices over the wrong range.
+            "* real\n#+BEGIN_SRC kotlin\n* not a heading\n#+END_SRC\n* also real\n",
+            "* real\n#+begin_example\n** neither is this\n#+end_example\n",
+            "* real\n:PROPERTIES:\n:ID: 1\n:END:\n* second\n",
         )
         for (text in corpus) {
             // Headings nest now, so the parser's count is over the whole tree, not the top level.

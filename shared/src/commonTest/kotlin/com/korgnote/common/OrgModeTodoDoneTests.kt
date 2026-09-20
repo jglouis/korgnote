@@ -48,7 +48,7 @@ class OrgModeTodoDoneTests {
         assertEquals(1, doc.children.size)
         val list = assertIs<OrgList>(doc.children[0])
         assertEquals('-', list.bulletType)
-        assertEquals("TODO just a list item", (assertIs<OrgRaw>(list.children[0])).content)
-        assertEquals("DONE another item", (assertIs<OrgRaw>(list.children[1])).content)
+        assertEquals("TODO just a list item", (assertIs<OrgListItem>(list.children[0])).text)
+        assertEquals("DONE another item", (assertIs<OrgListItem>(list.children[1])).text)
     }
 }
