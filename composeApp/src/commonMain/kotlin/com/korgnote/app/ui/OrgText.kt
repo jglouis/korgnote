@@ -71,7 +71,6 @@ import com.korgnote.common.org.isNumeric
 import com.korgnote.common.org.parseOrgTable
 import com.korgnote.common.org.toOrgString
 
-private class Ord(var i: Int)
 
 
 /**
@@ -90,8 +89,6 @@ fun OrgText(
     scrollToChildIndex: Int? = null,
     onScrolledToChildIndex: () -> Unit = {},
 ) {
-    // Fresh counter each composition to ensure consistent ordinal indexing on every recomposition
-    val ord = Ord(0)
     val todoConfig = if (content is OrgDocument) orgTodoConfigOf(content) else DefaultOrgTodoConfig
     Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
         if (content is OrgDocument) {
@@ -105,7 +102,7 @@ fun OrgText(
                     modifier = Modifier.bringIntoViewRequester(requesters[idx]),
                     horizontalAlignment = Alignment.Start
                 ) {
-                    RenderNode(node = child, ordinal = ord, todoConfig = todoConfig, onToggleCheckbox = onToggleCheckbox)
+                    RenderNode(node = child, todoConfig = todoConfig, onToggleCheckbox = onToggleCheckbox)
                 }
             }
             LaunchedEffect(scrollToChildIndex, requesters) {
@@ -118,7 +115,6 @@ fun OrgText(
         } else {
             RenderNode(
                 node = content,
-                ordinal = ord,
                 todoConfig = todoConfig,
                 onToggleCheckbox = onToggleCheckbox,
             )
@@ -129,14 +125,13 @@ fun OrgText(
 @Composable
 private fun RenderNode(
     node: OrgNode,
-    ordinal: Ord,
     todoConfig: OrgTodoConfig,
     onToggleCheckbox: ((OrgCheckboxItem) -> Unit)?
 ) {
     when (node) {
         is OrgDocument -> {
             Column(horizontalAlignment = Alignment.Start) {
-                node.children.forEach { child -> RenderNode(child, ordinal, todoConfig, onToggleCheckbox) }
+                node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox) }
             }
         }
 
@@ -145,7 +140,7 @@ private fun RenderNode(
             // its whole subtree. The heading itself carries the level, so nothing here indents:
             // the visual result is the same flow of blocks the flat model produced.
             OrgHeading(node, todoConfig)
-            node.children.forEach { child -> RenderNode(child, ordinal, todoConfig, onToggleCheckbox) }
+            node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox) }
         }
 
         // The grammar models these now, so they render from the node rather than by re-scanning
@@ -168,7 +163,7 @@ private fun RenderNode(
 
         is OrgListItem -> {
             OrgLine(node.text, todoConfig)
-            node.children.forEach { child -> RenderNode(child, ordinal, todoConfig, onToggleCheckbox) }
+            node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox) }
         }
 
         is OrgList -> {
@@ -182,12 +177,12 @@ private fun RenderNode(
                     when (child) {
                         is OrgCheckboxItem -> {
                             RenderCheckboxItem(child, onToggleCheckbox)
-                            child.children.forEach { RenderNode(it, ordinal, todoConfig, onToggleCheckbox) }
+                            child.children.forEach { RenderNode(it, todoConfig, onToggleCheckbox) }
                         }
 
                         is OrgListItem -> {
                             OrgLine("$marker ${child.text}", todoConfig)
-                            child.children.forEach { RenderNode(it, ordinal, todoConfig, onToggleCheckbox) }
+                            child.children.forEach { RenderNode(it, todoConfig, onToggleCheckbox) }
                         }
 
                         is OrgDescriptionItem ->
@@ -195,7 +190,7 @@ private fun RenderNode(
 
                         is OrgRaw -> OrgLine("$marker ${child.content}", todoConfig)
 
-                        else -> RenderNode(child, ordinal, todoConfig, onToggleCheckbox)
+                        else -> RenderNode(child, todoConfig, onToggleCheckbox)
                     }
                 }
             }

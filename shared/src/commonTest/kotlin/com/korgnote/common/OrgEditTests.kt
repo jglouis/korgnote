@@ -216,6 +216,16 @@ class OrgEditTests {
         assertTrue(result.contains("* Another\nDEADLINE: <2026-12-25 Fri>\nTail."), result)
     }
 
+    /** CLOSED is a planning kind like the others; Org writes it when a task is finished. */
+    @Test
+    fun aClosedTimestampCanBeSetAndCleared() {
+        val closed = doc.setPlanning(section("Another"), PlanningKind.CLOSED, "[2026-09-21 Mon 18:00]")
+        assertTrue(closed.text.contains("* Another\nCLOSED: [2026-09-21 Mon 18:00]\nTail."), closed.text)
+
+        val section = closed.allNodes().filterIsInstance<OrgSection>().first { it.title == "Another" }
+        assertEquals(document, closed.setPlanning(section, PlanningKind.CLOSED, null).text)
+    }
+
     // --- Promote and demote ---
 
     @Test

@@ -147,8 +147,3 @@ fun String.withNewOrgElement(at: Int, level: Int): OrgInsertion {
         caret = elementStart + stars.length + 1,
     )
 }
-
-// `\]` is not redundant: JS/Wasm regexes run in `u` mode where a lone `]` is a SyntaxError.
-@Suppress("RegExpRedundantEscape")
-private val checkboxLineRegex = Regex("^\\s*[-+]\\s+\\[([ xX])\\]\\s*.*")
-

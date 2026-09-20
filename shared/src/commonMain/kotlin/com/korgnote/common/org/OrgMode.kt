@@ -76,7 +76,7 @@ data class OrgList(
 // Lines that start with #+
 data class OrgKeyword(val content: String) : OrgNode()
 
-// SCHEDULED or DEADLINE timestamp line under a heading
+// A SCHEDULED, DEADLINE or CLOSED timestamp line under a heading
 data class OrgPlanning(val planType: String, val timestamp: String) : OrgNode()
 
 // Any raw text paragraph or line content that doesn't fit another construct.
@@ -497,13 +497,13 @@ fun String.toOrgDocument(): OrgDocument {
             i++
             continue
         }
-        // Planning lines: SCHEDULED: or DEADLINE:
+        // Planning lines, from the shared grammar, which is what also taught this CLOSED:.
         run {
-            val pm = Regex("^(?:SCHEDULED|DEADLINE):\\s*(.*)").find(line)
+            val pm = OrgSyntax.planning.find(line)
             if (pm != null) {
                 flushParagraph()
-                val type = if (line.trimStart().startsWith("SCHEDULED:")) "SCHEDULED" else "DEADLINE"
-                val ts = pm.groupValues[1].trim()
+                val type = pm.groupValues[1]
+                val ts = line.substring(pm.value.length).trim()
                 sink().add(OrgPlanning(planType = type, timestamp = ts).spanning(i, i + 1))
                 i++
                 continue@mainLoop
@@ -589,10 +589,6 @@ fun parseTodoConfigFrom(metadata: List<String>): OrgTodoConfig {
     return OrgTodoConfig(todo, done)
 }
 
-// Returns true when a line (as it appears in the raw text) is recognized as a checkbox list
-// item by the parser above: a top-level "- "/"+ " bullet whose text starts with "[ ]"/"[x]"/"[X]".
-// Kept in sync with parseList()'s checkboxRegex so raw-text ordinals match the parsed document.
-private val rawCheckboxLineRegex = Regex("^\\s*[-+]\\s+\\[([ xX])]\\s*.*")
 
 // Flips the checked state of the nth (0-based, document order) checkbox item directly in the raw
 // text, changing only that line's "[ ]"/"[x]" marker and leaving every other character - including
@@ -663,9 +659,5 @@ fun OrgNode.toOrgString(): String = when (this) {
     }.trimEnd()
     is OrgTable -> toAlignedLines().joinToString("\n")
     is OrgTableRow -> if (isRule) "|-|" else "| " + cells.joinToString(" | ") { it.cellText() } + " |"
-    is OrgPlanning -> when (planType) {
-        "SCHEDULED" -> "SCHEDULED: $timestamp"
-        "DEADLINE" -> "DEADLINE: $timestamp"
-        else -> timestamp
-    }
+    is OrgPlanning -> if (planType.isBlank()) timestamp else "$planType: $timestamp"
 }
