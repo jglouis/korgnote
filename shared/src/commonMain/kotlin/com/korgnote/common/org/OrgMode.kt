@@ -408,7 +408,10 @@ fun String.toOrgDocument(): OrgDocument {
 
     /** Closes the innermost open heading at [endLineExclusive] and hands it to its parent. */
     fun closeSection(endLineExclusive: Int) {
-        val open = openSections.removeLast()
+        // removeAt(lastIndex), not removeLast(): Kotlin compiles removeLast() to the JDK 21
+        // SequencedCollection method, which Android's java.util.List does not have and which is not
+        // desugared, so it compiles everywhere and then throws NoSuchMethodError on device.
+        val open = openSections.removeAt(openSections.lastIndex)
         val section = OrgSection(
             title = open.heading.title,
             todo = open.heading.todo,
