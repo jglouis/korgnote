@@ -190,11 +190,7 @@ private class LineState {
     var inDrawer: Boolean = false
 }
 
-/**
- * Heading sizes, shared by the fully styled path and the metrics-only path used off screen: a
- * heading must occupy the same height whether or not it is currently visible, or the document's
- * total height would change as the styled window follows the viewport.
- */
+/** Heading sizes for reading mode; the editor drops them, see [editorSpanStyle]. */
 private fun headingFontSize(level: Int): TextUnit = when (level) {
     1 -> 1.3.em
     2 -> 1.15.em
@@ -203,17 +199,16 @@ private fun headingFontSize(level: Int): TextUnit = when (level) {
 }
 
 /**
- * Appends a line that lies outside the styled window: its characters, plus only the styling that
- * affects layout metrics (heading size and weight). Colour is skipped — it costs spans without
- * changing where anything sits.
+ * Appends a line that lies outside the styled window: its characters, unstyled.
  *
- * Mirrors [appendHighlightedLine]'s branch order so [state] advances identically, which is what
- * lets a visible line inside a block or drawer still be styled correctly.
+ * Nothing is styled because nothing the editor applies changes text metrics ([editorSpanStyle]), so
+ * an unstyled line occupies exactly the space a styled one would and the document does not shift as
+ * the window follows the viewport.
  *
- * Everything else is metric-neutral because the editor renders in a monospace font, where bold and
- * regular glyphs share the same advance width.
+ * The branch order still mirrors [appendHighlightedLine] so [state] advances identically, which is
+ * what lets a visible line inside a block or drawer be styled correctly.
  */
-private fun AnnotatedString.Builder.appendMetricsOnlyLine(line: String, state: LineState) {
+private fun AnnotatedString.Builder.appendUnstyledLine(line: String, state: LineState) {
     if (state.blockType != null) {
         if (OrgSyntax.blockEnd.containsMatchIn(line)) state.blockType = null
         append(line)
@@ -225,25 +220,13 @@ private fun AnnotatedString.Builder.appendMetricsOnlyLine(line: String, state: L
         return
     }
     when {
-        OrgSyntax.heading.containsMatchIn(line) -> {
-            val stars = OrgSyntax.heading.find(line)!!.groupValues[1]
-            withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = headingFontSize(stars.length))) {
-                append(line)
-            }
-        }
-
-        OrgSyntax.blockBegin.containsMatchIn(line) -> {
+        OrgSyntax.blockBegin.containsMatchIn(line) ->
             state.blockType = OrgSyntax.blockBegin.find(line)!!.groupValues[1].lowercase()
-            append(line)
-        }
 
-        OrgSyntax.drawerBegin.containsMatchIn(line) -> {
+        OrgSyntax.drawerBegin.containsMatchIn(line) ->
             state.inDrawer = !OrgSyntax.drawerEnd.containsMatchIn(line)
-            append(line)
-        }
-
-        else -> append(line)
     }
+    append(line)
 }
 
 private data class LineStateSnapshot(val blockType: String?, val inDrawer: Boolean)
@@ -277,7 +260,7 @@ private class OrgHighlightCache(private val headingColor: Color) {
 
     /**
      * [visible] limits full styling to the characters in that range; lines outside it get
-     * [appendMetricsOnlyLine]. Passing null styles the whole document.
+     * [appendUnstyledLine]. Passing null styles the whole document.
      */
     fun highlight(text: String, visible: IntRange?): AnnotatedString {
         if (visible == cachedVisible) {
@@ -327,7 +310,7 @@ private class OrgHighlightCache(private val headingColor: Color) {
                     }
                 )
             } else {
-                results.add(buildAnnotatedString { appendMetricsOnlyLine(newLines[i], state) })
+                results.add(buildAnnotatedString { appendUnstyledLine(newLines[i], state) })
             }
             after.add(state.snapshot())
             styledFlags.add(styled)
@@ -459,6 +442,34 @@ private fun AnnotatedString.Builder.appendDrawerLine(line: String, viewMode: Boo
     }
 }
 
+/**
+ * One styled stretch of a heading line. [inline] pieces go through [appendInline] instead of a
+ * single span.
+ */
+private class HeadingPiece(val style: SpanStyle?, var text: String, val inline: Boolean = false)
+
+/**
+ * Folds any piece that is only whitespace into its neighbour.
+ *
+ * A style run holding nothing but whitespace is measured as zero width by the Skia text backend
+ * (desktop, iOS and web), which made the spaces around a TODO keyword vanish while typing; Android
+ * uses a different backend and never showed it. Whitespace carries no glyph, so which run owns it
+ * makes no visible difference.
+ */
+private fun List<HeadingPiece>.foldWhitespaceIntoNeighbours() {
+    forEachIndexed { index, piece ->
+        if (piece.text.isEmpty() || !piece.text.isBlank()) return@forEachIndexed
+        val previous = subList(0, index).lastOrNull { it.text.isNotEmpty() }
+        val next = subList(index + 1, size).firstOrNull { it.text.isNotEmpty() }
+        when {
+            previous != null -> previous.text += piece.text
+            next != null -> next.text = piece.text + next.text
+            else -> return@forEachIndexed // a line of pure whitespace: nothing to fold into
+        }
+        piece.text = ""
+    }
+}
+
 private fun AnnotatedString.Builder.appendHeading(
     line: String,
     headingColor: Color,
@@ -468,42 +479,48 @@ private fun AnnotatedString.Builder.appendHeading(
     val stars = OrgSyntax.heading.find(line)!!.groupValues[1]
     val size: TextUnit = headingFontSize(stars.length)
     withStyle(SpanStyle(color = headingColor, fontWeight = FontWeight.Bold, fontSize = size)) {
-        withStyle(SpanStyle(color = OrgColors.stars)) { append(stars) }
         var rest = line.substring(stars.length)
-
-        fun consumeWhitespace() {
-            val ws = rest.takeWhile { it.isWhitespace() }
-            append(ws)
-            rest = rest.drop(ws.length)
+        fun takeWhitespace(): String {
+            val whitespace = rest.takeWhile { it.isWhitespace() }
+            rest = rest.drop(whitespace.length)
+            return whitespace
         }
-        consumeWhitespace()
+
+        val pieces = mutableListOf(HeadingPiece(SpanStyle(color = OrgColors.stars), stars))
+        var pending = takeWhitespace()
 
         val firstWord = rest.takeWhile { !it.isWhitespace() }
         val todoColor = todoConfig.colorFor(firstWord)
         if (todoColor != null) {
-            withStyle(SpanStyle(color = todoColor)) { append(firstWord) }
+            pieces += HeadingPiece(SpanStyle(color = todoColor), pending + firstWord)
             rest = rest.drop(firstWord.length)
-            consumeWhitespace()
+            pending = takeWhitespace()
         }
 
-        val prio = OrgSyntax.priority.find(rest)
-        if (prio != null) {
-            withStyle(SpanStyle(color = OrgColors.priority)) { append(prio.value) }
-            rest = rest.drop(prio.value.length)
-            consumeWhitespace()
+        val priority = OrgSyntax.priority.find(rest)
+        if (priority != null) {
+            pieces += HeadingPiece(SpanStyle(color = OrgColors.priority), pending + priority.value)
+            rest = rest.drop(priority.value.length)
+            pending = takeWhitespace()
         }
 
         val tags = OrgSyntax.tags.find(rest)
         val body = if (tags != null) rest.substring(0, tags.range.first) else rest
-        appendInline(body, viewMode)
+        pieces += HeadingPiece(style = null, text = pending + body, inline = true)
         if (tags != null) {
-            val tail = rest.substring(tags.range.first)
-            val tagStart = tail.indexOf(tags.groupValues[1])
-            append(tail.substring(0, tagStart))
-            withStyle(SpanStyle(color = OrgColors.tag, fontWeight = FontWeight.Normal)) {
-                append(tags.groupValues[1])
+            // The whole tail: the whitespace before the tags, the tags, and any trailing spaces.
+            val tagStyle = SpanStyle(color = OrgColors.tag, fontWeight = FontWeight.Normal)
+            pieces += HeadingPiece(tagStyle, rest.substring(tags.range.first))
+        }
+
+        pieces.foldWhitespaceIntoNeighbours()
+        for (piece in pieces) {
+            when {
+                piece.text.isEmpty() -> Unit
+                piece.inline -> appendInline(piece.text, viewMode)
+                piece.style != null -> withStyle(piece.style) { append(piece.text) }
+                else -> append(piece.text)
             }
-            append(tail.substring(tagStart + tags.groupValues[1].length))
         }
     }
 }
@@ -539,9 +556,11 @@ private fun AnnotatedString.Builder.appendTableLine(line: String, viewMode: Bool
 }
 
 private fun AnnotatedString.Builder.appendListItem(line: String, item: MatchResult, viewMode: Boolean) {
-    append(item.groupValues[1])
-    withStyle(SpanStyle(color = OrgColors.bullet, fontWeight = FontWeight.Bold)) { append(item.groupValues[2]) }
-    append(item.groupValues[3])
+    // Indent, bullet and the whitespace after it share one run, so no whitespace forms a run of
+    // its own — see the note in appendHeading.
+    withStyle(SpanStyle(color = OrgColors.bullet, fontWeight = FontWeight.Bold)) {
+        append(item.groupValues[1] + item.groupValues[2] + item.groupValues[3])
+    }
     val box = item.groupValues[4]
     if (box.isNotEmpty()) {
         withStyle(SpanStyle(color = OrgColors.checkbox, fontWeight = FontWeight.Bold)) { append(box) }
@@ -555,8 +574,8 @@ private fun AnnotatedString.Builder.appendItemText(text: String, viewMode: Boole
     var rest = text
     val desc = OrgSyntax.descriptionTerm.find(rest)
     if (desc != null) {
-        append(desc.groupValues[1])
         withStyle(SpanStyle(color = OrgColors.descriptionTerm, fontWeight = FontWeight.Bold)) {
+            append(desc.groupValues[1])
             appendInline(desc.groupValues[2], viewMode)
         }
         withStyle(SpanStyle(color = OrgColors.markup)) { append(desc.groupValues[3]) }
@@ -676,6 +695,37 @@ private fun AnnotatedString.Builder.appendUrl(target: String, label: String, vie
 //    }
 //}
 
+/**
+ * The subset of a [SpanStyle] the editor may apply.
+ *
+ * Anything that changes text metrics — font size, weight, style or family — has to be dropped. Such
+ * a span makes the text field mis-place its caret on the keystroke that first applies it: typing the
+ * space that turns a line into a heading changes the line's metrics, the caret fails to advance,
+ * and because a space has no glyph nothing appears to happen until the next character re-lays the
+ * line out. Bold is not exempt — it selects a different font face, with its own metrics.
+ *
+ * Verified on desktop, iOS and web, which share the Skia text backend; Android uses a different one
+ * and is unaffected.
+ *
+ * Colour, background fills and underline/strikethrough are kept: they are painted over the same
+ * glyphs and cannot move anything.
+ *
+ * Reading mode does not go through [OrgSyntaxHighlightTransformation] and keeps the full styling,
+ * heading sizes included.
+ */
+private fun editorSpanStyle(style: SpanStyle) = SpanStyle(
+    color = style.color,
+    background = style.background,
+    textDecoration = style.textDecoration,
+)
+
+/** Same text and span ranges, with each [SpanStyle] replaced by [project] of itself. */
+private fun AnnotatedString.withSpans(project: (SpanStyle) -> SpanStyle): AnnotatedString =
+    AnnotatedString(
+        text = text,
+        spanStyles = spanStyles.map { AnnotatedString.Range(project(it.item), it.start, it.end) },
+    )
+
 class OrgSyntaxHighlightTransformation(headingColor: Color) : VisualTransformation {
     private val cache = OrgHighlightCache(headingColor)
 
@@ -690,9 +740,7 @@ class OrgSyntaxHighlightTransformation(headingColor: Color) : VisualTransformati
     var visibleChars: IntRange? = null
 
     override fun filter(text: AnnotatedString): TransformedText {
-        val mark = kotlin.time.TimeSource.Monotonic.markNow()
-        val highlighted = cache.highlight(text.text, visibleChars)
-        println("[PERF] filter chars=${text.text.length} spans=${highlighted.spanStyles.size} took=${mark.elapsedNow()}")
+        val highlighted = cache.highlight(text.text, visibleChars).withSpans(::editorSpanStyle)
         return TransformedText(highlighted, OffsetMapping.Identity)
     }
 }

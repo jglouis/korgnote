@@ -22,6 +22,15 @@ class OrgSyntaxHighlightingTest {
     private fun AnnotatedString.colorRanges(color: Color) =
         spanStyles.filter { it.item.color == color }.map { it.start until it.end }
 
+    /**
+     * A span of [color] covers [range], possibly extending past it.
+     *
+     * Colour spans deliberately absorb the whitespace next to their token: a style run holding only
+     * whitespace is measured as zero width by the Skia text backend. See [OrgWhitespaceRunTest].
+     */
+    private fun AnnotatedString.coversColorAt(color: Color, range: IntRange) =
+        spanStyles.any { it.item.color == color && it.start <= range.first && it.end >= range.last + 1 }
+
     @Test
     fun preservesTextExactly() {
         val src = "* TODO Task\nSCHEDULED: <2026-09-18>\n#+TITLE: x\n- [ ] item\n\nplain DONE"
@@ -40,7 +49,7 @@ class OrgSyntaxHighlightingTest {
         val out = buildOrgHighlightedString("* TODO Task", heading)
         val styles = out.spanStyles
         assertTrue(styles.any { it.item.color == heading && it.start == 0 && it.end == "* TODO Task".length })
-        assertTrue(styles.any { it.item.color == OrgColors.todo && it.start == 2 && it.end == 6 })
+        assertTrue(out.coversColorAt(OrgColors.todo, 2 until 6))
     }
 
     @Test
@@ -77,8 +86,8 @@ class OrgSyntaxHighlightingTest {
     fun customTodoKeywordsFromDocumentAreUsed() {
         val src = "#+TODO: TODO DOING | DONE CANCELED\n* DOING work\n* CANCELED nope"
         val out = buildOrgHighlightedString(src, heading)
-        assertTrue(out.hasColorAt(OrgColors.todo, src.indexOf("DOING work") until src.indexOf("DOING work") + 5))
-        assertTrue(out.hasColorAt(OrgColors.done, src.indexOf("CANCELED nope") until src.indexOf("CANCELED nope") + 8))
+        assertTrue(out.coversColorAt(OrgColors.todo, src.indexOf("DOING work") until src.indexOf("DOING work") + 5))
+        assertTrue(out.coversColorAt(OrgColors.done, src.indexOf("CANCELED nope") until src.indexOf("CANCELED nope") + 8))
     }
 
     @Test
@@ -86,9 +95,9 @@ class OrgSyntaxHighlightingTest {
         val src = "** TODO [#A] Write it [1/3] :Dev:Home:"
         val out = buildOrgHighlightedString(src, heading)
         assertTrue(out.hasColorAt(OrgColors.stars, 0..1))
-        assertTrue(out.hasColorAt(OrgColors.priority, src.indexOf("[#A]") until src.indexOf("[#A]") + 4))
+        assertTrue(out.coversColorAt(OrgColors.priority, src.indexOf("[#A]") until src.indexOf("[#A]") + 4))
         assertTrue(out.hasColorAt(OrgColors.statistics, src.indexOf("[1/3]") until src.indexOf("[1/3]") + 5))
-        assertTrue(out.hasColorAt(OrgColors.tag, src.indexOf(":Dev:Home:") until src.length))
+        assertTrue(out.coversColorAt(OrgColors.tag, src.indexOf(":Dev:Home:") until src.length))
     }
 
     @Test
@@ -231,8 +240,8 @@ class OrgSyntaxHighlightingTest {
     fun listBulletsAndDescriptionTermsAreHighlighted() {
         val src = "  + term :: definition\n1. numbered"
         val out = buildOrgHighlightedString(src, heading)
-        assertTrue(out.hasColorAt(OrgColors.bullet, 2..2))
-        assertTrue(out.hasColorAt(OrgColors.descriptionTerm, 4 until 8))
-        assertTrue(out.hasColorAt(OrgColors.bullet, src.indexOf("1.") until src.indexOf("1.") + 2))
+        assertTrue(out.coversColorAt(OrgColors.bullet, 2..2))
+        assertTrue(out.coversColorAt(OrgColors.descriptionTerm, 4 until 8))
+        assertTrue(out.coversColorAt(OrgColors.bullet, src.indexOf("1.") until src.indexOf("1.") + 2))
     }
 }

@@ -2,10 +2,8 @@ package com.korgnote.app.ui
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -63,19 +61,23 @@ class OrgViewportHighlightTest {
     }
 
     @Test
-    fun headingsOutsideTheWindowKeepTheirMetricsButNotTheirColour() {
+    fun linesOutsideTheWindowAreLeftUnstyled() {
+        // Nothing the editor applies changes metrics, so an unstyled line occupies exactly the
+        // space a styled one would and the document does not shift as the window moves.
         val farHeadingStart = document.indexOf("* TODO Far away heading")
-        val windowed = scoped(document, 0..10) // far heading is outside
 
-        val spansOnFarHeading = windowed.spanStyles.filter {
-            it.start <= farHeadingStart && it.end > farHeadingStart
-        }
-        val metrics = spansOnFarHeading.firstOrNull { it.item.fontWeight == FontWeight.Bold }
-        assertNotNull(metrics, "an off-screen heading must keep its size/weight so layout is stable")
-        assertEquals(scoped(document, null).spanStyles.first {
-            it.start <= farHeadingStart && it.end > farHeadingStart && it.item.fontWeight == FontWeight.Bold
-        }.item.fontSize, metrics.item.fontSize, "off-screen heading font size must match on-screen")
-        assertEquals(Color.Unspecified, metrics.item.color, "off-screen heading should not pay for colour")
+        assertTrue(
+            scoped(document, 0..10).spanStyles.none {
+                it.start <= farHeadingStart && it.end > farHeadingStart
+            },
+            "a heading outside the window should carry no spans",
+        )
+        assertTrue(
+            scoped(document, null).spanStyles.any {
+                it.start <= farHeadingStart && it.end > farHeadingStart
+            },
+            "the same heading should be styled when the window covers it",
+        )
     }
 
     @Test
@@ -91,7 +93,7 @@ class OrgViewportHighlightTest {
 
         val bodySpans = windowed.spanStyles.filter { it.start <= bodyStart && it.end > bodyStart }
         assertTrue(
-            bodySpans.any { it.item.fontFamily != null || it.item.background != Color.Unspecified },
+            bodySpans.any { it.item.background != Color.Unspecified },
             "a visible line inside a block must still be styled as block content"
         )
     }

@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 
 /**
  * The per-line cache inside [OrgSyntaxHighlightTransformation] must be invisible: for any sequence
- * of edits, its output has to match a fresh [buildOrgHighlightedString] of the same text.
+ * of edits, a reused instance has to produce exactly what a fresh one would for the same text.
  */
 class OrgHighlightCacheTest {
 
@@ -15,12 +15,15 @@ class OrgHighlightCacheTest {
 
     private fun transformation() = OrgSyntaxHighlightTransformation(heading)
 
-    /** Feeds [texts] through one transformation instance, asserting each result against a fresh build. */
+    /**
+     * Feeds [texts] through one transformation instance, asserting each result matches what a fresh
+     * instance produces for the same text — reusing the cache must change nothing.
+     */
     private fun assertMatchesFreshBuild(vararg texts: String) {
         val subject = transformation()
         for (text in texts) {
             val cached = subject.filter(AnnotatedString(text)).text
-            val fresh = buildOrgHighlightedString(text, heading)
+            val fresh = transformation().filter(AnnotatedString(text)).text
             assertEquals(fresh.text, cached.text, "text mismatch for:\n$text")
             assertEquals(fresh.spanStyles, cached.spanStyles, "span mismatch for:\n$text")
         }

@@ -218,15 +218,6 @@ fun App() {
 
                             if (isEditing) {
                                 val headingColor = MaterialTheme.colorScheme.primary
-                                // TEMP DEBUG (editor performance investigation) — remove with the
-                                // mode switcher below once the fix is chosen.
-                                var perfMode by remember { mutableStateOf(EditorPerfMode.SCOPED) }
-                                val keystroke = remember { KeystrokeProbe() }
-                                // TEMP DEBUG: proves which build is running. If this line is absent
-                                // from the log, the running binary predates the probe.
-                                LaunchedEffect(Unit) {
-                                    println("[PERF] editor probe ACTIVE (build $EDITOR_PROBE_BUILD) — expect ${EditorPerfMode.entries.size} mode chips above the field")
-                                }
                                 val orgHighlighting = remember(headingColor) {
                                     OrgSyntaxHighlightTransformation(headingColor)
                                 }
@@ -240,8 +231,7 @@ fun App() {
                                 var styledRange by remember {
                                     mutableStateOf<IntRange?>(0..EditorViewport.INITIAL_STYLED_CHARS)
                                 }
-                                orgHighlighting.visibleChars =
-                                    if (perfMode == EditorPerfMode.SCOPED) styledRange else null
+                                orgHighlighting.visibleChars = styledRange
                                 val interactionSource = remember { MutableInteractionSource() }
                                 val editorTextStyle = LocalTextStyle.current.merge(
                                     TextStyle(
@@ -249,19 +239,6 @@ fun App() {
                                         color = MaterialTheme.colorScheme.onSurface,
                                     )
                                 )
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    EditorPerfMode.entries.forEach { mode ->
-                                        FilterChip(
-                                            selected = perfMode == mode,
-                                            onClick = {
-                                                perfMode = mode
-                                                keystroke.cancel()
-                                            },
-                                            label = { Text(mode.label) }
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
                                 // No fillMaxSize/weight here: the field grows to its natural height so
                                 // the surrounding screen Column's own scroll (shared with reading mode
                                 // below) is what scrolls it, keeping the scroll position when toggling
@@ -271,21 +248,12 @@ fun App() {
                                 // The Material look is preserved by the decoration box below.
                                 BasicTextField(
                                     value = vm.selectedFileContent,
-                                    onValueChange = {
-                                        keystroke.start() // TEMP DEBUG
-                                        vm.onContentChanged(it)
-                                    },
+                                    onValueChange = { vm.onContentChanged(it) },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .onGloballyPositioned { coordinates ->
                                             viewport.onPositioned(coordinates)
                                             viewport.widenIfNeeded(styledRange)?.let { styledRange = it }
-                                        }
-                                        // TEMP DEBUG: fires after this field has drawn, so the
-                                        // reported time covers recomposition + layout + draw.
-                                        .drawWithContent {
-                                            drawContent()
-                                            keystroke.reportIfPending(perfMode.label)
                                         },
                                     textStyle = editorTextStyle,
                                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -294,9 +262,7 @@ fun App() {
                                         viewport.onTextLayout(layout)
                                         viewport.widenIfNeeded(styledRange)?.let { styledRange = it }
                                     },
-                                    visualTransformation =
-                                        if (perfMode == EditorPerfMode.OFF) VisualTransformation.None
-                                        else orgHighlighting,
+                                    visualTransformation = orgHighlighting,
                                     decorationBox = { innerTextField ->
                                         OutlinedTextFieldDefaults.DecorationBox(
                                             value = vm.selectedFileContent,
@@ -367,9 +333,6 @@ fun App() {
     }
 }
 
-// TEMP DEBUG: bump when changing the probe, so a stale build is obvious in the log.
-private const val EDITOR_PROBE_BUILD = "probe-7-addfix"
-
 /**
  * Tracks which characters of the editor are on screen, so the highlighter can style only those.
  *
@@ -418,46 +381,6 @@ private class EditorViewport {
 
         /** Styled up front, before the first layout tells us what is actually on screen. */
         const val INITIAL_STYLED_CHARS = 4_000
-    }
-}
-
-// TEMP DEBUG (editor performance investigation) — delete along with the switcher in App().
-// Each mode changes how many style spans the editor's text carries, holding the text itself
-// constant, so the cost of span count can be separated from the cost of producing the spans.
-private enum class EditorPerfMode(val label: String) {
-    /** The fix: full styling for the visible range, metrics-only elsewhere. */
-    SCOPED("Scoped"),
-
-    /** Previous behaviour — every construct styled across the whole document. */
-    FULL("Full"),
-
-    /** No transformation at all — the zero-span reference. */
-    OFF("Off"),
-}
-
-/**
- * TEMP DEBUG: measures a keystroke all the way to pixels. [start] is called from `onValueChange`,
- * [reportIfPending] from the text field's draw phase, so the reported time spans recomposition,
- * layout and draw — not just the highlighting.
- *
- * Deliberately a plain holder rather than Compose state: writing to it must not trigger another
- * recomposition and perturb what is being measured.
- */
-private class KeystrokeProbe {
-    private var startedAt: kotlin.time.TimeSource.Monotonic.ValueTimeMark? = null
-
-    fun start() {
-        startedAt = kotlin.time.TimeSource.Monotonic.markNow()
-    }
-
-    fun cancel() {
-        startedAt = null
-    }
-
-    fun reportIfPending(tag: String) {
-        val mark = startedAt ?: return
-        startedAt = null
-        println("[PERF] keystroke->pixels [$tag] ${mark.elapsedNow()}")
     }
 }
 
