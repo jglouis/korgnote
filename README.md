@@ -67,6 +67,7 @@ in your IDE’s toolbar or run it directly from the terminal:
 | `NOTES_DIR` | Directory of `.org` files to serve. Defaults to the bundled samples. |
 | `KORGNOTE_TOKEN` | Require `Authorization: Bearer <token>` on `/api`, and listen on all interfaces. |
 | `KORGNOTE_ALLOW_LAN` | `1` to listen on all interfaces **without** a token. For testing only. |
+| `KORGNOTE_PORT` | Port to listen on. Defaults to 8080; handy for a second instance while testing. |
 
 With no variables set the server listens on **127.0.0.1 only**, so an unauthenticated server is not
 reachable from the network. It logs, on startup, one line saying which of these three modes it is in.

@@ -9,6 +9,7 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.server.application.call
+import io.ktor.server.application.ApplicationStopping
 import io.ktor.server.application.install
 import io.ktor.server.application.log
 import io.ktor.server.engine.embeddedServer
@@ -38,7 +39,10 @@ import java.nio.file.Paths
 
 fun main() {
     val security = ServerSecurity.fromEnvironment()
-    embeddedServer(Netty, port = SERVER_PORT, host = security.bindHost) { module(security) }
+    // KORGNOTE_PORT mostly exists so a second instance can be run alongside the real one while
+    // testing, without stopping the one being used.
+    val port = System.getenv("KORGNOTE_PORT")?.trim()?.toIntOrNull() ?: SERVER_PORT
+    embeddedServer(Netty, port = port, host = security.bindHost) { module(security) }
         .start(wait = true)
 }
 
@@ -137,6 +141,14 @@ fun Application.module(security: ServerSecurity = ServerSecurity.open()) {
 
     val store = openStore()
 
+    // The generation counter the sync API hands out, and the watcher that keeps it honest about
+    // edits the server did not make itself.
+    val journal = ChangeJournal()
+    // Bundled samples are read-only and never change, so there is nothing to watch.
+    val watcher = if (store.readOnly) null else NotesWatcher(store.root, store, journal)
+    watcher?.start(this)
+    monitor.subscribe(ApplicationStopping) { watcher?.stop() }
+
     /**
      * The version of each file this server last handed out, used to refuse a save that would
      * overwrite a change the client never saw — an edit made in Emacs, or arriving via Syncthing.
@@ -195,6 +207,9 @@ fun Application.module(security: ServerSecurity = ServerSecurity.open()) {
         }
 
         route("/api") {
+            // Sync API v1. The endpoints below it stay until the client cuts over in T10.
+            syncApiV1(store, journal)
+
             get("/") {
                 call.respondText("Ktor: ${Greeting().greet()}")
             }

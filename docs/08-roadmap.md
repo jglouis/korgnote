@@ -30,7 +30,8 @@ Updated 2026-09-21.
 | ✅ | T7 Structural edit API | Done — `org.edit`; ordinals replaced by node identity |
 | ✅ | T2 Transport hygiene | Done — gzip, bearer token, loopback default, LAN opt-in for testing |
 | ✅ | T8 Replica store | Done — local replica; the app opens and edits with the server unreachable |
-| ❌ | T9–T11, T13–T18 | Not started |
+| ✅ | T9 Sync API v1 | Done — manifest, conditional files, bundle, SSE fed by a file watcher |
+| ❌ | T10–T11, T13–T18 | Not started |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -281,7 +282,31 @@ replica is populated by the existing `/api/org-content` call, as this task speci
 offline edit survives a restart; the same `DocumentStore` tests pass against the in-memory
 implementation with no filesystem involved.
 
-### T9 · Sync API v1 (server)
+### T9 · Sync API v1 (server) — ✅ **done**
+**Landed** `/api/v1/manifest[?since=]`, conditional `GET|PUT|DELETE /api/v1/files/{path…}`, a
+streamed NDJSON `/api/v1/bundle[?since=]` with a size cap, and `/api/v1/events` as SSE. `FileStore`
+gained create (`If-None-Match: *`) and delete-to-trash: a deleted note moves to
+`.korgnote-trash/<date>/` rather than being unlinked, which makes a sync bug recoverable. A
+`ChangeJournal` holds the generation counter and a bounded log; `NotesWatcher` feeds it from a
+`WatchService`, so an edit made in Emacs becomes a generation bump and an SSE event. The old
+endpoints are untouched until the client cuts over in T10.
+**Design note** A stale `If-Match` answers **409**, not 412, and includes the current `ETag`: this is
+a mergeable conflict, not a precondition the client should give up on. The journal is deliberately an
+optimisation — a `since` it cannot cover returns a full manifest — which is what makes it safe to
+hold only in memory across restarts.
+**Also added** `KORGNOTE_PORT`, so a second server can run beside the real one while testing.
+**Verified** 34 server tests (14 API, 7 journal, 2 watcher, plus the existing suites). The watcher
+test prints its measured latency; an external edit was detected in **110 ms**, comfortably inside the
+"within seconds" the protocol promises. Then every acceptance criterion was checked with `curl`
+against a real server, which is how the task phrased them: manifest listed, `If-None-Match` → **304**,
+stale `If-Match` → **409** with the file untouched on disk, current `If-Match` → 200, bundle as
+NDJSON, `?since` returning only the delta and falling back to a full manifest for an unknown
+generation, and — writing files directly on disk, the Emacs case — two `event: changed` frames
+arriving on the SSE stream.
+**Not covered by an automated test** The SSE stream itself. Driving a never-ending response through
+the Ktor test host deadlocked the test rather than exercising the server, so it is verified by curl
+above and by the journal and watcher tests underneath it, rather than by a flaky test pretending to
+be evidence.
 **Depends** T1
 **Scope** `/api/v1/manifest`, `GET|PUT|DELETE /api/v1/files/{path…}` with ETag semantics,
 `GET /api/v1/bundle` (streamed NDJSON, for clients that start empty), `/api/v1/events` SSE

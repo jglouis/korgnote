@@ -2,6 +2,7 @@ package com.korgnote.server
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.LocalDate
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
@@ -44,7 +45,8 @@ sealed interface WriteResult {
  * from, so an unchanged file is not re-read.
  */
 class FileStore(
-    private val root: Path,
+    /** The notes directory being served; the watcher needs it too. */
+    val root: Path,
     /** True when the store is serving bundled sample files, which must not be written to. */
     val readOnly: Boolean = false,
 ) {
@@ -56,7 +58,11 @@ class FileStore(
     fun list(): List<FileMeta> {
         if (!root.exists() || !root.isDirectory()) return emptyList()
         return Files.walk(root).use { paths ->
-            paths.filter { it.isRegularFile() && it.extension in ALLOWED_EXTENSIONS }
+            paths.filter {
+                it.isRegularFile() && it.extension in ALLOWED_EXTENSIONS &&
+                    // Deleted notes live under the root but are not part of the library.
+                    !it.any { segment -> segment.toString() == TRASH_DIRECTORY }
+            }
                 .map { metaOf(relativePathOf(it), it) }
                 .toList()
         }.filterNotNull().sortedBy { it.path }
@@ -112,6 +118,92 @@ class FileStore(
         }
     }
 
+    /**
+     * The sync API's write: creates or replaces [path] according to the conditional headers.
+     *
+     * [ifMatch] is "I edited the version with this hash" — a mismatch is a [WriteResult.Conflict],
+     * not an error, because the two versions can still be merged. [mustNotExist] is `If-None-Match:
+     * *`, the capture case: create it, or tell me it is already there.
+     */
+    fun put(
+        path: String,
+        content: String,
+        ifMatch: String? = null,
+        mustNotExist: Boolean = false,
+    ): WriteResult {
+        if (readOnly) return WriteResult.ReadOnly
+        val file = resolve(path) ?: return WriteResult.Rejected("invalid path")
+
+        val bytes = content.encodeToByteArray()
+        if (bytes.size > MAX_BYTES) return WriteResult.Rejected("file too large")
+
+        val exists = file.isRegularFile()
+        if (mustNotExist && exists) return WriteResult.Conflict(metaOf(path, file))
+        if (ifMatch != null) {
+            if (!exists) return WriteResult.NotFound
+            val current = metaOf(path, file)
+            if (current.etag != ifMatch) return WriteResult.Conflict(current)
+        }
+
+        return try {
+            Files.createDirectories(file.parent)
+            val temporary = Files.createTempFile(file.parent, ".korgnote", ".tmp")
+            try {
+                Files.write(temporary, bytes)
+                Files.move(
+                    temporary,
+                    file,
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE,
+                )
+            } catch (failure: Exception) {
+                Files.deleteIfExists(temporary)
+                throw failure
+            }
+            hashes.remove(path)
+            WriteResult.Written(metaOf(path, file))
+        } catch (failure: Exception) {
+            WriteResult.Rejected(failure.message ?: "write failed")
+        }
+    }
+
+    /**
+     * Moves [path] into `.korgnote-trash/<date>/`, rather than unlinking it.
+     *
+     * Cheap insurance: a sync bug that deletes the wrong note is recoverable, and a few kilobytes of
+     * text is not worth the risk of being right.
+     */
+    fun delete(path: String, ifMatch: String?): WriteResult {
+        if (readOnly) return WriteResult.ReadOnly
+        val file = resolve(path) ?: return WriteResult.Rejected("invalid path")
+        if (!file.isRegularFile()) return WriteResult.NotFound
+
+        val current = metaOf(path, file)
+        if (ifMatch != null && current.etag != ifMatch) return WriteResult.Conflict(current)
+
+        return try {
+            val day = LocalDate.now().toString()
+            val target = root.resolve(".korgnote-trash").resolve(day).resolve(path)
+            Files.createDirectories(target.parent)
+            Files.move(file, uniqueTrashPath(target), StandardCopyOption.ATOMIC_MOVE)
+            hashes.remove(path)
+            WriteResult.Written(current)
+        } catch (failure: Exception) {
+            WriteResult.Rejected(failure.message ?: "delete failed")
+        }
+    }
+
+    /** Deleting the same path twice in a day must not overwrite the first copy. */
+    private fun uniqueTrashPath(target: Path): Path {
+        if (!target.exists()) return target
+        var index = 2
+        while (true) {
+            val candidate = target.resolveSibling("${target.fileName}.$index")
+            if (!candidate.exists()) return candidate
+            index++
+        }
+    }
+
     private fun metaOf(path: String, file: Path): FileMeta {
         val size = file.fileSize()
         val mtime = file.getLastModifiedTime().toMillis()
@@ -157,6 +249,7 @@ class FileStore(
     }
 
     private companion object {
+        const val TRASH_DIRECTORY = ".korgnote-trash"
         val ALLOWED_EXTENSIONS = setOf("org")
         const val ETAG_BYTES = 16
         const val MAX_BYTES = 32 * 1024 * 1024
