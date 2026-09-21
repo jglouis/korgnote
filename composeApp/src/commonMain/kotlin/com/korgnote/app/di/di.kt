@@ -14,7 +14,6 @@ import com.korgnote.common.replica.SyncEngine
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 
 // Simple Koin setup for Multiplatform Compose
 val appModule = module {
@@ -58,10 +57,10 @@ expect fun platformBuildHttpClient(): HttpClient
  * Stamp for conflict copies: `yyyyMMdd-HHmmss` in local time, matching Syncthing's naming so the
  * files look familiar next to the ones it already makes.
  */
-@OptIn(ExperimentalTime::class)
 internal fun conflictTimestamp(): String {
     val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+    // Month is an enum here, so its number comes from the ordinal; January is 0.
     fun pad(value: Int, width: Int = 2) = value.toString().padStart(width, '0')
-    return "${pad(now.year, 4)}${pad(now.monthNumber)}${pad(now.dayOfMonth)}-" +
+    return "${pad(now.year, 4)}${pad(now.month.ordinal + 1)}${pad(now.day)}-" +
         "${pad(now.hour)}${pad(now.minute)}${pad(now.second)}"
 }
