@@ -15,6 +15,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import io.ktor.client.request.put
 
 /**
  * These notes are also edited in Emacs and delivered by Syncthing, so the server has to answer from
@@ -43,11 +44,11 @@ class ExternalEditsTest {
         file.writeText("* TODO before\n")
         application { module() }
 
-        assertEquals("* TODO before\n", client.get("/api/content/inbox.org").bodyAsText())
+        assertEquals("* TODO before\n", client.get("/api/v1/files/inbox.org").bodyAsText())
 
         file.writeText("* TODO edited in Emacs\n")
 
-        assertEquals("* TODO edited in Emacs\n", client.get("/api/content/inbox.org").bodyAsText())
+        assertEquals("* TODO edited in Emacs\n", client.get("/api/v1/files/inbox.org").bodyAsText())
     }
 
     @Test
@@ -55,12 +56,12 @@ class ExternalEditsTest {
         File(notesDir, "first.org").writeText("* one\n")
         application { module() }
 
-        assertTrue(client.get("/api/org-tree-paths").bodyAsText().contains("first.org"))
+        assertTrue(client.get("/api/v1/manifest").bodyAsText().contains("first.org"))
 
         File(notesDir, "second.org").writeText("* two\n")
 
         assertTrue(
-            client.get("/api/org-tree-paths").bodyAsText().contains("second.org"),
+            client.get("/api/v1/manifest").bodyAsText().contains("second.org"),
             "a file added after startup should show up",
         )
     }
@@ -69,11 +70,11 @@ class ExternalEditsTest {
     fun aFileCreatedOutsideTheServerAppearsInOrgContent() = testApplication {
         File(notesDir, "first.org").writeText("* one\n")
         application { module() }
-        client.get("/api/org-content")
+        client.get("/api/v1/bundle")
 
         File(notesDir, "second.org").writeText("* two\n")
 
-        assertTrue(client.get("/api/org-content").bodyAsText().contains("second.org"))
+        assertTrue(client.get("/api/v1/bundle").bodyAsText().contains("second.org"))
     }
 
     @Test
@@ -82,12 +83,15 @@ class ExternalEditsTest {
         file.writeText("* TODO before\n")
         application { module() }
 
-        // The client reads the file...
-        client.get("/api/content/inbox.org")
+        // The client reads the file, keeping the version it was given...
+        val etag = client.get("/api/v1/files/inbox.org").headers[HttpHeaders.ETag]!!
         // ...then it changes on disk underneath...
         file.writeText("* TODO edited in Emacs\n")
-        // ...and the client saves what it had.
-        val response = client.post("/api/content/inbox.org") { setBody("* TODO from the app\n") }
+        // ...and the client saves what it had, naming the version it edited.
+        val response = client.put("/api/v1/files/inbox.org") {
+            header(HttpHeaders.IfMatch, etag)
+            setBody("* TODO from the app\n")
+        }
 
         assertEquals(HttpStatusCode.Conflict, response.status)
         assertEquals(
@@ -103,16 +107,22 @@ class ExternalEditsTest {
         file.writeText("* TODO before\n")
         application { module() }
 
-        client.get("/api/content/inbox.org")
+        val stale = client.get("/api/v1/files/inbox.org").headers[HttpHeaders.ETag]!!
         file.writeText("* TODO edited in Emacs\n")
         assertEquals(
             HttpStatusCode.Conflict,
-            client.post("/api/content/inbox.org") { setBody("* nope\n") }.status,
+            client.put("/api/v1/files/inbox.org") {
+                header(HttpHeaders.IfMatch, stale)
+                setBody("* nope\n")
+            }.status,
         )
 
-        // Re-reading establishes the new baseline, so the next save is accepted.
-        client.get("/api/content/inbox.org")
-        val response = client.post("/api/content/inbox.org") { setBody("* TODO reconciled\n") }
+        // Re-reading gives the current version, so the next save is accepted.
+        val current = client.get("/api/v1/files/inbox.org").headers[HttpHeaders.ETag]!!
+        val response = client.put("/api/v1/files/inbox.org") {
+            header(HttpHeaders.IfMatch, current)
+            setBody("* TODO reconciled\n")
+        }
 
         assertEquals(HttpStatusCode.OK, response.status)
         assertEquals("* TODO reconciled\n", file.readText())
@@ -124,22 +134,22 @@ class ExternalEditsTest {
         file.writeText("* TODO before\n")
         application { module() }
 
-        val read = client.get("/api/content/inbox.org")
+        val read = client.get("/api/v1/files/inbox.org")
         val etag = read.headers[HttpHeaders.ETag]
         assertNotNull(etag, "reads should advertise the version they served")
 
-        val accepted = client.post("/api/content/inbox.org") {
+        val accepted = client.put("/api/v1/files/inbox.org") {
             header(HttpHeaders.IfMatch, etag)
             setBody("* TODO after\n")
         }
         assertEquals(HttpStatusCode.OK, accepted.status)
         assertEquals("* TODO after\n", file.readText())
 
-        val stale = client.post("/api/content/inbox.org") {
+        val staleAttempt = client.put("/api/v1/files/inbox.org") {
             header(HttpHeaders.IfMatch, etag)
             setBody("* TODO stale\n")
         }
-        assertEquals(HttpStatusCode.Conflict, stale.status)
+        assertEquals(HttpStatusCode.Conflict, staleAttempt.status)
         assertEquals("* TODO after\n", file.readText())
     }
 
@@ -151,7 +161,7 @@ class ExternalEditsTest {
         application { module() }
 
         try {
-            val response = client.post("/api/content/../outside_secret.org") { setBody("clobbered\n") }
+            val response = client.post("/api/v1/files/../outside_secret.org") { setBody("clobbered\n") }
 
             assertTrue(
                 response.status == HttpStatusCode.NotFound ||

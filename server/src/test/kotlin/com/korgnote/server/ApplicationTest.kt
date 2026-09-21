@@ -23,7 +23,7 @@ class ApplicationTest {
         application {
             module()
         }
-        val response = client.get("/api/org-tree-paths")
+        val response = client.get("/api/v1/manifest")
         assertEquals(HttpStatusCode.OK, response.status)
         val body = response.bodyAsText()
         // Should contain some of our resource files in the tree
@@ -36,7 +36,7 @@ class ApplicationTest {
         application {
             module()
         }
-        val response = client.get("/api/content/notes.org")
+        val response = client.get("/api/v1/files/notes.org")
         assertEquals(HttpStatusCode.OK, response.status)
     }
 
@@ -56,14 +56,14 @@ class ApplicationTest {
                 application {
                     module()
                 }
-                val response = client.get("/api/org-tree-paths")
+                val response = client.get("/api/v1/manifest")
                 assertEquals(HttpStatusCode.OK, response.status)
                 val body = response.bodyAsText()
                 assertTrue(body.contains("root.org"))
                 assertTrue(body.contains("Sub"))
                 assertTrue(body.contains("leaf.org"))
 
-                val contentResponse = client.get("/api/content/Sub/leaf.org")
+                val contentResponse = client.get("/api/v1/files/Sub/leaf.org")
                 assertEquals(HttpStatusCode.OK, contentResponse.status)
                 assertEquals("* Leaf", contentResponse.bodyAsText())
             }
@@ -89,7 +89,7 @@ class ApplicationTest {
                 }
                 
                 val newContent = "* Updated Content"
-                val response = client.post("/api/content/save.org") {
+                val response = client.put("/api/v1/files/save.org") {
                     setBody(newContent)
                 }
                 
@@ -97,7 +97,7 @@ class ApplicationTest {
                 assertEquals(newContent, file.readText())
                 
                 // Also verify it's updated in the GET response
-                val getResponse = client.get("/api/content/save.org")
+                val getResponse = client.get("/api/v1/files/save.org")
                 assertEquals(newContent, getResponse.bodyAsText())
             }
         } finally {
@@ -120,7 +120,7 @@ class ApplicationTest {
                 application {
                     module()
                 }
-                val response = client.get("/api/org-tree-paths")
+                val response = client.get("/api/v1/manifest")
                 assertEquals(HttpStatusCode.OK, response.status)
                 assertTrue(response.bodyAsText().contains("test.org"))
             }
@@ -149,7 +149,7 @@ class ApplicationTest {
                 application {
                     module()
                 }
-                val response = client.get("/api/org-tree-paths")
+                val response = client.get("/api/v1/manifest")
                 assertEquals(HttpStatusCode.OK, response.status)
                 assertTrue(response.bodyAsText().contains("env.org"))
             }

@@ -1,6 +1,5 @@
 package com.korgnote.app.viewmodel
 
-import com.korgnote.app.data.OrgRepository
 import com.korgnote.common.fs.Folder
 import com.korgnote.common.fs.TreeUtils
 import com.korgnote.common.org.OrgNode
@@ -17,6 +16,9 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import com.korgnote.common.replica.DocumentStore
+import com.korgnote.common.replica.InMemoryReplicaStorage
+import com.korgnote.common.replica.SyncEngine
 
 /**
  * Opening a file at a particular heading, the way the calendar does.
@@ -49,27 +51,14 @@ class CalendarNavigationTest {
         * TODO Delta
     """.trimIndent() + "\n"
 
-    private class FakeRepository(private val files: MutableMap<String, String>) : OrgRepository {
-        override suspend fun fetchAllContents(): Map<String, String> = files.toMap()
-
-        override suspend fun fetchTree(): Folder =
-            TreeUtils.buildFromPaths(files.keys.sorted(), rootName = "Org")
-
-        override suspend fun fetchRawContent(path: String): String = files.getValue(path)
-
-        override suspend fun saveContent(path: String, content: String) {
-            files[path] = content
-        }
-    }
-
     private lateinit var viewModel: FileTreeViewModel
 
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
-        viewModel = FileTreeViewModel(
-            FakeRepository(mutableMapOf(agenda to agendaText, other to otherText)),
-        )
+        val store = DocumentStore(InMemoryReplicaStorage())
+        val api = FakeSyncApi(mutableMapOf(agenda to agendaText, other to otherText))
+        viewModel = FileTreeViewModel(SyncEngine(store, api), store)
     }
 
     @AfterTest

@@ -5,10 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.korgnote.app.data.OrgRepository
 import com.korgnote.common.fs.TreeUtils
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.DocumentStore
+import com.korgnote.common.replica.SyncEngine
 import com.korgnote.app.ui.File
 import com.korgnote.app.ui.Folder
 import com.korgnote.app.ui.Node
@@ -23,6 +23,9 @@ import kotlinx.datetime.LocalDate
 import com.korgnote.common.fs.File as SharedFile
 import com.korgnote.common.fs.Folder as SharedFolder
 import com.korgnote.common.fs.Node as SharedNode
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Simple ViewModel that holds a file tree and uses a repository to fetch org contents.
@@ -30,7 +33,7 @@ import com.korgnote.common.fs.Node as SharedNode
 
 
 class FileTreeViewModel(
-    private val repository: OrgRepository,
+    private val sync: SyncEngine,
     /**
      * The local replica. Reads and writes go here first, which is what lets the app open and edit
      * notes with the server unreachable. The network only populates it (T8); the sync engine that
@@ -105,6 +108,9 @@ class FileTreeViewModel(
      * Element to bring into view, set when a file is opened at a particular heading — currently from
      * a calendar entry. Consumed once, via [onScrolledToElement].
      */
+    /** Guards against starting a second event stream on recomposition. */
+    private var watching = false
+
     var scrollToElementIndex: Int? by mutableStateOf(null)
         private set
 
@@ -251,7 +257,7 @@ class FileTreeViewModel(
         selectedOrgNode = updatedDoc
         scheduledByDate = buildScheduledIndex(orgContents)
         try {
-            repository.saveContent(path, selectedFileContent)
+            sync.sync()
             clearError()
         } catch (t: Throwable) {
             // Rethrows if this job was cancelled, so cancellation stays cancellation
@@ -286,10 +292,12 @@ class FileTreeViewModel(
         orgContents[file] = updatedDoc
         selectedOrgNode = updatedDoc
 
-        // Persist change to server
+        // Write locally, then push. The local write already happened above, so a failure here
+        // leaves the file dirty for the next cycle rather than losing the toggle.
         scope?.launch {
             try {
-                repository.saveContent(file, selectedFileContent)
+                store.save(file, selectedFileContent)
+                sync.sync()
                 scheduledByDate = buildScheduledIndex(orgContents)
                 clearError()
             } catch (t: Throwable) {
@@ -340,19 +348,65 @@ class FileTreeViewModel(
      * content, which meant an unreachable server left the app empty. The replica *is* the content
      * now, so a failure costs freshness, not access.
      */
+    /**
+     * Runs a sync cycle when the server can be reached, then shows whatever the replica holds.
+     *
+     * A network failure is not fatal: the replica *is* the content, so being offline costs
+     * freshness, not access.
+     */
     suspend fun loadFromServer() {
         try {
-            val data = repository.fetchAllContents()
-            store.acceptAllFromServer(data)
-            clearError()
+            val report = sync.sync()
+            if (report.conflicted.isNotEmpty()) {
+                lastErrorMessage = "Kept your version of ${report.conflicted.joinToString(", ")}; " +
+                    "the server has a different one."
+            } else {
+                clearError()
+            }
         } catch (t: Throwable) {
             // Rethrows if this job was cancelled, so cancellation stays cancellation instead of
             // being reported as a failure.
             currentCoroutineContext().ensureActive()
             lastErrorMessage = friendlyErrorMessage(t)
-            println("[DEBUG_LOG][FileTreeViewModel] Offline, using the local replica: ${t.message}")
         }
         showFromReplica()
+    }
+
+    /** Applies a single change the server announced over SSE. */
+    suspend fun onRemoteChange(path: String) {
+        if (sync.pull(path)) showFromReplica()
+    }
+
+    /**
+     * Follows the server's change stream for as long as the app runs, so an edit made in Emacs shows
+     * up without a refresh.
+     *
+     * Reconnects with a backoff, and re-syncs after each reconnection: the stream is a hint, so a
+     * gap in it costs latency, never an edit.
+     */
+    fun watchServer() {
+        if (watching) return
+        watching = true
+        viewModelScope.launch {
+            var backoff = 1.seconds
+            while (isActive) {
+                try {
+                    sync.watch { showFromReplica() }
+                    // A clean end means the server closed the stream; reconnect promptly.
+                    backoff = 1.seconds
+                } catch (t: Throwable) {
+                    // Cancellation is the app shutting down, not a dropped connection.
+                    currentCoroutineContext().ensureActive()
+                    println("[DEBUG_LOG][FileTreeViewModel] Event stream dropped: ${t.message}")
+                    // Back off so an unreachable server is not hammered, but keep trying: without
+                    // this the app silently stops seeing edits made elsewhere.
+                    backoff = (backoff * 2).coerceAtMost(30.seconds)
+                }
+                delay(backoff)
+                // Catch up on whatever was missed while disconnected; the stream is only a hint.
+                runCatching { sync.sync() }.onSuccess { showFromReplica() }
+            }
+        }
     }
 
     /** Rebuilds everything the UI shows out of the replica. */

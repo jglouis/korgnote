@@ -42,7 +42,7 @@ fun main() {
     // KORGNOTE_PORT mostly exists so a second instance can be run alongside the real one while
     // testing, without stopping the one being used.
     val port = System.getenv("KORGNOTE_PORT")?.trim()?.toIntOrNull() ?: SERVER_PORT
-    embeddedServer(Netty, port = port, host = security.bindHost) { module(security) }
+    embeddedServer(Netty, port = port, host = security.bindHost) { module(security, watchFiles = true) }
         .start(wait = true)
 }
 
@@ -50,7 +50,17 @@ fun main() {
  * [security] defaults to open because that is what the test host and a plain local run want; `main`
  * passes what the environment actually asks for.
  */
-fun Application.module(security: ServerSecurity = ServerSecurity.open()) {
+fun Application.module(
+    security: ServerSecurity = ServerSecurity.open(),
+    /**
+     * Whether to watch the notes directory for external edits.
+     *
+     * Off by default because tests start this module dozens of times, and a file watcher per test —
+     * polling the filesystem on platforms without a native backend — costs far more than the tests
+     * themselves. `main` turns it on.
+     */
+    watchFiles: Boolean = false,
+) {
     log.info(security.describe())
 
     install(ContentNegotiation) { json() }
@@ -145,7 +155,7 @@ fun Application.module(security: ServerSecurity = ServerSecurity.open()) {
     // edits the server did not make itself.
     val journal = ChangeJournal()
     // Bundled samples are read-only and never change, so there is nothing to watch.
-    val watcher = if (store.readOnly) null else NotesWatcher(store.root, store, journal)
+    val watcher = if (watchFiles && !store.readOnly) NotesWatcher(store.root, store, journal) else null
     watcher?.start(this)
     monitor.subscribe(ApplicationStopping) { watcher?.stop() }
 
@@ -207,77 +217,11 @@ fun Application.module(security: ServerSecurity = ServerSecurity.open()) {
         }
 
         route("/api") {
-            // Sync API v1. The endpoints below it stay until the client cuts over in T10.
+            // Sync API v1. The endpoints it replaced were deleted in T10.
             syncApiV1(store, journal)
 
             get("/") {
                 call.respondText("Ktor: ${Greeting().greet()}")
-            }
-            // Returns a JSON object mapping filename -> raw file text.
-            //
-            // The server deliberately does not parse: the client has the same parser and needs the
-            // source text anyway to edit it, so sending text is both smaller and lossless.
-            get("/org-content") {
-                val contents = buildMap {
-                    for (meta in store.list()) {
-                        val text = store.read(meta.path) ?: continue
-                        lastServed[meta.path] = meta.etag
-                        put(meta.path, text)
-                    }
-                }
-                call.respond(contents)
-            }
-            // Returns a JSON serializable Folder tree instead of raw paths
-            get("/org-tree-paths") {
-                call.respond(buildFromPaths(store.list().map { it.path }, rootName = "Org"))
-            }
-            // Convenience endpoint to fetch a single file content
-            get("/content/{name...}") {
-                val name = call.parameters.getAll("name")?.joinToString("/").orEmpty()
-                val meta = store.meta(name)
-                val body = meta?.let { store.read(name) }
-                if (meta == null || body == null) {
-                    call.respondText("Not found: $name", status = HttpStatusCode.NotFound)
-                } else {
-                    lastServed[name] = meta.etag
-                    call.response.header(HttpHeaders.ETag, meta.etag)
-                    call.respondText(body)
-                }
-            }
-
-            // Save content for a single file
-            post("/content/{name...}") {
-                val name = call.parameters.getAll("name")?.joinToString("/").orEmpty()
-                val newBody = call.receiveText()
-                // An explicit If-Match wins; otherwise fall back to whatever this server last
-                // handed out for the file, which catches the edit-in-Emacs case.
-                val expected = call.request.header(HttpHeaders.IfMatch)?.trim('"') ?: lastServed[name]
-
-                when (val result = store.write(name, newBody, expected)) {
-                    is WriteResult.Written -> {
-                        lastServed[name] = result.meta.etag
-                        call.response.header(HttpHeaders.ETag, result.meta.etag)
-                        call.respond(HttpStatusCode.OK, "Saved")
-                    }
-
-                    is WriteResult.Conflict -> {
-                        lastServed[name] = result.current.etag
-                        call.response.header(HttpHeaders.ETag, result.current.etag)
-                        call.respondText(
-                            "The file changed on disk since it was read; nothing was written.",
-                            status = HttpStatusCode.Conflict,
-                        )
-                    }
-
-                    WriteResult.NotFound ->
-                        call.respondText("File not found or not in allowed directory", status = HttpStatusCode.NotFound)
-
-                    WriteResult.ReadOnly ->
-                        call.respondText("Server is in read-only mode (resources)", status = HttpStatusCode.Forbidden)
-
-                    is WriteResult.Rejected ->
-                        call.respondText("Cannot write: ${result.reason}", status = HttpStatusCode.UnprocessableEntity)
-                }
             }
         }
     }

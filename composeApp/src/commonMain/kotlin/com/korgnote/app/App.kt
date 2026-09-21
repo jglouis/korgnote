@@ -40,6 +40,8 @@ fun App() {
         val vm = koinViewModel<FileTreeViewModel>()
         LaunchedEffect(Unit) {
             vm.loadFromServer()
+            // Then follow the server's change stream for the rest of the session.
+            vm.watchServer()
         }
         ModalNavigationDrawer(
             drawerState = drawerState,

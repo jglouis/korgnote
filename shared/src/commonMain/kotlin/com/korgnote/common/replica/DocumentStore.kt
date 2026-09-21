@@ -147,6 +147,75 @@ class DocumentStore(private val storage: ReplicaStorage) {
         _changes.emit(ReplicaChange.Reloaded())
     }
 
+    /**
+     * Records that [path]'s current content reached the server: it becomes the base, and the file is
+     * no longer dirty.
+     *
+     * The content is re-read under the lock rather than passed in, so an edit made while the push
+     * was in flight stays dirty instead of being marked as synced.
+     */
+    suspend fun markPushed(path: String, etag: String, pushedContent: String) {
+        mutex.withLock {
+            val current = storage.read(path)
+            val meta = storage.readMeta()
+            val existing = meta.files[path] ?: FileMeta(path)
+            if (current != pushedContent) {
+                // Edited again mid-flight: keep it dirty, but the base did move.
+                storage.writeBase(path, pushedContent)
+                storage.writeMeta(meta.copy(files = meta.files + (path to existing.copy(etag = etag))))
+                return@withLock
+            }
+            storage.writeBase(path, pushedContent)
+            storage.writeMeta(
+                meta.copy(
+                    files = meta.files + (path to existing.copy(
+                        etag = etag,
+                        dirty = false,
+                        conflicted = false,
+                        size = pushedContent.length.toLong(),
+                    )),
+                ),
+            )
+        }
+    }
+
+    /** Flags [path] as diverged from the server, keeping the local version untouched. */
+    suspend fun markConflicted(path: String, remoteEtag: String?) {
+        mutex.withLock {
+            val meta = storage.readMeta()
+            val existing = meta.files[path] ?: FileMeta(path)
+            storage.writeMeta(
+                meta.copy(
+                    files = meta.files + (path to existing.copy(conflicted = true, etag = remoteEtag ?: existing.etag)),
+                ),
+            )
+        }
+    }
+
+    suspend fun conflictedPaths(): List<String> =
+        storage.readMeta().files.values.filter { it.conflicted }.map { it.path }.sorted()
+
+    /** Remembers how far the replica has caught up, so the next sync can ask for a delta. */
+    suspend fun setGeneration(generation: Long) {
+        mutex.withLock {
+            val meta = storage.readMeta()
+            storage.writeMeta(meta.copy(generation = maxOf(meta.generation, generation)))
+        }
+    }
+
+    suspend fun generation(): Long = storage.readMeta().generation
+
+    /** Removes [path] locally without recording a deletion to push. */
+    suspend fun removeLocally(path: String) {
+        mutex.withLock {
+            storage.delete(path)
+            storage.deleteBase(path)
+            val meta = storage.readMeta()
+            storage.writeMeta(meta.copy(files = meta.files - path))
+        }
+        _changes.emit(ReplicaChange.Deleted(path))
+    }
+
     /** The content as the server last had it: the ancestor a three-way merge (T11) will need. */
     suspend fun base(path: String): String? = storage.readBase(path)
 }

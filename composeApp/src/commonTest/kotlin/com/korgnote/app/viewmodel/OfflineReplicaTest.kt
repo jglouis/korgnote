@@ -1,8 +1,5 @@
 package com.korgnote.app.viewmodel
 
-import com.korgnote.app.data.OrgRepository
-import com.korgnote.common.fs.Folder
-import com.korgnote.common.fs.TreeUtils
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +13,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import com.korgnote.common.replica.SyncEngine
 
 /**
  * T8's acceptance at the app level: the app opens, renders and edits notes with the server
@@ -28,50 +26,23 @@ class OfflineReplicaTest {
     private val serverText = "* TODO From the server\n"
 
     /** A repository that can be switched offline, the way a train tunnel does it. */
-    private class FlakyRepository(private val files: MutableMap<String, String>) : OrgRepository {
-        var online = true
-        val saves = mutableListOf<Pair<String, String>>()
-
-        private fun requireOnline() {
-            if (!online) throw RuntimeException("Connection refused")
-        }
-
-        override suspend fun fetchAllContents(): Map<String, String> {
-            requireOnline()
-            return files.toMap()
-        }
-
-        override suspend fun fetchTree(): Folder {
-            requireOnline()
-            return TreeUtils.buildFromPaths(files.keys.sorted(), rootName = "Org")
-        }
-
-        override suspend fun fetchRawContent(path: String): String {
-            requireOnline()
-            return files.getValue(path)
-        }
-
-        override suspend fun saveContent(path: String, content: String) {
-            requireOnline()
-            files[path] = content
-            saves.add(path to content)
-        }
-    }
-
-    private lateinit var repository: FlakyRepository
+    private lateinit var repository: FakeSyncApi
     private lateinit var storage: InMemoryReplicaStorage
 
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
-        repository = FlakyRepository(mutableMapOf(path to serverText))
+        repository = FakeSyncApi(mutableMapOf(path to serverText))
         storage = InMemoryReplicaStorage()
     }
 
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
 
-    private fun viewModel() = FileTreeViewModel(repository, DocumentStore(storage))
+    private fun viewModel(): FileTreeViewModel {
+        val store = DocumentStore(storage)
+        return FileTreeViewModel(SyncEngine(store, repository), store)
+    }
 
     @Test
     fun anOnlineLoadFillsTheReplica() = runTest {

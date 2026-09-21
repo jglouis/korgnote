@@ -31,7 +31,8 @@ Updated 2026-09-21.
 | ✅ | T2 Transport hygiene | Done — gzip, bearer token, loopback default, LAN opt-in for testing |
 | ✅ | T8 Replica store | Done — local replica; the app opens and edits with the server unreachable |
 | ✅ | T9 Sync API v1 | Done — manifest, conditional files, bundle, SSE fed by a file watcher |
-| ❌ | T10–T11, T13–T18 | Not started |
+| ✅ | T10 Sync engine and cutover | Done — old API deleted; the client syncs through v1 |
+| ❌ | T10b, T11, T13–T18 | Not started |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -315,7 +316,26 @@ fed by a `WatchService`. Old endpoints remain for now.
 with `If-Match` and get a 409 on a stale write, and receive an SSE event when a file is
 touched by Emacs.
 
-### T10 · Sync engine (client) and cutover
+### T10 · Sync engine (client) and cutover — ✅ **done**
+**Landed** `SyncEngine` in `shared/` implements the reconciliation table over `DocumentStore` and a
+`SyncApi` interface; `KtorSyncApi` in the client is the HTTP half, including the SSE stream. The
+view model now takes the engine instead of a repository, the file tree is built from the replica, and
+the app follows the event stream for the session, so an edit made in Emacs appears without a refresh.
+**The cutover is complete.** `/api/org-content`, `/api/org-tree-paths` and `/api/content/{…}` are
+deleted along with `KtorOrgRepository` and `OrgRepository` — verified by curl against a real server:
+all three now answer **404** while `/api/v1/manifest` serves. Nothing in the client parses a
+server-provided AST; it moves text and etags only (D2, D3).
+**Not included** Merging. A push refused with 409 keeps the local version and flags it
+(`conflictedPaths`), and the UI says so. Three-way merge and conflict copies are T11. Every branch of
+the table is written so that no edit is ever discarded in the meantime — including the awkward row
+where a file was deleted on the server but edited here, which re-pushes it.
+**Verified** 14 `SyncEngineTests`, one per row of the table plus the two event-stream cases, using a
+fake server that counts requests — which is how "a cold start transfers only what it lacks" is
+asserted rather than asserted-about: the second cycle fetches **nothing**. Removing the conflict
+branch fails the test that protects a local edit. The server's own suite was ported to v1 rather than
+deleted, so the notes-directory resolution, tilde and env expansion, and external-edit protection
+keep their coverage — now expressed with explicit `If-Match` instead of the server inferring a
+baseline.
 **Depends** T8, T9
 **Scope** `SyncEngine` implementing the pull/push table
 ([05](05-sync-protocol.md#sync-algorithm)) without merge yet (conflicts are deferred to

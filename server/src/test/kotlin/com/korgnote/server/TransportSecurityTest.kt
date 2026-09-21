@@ -61,7 +61,7 @@ class TransportSecurityTest {
     fun responsesAreGzippedWhenTheClientAsksForIt() = testApplication {
         application { module(ServerSecurity.open()) }
 
-        val response = client.get("/api/org-content") {
+        val response = client.get("/api/v1/bundle") {
             header(HttpHeaders.AcceptEncoding, "gzip")
         }
         assertEquals(HttpStatusCode.OK, response.status)
@@ -72,7 +72,7 @@ class TransportSecurityTest {
     fun aClientThatDoesNotAskForCompressionGetsPlainText() = testApplication {
         application { module(ServerSecurity.open()) }
 
-        val response = client.get("/api/org-content") {
+        val response = client.get("/api/v1/bundle") {
             header(HttpHeaders.AcceptEncoding, "identity")
         }
         assertEquals(HttpStatusCode.OK, response.status)
@@ -85,7 +85,7 @@ class TransportSecurityTest {
     fun anUnauthenticatedApiRequestIsRefusedWhenATokenIsSet() = testApplication {
         application { module(ServerSecurity(token = token, allowLanWithoutToken = false)) }
 
-        val response = client.get("/api/org-tree-paths")
+        val response = client.get("/api/v1/manifest")
         assertEquals(HttpStatusCode.Unauthorized, response.status)
         assertTrue(response.bodyAsText().contains("Bearer"), "the refusal should say how to fix it")
     }
@@ -94,7 +94,7 @@ class TransportSecurityTest {
     fun theWrongTokenIsAlsoRefused() = testApplication {
         application { module(ServerSecurity(token = token, allowLanWithoutToken = false)) }
 
-        val response = client.get("/api/org-tree-paths") {
+        val response = client.get("/api/v1/manifest") {
             header(HttpHeaders.Authorization, "Bearer not-the-token")
         }
         assertEquals(HttpStatusCode.Unauthorized, response.status)
@@ -104,7 +104,7 @@ class TransportSecurityTest {
     fun theRightTokenIsAccepted() = testApplication {
         application { module(ServerSecurity(token = token, allowLanWithoutToken = false)) }
 
-        val response = client.get("/api/org-tree-paths") {
+        val response = client.get("/api/v1/manifest") {
             header(HttpHeaders.Authorization, "Bearer $token")
         }
         assertEquals(HttpStatusCode.OK, response.status)
@@ -114,7 +114,7 @@ class TransportSecurityTest {
     fun writesAreProtectedTooNotJustReads() = testApplication {
         application { module(ServerSecurity(token = token, allowLanWithoutToken = false)) }
 
-        val response = client.get("/api/content/notes.org")
+        val response = client.get("/api/v1/files/notes.org")
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 
@@ -122,6 +122,6 @@ class TransportSecurityTest {
     fun withNoTokenConfiguredTheApiIsOpen() = testApplication {
         application { module(ServerSecurity.open()) }
 
-        assertEquals(HttpStatusCode.OK, client.get("/api/org-tree-paths").status)
+        assertEquals(HttpStatusCode.OK, client.get("/api/v1/manifest").status)
     }
 }

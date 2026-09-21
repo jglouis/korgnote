@@ -45,11 +45,5 @@ kotlin {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
         }
-        // iOS gets its own tests: the storage there talks to Foundation, and a cast that compiles
-        // can still throw at runtime. Only running it on a simulator proves otherwise.
-        iosTest.dependencies {
-            implementation(libs.kotlin.test)
-            implementation(libs.kotlinx.coroutines.test)
-        }
     }
 }

@@ -1,6 +1,5 @@
 package com.korgnote.app.viewmodel
 
-import com.korgnote.app.data.OrgRepository
 import com.korgnote.common.fs.Folder
 import com.korgnote.common.fs.TreeUtils
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +14,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import com.korgnote.common.replica.DocumentStore
+import com.korgnote.common.replica.InMemoryReplicaStorage
+import com.korgnote.common.replica.SyncEngine
 
 /**
  * Editing and adding elements is a small state machine over the document text, and getting it wrong
@@ -34,30 +36,15 @@ class ElementEditingTest {
         * TODO Second task
     """.trimIndent() + "\n"
 
-    private class FakeRepository(private val files: MutableMap<String, String>) : OrgRepository {
-        val saves = mutableListOf<Pair<String, String>>()
-
-        override suspend fun fetchAllContents(): Map<String, String> = files.toMap()
-
-        override suspend fun fetchTree(): Folder =
-            TreeUtils.buildFromPaths(files.keys.sorted(), rootName = "Org")
-
-        override suspend fun fetchRawContent(path: String): String = files.getValue(path)
-
-        override suspend fun saveContent(path: String, content: String) {
-            files[path] = content
-            saves.add(path to content)
-        }
-    }
-
-    private lateinit var repository: FakeRepository
+    private lateinit var repository: FakeSyncApi
     private lateinit var viewModel: FileTreeViewModel
 
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
-        repository = FakeRepository(mutableMapOf(path to initialText))
-        viewModel = FileTreeViewModel(repository)
+        repository = FakeSyncApi(mutableMapOf(path to initialText))
+        val store = DocumentStore(InMemoryReplicaStorage())
+        viewModel = FileTreeViewModel(SyncEngine(store, repository), store)
     }
 
     @AfterTest
