@@ -32,7 +32,7 @@ kotlin {
     // them. iOS gets its own implementation; wasm has no filesystem and uses the in-memory one.
     applyDefaultHierarchyTemplate()
     sourceSets {
-        val jvmSharedMain by creating { dependsOn(commonMain.get()) }
+        val jvmSharedMain = create("jvmSharedMain") { dependsOn(commonMain.get()) }
         jvmMain.get().dependsOn(jvmSharedMain)
         androidMain.get().dependsOn(jvmSharedMain)
 
@@ -42,6 +42,12 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
         }
         commonTest.dependencies {
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
+        }
+        // iOS gets its own tests: the storage there talks to Foundation, and a cast that compiles
+        // can still throw at runtime. Only running it on a simulator proves otherwise.
+        iosTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
         }

@@ -1,11 +1,13 @@
 package com.korgnote.common.replica
 
+import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.serialization.json.Json
 import platform.Foundation.NSApplicationSupportDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSString
+import platform.Foundation.create
 import platform.Foundation.NSURL
 import platform.Foundation.NSUTF8StringEncoding
 import platform.Foundation.NSUserDomainMask
@@ -18,8 +20,8 @@ import platform.Foundation.writeToFile
  * `NSString.writeToFile(atomically = true)` gives the same crash-safety as the JVM implementation's
  * write-then-rename: a killed app leaves the old note or the new one, never half of either.
  */
-@OptIn(ExperimentalForeignApi::class)
-class FileSystemReplicaStorage(private val root: String) : ReplicaStorage {
+@OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+class FileSystemReplicaStorage(root: String) : ReplicaStorage {
 
     private val manager = NSFileManager.defaultManager
     private val notesDir = "$root/notes"
@@ -38,7 +40,10 @@ class FileSystemReplicaStorage(private val root: String) : ReplicaStorage {
     private fun writeText(path: String, content: String) {
         val parent = path.substringBeforeLast('/')
         manager.createDirectoryAtPath(parent, withIntermediateDirectories = true, attributes = null, error = null)
-        (content as NSString).writeToFile(path, atomically = true, encoding = NSUTF8StringEncoding, error = null)
+        // NSString.create, not a cast: a Kotlin String is not an NSString in Kotlin/Native, and
+        // `content as NSString` compiles but throws at runtime.
+        NSString.create(string = content)
+            .writeToFile(path, atomically = true, encoding = NSUTF8StringEncoding, error = null)
     }
 
     override suspend fun list(): List<String> {
@@ -77,11 +82,10 @@ class FileSystemReplicaStorage(private val root: String) : ReplicaStorage {
 }
 
 /** The app container directory the replica lives in on iOS. */
-@OptIn(ExperimentalForeignApi::class)
 fun defaultReplicaRoot(): String {
     val paths = NSSearchPathForDirectoriesInDomains(
-        NSApplicationSupportDirectory.toULong(),
-        NSUserDomainMask.toULong(),
+        NSApplicationSupportDirectory,
+        NSUserDomainMask,
         true,
     )
     val support = paths.firstOrNull() as? String ?: NSURL.fileURLWithPath(".").path.orEmpty()

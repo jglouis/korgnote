@@ -20,7 +20,7 @@ import java.io.File
  * Writes go to a temporary file and are then moved into place, so a crash or a pulled battery
  * leaves either the old content or the new one — never half a note.
  */
-class FileSystemReplicaStorage(private val root: File) : ReplicaStorage {
+class FileSystemReplicaStorage(root: File) : ReplicaStorage {
 
     private val notesDir = File(root, "notes")
     private val baseDir = File(root, ".korgnote/base")

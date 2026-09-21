@@ -3,7 +3,6 @@ package com.korgnote.server
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.call
 import io.ktor.server.request.header
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.header
@@ -15,7 +14,8 @@ import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -100,17 +100,21 @@ fun Route.syncApiV1(store: FileStore, journal: ChangeJournal) {
             call.respondTextWriter(ContentType.Application.Json) {
                 var budget = BUNDLE_BYTE_BUDGET
                 for (path in paths) {
-                    val meta = store.meta(path) ?: continue
-                    val text = store.read(path) ?: continue
+                    // Reading files is blocking; keep it off the thread serving the response.
+                    val meta = withContext(Dispatchers.IO) { store.meta(path) } ?: continue
+                    val text = withContext(Dispatchers.IO) { store.read(path) } ?: continue
                     if (budget - text.length < 0) {
-                        write(json.encodeToString(BundleTruncated(generation = journal.generation)))
-                        write("\n")
+                        val marker = json.encodeToString(BundleTruncated(generation = journal.generation))
+                        withContext(Dispatchers.IO) { write(marker); write("\n") }
                         break
                     }
                     budget -= text.length
-                    write(json.encodeToString(BundleLine(path, meta.etag, text)))
-                    write("\n")
-                    flush()
+                    val line = json.encodeToString(BundleLine(path, meta.etag, text))
+                    withContext(Dispatchers.IO) {
+                        write(line)
+                        write("\n")
+                        flush()
+                    }
                 }
             }
         }
@@ -118,15 +122,19 @@ fun Route.syncApiV1(store: FileStore, journal: ChangeJournal) {
         get("/events") {
             call.response.header(HttpHeaders.CacheControl, "no-cache")
             call.respondTextWriter(ContentType.Text.EventStream) {
+                // Each frame is built in memory and then written on the IO dispatcher: writing to a
+                // slow client blocks, and that must not happen on a thread serving other requests.
+                suspend fun send(frame: String) = withContext(Dispatchers.IO) {
+                    write(frame)
+                    flush()
+                }
+
                 // A hint stream: clients reconcile with the manifest, so a missed event is a delay,
                 // never a lost edit.
-                write(": connected\n\n")
-                flush()
+                send(": connected\n\n")
                 journal.events.collect { entry ->
                     val name = if (entry.deleted) "deleted" else "changed"
-                    write("event: $name\n")
-                    write("data: ${json.encodeToString(entry)}\n\n")
-                    flush()
+                    send("event: $name\ndata: ${json.encodeToString(entry)}\n\n")
                 }
             }
         }

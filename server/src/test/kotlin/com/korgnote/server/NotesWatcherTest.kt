@@ -10,6 +10,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -46,11 +48,11 @@ class NotesWatcherTest {
         NotesWatcher(dir.toPath(), store, journal).start(scope)
 
         // Give the watcher a moment to register before touching anything.
-        kotlinx.coroutines.delay(500)
+        kotlinx.coroutines.delay(500.milliseconds)
         val started = System.currentTimeMillis()
         File(dir, "a.org").writeText("* Edited in Emacs\n")
 
-        val seen = withTimeoutOrNull(30_000) {
+        val seen = withTimeoutOrNull(30.seconds) {
             journal.events.first { it.path == "a.org" }
         }
         val elapsed = System.currentTimeMillis() - started
@@ -68,10 +70,10 @@ class NotesWatcherTest {
         val journal = ChangeJournal()
         NotesWatcher(dir.toPath(), store, journal).start(scope)
 
-        kotlinx.coroutines.delay(500)
+        kotlinx.coroutines.delay(500.milliseconds)
         File(dir, "fresh.org").writeText("* New\n")
 
-        val seen = withTimeoutOrNull(30_000) {
+        val seen = withTimeoutOrNull(30.seconds) {
             journal.events.first { it.path == "fresh.org" }
         }
         assertNotNull(seen, "a new file must reach the journal")

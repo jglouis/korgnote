@@ -3,8 +3,9 @@ package com.korgnote.server
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -20,6 +21,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.io.path.extension
 import kotlin.io.path.isDirectory
 import kotlin.io.path.isRegularFile
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Watches the notes directory so an edit made in Emacs — or delivered by Syncthing — becomes a
@@ -46,10 +48,10 @@ class NotesWatcher(
     }
 
     private suspend fun run() {
-        val watcher = FileSystems.getDefault().newWatchService()
+        val watcher = withContext(Dispatchers.IO) { FileSystems.getDefault().newWatchService() }
         try {
-            registerRecursively(root, watcher)
-            while (currentlyActive()) {
+            withContext(Dispatchers.IO) { registerRecursively(root, watcher) }
+            while (currentCoroutineContext().isActive) {
                 // Poll rather than block, so cancelling the server does not leave a thread parked.
                 val key: WatchKey = withContext(Dispatchers.IO) {
                     watcher.poll(500, TimeUnit.MILLISECONDS)
@@ -62,7 +64,7 @@ class NotesWatcher(
 
                     // A new directory has to be watched too, or notes created inside it are missed.
                     if (changed.isDirectory() && event.kind() == ENTRY_CREATE) {
-                        runCatching { registerRecursively(changed, watcher) }
+                        withContext(Dispatchers.IO) { runCatching { registerRecursively(changed, watcher) } }
                         continue
                     }
                     if (changed.extension != "org") continue
@@ -71,21 +73,18 @@ class NotesWatcher(
                     val path = root.relativize(changed).joinToString("/") { it.toString() }
                     // Editors write through temporary files, so a single save can arrive as several
                     // events; the etag is read fresh here and identical repeats are harmless.
-                    val meta = if (changed.isRegularFile()) store.meta(path) else null
+                    val meta = withContext(Dispatchers.IO) {
+                        if (changed.isRegularFile()) store.meta(path) else null
+                    }
                     journal.record(path, meta?.etag, deleted = meta == null)
                 }
                 if (!key.reset()) break
                 // Coalesce the burst an editor produces when saving one file.
-                delay(100)
+                delay(100.milliseconds)
             }
         } finally {
-            runCatching { watcher.close() }
+            withContext(NonCancellable + Dispatchers.IO) { runCatching { watcher.close() } }
         }
-    }
-
-    private suspend fun currentlyActive(): Boolean {
-        kotlinx.coroutines.currentCoroutineContext().ensureActive()
-        return kotlinx.coroutines.currentCoroutineContext()[Job]?.isActive ?: true
     }
 
     private fun registerRecursively(directory: Path, watcher: WatchService) {

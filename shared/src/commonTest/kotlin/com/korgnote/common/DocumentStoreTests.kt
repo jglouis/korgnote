@@ -4,6 +4,7 @@ import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.ReplicaChange
 import com.korgnote.common.replica.ReplicaStorage
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -21,6 +22,7 @@ import kotlin.test.assertTrue
  * `FileSystemDocumentStoreTest` runs this same contract against a real directory, which is what
  * makes the in-memory implementation a fair stand-in for the web build and for tests.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 abstract class DocumentStoreContract {
 
     abstract suspend fun storage(): ReplicaStorage
