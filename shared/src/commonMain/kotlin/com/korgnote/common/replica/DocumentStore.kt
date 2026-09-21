@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.Mutex
+import com.korgnote.common.sync.conflictCopyName
 import kotlinx.coroutines.sync.withLock
 
 /** Something that happened to the replica, for the view models to react to. */
@@ -177,6 +178,18 @@ class DocumentStore(private val storage: ReplicaStorage) {
                 ),
             )
         }
+    }
+
+    /**
+     * Saves [content] beside [path] as a conflict copy and returns its name.
+     *
+     * The copy is dirty, so the next sync pushes it and the other device sees it too — which is the
+     * point: the version that could not be merged is not stranded on one machine.
+     */
+    suspend fun writeConflictCopy(path: String, content: String, timestamp: String): String {
+        val name = conflictCopyName(path, timestamp)
+        save(name, content)
+        return name
     }
 
     /** Flags [path] as diverged from the server, keeping the local version untouched. */

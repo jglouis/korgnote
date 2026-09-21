@@ -11,6 +11,10 @@ import org.koin.dsl.module
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.SyncApi
 import com.korgnote.common.replica.SyncEngine
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 // Simple Koin setup for Multiplatform Compose
 val appModule = module {
@@ -25,7 +29,7 @@ val appModule = module {
         KtorSyncApi(get(), baseUrlProvider, settings::getServerToken)
     }
 
-    single { SyncEngine(get(), get()) }
+    single { SyncEngine(get(), get(), ::conflictTimestamp) }
     // The local replica. Each platform contributes the ReplicaStorage it can actually use:
     // a real directory on desktop, Android and iOS; memory on the web, which is online by
     // definition and reloads from the server anyway.
@@ -49,3 +53,15 @@ fun buildBaseUrl(host: String, port: Int): String {
 
 // Platform-specific client builder (Android adds Logging, others are minimal)
 expect fun platformBuildHttpClient(): HttpClient
+
+/**
+ * Stamp for conflict copies: `yyyyMMdd-HHmmss` in local time, matching Syncthing's naming so the
+ * files look familiar next to the ones it already makes.
+ */
+@OptIn(ExperimentalTime::class)
+internal fun conflictTimestamp(): String {
+    val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+    fun pad(value: Int, width: Int = 2) = value.toString().padStart(width, '0')
+    return "${pad(now.year, 4)}${pad(now.monthNumber)}${pad(now.dayOfMonth)}-" +
+        "${pad(now.hour)}${pad(now.minute)}${pad(now.second)}"
+}

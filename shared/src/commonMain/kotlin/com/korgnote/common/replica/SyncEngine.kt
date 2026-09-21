@@ -1,5 +1,8 @@
 package com.korgnote.common.replica
 
+import com.korgnote.common.sync.MergeResult
+import com.korgnote.common.sync.merge
+
 /** What one sync cycle did, mostly so tests and the UI can say something specific. */
 data class SyncReport(
     val pulled: List<String> = emptyList(),
@@ -28,6 +31,11 @@ data class SyncReport(
 class SyncEngine(
     private val store: DocumentStore,
     private val api: SyncApi,
+    /**
+     * Stamp for conflict copies, as `yyyyMMdd-HHmmss`. Injected rather than read from a clock so
+     * the merge behaviour can be tested without one.
+     */
+    private val timestamp: () -> String = { "unknown" },
 ) {
 
     /** One full cycle: diff the manifest, pull what is stale, push what is dirty. */
@@ -68,10 +76,11 @@ class SyncEngine(
                     PushOutcome.SKIPPED -> Unit
                 }
 
-                // Both moved. Merging is T11; until then keep the local edit and say so.
-                else -> {
-                    store.markConflicted(entry.path, entry.etag)
-                    conflicted.add(entry.path)
+                // Both moved: try to reconcile them, and only involve the user if that fails.
+                else -> when (reconcile(entry.path, entry.etag)) {
+                    Reconciliation.MERGED -> pushed.add(entry.path)
+                    Reconciliation.CONFLICTED -> conflicted.add(entry.path)
+                    Reconciliation.FAILED -> failed.add(entry.path)
                 }
             }
         }
@@ -144,6 +153,44 @@ class SyncEngine(
                 }
             } else if (pull(path)) {
                 onApplied(path)
+            }
+        }
+    }
+
+    private enum class Reconciliation { MERGED, CONFLICTED, FAILED }
+
+    /**
+     * Merges a file both sides changed.
+     *
+     * A clean merge is written locally and pushed with the *remote's* etag, so the server accepts
+     * it. A real conflict keeps the local version live and saves the server's beside it as
+     * `name.sync-conflict-<timestamp>.org` — deliberately not conflict markers inside the note, and
+     * deliberately never a choice between the two. Neither version is ever discarded.
+     */
+    private suspend fun reconcile(path: String, remoteEtag: String): Reconciliation {
+        val local = store.read(path) ?: return Reconciliation.FAILED
+        val base = store.base(path) ?: ""
+        val remote = api.fetch(path) ?: return Reconciliation.FAILED
+
+        return when (val result = merge(base, local, remote.text)) {
+            is MergeResult.Merged -> {
+                store.save(path, result.text)
+                when (val push = api.push(path, result.text, ifMatch = remote.etag)) {
+                    is PushResult.Pushed -> {
+                        store.markPushed(path, push.etag, result.text)
+                        Reconciliation.MERGED
+                    }
+                    // It moved again while we were merging; the next cycle will pick it up.
+                    else -> Reconciliation.FAILED
+                }
+            }
+
+            is MergeResult.Conflicted -> {
+                store.writeConflictCopy(path, remote.text, timestamp())
+                // The base becomes the server's version, so the next cycle sees a plain local edit
+                // rather than reporting the same conflict forever.
+                store.markConflicted(path, remoteEtag)
+                Reconciliation.CONFLICTED
             }
         }
     }

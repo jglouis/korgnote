@@ -358,8 +358,9 @@ class FileTreeViewModel(
         try {
             val report = sync.sync()
             if (report.conflicted.isNotEmpty()) {
-                lastErrorMessage = "Kept your version of ${report.conflicted.joinToString(", ")}; " +
-                    "the server has a different one."
+                val names = report.conflicted.joinToString(", ")
+                lastErrorMessage = "Kept your version of $names. The other version is saved beside " +
+                    "it as a .sync-conflict- copy."
             } else {
                 clearError()
             }

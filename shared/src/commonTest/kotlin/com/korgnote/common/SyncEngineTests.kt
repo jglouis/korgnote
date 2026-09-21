@@ -44,7 +44,7 @@ class SyncEngineTests {
             pending.clear()
         }
 
-        fun put(path: String, text: String, etag: String = "e-$path-${text.length}") {
+        fun put(path: String, text: String, etag: String = "e-$path-${text.hashCode()}") {
             files[path] = etag to text
         }
 
@@ -70,7 +70,7 @@ class SyncEngineTests {
             if (ifMatch != null && current != null && current.first != ifMatch) {
                 return PushResult.Conflict(current.first)
             }
-            val etag = "e-$path-${content.length}-pushed"
+            val etag = "e-$path-${content.hashCode()}"
             files[path] = etag to content
             generation++
             return PushResult.Pushed(etag)
@@ -87,7 +87,7 @@ class SyncEngineTests {
     private fun setUp(): Triple<FakeServer, DocumentStore, SyncEngine> {
         val server = FakeServer()
         val store = DocumentStore(InMemoryReplicaStorage())
-        return Triple(server, store, SyncEngine(store, server))
+        return Triple(server, store, SyncEngine(store, server) { "20260921-101500" })
     }
 
     /** "Cold start transfers a manifest plus only stale files." */
@@ -140,22 +140,81 @@ class SyncEngineTests {
         assertEquals("* A edited\n", store.base("a.org"), "the base moves with the push")
     }
 
-    /** Both sides moved: keep the local edit, flag it, and never overwrite. */
+    /**
+     * T11's headline: two devices editing *different* headings converge with nobody asked anything.
+     */
     @Test
-    fun aDivergedFileIsFlaggedAndTheLocalEditIsKept() = runTest {
+    fun editsToDifferentHeadingsMergeWithoutAsking() = runTest {
         val (server, store, engine) = setUp()
-        server.put("a.org", "* A\n")
+        val original = "* TODO First\nbody one\n\n* TODO Second\nbody two\n"
+        server.put("a.org", original)
         engine.sync()
 
-        store.save("a.org", "* Edited here\n")
-        server.put("a.org", "* Edited elsewhere\n")
+        store.save("a.org", original.replace("body one", "body one, from the phone"))
+        server.put("a.org", original.replace("body two", "body two, from Emacs"))
+
+        val report = engine.sync()
+
+        assertEquals(listOf("a.org"), report.pushed)
+        assertEquals(emptyList(), report.conflicted)
+        val result = store.read("a.org")!!
+        assertTrue(result.contains("from the phone"), result)
+        assertTrue(result.contains("from Emacs"), result)
+        // And the server has the merged version too, so the other device converges on the next pull.
+        assertEquals(result, server.files["a.org"]?.second)
+    }
+
+    /** The other half: the same line changed twice keeps both versions, losing neither. */
+    @Test
+    fun theSameLineChangedTwiceYieldsAConflictCopyAndLosesNothing() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* TODO Task\n")
+        engine.sync()
+
+        store.save("a.org", "* DONE Task\n")
+        server.put("a.org", "* NEXT Task\n")
 
         val report = engine.sync()
 
         assertEquals(listOf("a.org"), report.conflicted)
-        assertEquals("* Edited here\n", store.read("a.org"), "the local edit must survive")
-        assertEquals(listOf("a.org"), store.conflictedPaths())
-        assertEquals(emptyList(), report.pulled, "a conflict must not silently pull over the edit")
+        assertEquals("* DONE Task\n", store.read("a.org"), "the local version stays live")
+        assertEquals(
+            "* NEXT Task\n",
+            store.read("a.sync-conflict-20260921-101500.org"),
+            "the server's version is kept beside it",
+        )
+        assertTrue(!store.read("a.org")!!.contains("<<<"), "never markers inside a note")
+    }
+
+    /** A conflict must be reported once, not on every cycle for ever. */
+    @Test
+    fun aConflictIsNotReportedAgainOnTheNextCycle() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* TODO Task\n")
+        engine.sync()
+        store.save("a.org", "* DONE Task\n")
+        server.put("a.org", "* NEXT Task\n")
+        assertEquals(listOf("a.org"), engine.sync().conflicted)
+
+        val second = engine.sync()
+        assertEquals(emptyList(), second.conflicted, "the same conflict must not repeat")
+    }
+
+    /** The conflict copy is itself a note, so it syncs to the other device too. */
+    @Test
+    fun theConflictCopyIsPushedToTheServer() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* TODO Task\n")
+        engine.sync()
+        store.save("a.org", "* DONE Task\n")
+        server.put("a.org", "* NEXT Task\n")
+        engine.sync()
+
+        engine.sync()
+        assertTrue(
+            server.files.containsKey("a.sync-conflict-20260921-101500.org"),
+            "the other device must be able to see it: ${server.files.keys}",
+        )
     }
 
     @Test

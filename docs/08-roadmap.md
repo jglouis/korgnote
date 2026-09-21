@@ -32,7 +32,8 @@ Updated 2026-09-21.
 | ✅ | T8 Replica store | Done — local replica; the app opens and edits with the server unreachable |
 | ✅ | T9 Sync API v1 | Done — manifest, conditional files, bundle, SSE fed by a file watcher |
 | ✅ | T10 Sync engine and cutover | Done — old API deleted; the client syncs through v1 |
-| ❌ | T10b, T11, T13–T18 | Not started |
+| ✅ | T11 Conflicts | Done — diff3 merge; divergent edits keep both versions, never markers |
+| ❌ | T10b, T13–T18 | Not started |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -356,7 +357,29 @@ same-origin base URL (no host/port setting needed on web), no-op
 in Emacs within seconds, and shares 100% of its ViewModel, Org-core and sync code with the
 native clients.
 
-### T11 · Conflicts
+### T11 · Conflicts — ✅ **done**
+**Landed** `shared/sync/merge.kt`: a line-based three-way merge (diff3) over base, local and remote,
+dependency-free and with the timestamp injected so it can be tested without a clock. `SyncEngine`
+now reconciles instead of only flagging — a clean merge is written locally and pushed with the
+*remote's* etag, and a real conflict keeps the local version live while the server's is saved beside
+it as `name.sync-conflict-<timestamp>.org`, mirroring Syncthing's naming. The conflict copy is itself
+a note, so it is pushed and the other device sees it too. The banner names the file and says where
+the other version went.
+**One deliberate departure from diff3** When both sides only *added* lines at the same point, both
+additions are kept rather than declared a conflict. Strict diff3 conflicts there, rightly for source
+code where order can matter. For a list of Org headings it does not, and it is the commonest case
+there is — capturing a TODO on the phone and another on the laptop. Keeping both loses nothing;
+conflicting would litter the notes with copies for the most ordinary thing a person does.
+**Never** are conflict markers written into a note. A file full of `<<<<<<<` is a corrupted note, and
+the merge has no code path that can produce one.
+**Verified** 12 `MergeTests` and 18 `SyncEngineTests`, covering both acceptance criteria directly:
+edits to different headings converge with nothing asked of the user, and the same line changed twice
+produces a conflict copy while the local version stays live. Also that the same conflict is not
+re-reported every cycle, and that the copy reaches the server. Replacing the merge with an
+unconditional conflict fails the convergence test.
+**Found while testing** The fake server in `SyncEngineTests` derived etags from content *length*, so
+two different edits of equal length looked identical to it and the conflict path was never reached.
+Etags now follow content. A fake that is too forgiving hides exactly the case the tests exist for.
 **Depends** T10
 **Scope** `sync.merge` diff3; clean merges auto-resolve; conflicting ones produce
 `name.sync-conflict-<timestamp>.org` and a UI banner (D9).
