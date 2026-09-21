@@ -61,7 +61,7 @@ class SyncEngine(
                 !dirty -> if (pull(entry.path)) pulled.add(entry.path)
 
                 // Edited locally, server unchanged since we synced: push.
-                meta.etag == entry.etag -> when (val result = pushLocal(entry.path, meta.etag)) {
+                meta.etag == entry.etag -> when (pushLocal(entry.path, meta.etag)) {
                     PushOutcome.PUSHED -> pushed.add(entry.path)
                     PushOutcome.CONFLICT -> conflicted.add(entry.path)
                     PushOutcome.FAILED -> failed.add(entry.path)
@@ -83,7 +83,7 @@ class SyncEngine(
                 val meta = store.meta(path)
                 when {
                     // Never synced: it is a local creation, not a remote deletion.
-                    meta == null || meta.etag == null ->
+                    meta?.etag == null ->
                         if (pushNew(path)) pushed.add(path) else failed.add(path)
                     // Deleted on the server but edited here: keep it and put it back.
                     meta.dirty -> if (pushNew(path)) pushed.add(path) else failed.add(path)

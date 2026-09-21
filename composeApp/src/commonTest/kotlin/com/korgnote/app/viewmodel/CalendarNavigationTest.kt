@@ -1,24 +1,18 @@
 package com.korgnote.app.viewmodel
 
-import com.korgnote.common.fs.Folder
-import com.korgnote.common.fs.TreeUtils
 import com.korgnote.common.org.OrgNode
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.toOrgDocument
+import com.korgnote.common.replica.DocumentStore
+import com.korgnote.common.replica.InMemoryReplicaStorage
+import com.korgnote.common.replica.SyncEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNull
-import com.korgnote.common.replica.DocumentStore
-import com.korgnote.common.replica.InMemoryReplicaStorage
-import com.korgnote.common.replica.SyncEngine
+import kotlin.test.*
 
 /**
  * Opening a file at a particular heading, the way the calendar does.

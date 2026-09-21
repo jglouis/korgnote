@@ -372,11 +372,6 @@ class FileTreeViewModel(
         showFromReplica()
     }
 
-    /** Applies a single change the server announced over SSE. */
-    suspend fun onRemoteChange(path: String) {
-        if (sync.pull(path)) showFromReplica()
-    }
-
     /**
      * Follows the server's change stream for as long as the app runs, so an edit made in Emacs shows
      * up without a refresh.
@@ -404,7 +399,17 @@ class FileTreeViewModel(
                 }
                 delay(backoff)
                 // Catch up on whatever was missed while disconnected; the stream is only a hint.
-                runCatching { sync.sync() }.onSuccess { showFromReplica() }
+                // Not runCatching: it would swallow cancellation and keep the loop alive after the
+                // view model is gone.
+                try {
+                    sync.sync()
+                    showFromReplica()
+                } catch (catchUpFailed: Throwable) {
+                    // Cancellation must still cancel; anything else just means still offline, and
+                    // the next reconnection will try again.
+                    currentCoroutineContext().ensureActive()
+                    println("[DEBUG_LOG][FileTreeViewModel] Catch-up sync failed: ${catchUpFailed.message}")
+                }
             }
         }
     }

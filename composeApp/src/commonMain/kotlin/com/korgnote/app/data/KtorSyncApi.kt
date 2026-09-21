@@ -19,7 +19,7 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import io.ktor.utils.io.readUTF8Line
+import io.ktor.utils.io.readLine
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -101,7 +101,7 @@ class KtorSyncApi(
             val channel = response.bodyAsChannel()
             var deleted = false
             while (true) {
-                val line = channel.readUTF8Line() ?: break
+                val line = channel.readLine() ?: break
                 when {
                     line.startsWith("event:") -> deleted = line.contains("deleted")
                     line.startsWith("data:") -> {

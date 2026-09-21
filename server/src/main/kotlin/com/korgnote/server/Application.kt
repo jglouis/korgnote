@@ -2,38 +2,18 @@ package com.korgnote.server
 
 import com.korgnote.common.Greeting
 import com.korgnote.common.SERVER_PORT
-import com.korgnote.common.fs.TreeUtils.buildFromPaths
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.serialization.kotlinx.json.json
-import io.ktor.server.application.Application
-import io.ktor.server.application.ApplicationCallPipeline
-import io.ktor.server.application.call
-import io.ktor.server.application.ApplicationStopping
-import io.ktor.server.application.install
-import io.ktor.server.application.log
-import io.ktor.server.engine.embeddedServer
-import io.ktor.server.http.content.staticFiles
-import io.ktor.server.netty.Netty
-import io.ktor.server.plugins.compression.Compression
-import io.ktor.server.plugins.compression.deflate
-import io.ktor.server.plugins.compression.gzip
-import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.server.plugins.origin
-import io.ktor.server.request.httpMethod
-import io.ktor.server.request.header
-import io.ktor.server.request.receiveText
-import io.ktor.server.request.uri
-import io.ktor.server.request.userAgent
-import io.ktor.server.response.header
-import io.ktor.server.response.respond
-import io.ktor.server.response.respondBytes
-import io.ktor.server.response.respondText
-import io.ktor.server.routing.RoutingContext
-import io.ktor.server.routing.get
-import io.ktor.server.routing.post
-import io.ktor.server.routing.route
-import io.ktor.server.routing.routing
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.application.*
+import io.ktor.server.engine.*
+import io.ktor.server.http.content.*
+import io.ktor.server.netty.*
+import io.ktor.server.plugins.*
+import io.ktor.server.plugins.compression.*
+import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
 import java.io.File
 import java.nio.file.Paths
 
@@ -167,7 +147,6 @@ fun Application.module(
      * full concurrency protocol: two app clients editing the same file still race, which is D9 and
      * waits for the sync work.
      */
-    val lastServed = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     routing {
         // Robust resolver for the WASM app output directory (Option A)
@@ -231,6 +210,6 @@ suspend fun RoutingContext.respondFavIcon() {
     if (bytes == null) {
         call.respondText("Not found", status = HttpStatusCode.NotFound)
     } else {
-        call.respondBytes(bytes, contentType = io.ktor.http.ContentType.Image.PNG)
+        call.respondBytes(bytes, contentType = ContentType.Image.PNG)
     }
 }

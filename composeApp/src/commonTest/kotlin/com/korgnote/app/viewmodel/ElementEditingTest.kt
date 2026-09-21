@@ -1,22 +1,15 @@
 package com.korgnote.app.viewmodel
 
-import com.korgnote.common.fs.Folder
-import com.korgnote.common.fs.TreeUtils
+import com.korgnote.common.replica.DocumentStore
+import com.korgnote.common.replica.InMemoryReplicaStorage
+import com.korgnote.common.replica.SyncEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
-import com.korgnote.common.replica.DocumentStore
-import com.korgnote.common.replica.InMemoryReplicaStorage
-import com.korgnote.common.replica.SyncEngine
+import kotlin.test.*
 
 /**
  * Editing and adding elements is a small state machine over the document text, and getting it wrong
