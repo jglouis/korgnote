@@ -6,6 +6,9 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.korgnote.app.data.OrgRepository
+import com.korgnote.common.fs.TreeUtils
+import com.korgnote.common.replica.InMemoryReplicaStorage
+import com.korgnote.common.replica.DocumentStore
 import com.korgnote.app.ui.File
 import com.korgnote.app.ui.Folder
 import com.korgnote.app.ui.Node
@@ -26,7 +29,15 @@ import com.korgnote.common.fs.Node as SharedNode
  */
 
 
-class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
+class FileTreeViewModel(
+    private val repository: OrgRepository,
+    /**
+     * The local replica. Reads and writes go here first, which is what lets the app open and edit
+     * notes with the server unreachable. The network only populates it (T8); the sync engine that
+     * pushes from it arrives in T10.
+     */
+    private val store: DocumentStore = DocumentStore(InMemoryReplicaStorage()),
+) : ViewModel() {
     // Exposed error message when network/server cannot be reached
     var lastErrorMessage by mutableStateOf("")
         private set
@@ -226,21 +237,27 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
         saveCurrentFile()
     }
 
+    /**
+     * Writes to the replica, then tries to push.
+     *
+     * The local write cannot fail on a network problem, so an edit is never lost to one. If the
+     * push fails the file simply stays dirty and the sync engine (T10) will carry it.
+     */
     suspend fun saveCurrentFile() {
         val path = currentFile ?: return
+        store.save(path, selectedFileContent)
+        val updatedDoc = selectedFileContent.toOrgDocument()
+        orgContents[path] = updatedDoc
+        selectedOrgNode = updatedDoc
+        scheduledByDate = buildScheduledIndex(orgContents)
         try {
             repository.saveContent(path, selectedFileContent)
-            // Re-parse the saved content into orgContents map
-            val updatedDoc = selectedFileContent.toOrgDocument()
-            orgContents[path] = updatedDoc
-            selectedOrgNode = updatedDoc
-            scheduledByDate = buildScheduledIndex(orgContents)
             clearError()
         } catch (t: Throwable) {
             // Rethrows if this job was cancelled, so cancellation stays cancellation
             // instead of being reported as a failure.
             currentCoroutineContext().ensureActive()
-            lastErrorMessage = "Failed to save: ${t.message}"
+            lastErrorMessage = "Saved locally; could not reach the server: ${t.message}"
             t.printStackTrace()
         }
     }
@@ -279,7 +296,7 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
                 // Rethrows if this job was cancelled, so cancellation stays cancellation
                 // instead of being reported as a failure.
                 currentCoroutineContext().ensureActive()
-                lastErrorMessage = "Failed to save: ${t.message}"
+                lastErrorMessage = "Saved locally; could not reach the server: ${t.message}"
                 t.printStackTrace()
             }
         }
@@ -303,76 +320,64 @@ class FileTreeViewModel(private val repository: OrgRepository) : ViewModel() {
             selectedFileContent = "* ${path}\nNo content yet."
             return
         }
-        // Fetch the file's exact raw text to edit, rather than a re-serialized version of the
-        // parsed document, so saving without changes round-trips the file byte-for-byte.
+        // From the replica, so opening a note works offline and does not wait on a round trip.
+        // The raw text is kept rather than re-serialised from the parse tree, so saving an
+        // unchanged file round-trips it byte for byte.
         viewModelScope.launch {
-            try {
-                val raw = repository.fetchRawContent(path)
-                if (currentFile == path) {
-                    selectedFileContent = raw
-                    scrollToElementIndex = scrollToHeading?.let { raw.elementIndexOf(it) }
-                }
-            } catch (t: Throwable) {
-                // Rethrows if this job was cancelled, so cancellation stays cancellation
-                // instead of being reported as a failure.
-                currentCoroutineContext().ensureActive()
-                lastErrorMessage = "Failed to load file: ${t.message}"
-                t.printStackTrace()
+            val raw = store.read(path)
+            if (currentFile == path && raw != null) {
+                selectedFileContent = raw
+                scrollToElementIndex = scrollToHeading?.let { raw.elementIndexOf(it) }
             }
         }
     }
 
     // Load tree and contents from server repository and update state
+    /**
+     * Refreshes from the server when it can be reached, then shows whatever the replica holds.
+     *
+     * A network failure is no longer fatal: it used to clear the tree so as not to show stale
+     * content, which meant an unreachable server left the app empty. The replica *is* the content
+     * now, so a failure costs freshness, not access.
+     */
     suspend fun loadFromServer() {
         try {
-            val sharedTree = repository.fetchTree()
             val data = repository.fetchAllContents()
-            orgContents.clear()
-            orgContents.putAll(data.mapValues { (_, text) -> text.toOrgDocument() })
-            tree = mapRootToUiFolder(sharedTree)
-            scheduledByDate = buildScheduledIndex(orgContents)
-            // clear error on success
+            store.acceptAllFromServer(data)
             clearError()
-            if (currentFile == null) {
-                val first = data.keys.minOrNull()
-                if (first != null) onFileSelected(first) else {
-                    selectedOrgNode = null
-                    selectedFileContent = ""
-                }
-            } else {
-                val current = currentFile
-                if (current != null) {
-                    val doc = orgContents[current]
-                    if (doc != null) {
-                        selectedOrgNode = doc
-                        try {
-                            val raw = repository.fetchRawContent(current)
-                            if (currentFile == current) selectedFileContent = raw
-                        } catch (t: Throwable) {
-                            // Rethrows if this job was cancelled, so cancellation stays cancellation
-                            // instead of being reported as a failure.
-                            currentCoroutineContext().ensureActive()
-                            lastErrorMessage = "Failed to load file: ${t.message}"
-                            t.printStackTrace()
-                        }
-                    }
-                }
-            }
         } catch (t: Throwable) {
-            // Rethrows if this job was cancelled, so cancellation stays cancellation
-            // instead of being reported as a failure.
+            // Rethrows if this job was cancelled, so cancellation stays cancellation instead of
+            // being reported as a failure.
             currentCoroutineContext().ensureActive()
-            // Failure: clear previous data to avoid showing stale content
-            orgContents.clear()
-            tree = Folder(name = "Documents", path = "", children = emptyList())
-            scheduledByDate = buildScheduledIndex(orgContents)
-            currentFile = null
-            selectedFileLabel = "No file selected"
-            selectedFileContent = ""
-            // Surface a friendly message to the UI
             lastErrorMessage = friendlyErrorMessage(t)
-            println("[DEBUG_LOG][FileTreeViewModel] Failed to load from server: ${t::class.simpleName}: ${t.message}")
-            t.printStackTrace()
+            println("[DEBUG_LOG][FileTreeViewModel] Offline, using the local replica: ${t.message}")
+        }
+        showFromReplica()
+    }
+
+    /** Rebuilds everything the UI shows out of the replica. */
+    private suspend fun showFromReplica() {
+        val paths = store.paths()
+        orgContents.clear()
+        for (path in paths) {
+            store.read(path)?.let { orgContents[path] = it.toOrgDocument() }
+        }
+        tree = mapRootToUiFolder(TreeUtils.buildFromPaths(paths, rootName = "Documents"))
+        scheduledByDate = buildScheduledIndex(orgContents)
+
+        val current = currentFile
+        if (current == null) {
+            val first = paths.minOrNull()
+            if (first != null) {
+                onFileSelected(first)
+            } else {
+                selectedOrgNode = null
+                selectedFileContent = ""
+                selectedFileLabel = "No file selected"
+            }
+        } else {
+            selectedOrgNode = orgContents[current]
+            store.read(current)?.let { selectedFileContent = it }
         }
     }
 

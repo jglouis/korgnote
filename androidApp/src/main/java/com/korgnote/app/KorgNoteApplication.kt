@@ -3,6 +3,7 @@ package com.korgnote.app
 import android.app.Application
 import com.korgnote.app.data.PersistentSettingsRepository
 import com.korgnote.app.data.SettingsRepository
+import com.korgnote.app.di.androidReplica
 import com.korgnote.app.di.initKoin
 import org.koin.dsl.module
 
@@ -13,6 +14,7 @@ class KorgNoteApplication : Application() {
         super.onCreate()
         val androidModule = module {
             single<SettingsRepository> { PersistentSettingsRepository(this@KorgNoteApplication) }
+            androidReplica(this@KorgNoteApplication)
         }
         initKoin(extraModules = listOf(androidModule))
     }

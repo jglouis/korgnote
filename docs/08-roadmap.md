@@ -15,7 +15,7 @@ edits are range replacements. T2 is done too, so everything before Phase 2 is fi
 
 ## Status
 
-Updated 2026-09-20.
+Updated 2026-09-21.
 
 | | Task | State |
 |---|---|---|
@@ -29,7 +29,8 @@ Updated 2026-09-20.
 | ✅ | T6 One grammar | Done — `orgSpans()` in shared; no Org pattern left in `composeApp/` |
 | ✅ | T7 Structural edit API | Done — `org.edit`; ordinals replaced by node identity |
 | ✅ | T2 Transport hygiene | Done — gzip, bearer token, loopback default, LAN opt-in for testing |
-| ❌ | T8–T11, T13–T18 | Not started |
+| ✅ | T8 Replica store | Done — local replica; the app opens and edits with the server unreachable |
+| ❌ | T9–T11, T13–T18 | Not started |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -250,7 +251,26 @@ changed, and the reader's checkbox tapping goes through it.
 
 ## Phase 2 — Local-first ([05](05-sync-protocol.md))
 
-### T8 · Replica store
+### T8 · Replica store — ✅ **done**
+**Landed** `ReplicaStorage` with two implementations — `FileSystemReplicaStorage` (written once in a
+`jvmSharedMain` source set that JVM and Android both use, plus a separate iOS one over
+`NSFileManager`) and `InMemoryReplicaStorage` for the web and for tests. `DocumentStore` sits on top
+and is the only writer: documents, dirty flags, change events, and the `base/` copies a three-way
+merge will need in T11. Writes are atomic (temp file then rename on JVM, `writeToFile(atomically)` on
+iOS), and a corrupt `meta.json` is discarded rather than allowed to make the notes unopenable.
+**The app now reads and writes locally.** `FileTreeViewModel` renders from the replica and saves to
+it first; the network only refreshes it. A failed load used to clear the tree "to avoid showing stale
+content", which meant an unreachable server left the app empty — now it costs freshness, not access.
+A failed save leaves the file dirty instead of losing the edit. All four entry points bind their own
+storage: a real directory on desktop, Android and iOS; memory on the web.
+**Verified** One `DocumentStoreContract` runs against both implementations — 9 cases in memory, the
+same 9 plus 4 filesystem-specific ones against a real directory — which is what makes the in-memory
+store a fair stand-in for the web build. `OfflineReplicaTest` covers the acceptance criteria at the
+app level: the app opens its notes with the server unreachable, an edit made offline stays dirty and
+survives a "restart" (a fresh view model over the same replica), and reconnecting does not overwrite
+it. Removing the dirty-file guard fails that last test in **both** implementations.
+**Not done here** Nothing pushes yet: dirty files stay dirty until the sync engine in T10. The
+replica is populated by the existing `/api/org-content` call, as this task specifies.
 **Depends** —
 **Scope** `ReplicaStorage` interface plus two implementations: `FileSystemReplicaStorage`
 (`notes/`, `.korgnote/base/`, `meta.json` under a platform app-data directory via

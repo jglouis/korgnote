@@ -28,12 +28,22 @@ kotlin {
         browser()
     }
 
+    // JVM and Android both have java.io, so the filesystem replica is written once and shared by
+    // them. iOS gets its own implementation; wasm has no filesystem and uses the in-memory one.
+    applyDefaultHierarchyTemplate()
     sourceSets {
+        val jvmSharedMain by creating { dependsOn(commonMain.get()) }
+        jvmMain.get().dependsOn(jvmSharedMain)
+        androidMain.get().dependsOn(jvmSharedMain)
+
         commonMain.dependencies {
             implementation(libs.kotlinx.serialization.core)
+            implementation(libs.kotlinx.serialization.json)
+            implementation(libs.kotlinx.coroutines.core)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }

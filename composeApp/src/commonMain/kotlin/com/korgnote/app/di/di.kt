@@ -10,6 +10,7 @@ import org.koin.core.context.startKoin
 import org.koin.core.module.Module
 import org.koin.dsl.bind
 import org.koin.dsl.module
+import com.korgnote.common.replica.DocumentStore
 
 // Simple Koin setup for Multiplatform Compose
 val appModule = module {
@@ -23,8 +24,13 @@ val appModule = module {
         val baseUrlProvider = { buildBaseUrl(repo.getServerHost(), repo.getServerPort()) }
         KtorOrgRepository(get(), baseUrlProvider, repo::getServerToken)
     } bind OrgRepository::class
-    // ViewModel uses repository
-    viewModel { FileTreeViewModel(get<OrgRepository>()) }
+    // The local replica. Each platform contributes the ReplicaStorage it can actually use:
+    // a real directory on desktop, Android and iOS; memory on the web, which is online by
+    // definition and reloads from the server anyway.
+    single { DocumentStore(get()) }
+
+    // ViewModel reads and writes the replica; the repository only refreshes it.
+    viewModel { FileTreeViewModel(get<OrgRepository>(), get<DocumentStore>()) }
 }
 
 fun initKoin(extraModules: List<Module> = emptyList()) {
