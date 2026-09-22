@@ -221,6 +221,18 @@ class OrgSyntaxHighlightingTest {
     }
 
     @Test
+    fun locationStaysLinkedWhenTheDrawerNameComesFromTheGrammar() {
+        // OrgDrawer.name drops the colons, so the reading-mode drawer view rebuilds them; without
+        // that the highlighter never enters drawer mode and the property is just a paragraph.
+        val src = orgDrawerSource("PROPERTIES", listOf(":LOCATION: 1600 Amphitheatre Pkwy"))
+        assertEquals(":PROPERTIES:\n:LOCATION: 1600 Amphitheatre Pkwy\n:END:", src)
+        val out = buildOrgHighlightedString(src, heading, viewMode = true)
+        val links = out.getLinkAnnotations(0, out.length)
+        assertEquals(1, links.size)
+        assertEquals(googleMapsUrl("1600 Amphitheatre Pkwy"), (links.single().item as LinkAnnotation.Url).url)
+    }
+
+    @Test
     fun otherDrawerPropertiesAreNotLinkedInViewMode() {
         val src = ":PROPERTIES:\n:ID: 42\n:END:"
         val out = buildOrgHighlightedString(src, heading, viewMode = true)

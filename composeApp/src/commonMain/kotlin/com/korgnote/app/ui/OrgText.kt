@@ -399,6 +399,21 @@ private fun OrgBlockView(type: String, params: String, lines: List<String>) {
     }
 }
 
+/**
+ * The Org source a drawer is highlighted from, rebuilt from its name and body lines.
+ *
+ * The two call sites spell the name differently — the grammar strips the colons off [OrgDrawer.name]
+ * while the raw-text path passes the `:PROPERTIES:` line as it stands — and the highlighter only
+ * enters drawer mode on a line that still has them, so the colons are put back here. Without that,
+ * a `:LOCATION:` property inside a parsed drawer was highlighted as a plain paragraph and lost its
+ * Google Maps link.
+ */
+internal fun orgDrawerSource(name: String, lines: List<String>): String =
+    (listOf(orgDrawerLabel(name)) + lines + ":END:").joinToString("\n")
+
+/** The drawer name as Org writes it, `:NAME:`, whichever way the caller spelled it. */
+internal fun orgDrawerLabel(name: String): String = ":" + name.trim().trim(':') + ":"
+
 @Composable
 private fun OrgDrawerView(name: String, lines: List<String>) {
     var expanded by remember { mutableStateOf(false) }
@@ -414,7 +429,7 @@ private fun OrgDrawerView(name: String, lines: List<String>) {
                 modifier = Modifier.width(16.dp)
             )
             Text(
-                text = name,
+                text = orgDrawerLabel(name),
                 style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
                 color = OrgColors.drawer
             )
@@ -422,7 +437,7 @@ private fun OrgDrawerView(name: String, lines: List<String>) {
         if (expanded) {
             Text(
                 text = buildOrgHighlightedString(
-                    (listOf(name) + lines + ":END:").joinToString("\n"),
+                    orgDrawerSource(name, lines),
                     MaterialTheme.colorScheme.primary,
                     viewMode = true
                 ),
