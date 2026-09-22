@@ -14,7 +14,11 @@ edits are range replacements. Phase 2 (T8–T11) is complete too: the app holds 
 locally, syncs through the v1 API, and merges divergent edits instead of losing them. **Phase 3 is
 complete** as well — the editor work is done bar what was deliberately deferred, and search and
 completion have landed. Next is **Phase 4** (agenda, T15–T18), whose first task is the timestamp
-parser that completion is already writing timestamps for.
+parser that completion is already writing timestamps for — but **T19 (CI) comes before all of
+it**, for the reason given there.
+
+**Phase 5 (T19–T22) came from using the thing.** Nothing in it was foreseen when the plan was
+written: it is what a day of real use and three regressions exposed.
 
 ## Status
 
@@ -40,6 +44,10 @@ Updated 2026-09-22.
 | ✅ | T14 Search | Done — linear scan over the replica, words and `tag:`, results open at the match |
 | 🟡 | T10b Web client | Mostly wired by T10; what is left is listed in the task |
 | ❌ | T15–T18 | Not started |
+| ❌ | T19 CI | Not started — nothing runs the tests but a person who remembers to |
+| ❌ | T20 File lifecycle | Not started — notes still cannot be created, renamed or deleted (D11) |
+| ❌ | T21 Link navigation | Not started — links render but do not go anywhere |
+| ❌ | T22 Whole-file editing | Not started — decide whether the second editing surface survives |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -568,6 +576,75 @@ the app closed and the network off.
 
 ---
 
+## Phase 5 — What using it exposed
+
+### T19 · Continuous integration
+**Depends** —
+**Scope** A workflow on every push: `:shared:jvmTest`, `:server:test`, `:composeApp:jvmTest`,
+plus a compile of each target that has no tests to run — `compileKotlinWasmJs`,
+`compileAndroidMain`, `compileKotlinIosSimulatorArm64`. Gradle cache, JDK and Android SDK set up
+once. A macOS runner is the only place `iosSimulatorArm64Test` can execute at all, so either that
+job runs there or it runs nightly; either is better than the present arrangement, where those
+tests have most likely never run anywhere.
+**Why first** There are over 900 tests and nothing runs them but a person who remembers to. Three
+regressions reached a device in a single day of work — a keyboard-covered suggestion strip, a
+caret landing outside a block, and a drawer that stopped opening notes — and the suite is not what
+caught any of them. Tests nobody runs are documentation.
+**Done when** A push that breaks any target, or any test, fails the build and names what broke.
+**Not included** Signing, publishing, or distributing builds. This is a gate, not a pipeline.
+
+### T20 · Creating, renaming and deleting notes
+**Depends** T10
+**Scope** The app side of D11. The server can already take a file it has never seen — `put` with
+`If-None-Match` — and `delete` exists, so what is missing is above it: view-model operations for
+create, rename and delete; the affordances in the drawer; replica bookkeeping so a new note is
+dirty-then-pushed like any edit; and a capture flow worth having on a phone, which is a new note
+from a template into a designated inbox.
+**The hard parts are not the happy paths.** A rename is a move, so it is a create and a delete that
+must not be observed half-done by the other device. A delete has to refuse, or warn, when the file
+holds edits that have not reached the server. And a note deleted on one device while being edited
+on another is the same question T11 answered for content, asked again for existence.
+**Done when** A note created on the phone appears on the laptop's disk without restarting
+anything; deleting one removes it from both; renaming keeps its content and its sync state; and
+none of the three can lose an unsynced edit.
+
+### T21 · Following links between notes
+**Depends** T14
+**Scope** `[[file:…]]`, `[[*Heading]]` and `[[id:…]]` become navigation: tapping one in reading
+mode opens the target at the right element, which is the offset-to-element lookup the calendar and
+search already share. Plus the half that makes a corpus a web rather than a pile — **backlinks**:
+"what links here", computed by the same linear scan as search, since finding every `[[…]]` that
+names this note is the same problem as finding every line that contains a word.
+**Keep the resolver in `shared`**, next to the search it is built on, so the rules for what a link
+points at are written once. Completion already *writes* these links (T13); the two must agree on
+their shape, and the fastest way to guarantee that is a test that completes a link and then
+resolves it.
+**Done when** Tapping a link opens its target at the right heading; a note shows every note that
+links to it; both work offline, and the backlink scan of the real corpus stays well under a second.
+**Not included** An `ID:` property scheme of its own, or `org-roam`'s database. The corpus is
+small enough to scan, and an index is a thing to keep correct on every save (G7).
+
+### T22 · Whole-file editing, reconsidered
+**Depends** T12b, T13
+**Scope** A decision, then the work it implies. Per-element editing ([09](09-element-editing.md))
+became the main path and the whole-file editor stayed behind as an escape hatch — holding a plain
+`String` where the element editor holds a `TextFieldValue`, with no completion, and carrying the
+viewport-highlighting machinery that only it needs. Either:
+
+- **retire it**, which first requires per-element editing to cover what it is still used for —
+  moving, promoting and demoting a heading, and editing the preamble; or
+- **bring it up to par**, hoisting its value into the view model as the element editor's is, wiring
+  completion through the same path, and keeping viewport highlighting for the large-file case.
+
+**Why it matters more than it looks** Two editing surfaces mean every editor decision is taken
+twice or forgotten once, and the second one is where the untested code lives. It also settles
+whether T12b's remaining items — read↔edit scroll mapping, debounced re-parse — are ever worth
+doing: they exist only for this surface.
+**Done when** There is one editing surface, or the second one has the same affordances as the
+first, and whichever it is, the reason is written down.
+
+---
+
 ## Sequencing notes
 
 - T1 and T2 are independent of everything else and can ship immediately.
@@ -579,3 +656,8 @@ the app closed and the network off.
 - The in-flight raw-text fix (PR #1 / uncommitted working-tree change) is superseded by T3
   and T7. Land it as-is first — it fixes real data corruption today — then let T7 remove
   the ordinal hack.
+- **T19 before Phase 4.** Everything after this point is built on a suite nothing runs; the longer
+  that is true, the more of it is decoration. It is also the only task here that takes an hour.
+- T20 before T21: a corpus you cannot add to is a corpus whose links you cannot finish writing.
+- T22 is independent and can wait, but it should be settled before the editor is touched again,
+  not after — the last three editor changes each had to ask which surface they applied to.
