@@ -42,6 +42,8 @@ import com.korgnote.common.fs.Folder as SharedFolder
 import com.korgnote.common.fs.Node as SharedNode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.Job
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -93,7 +95,17 @@ class FileTreeViewModel(
 
     fun onFilterQueryChanged(query: String) {
         filterQuery = query
-        refreshFilteredTree()
+        filterJob?.cancel()
+        // Clearing the box is not a search, so it takes effect at once rather than after a pause
+        // that would leave a filtered tree on screen for no reason.
+        if (query.isBlank()) {
+            filteredTree = tree
+            return
+        }
+        filterJob = viewModelScope.launch {
+            delay(TYPING_PAUSE)
+            refreshFilteredTree()
+        }
     }
 
     /**
@@ -152,10 +164,33 @@ class FileTreeViewModel(
     var searchResults by mutableStateOf<List<SearchHit>>(emptyList())
         private set
 
+    /**
+     * Records what was typed and searches once the typing stops.
+     *
+     * The query itself updates on the keystroke, so the field never lags; only the scan waits. It
+     * waits because scanning the whole corpus costs tens of milliseconds on a laptop and several
+     * times that on a phone, and doing it per character spends nearly all of it on prefixes nobody
+     * asked about — "g", "gr", "gro" on the way to "groceries".
+     *
+     * Results already on screen stay while the next scan is pending: they are what was asked for a
+     * moment ago, which is a better thing to show than a blank list that flickers on every letter.
+     */
     fun onSearchQueryChanged(query: String) {
         searchQuery = query
-        refreshSearch()
+        searchJob?.cancel()
+        if (query.isBlank()) {
+            searchResults = emptyList()
+            return
+        }
+        searchJob = viewModelScope.launch {
+            delay(TYPING_PAUSE)
+            refreshSearch()
+        }
     }
+
+    /** In flight or pending; a new keystroke cancels it rather than queueing another. */
+    private var searchJob: Job? = null
+    private var filterJob: Job? = null
 
     /**
      * Runs the search over text already in memory.
@@ -699,6 +734,17 @@ class FileTreeViewModel(
         val simple = t::class.simpleName ?: "Error"
         // Generic, user-friendly phrasing
         return "Cannot reach the server. Please check Settings and your connection. ($simple: $msg)"
+    }
+
+    private companion object {
+        /**
+         * How long the typing has to stop before the corpus is scanned.
+         *
+         * Long enough that a run of keystrokes costs one scan rather than one each, short enough
+         * that it reads as immediate: a pause this length is about where typing stops being a
+         * stream of characters and becomes a word someone meant.
+         */
+        val TYPING_PAUSE = 200.milliseconds
     }
 
     private fun mapSharedToUi(node: SharedNode): Node {

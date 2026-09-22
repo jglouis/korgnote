@@ -313,3 +313,25 @@ model rebuilds it when the replica or the open file changes — not per keystrok
 
 `filterQuery` became the degenerate case, as intended: the drawer parses the same query, matches
 file names with it, and understands `tag:` by asking whether a file has any hit at all.
+
+**Both boxes search once the typing stops**, after a 200 ms pause, rather than on every keystroke.
+The query updates on the keystroke, so the field never lags; only the scan waits. Measured on the
+real corpus, a scan is 10–20 ms on a laptop and several times that on a phone, and typing
+`groceries` per character spends nine scans to answer prefixes nobody asked about. Clearing the box
+is immediate — an empty box means an empty list now — and results already on screen stay while the
+next scan is pending, since they answer what was asked a moment ago and a blank list would flicker
+on every letter.
+
+The debounce made the search screen feel right and left the drawer sluggish, which located the
+real cost there: **it was rendering, not searching.** `FileTree` was a `LazyColumn` holding a single
+item with the whole recursive tree inside it, so laziness bought nothing and all 366 rows composed
+on every rebuild — and its expansion state was keyed by folder *object identity*, which a rebuilt
+tree invalidates, so each keystroke also re-opened every folder and restarted every animation. The
+reading-mode problem of [09](09-element-editing.md#known-gaps), in a second place, with the same
+fix: the tree is flattened into `visibleRows` — a pure function, so the nesting rules are testable
+now that they are a list rather than a shape made of composables — and drawn as real lazy items,
+keyed by path. Paths survive a rebuild; object identities do not.
+
+One cost remains, measured and still open: `searchOrgFile` splits a file into elements before it
+knows whether the file contains the words at all. A raw-text pre-check first would cut a scan from
+12 ms to 4 ms (search) and 10 ms to 4 ms (drawer filter) without changing what is found.

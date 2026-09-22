@@ -61,6 +61,9 @@ fun App() {
                         Spacer(Modifier.width(8.dp))
                         FileTree(
                             root = vm.filteredTree,
+                            // While filtering, show what matched even inside folders the reader
+                            // had closed: a hidden match looks like a filter that does not work.
+                            expandAll = vm.filterQuery.isNotBlank(),
                             onFileSelected = { name ->
                                 scope.launch {
                                     vm.onFileSelected(name)

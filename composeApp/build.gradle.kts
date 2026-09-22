@@ -69,6 +69,13 @@ kotlin {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.ktor.client.mock)
+            // Compose's own test API: the drawer and the editor are where the last few regressions
+            // have been, and nothing here could click a row until now.
+            implementation(libs.compose.ui.test)
+        }
+        jvmTest.dependencies {
+            // The desktop runtime the UI tests render on.
+            implementation(compose.desktop.currentOs)
         }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)

@@ -8,7 +8,11 @@ import com.korgnote.app.ui.Folder
 import com.korgnote.app.ui.Node
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -17,6 +21,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Searching the replica and opening what it finds (T14).
@@ -65,11 +70,27 @@ class SearchTest {
         Dispatchers.resetMain()
     }
 
+    /**
+     * Types into the search box and lets the debounce elapse.
+     *
+     * Searching waits for a pause in the typing, so a test that asserts straight after a keystroke
+     * is asserting about the moment before the search, not after it.
+     */
+    private fun TestScope.search(query: String) {
+        viewModel.onSearchQueryChanged(query)
+        advanceUntilIdle()
+    }
+
+    private fun TestScope.filterFiles(query: String) {
+        viewModel.onFilterQueryChanged(query)
+        advanceUntilIdle()
+    }
+
     @Test
     fun searchesEveryFileInTheReplica() = runTest {
         viewModel.loadFromServer()
 
-        viewModel.onSearchQueryChanged("the")
+        search("the")
 
         assertTrue(viewModel.searchResults.any { it.path == work })
         assertTrue(viewModel.searchResults.any { it.path == home })
@@ -78,7 +99,7 @@ class SearchTest {
     @Test
     fun openingAResultShowsItsFileAtItsElement() = runTest {
         viewModel.loadFromServer()
-        viewModel.onSearchQueryChanged("kitchen")
+        search("kitchen")
 
         viewModel.openSearchHit(viewModel.searchResults.single { it.path == home })
 
@@ -92,7 +113,7 @@ class SearchTest {
     fun openingAResultResolvesAgainstTheNewFile() = runTest {
         viewModel.loadFromServer()
         viewModel.onFileSelected(work)
-        viewModel.onSearchQueryChanged("drips")
+        search("drips")
 
         viewModel.openSearchHit(viewModel.searchResults.single())
 
@@ -103,7 +124,7 @@ class SearchTest {
     @Test
     fun resultsFollowTheReplica() = runTest {
         viewModel.loadFromServer()
-        viewModel.onSearchQueryChanged("marmalade")
+        search("marmalade")
         assertEquals(0, viewModel.searchResults.size)
 
         viewModel.onFileSelected(home)
@@ -117,7 +138,7 @@ class SearchTest {
     fun theDrawerFilterStillMatchesFileNames() = runTest {
         viewModel.loadFromServer()
 
-        viewModel.onFilterQueryChanged("home")
+        filterFiles("home")
 
         assertEquals(listOf(home), viewModel.filteredTree.filePaths())
     }
@@ -126,7 +147,7 @@ class SearchTest {
     fun theDrawerFilterUnderstandsTags() = runTest {
         viewModel.loadFromServer()
 
-        viewModel.onFilterQueryChanged("tag:work")
+        filterFiles("tag:work")
 
         // Only the file with a heading carrying the tag, even though neither file is named "work"
         // in a way the tag query looks at.
@@ -137,10 +158,82 @@ class SearchTest {
     fun anEmptyFilterKeepsTheWholeTree() = runTest {
         viewModel.loadFromServer()
 
-        viewModel.onFilterQueryChanged("tag:work")
+        filterFiles("tag:work")
         viewModel.onFilterQueryChanged("")
 
         assertEquals(listOf(home, work), viewModel.filteredTree.filePaths().sorted())
+    }
+
+    // --- Searching waits for the typing to stop ---
+
+    @Test
+    fun theScanWaitsForAPauseInTheTyping() = runTest {
+        viewModel.loadFromServer()
+
+        viewModel.onSearchQueryChanged("kitchen")
+        advanceTimeBy(100.milliseconds)
+        runCurrent()
+        assertTrue(viewModel.searchResults.isEmpty(), "searched while the typing was still going")
+
+        advanceTimeBy(150.milliseconds)
+        runCurrent()
+        assertEquals(1, viewModel.searchResults.size)
+    }
+
+    /** Which is the point: typing a word costs one scan, not one per letter. */
+    @Test
+    fun eachKeystrokeReplacesThePendingScan() = runTest {
+        viewModel.loadFromServer()
+
+        viewModel.onSearchQueryChanged("kitch")
+        advanceTimeBy(150.milliseconds)
+        viewModel.onSearchQueryChanged("kitchen")
+        advanceTimeBy(150.milliseconds)
+        runCurrent()
+        // 300 ms since the first keystroke, but only 150 since the last: nothing has run.
+        assertTrue(viewModel.searchResults.isEmpty())
+
+        advanceUntilIdle()
+        // And what finally ran was the finished word.
+        assertEquals(1, viewModel.searchResults.size)
+        assertEquals("kitchen", viewModel.searchQuery)
+    }
+
+    @Test
+    fun clearingTheQueryTakesEffectAtOnce() = runTest {
+        viewModel.loadFromServer()
+        search("kitchen")
+        assertTrue(viewModel.searchResults.isNotEmpty())
+
+        viewModel.onSearchQueryChanged("")
+
+        // No waiting: an empty box means an empty list, now.
+        assertTrue(viewModel.searchResults.isEmpty())
+    }
+
+    @Test
+    fun clearingTheFilterRestoresTheTreeAtOnce() = runTest {
+        viewModel.loadFromServer()
+        filterFiles("tag:work")
+        assertEquals(listOf(work), viewModel.filteredTree.filePaths())
+
+        viewModel.onFilterQueryChanged("")
+
+        assertEquals(listOf(home, work), viewModel.filteredTree.filePaths().sorted())
+    }
+
+    /** Stale results beat a blank list that flickers on every letter. */
+    @Test
+    fun theLastResultsStayWhileTheNextScanIsPending() = runTest {
+        viewModel.loadFromServer()
+        search("kitchen")
+        val before = viewModel.searchResults
+
+        viewModel.onSearchQueryChanged("kitchen sink")
+        advanceTimeBy(100.milliseconds)
+        runCurrent()
+
+        assertEquals(before, viewModel.searchResults)
     }
 
     private fun Folder.filePaths(): List<String> {

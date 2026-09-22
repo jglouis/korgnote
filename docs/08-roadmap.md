@@ -508,6 +508,13 @@ back out: a clock in a test suite asserts about the machine running it, so it fa
 laptop while the code is unchanged. The corpus-sized test now prints its time and checks only the
 result; an accidentally quadratic scan would announce itself by never finishing, which is not a
 failure anyone can mistake for a slow machine.
+**Searched once the typing stops** (200 ms), not per keystroke, in both the search box and the
+drawer filter: the query updates on the keystroke so the field never lags, while the scan waits for
+a pause. Clearing is immediate and stale results stay visible while the next scan is pending. That left the drawer still sluggish, which
+showed the cost there was never the scan: its tree composed all 366 rows on every rebuild and lost
+its expansion state to it, so it is now flattened into lazy rows keyed by path. The one cost still
+open — `searchOrgFile` splitting a file into elements before checking whether it contains the words
+— is written up in [06](06-editor.md#search-g2).
 **Measured on the real notes** 366 files, 1.21 MB: a word takes 17–54 ms, a tag query 8–15 ms, and
 a tag narrows a word search as it should (`cuisine` 66 hits, `tag:house cuisine` 61). The synthetic
 4 MB corpus scans in ~200 ms. Which is the whole argument for the linear scan: the index this would

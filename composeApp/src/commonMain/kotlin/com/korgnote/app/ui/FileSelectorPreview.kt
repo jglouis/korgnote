@@ -1,6 +1,5 @@
 package com.korgnote.app.ui
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,16 +19,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.tooling.preview.Preview
@@ -51,93 +47,113 @@ data class File(
     override val path: String
 ) : Node
 
+/**
+ * The file tree.
+ *
+ * A flat `LazyColumn` over [visibleRows] rather than a nested structure: only the rows on screen
+ * compose, which matters because the drawer holds a row per note — 366 of them here — and the tree
+ * is rebuilt on every keystroke of the filter.
+ *
+ * [expandAll] opens everything regardless of what the reader has closed, which is what the filter
+ * passes while it is narrowing the tree.
+ */
 @Composable
 fun FileTree(
     root: Folder,
     onFileSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
+    expandAll: Boolean = false,
 ) {
-    // Track expanded state by node identity (here by object reference via Any hash)
-    val expandedMap = remember { mutableStateMapOf<Folder, Boolean>() }
+    // Keyed by path, not by node: the tree is a new object graph after every filter keystroke and
+    // every sync, so identity-keyed state would be lost each time — re-opening every folder the
+    // reader had closed, and restarting every animation along with it.
+    val collapsed = remember { mutableStateMapOf<String, Boolean>() }
+    val rows = root.visibleRows(collapsed.keys.toSet(), expandAll)
 
-    // Make the tree scrollable to handle long file lists
-    androidx.compose.foundation.lazy.LazyColumn(modifier = modifier) {
-        item {
-            TreeFolderItem(
-                folder = root,
-                depth = 0,
-                expandedMap = expandedMap,
-                onFileSelected = onFileSelected
-            )
-        }
-    }
-}
+    LazyColumn(modifier = modifier) {
+        items(rows, key = { it.node.path }) { row ->
+            when (val node = row.node) {
+                is Folder -> TreeFolderItem(
+                    folder = node,
+                    depth = row.depth,
+                    expanded = row.expanded,
+                    // A folder opened by [expandAll] is not really open, so closing it has to
+                    // record the collapse rather than toggle from what is on screen.
+                    onToggle = {
+                        if (collapsed.remove(node.path) == null) collapsed[node.path] = true
+                    },
+                    modifier = Modifier.animateItem(),
+                )
 
-    @Composable
-    private fun TreeFolderItem(
-    folder: Folder,
-    depth: Int,
-    expandedMap: MutableMap<Folder, Boolean>,
-    onFileSelected: (String) -> Unit,
-) {
-    val isExpanded = expandedMap[folder] ?: true // root expanded by default
-    val rotation = animateFloatAsState(
-        targetValue = if (isExpanded) 180f else 0f,
-        label = "expand_rotation"
-    ).value
+                is File -> TreeFileItem(
+                    file = node,
+                    depth = row.depth,
+                    onFileSelected = onFileSelected,
+                    modifier = Modifier.animateItem(),
+                )
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { expandedMap[folder] = !isExpanded }
-            .padding(horizontal = 8.dp, vertical = 6.dp)
-            .animateContentSize(),
-        horizontalArrangement = Arrangement.Start
-    ) {
-        Spacer(Modifier.width((depth * 16).dp))
-        Icon(
-            imageVector = if (isExpanded) Icons.Filled.FolderOpen else Icons.Filled.Folder,
-            contentDescription = if (isExpanded) "Folder open" else "Folder"
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            folder.name,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f)
-        )
-        Icon(
-            imageVector = Icons.Filled.ExpandMore,
-            contentDescription = if (isExpanded) "Collapse" else "Expand",
-            modifier = Modifier.rotate(rotation)
-        )
-    }
-    HorizontalDivider()
-
-    AnimatedVisibility(
-        visible = isExpanded,
-        enter = expandVertically() + fadeIn(),
-        exit = shrinkVertically() + fadeOut(),
-    ) {
-        Column(modifier = Modifier.animateContentSize()) {
-            folder.children.forEach { child ->
-                when (child) {
-                    is Folder -> TreeFolderItem(child, depth + 1, expandedMap, onFileSelected)
-                    is File -> TreeFileItem(child, depth + 1, onFileSelected)
-                }
+                else -> Unit
             }
         }
     }
 }
 
 @Composable
-private fun TreeFileItem(file: File, depth: Int, onFileSelected: (String) -> Unit) {
-Row(
-    modifier = Modifier
-        .fillMaxWidth()
-        .clickable { onFileSelected(file.path) }
-        .padding(horizontal = 8.dp, vertical = 6.dp),
-    horizontalArrangement = Arrangement.Start
+private fun TreeFolderItem(
+    folder: Folder,
+    depth: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
+    val rotation = animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        label = "expand_rotation"
+    ).value
+
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggle() }
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.Start
+        ) {
+            Spacer(Modifier.width((depth * 16).dp))
+            Icon(
+                imageVector = if (expanded) Icons.Filled.FolderOpen else Icons.Filled.Folder,
+                contentDescription = if (expanded) "Folder open" else "Folder"
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                folder.name,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = Icons.Filled.ExpandMore,
+                contentDescription = if (expanded) "Collapse" else "Expand",
+                modifier = Modifier.rotate(rotation)
+            )
+        }
+        HorizontalDivider()
+    }
+}
+
+@Composable
+private fun TreeFileItem(
+    file: File,
+    depth: Int,
+    onFileSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { onFileSelected(file.path) }
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.Start
+    ) {
         Spacer(Modifier.width((depth * 16).dp))
         Icon(imageVector = Icons.Filled.Description, contentDescription = "File")
         Spacer(Modifier.width(8.dp))
