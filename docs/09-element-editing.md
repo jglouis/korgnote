@@ -120,6 +120,8 @@ the text before an insertion so that discarding removes it. Covered by `ElementE
   item's index is its element's index and a scroll target needs no translation — which is also why
   the calendar's jump uses `scrollToItem` rather than `BringIntoViewRequester`: the target is
   normally far off screen and has not been composed yet, so there is no node to bring anywhere.
+  The same holds for the **+** FAB: its new heading sits at the end of the list, so the view
+  scrolls to whichever element is being edited when that item is not already visible.
 
   Worth recording, because it cost time to learn: the slowness was **not** caused by T3. Measured on
   the real corpus, every path T3 touched is negligible — the server answers `/api/org-content` in

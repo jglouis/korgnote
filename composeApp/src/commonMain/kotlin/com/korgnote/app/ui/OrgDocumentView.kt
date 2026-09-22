@@ -174,6 +174,18 @@ fun OrgDocumentView(
             onScrolledToElement()
         }
     }
+
+    // A lazy list only composes what is on screen, so an element added at the far end (the FAB)
+    // has no editor to focus and nothing would bring it into view: go to it. An element already
+    // visible — long-pressed or added from its neighbour — is left where the user sees it.
+    LaunchedEffect(editingElementIndex) {
+        val index = editingElementIndex ?: return@LaunchedEffect
+        if (index in elements.indices &&
+            listState.layoutInfo.visibleItemsInfo.none { it.index == index }
+        ) {
+            listState.scrollToItem(index)
+        }
+    }
 }
 
 /**
