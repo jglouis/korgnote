@@ -14,9 +14,9 @@ Addresses G2, G3 and defect D6. Depends on the source-mapped model from
 |---|---|---|
 | Typing cost grows with document size | `OrgSyntaxHighlightTransformation.filter` re-highlighted the **entire** document on every keystroke | Fixed — per-line cache + viewport scoping |
 | Redundant work per keystroke | `filter` ran 3× per keystroke, all on identical text | Fixed — memoised |
-| Opening a large file composes everything at once | `OrgText` renders into a plain `Column` inside an outer `verticalScroll` | **Still open** — see [Reading mode at scale](#reading-mode-at-scale) |
+| Opening a large file composes everything at once | `OrgText` rendered into a plain `Column` inside an outer `verticalScroll` | Fixed — a `LazyColumn` of elements; see [Reading mode at scale](#reading-mode-at-scale) |
 | Programmatic edits are awkward | The `String`-valued field gave no cursor control | Fixed for the element editor — it uses `TextFieldValue` |
-| Structural actions are ordinal-based | Checkbox toggling addresses the *N*th checkbox instead of a node | **Still open** — needs T7 |
+| Structural actions are ordinal-based | Checkbox toggling addressed the *N*th checkbox instead of a node | Fixed by T7 — a node is identified by its source offset |
 
 ## Performance: where the time actually goes
 
@@ -189,9 +189,9 @@ line scanner is much cheaper than styling every line — provided it is debounce
 cancellable (`debounce(50)` + `collectLatest`). Consider incremental parsing only if
 profiling on a real device says so; on wasm, chunk it with `yield()` so frames still render.
 
-### Reading mode at scale — done
+### Reading mode at scale
 
-Read mode is a single `LazyColumn` keyed by element, so only what is on screen composes: first
+**Done.** Read mode is a single `LazyColumn` keyed by element, so only what is on screen composes: first
 composition of the largest real file went from 234 ms to 38 ms ([09](09-element-editing.md#known-gaps)).
 
 The constraint that shaped it is worth keeping in mind for any screen like it: **a `LazyColumn`
@@ -255,10 +255,10 @@ Platform note: a floating popup suits desktop; on phones, prefer a suggestion st
 above the keyboard — the popup fights the IME and the selection handles. Same engine, two
 presentations.
 
-## Search (G2) — done
+## Search (G2)
 
-Because the client holds the whole corpus locally, search is a local problem. `shared/org/search`
-holds all of it; the screen only lists what it returns.
+**Done (T14).** Because the client holds the whole corpus locally, search is a local problem.
+`shared/org/search` holds all of it; the screen only lists what it returns.
 
 - **A linear scan**, as planned. Body text, heading titles and file names in one pass,
   case-insensitive throughout. A ~4 MB corpus — larger than the real notes directory — matches in

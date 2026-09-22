@@ -17,8 +17,8 @@ import com.korgnote.common.org.sliceOf
  * for tags as well as text.
  *
  * Text and tags are the two the notes actually need today. The structured queries sketched in
- * [docs/06-editor.md] (`todo:NEXT`, `deadline:<=7d`) are more prefixes in [parse] plus more
- * predicates in [searchOrgFile]; nothing here assumes there will only ever be two.
+ * `docs/06-editor.md` (`todo:NEXT`, `deadline:<=7d`) are more prefixes in [Companion.parse] plus
+ * more predicates in [searchOrgFile]; nothing here assumes there will only ever be two.
  */
 data class SearchQuery(
     /** Words that must all appear, already lowercased. */
@@ -200,7 +200,8 @@ fun searchOrgFile(
  * Searches every file, in path order.
  *
  * A linear scan, deliberately: a few megabytes of text match in milliseconds, and an index is a
- * dependency to keep correct on every save. [OrgSearchTests] pins the corpus-sized case.
+ * dependency to keep correct on every save. `OrgSearchTests` pins the corpus-sized case — main
+ * code cannot link to a test class, so that name is written out rather than referenced.
  */
 fun searchOrg(files: Map<String, String>, query: SearchQuery, limit: Int = DEFAULT_SEARCH_LIMIT): List<SearchHit> {
     if (query.isEmpty) return emptyList()
@@ -269,18 +270,13 @@ private fun collectLineHits(
  * earliest of them is the one highlighted, so the snippet is anchored where reading would start.
  */
 private fun matchIn(line: String, words: List<String>): IntRange? {
-    var earliest = -1
-    var length = 0
+    var earliest: IntRange? = null
     for (word in words) {
         val at = line.indexOf(word, ignoreCase = true)
         if (at < 0) return null
-        if (earliest < 0 || at < earliest) {
-            earliest = at
-            length = word.length
-        }
+        if (earliest == null || at < earliest.first) earliest = at until (at + word.length)
     }
-    if (earliest < 0) return null
-    return earliest until (earliest + length)
+    return earliest
 }
 
 /**
