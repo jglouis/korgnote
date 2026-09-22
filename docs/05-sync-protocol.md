@@ -54,6 +54,8 @@ The client diffs this against its own metadata. With `since`, the server answers
 in-memory journal fed by the file watcher and sets `complete: false`; if the generation is
 unknown (server restarted, journal trimmed) it returns a full manifest with
 `complete: true`. The client must handle both — which keeps the journal a pure optimisation.
+A delta names only what moved on the server, so the client pushes its dirty and never-synced
+files even when the delta leaves them out: absence means "unchanged remotely".
 
 Size check: ~120 bytes per entry, so 1,000 files ≈ 120 KB raw, ~20 KB gzipped, and that is
 the *worst* case (a cold client). The steady state is a `since` query returning nothing.

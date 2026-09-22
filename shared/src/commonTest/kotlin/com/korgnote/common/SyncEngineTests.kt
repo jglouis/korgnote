@@ -36,6 +36,12 @@ class SyncEngineTests {
         var deletedPaths = mutableListOf<String>()
         var completeManifests = true
 
+        /**
+         * When set, a delta manifest lists only these paths, as the real server's journal does: a
+         * delta names what moved on the server, so a file only edited locally is absent from it.
+         */
+        var deltaEntries: Set<String>? = null
+
         /** Events the stream will deliver once, then finish, so tests are not left waiting. */
         val pending = mutableListOf<Pair<String, Boolean>>()
 
@@ -53,7 +59,9 @@ class SyncEngineTests {
             return RemoteManifest(
                 generation = generation,
                 complete = completeManifests,
-                entries = files.map { (path, value) -> RemoteEntry(path, value.first) },
+                entries = files
+                    .filterKeys { completeManifests || deltaEntries?.contains(it) != false }
+                    .map { (path, value) -> RemoteEntry(path, value.first) },
                 deleted = deletedPaths.toList(),
             )
         }
@@ -273,6 +281,27 @@ class SyncEngineTests {
 
         assertEquals(emptyList(), report.deletedRemotely)
         assertEquals("* B\n", store.read("b.org"), "a delta must not be read as a deletion")
+    }
+
+    /** A delta only lists what moved on the server; a local edit must still be pushed. */
+    @Test
+    fun aLocalEditIsPushedEvenWhenTheDeltaDoesNotMentionIt() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* A\n")
+        server.put("b.org", "* B\n")
+        engine.sync()
+
+        server.completeManifests = false
+        server.deltaEntries = emptySet()
+        store.save("a.org", "* A edited\n")
+        store.save("offline.org", "* Captured offline\n")
+        val report = engine.sync()
+
+        assertEquals(listOf("a.org", "offline.org"), report.pushed.sorted())
+        assertEquals("* A edited\n", server.files["a.org"]?.second)
+        assertEquals("* Captured offline\n", server.files["offline.org"]?.second)
+        assertFalse(store.isDirty("a.org"))
+        assertFalse(store.isDirty("offline.org"))
     }
 
     @Test

@@ -114,6 +114,27 @@ class SyncEngine(
             }
         }
 
+        // A delta lists only what moved on the server, so a file edited or created here alone is
+        // absent from it. Absence means "unchanged remotely": push it against the etag we hold.
+        if (!manifest.complete) {
+            val covered = remote.keys + manifest.deleted
+            val unsynced = store.dirtyPaths().toSet() +
+                localPaths.filter { store.meta(it)?.etag == null }
+            for (path in unsynced - covered) {
+                val etag = store.meta(path)?.etag
+                if (etag == null) {
+                    if (pushNew(path)) pushed.add(path) else failed.add(path)
+                } else {
+                    when (pushLocal(path, etag)) {
+                        PushOutcome.PUSHED -> pushed.add(path)
+                        PushOutcome.CONFLICT -> conflicted.add(path)
+                        PushOutcome.FAILED -> failed.add(path)
+                        PushOutcome.SKIPPED -> Unit
+                    }
+                }
+            }
+        }
+
         store.setGeneration(manifest.generation)
         return SyncReport(
             pulled = pulled,
