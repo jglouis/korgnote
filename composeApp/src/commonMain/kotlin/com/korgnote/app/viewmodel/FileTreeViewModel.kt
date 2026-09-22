@@ -3,6 +3,8 @@ package com.korgnote.app.viewmodel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.korgnote.common.fs.TreeUtils
@@ -18,6 +20,11 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import com.korgnote.common.org.*
 import com.korgnote.common.org.complete.CompletionContext
+import com.korgnote.common.org.complete.CompletionItem
+import com.korgnote.common.org.complete.CompletionResult
+import com.korgnote.common.org.complete.applyTo
+import com.korgnote.common.org.complete.complete
+import com.korgnote.common.org.complete.orgStamp
 import com.korgnote.common.org.complete.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.edit.allNodes
 import com.korgnote.common.org.edit.nodeAt
@@ -176,6 +183,84 @@ class FileTreeViewModel(
     var completionContext by mutableStateOf(CompletionContext(today = today()))
         private set
 
+    /**
+     * What the strip is showing, in order, or empty when there is nothing to offer.
+     *
+     * Recomputed on every keystroke, which is affordable because it is a rule check over one line
+     * of one element; the corpus-wide material it draws on is in [completionContext] and is not.
+     */
+    var completionSuggestions by mutableStateOf<List<CompletionItem>>(emptyList())
+        private set
+
+    /** Which suggestion a hardware keyboard has moved to; the strip highlights it. */
+    var selectedSuggestion by mutableStateOf(0)
+        private set
+
+    /** The item waiting on a date picker, or null when none is open. */
+    var pendingDatePicker: CompletionItem? by mutableStateOf(null)
+        private set
+
+    /** Esc silences the suggestions for the current text; typing brings them back. */
+    private var completionDismissed = false
+
+    private fun refreshSuggestions() {
+        val editing = editingElementIndex != null
+        completionSuggestions = when {
+            !editing || completionDismissed -> emptyList()
+            // A selection is not a caret: completing over one would silently delete it.
+            !elementDraftValue.selection.collapsed -> emptyList()
+            else -> complete(elementDraft.toOrgDocument(), elementDraftCaret, completionContext)
+        }
+        // The list is rebuilt under the selection on every keystroke, so it starts from the top.
+        selectedSuggestion = 0
+    }
+
+    /** Accepts [item]: a range replacement in the draft, with the caret where the item asks. */
+    fun acceptCompletion(item: CompletionItem) {
+        // The picker is the one suggestion that cannot answer for itself; it asks first.
+        if (item.kind == CompletionItem.Kind.DATE_PICKER) {
+            pendingDatePicker = item
+            return
+        }
+        applyCompletion(item.applyTo(elementDraft))
+    }
+
+    /** Accepts whatever the keyboard has moved to. True when there was something to accept. */
+    fun acceptSelectedCompletion(): Boolean {
+        val item = completionSuggestions.getOrNull(selectedSuggestion) ?: return false
+        acceptCompletion(item)
+        return true
+    }
+
+    fun moveCompletionSelection(delta: Int) {
+        val count = completionSuggestions.size
+        if (count == 0) return
+        selectedSuggestion = ((selectedSuggestion + delta) % count + count) % count
+    }
+
+    fun dismissCompletion() {
+        completionDismissed = true
+        completionSuggestions = emptyList()
+    }
+
+    /** Puts the date the picker came back with where its suggestion would have gone. */
+    fun onDatePicked(date: LocalDate) {
+        val item = pendingDatePicker ?: return
+        pendingDatePicker = null
+        applyCompletion(item.applyTo(elementDraft, date.orgStamp(active = true)))
+    }
+
+    fun dismissDatePicker() {
+        pendingDatePicker = null
+    }
+
+    private fun applyCompletion(result: CompletionResult) {
+        elementDraftValue = TextFieldValue(result.text, TextRange(result.caret))
+        // Not dismissed: one completion often leads to the next — a planning line wants a date.
+        completionDismissed = false
+        refreshSuggestions()
+    }
+
     private fun refreshCompletionContext() {
         val document = currentFile?.let { orgContents[it] }
         completionContext = CompletionContext(
@@ -290,13 +375,23 @@ class FileTreeViewModel(
     var editingElementIndex: Int? by mutableStateOf(null)
         private set
 
-    /** The element's text as it is being edited. */
-    var elementDraft by mutableStateOf("")
+    /**
+     * The element's text and caret as it is being edited.
+     *
+     * The caret lives here, not in the editor composable, because completion is a function of where
+     * it is: the suggestions are computed here and the strip that shows them is pinned to the
+     * screen rather than drawn next to the field, so neither of them can reach into the field for
+     * it. It also means accepting a suggestion is an ordinary state change rather than a message
+     * passed down into a composable.
+     */
+    var elementDraftValue by mutableStateOf(TextFieldValue(""))
         private set
 
-    /** Where the caret should start when the editor opens; after the stars of a new heading. */
-    var elementDraftCaret by mutableStateOf(0)
-        private set
+    /** The element's text as it is being edited. */
+    val elementDraft: String get() = elementDraftValue.text
+
+    /** Where the caret is; after the stars of a heading that was just added. */
+    val elementDraftCaret: Int get() = elementDraftValue.selection.start
 
     /** The element's text when editing began, used to refuse a splice if the document moved. */
     private var elementOriginal: String? = null
@@ -309,9 +404,8 @@ class FileTreeViewModel(
         val original = element.sliceOf(selectedFileContent)
         textBeforeInsertion = null
         elementOriginal = original
-        elementDraft = original
-        elementDraftCaret = original.length
         editingElementIndex = index
+        setDraft(original, caret = original.length)
     }
 
     /** Adds a heading at the end of the document and opens it for editing. */
@@ -335,13 +429,25 @@ class FileTreeViewModel(
         // Nothing is written to disk yet, and cancelling must not leave an empty heading behind.
         textBeforeInsertion = previousText
         elementOriginal = element.sliceOf(insertion.text)
-        elementDraft = elementOriginal.orEmpty()
-        elementDraftCaret = insertion.caret - element.start
         editingElementIndex = index
+        setDraft(elementOriginal.orEmpty(), caret = insertion.caret - element.start)
     }
 
-    fun onElementDraftChanged(newDraft: String) {
-        elementDraft = newDraft
+    fun onElementDraftChanged(value: TextFieldValue) {
+        elementDraftValue = value
+        // Typing brings dismissed suggestions back: Esc silences this completion, not completion.
+        completionDismissed = false
+        refreshSuggestions()
+    }
+
+    /** Convenience for callers that have no caret of their own to report; it goes to the end. */
+    fun onElementDraftChanged(newDraft: String) =
+        onElementDraftChanged(TextFieldValue(newDraft, TextRange(newDraft.length)))
+
+    private fun setDraft(text: String, caret: Int) {
+        elementDraftValue = TextFieldValue(text, TextRange(caret.coerceIn(0, text.length)))
+        completionDismissed = false
+        refreshSuggestions()
     }
 
     fun cancelElementEdit() {
@@ -361,8 +467,10 @@ class FileTreeViewModel(
         textBeforeInsertion = null
         editingElementIndex = null
         elementOriginal = null
-        elementDraft = ""
-        elementDraftCaret = 0
+        elementDraftValue = TextFieldValue("")
+        pendingDatePicker = null
+        completionDismissed = false
+        refreshSuggestions()
     }
 
     /** Splices the draft back into the document and saves. Leaves the editor open if it cannot. */

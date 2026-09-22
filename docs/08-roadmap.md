@@ -452,14 +452,25 @@ nothing — the field handles Tab to accept, arrows to move and Esc to dismiss, 
 keyboard never has to reach for a chip. Tab rather than Enter, because Enter is a newline in a
 multi-line element and stealing it would make an ordinary edit depend on whether a chip happened to
 be showing.
+**Pinned to the screen, after a first attempt that was not.** Placed under the field, the strip was
+often invisible on a phone: the app is inset for the keyboard, but both Android's `imePadding` and
+iOS's lifting bring *the field* into view, and anything laid out after it stays in the region the
+keyboard took. It is now the `Scaffold`'s `bottomBar` while an element is being edited, which also
+hoisted the caret into the view model — the strip is nowhere near the field — and that is what made
+accepting a suggestion testable at all. The navigation bar is hidden for the duration; it held that
+space, and mid-edit tab switches were always accidents. The bar keeps its place when there is
+nothing to suggest, because suggestions come and go with nearly every keystroke and a bar that came
+and went with them would reflow the document under the caret. See
+[06](06-editor.md#where-the-strip-goes-and-why-it-matters).
 **Context comes from outside the document** The engine is handed one element while the useful
 material is corpus-wide, so tags (most-used first), file paths, the open file's `#+TODO:` keywords
 and today's date arrive in a `CompletionContext` the view model rebuilds when the replica or the
 open file changes — never per keystroke. Walking all 366 real notes for the tag counts costs 3 ms
 warm, 14 ms cold, so nothing cleverer is warranted.
 **Verified** 26 `OrgCompleteTests` — one or more per trigger row, asserting the text and caret the
-user ends up with rather than the shape of the item — and 5 `CompletionContextTest` cases for the
-material the app supplies. The acceptance criterion is a test by name: typing `* ` then `TO` offers
+user ends up with rather than the shape of the item — 5 `CompletionContextTest` cases for the
+material the app supplies, and 12 `CompletionEditingTest` cases for accepting, moving, dismissing
+and the date picker, which became reachable once that state left the composable. The acceptance criterion is a test by name: typing `* ` then `TO` offers
 the document's own `#+TODO:` keywords, and a document naming none falls back to Org's.
 **Found while writing it** The editor spliced items with `insert.length` instead of the item's
 `caretOffset`, which would have left the caret after `#+END_SRC` instead of inside the block. That

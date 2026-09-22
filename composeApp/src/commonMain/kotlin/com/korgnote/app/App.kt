@@ -127,7 +127,17 @@ fun App() {
                     }
                 },
                 bottomBar = {
-                    NavigationBar {
+                    // While an element is being edited the suggestions take the bottom of the
+                    // screen, which is where the keyboard pushes everything else against. The
+                    // navigation bar goes away with them: switching tabs mid-edit only ever
+                    // happened by accident.
+                    if (vm.editingElementIndex != null) {
+                        CompletionStrip(
+                            items = vm.completionSuggestions,
+                            selectedIndex = vm.selectedSuggestion,
+                            onAccept = { vm.acceptCompletion(it) },
+                        )
+                    } else NavigationBar {
                         BottomItem.entries.forEach { item ->
                             NavigationBarItem(
                                 selected = selectedScreen == item,
@@ -145,6 +155,13 @@ fun App() {
                     }
                 }
             ) { paddingValues ->
+                vm.pendingDatePicker?.let {
+                    OrgDatePickerDialog(
+                        initial = vm.completionContext.today,
+                        onPick = { date -> vm.onDatePicked(date) },
+                        onDismiss = { vm.dismissDatePicker() },
+                    )
+                }
                 // Reading mode scrolls itself, one element at a time, so that opening a large file
                 // does not have to lay out every element first; search does the same with its
                 // results. A lazy list cannot be nested in a vertically scrolling parent, so this
@@ -253,10 +270,18 @@ fun App() {
                                     modifier = Modifier.weight(1f).fillMaxWidth(),
                                     text = vm.selectedFileContent,
                                     editingElementIndex = vm.editingElementIndex,
-                                    elementDraft = vm.elementDraft,
-                                    elementDraftCaret = vm.elementDraftCaret,
+                                    elementDraftValue = vm.elementDraftValue,
                                     onElementDraftChange = { vm.onElementDraftChanged(it) },
-                                    completionContext = vm.completionContext,
+                                    onCompletionKey = { key ->
+                                        // Nothing showing means the key was never ours: an arrow
+                                        // has to go on moving the caret.
+                                        if (vm.completionSuggestions.isEmpty()) false else when (key) {
+                                            CompletionKey.ACCEPT -> vm.acceptSelectedCompletion()
+                                            CompletionKey.DISMISS -> { vm.dismissCompletion(); true }
+                                            CompletionKey.NEXT -> { vm.moveCompletionSelection(1); true }
+                                            CompletionKey.PREVIOUS -> { vm.moveCompletionSelection(-1); true }
+                                        }
+                                    },
                                     onEditElement = { vm.beginElementEdit(it) },
                                     onAddElementAfter = { vm.addElementAfter(it) },
                                     scrollToElementIndex = vm.scrollToElementIndex,

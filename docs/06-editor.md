@@ -264,6 +264,28 @@ strip**. The popup fights the IME and the selection handles, phones are where th
 written, and one presentation is one thing to keep working. Desktop loses nothing, because the
 keyboard path does not go through the chips.
 
+### Where the strip goes, and why it matters
+
+First attempt put the strip under the field, and on a phone it was frequently invisible. The reason
+is worth keeping: the app is inset for the keyboard already — `MainActivity` wraps everything in
+`imePadding()`, and iOS lifts the focused field — but both of those bring **the field** into view,
+and the strip was laid out after it, inside the same scrolling list. Scrolling stops as soon as the
+field is visible, which leaves whatever follows it in the region the keyboard just took.
+
+So the strip is pinned to the bottom of the screen, as the `Scaffold`'s `bottomBar`, for as long as
+an element is being edited. Three consequences, all deliberate:
+
+- **The caret lives in the view model.** The strip is nowhere near the field, so the text *and* the
+  caret are hoisted: `elementDraftValue` is a `TextFieldValue` the field is fully controlled by, and
+  the suggestions are computed from it there. Accepting one becomes an ordinary state change rather
+  than a message pushed down into a composable — and testable, which the caret handling was not.
+- **The navigation bar is hidden while editing.** It occupied that space, and switching tabs in the
+  middle of an edit only ever happened by accident.
+- **The bar holds its place even with nothing to suggest**, showing what completion responds to.
+  Suggestions appear and vanish with almost every keystroke; a bar that came and went with them
+  would reflow the document under the caret each time. That empty state is also the obvious home for
+  Org quick-inserts (`*`, `-`, `[ ]`, a date) whenever typing Org on a phone gets addressed.
+
 The context comes from outside the document being edited: completion runs against a single element,
 while the tags are the whole replica's and the `#+TODO:` keywords are the open file's. The view
 model rebuilds it when the replica or the open file changes — not per keystroke.

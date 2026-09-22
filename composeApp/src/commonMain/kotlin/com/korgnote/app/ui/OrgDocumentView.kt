@@ -39,18 +39,11 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import com.korgnote.common.org.complete.CompletionContext
-import com.korgnote.common.org.complete.CompletionItem
-import com.korgnote.common.org.complete.CompletionResult
-import com.korgnote.common.org.complete.applyTo
-import com.korgnote.common.org.complete.complete
-import com.korgnote.common.org.complete.orgStamp
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.sliceOf
 import com.korgnote.common.org.toOrgDocument
@@ -71,11 +64,13 @@ fun OrgDocumentView(
     // The offset of the tapped checkbox in [text]; the view model finds the node there.
     onToggleCheckbox: ((offsetInDocument: Int) -> Unit)? = null,
     editingElementIndex: Int? = null,
-    elementDraft: String = "",
-    elementDraftCaret: Int = 0,
-    onElementDraftChange: (String) -> Unit = {},
-    /** What completion draws on; null turns completion off. */
-    completionContext: CompletionContext? = null,
+    elementDraftValue: TextFieldValue = TextFieldValue(""),
+    onElementDraftChange: (TextFieldValue) -> Unit = {},
+    /**
+     * A keyboard key aimed at the suggestions. Returns true when it was used, so an unhandled Tab
+     * or Escape still does whatever it would normally do.
+     */
+    onCompletionKey: (CompletionKey) -> Boolean = { false },
     onEditElement: ((elementIndex: Int) -> Unit)? = null,
     onAddElementAfter: ((elementIndex: Int) -> Unit)? = null,
     scrollToElementIndex: Int? = null,
@@ -102,10 +97,9 @@ fun OrgDocumentView(
                 if (index == editingElementIndex) {
                     OrgElementEditor(
                         elementKey = index,
-                        value = elementDraft,
-                        initialCaret = elementDraftCaret,
+                        value = elementDraftValue,
                         onValueChange = onElementDraftChange,
-                        completionContext = completionContext,
+                        onCompletionKey = onCompletionKey,
                     )
                 } else {
                     Row(
@@ -198,10 +192,9 @@ fun OrgDocumentView(
 @Composable
 private fun OrgElementEditor(
     elementKey: Int,
-    value: String,
-    initialCaret: Int,
-    onValueChange: (String) -> Unit,
-    completionContext: CompletionContext? = null,
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    onCompletionKey: (CompletionKey) -> Boolean,
 ) {
     val headingColor = MaterialTheme.colorScheme.primary
     val highlighting = remember(headingColor) { OrgSyntaxHighlightTransformation(headingColor) }
@@ -210,78 +203,31 @@ private fun OrgElementEditor(
         TextStyle(fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface)
     )
 
-    // TextFieldValue rather than a plain String so the caret can start after the stars of a newly
-    // added heading. It is the local source of truth for the session; the text is mirrored upward.
-    var field by remember(elementKey) {
-        mutableStateOf(TextFieldValue(value, TextRange(initialCaret.coerceIn(0, value.length))))
-    }
     val focusRequester = remember(elementKey) { FocusRequester() }
     LaunchedEffect(elementKey) { focusRequester.requestFocus() }
 
-    // Completion is computed from the draft alone: it is one element, so parsing it per keystroke
-    // is cheap, and everything the engine cannot see from here — the corpus's tags, the file paths,
-    // the document's own `#+TODO:` — arrives in the context.
-    var dismissed by remember(elementKey) { mutableStateOf(false) }
-    var selectedSuggestion by remember(elementKey) { mutableStateOf(0) }
-    var pickingDateFor by remember(elementKey) { mutableStateOf<CompletionItem?>(null) }
-
-    val suggestions = remember(field.text, field.selection, completionContext, dismissed) {
-        when {
-            completionContext == null || dismissed -> emptyList()
-            // A selection is not a caret: completing over one would silently delete it.
-            !field.selection.collapsed -> emptyList()
-            else -> complete(field.text.toOrgDocument(), field.selection.start, completionContext)
-        }
-    }
-    // The list changes under the selection on every keystroke, so it starts from the top again.
-    LaunchedEffect(suggestions) { selectedSuggestion = 0 }
-
-    fun apply(result: CompletionResult) {
-        field = TextFieldValue(result.text, TextRange(result.caret))
-        onValueChange(result.text)
-    }
-
-    fun accept(item: CompletionItem) {
-        // The picker is the one suggestion that cannot answer for itself; it asks first.
-        if (item.kind == CompletionItem.Kind.DATE_PICKER) pickingDateFor = item
-        else apply(item.applyTo(field.text))
-    }
-
-    pickingDateFor?.let { item ->
-        OrgDatePickerDialog(
-            initial = completionContext?.today ?: return@let,
-            onPick = { date ->
-                pickingDateFor = null
-                apply(item.applyTo(field.text, date.orgStamp(active = true)))
-            },
-            onDismiss = { pickingDateFor = null },
-        )
-    }
-
+    // A fully controlled field: the text *and the caret* come from above. The caret has to live
+    // there because the suggestions computed from it are shown on a strip pinned to the screen,
+    // which is nowhere near this composable — and because accepting one moves the caret.
     BasicTextField(
-        value = field,
-        onValueChange = {
-            field = it
-            // Typing is what brings dismissed suggestions back: Esc silences this completion, not
-            // completion itself.
-            dismissed = false
-            onValueChange(it.text)
-        },
+        value = value,
+        onValueChange = onValueChange,
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).focusRequester(focusRequester)
             .onPreviewKeyEvent { event ->
                 // Only meaningful with a hardware keyboard; on a phone the chips are the interface.
-                if (event.type != KeyEventType.KeyDown || suggestions.isEmpty()) return@onPreviewKeyEvent false
-                when (event.key) {
-                    Key.Escape -> { dismissed = true; true }
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val intent = when (event.key) {
+                    Key.Escape -> CompletionKey.DISMISS
                     // Tab, not Enter: Enter is a newline in a multi-line element and stealing it
                     // would make an ordinary edit depend on whether a chip happened to be showing.
-                    Key.Tab -> { accept(suggestions[selectedSuggestion]); true }
-                    Key.DirectionDown, Key.DirectionRight ->
-                        { selectedSuggestion = (selectedSuggestion + 1) % suggestions.size; true }
-                    Key.DirectionUp, Key.DirectionLeft ->
-                        { selectedSuggestion = (selectedSuggestion + suggestions.size - 1) % suggestions.size; true }
-                    else -> false
+                    Key.Tab -> CompletionKey.ACCEPT
+                    Key.DirectionDown, Key.DirectionRight -> CompletionKey.NEXT
+                    Key.DirectionUp, Key.DirectionLeft -> CompletionKey.PREVIOUS
+                    else -> return@onPreviewKeyEvent false
                 }
+                // Unhandled means there were no suggestions, so the key keeps its ordinary meaning
+                // — an arrow still moves the caret.
+                onCompletionKey(intent)
             },
         textStyle = textStyle,
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -289,7 +235,7 @@ private fun OrgElementEditor(
         visualTransformation = highlighting,
         decorationBox = { innerTextField ->
             OutlinedTextFieldDefaults.DecorationBox(
-                value = field.text,
+                value = value.text,
                 innerTextField = innerTextField,
                 enabled = true,
                 singleLine = false,
@@ -300,12 +246,5 @@ private fun OrgElementEditor(
                 label = { Text("Editing element") },
             )
         },
-    )
-
-    CompletionStrip(
-        items = suggestions,
-        selectedIndex = selectedSuggestion,
-        onAccept = { accept(it) },
-        modifier = Modifier.fillMaxWidth(),
     )
 }
