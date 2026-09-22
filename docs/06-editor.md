@@ -6,7 +6,7 @@ Addresses G2, G3 and defect D6. Depends on the source-mapped model from
 > **Status.** The performance work is done and the findings below are measurements, not plans.
 > Per-element editing ([09](09-element-editing.md)) has since become the primary editing surface and
 > removed document size as a concern; the whole-file editor described here remains as an escape
-> hatch. Completion and search are still unbuilt.
+> hatch. Search is built (T14); completion (T13) is still unbuilt.
 
 ## Where it hurt
 
@@ -189,15 +189,17 @@ line scanner is much cheaper than styling every line — provided it is debounce
 cancellable (`debounce(50)` + `collectLatest`). Consider incremental parsing only if
 profiling on a real device says so; on wasm, chunk it with `yield()` so frames still render.
 
-### Reading mode at scale
+### Reading mode at scale — done
 
-Read mode should be a single `LazyColumn` keyed by top-level heading, so only visible
-subtrees compose. Constraint worth knowing before starting: **a `LazyColumn` cannot live
-inside a `Modifier.verticalScroll` column**, which is how `App.kt` is currently structured
-(and the shared scroll position between read and edit mode was a deliberate recent choice —
-see the comment added in the "Link :LOCATION:" commit). The screen must be restructured so
-that exactly one component owns scrolling in each mode, and the scroll offset is mapped
-across the two by *character offset* rather than pixels.
+Read mode is a single `LazyColumn` keyed by element, so only what is on screen composes: first
+composition of the largest real file went from 234 ms to 38 ms ([09](09-element-editing.md#known-gaps)).
+
+The constraint that shaped it is worth keeping in mind for any screen like it: **a `LazyColumn`
+cannot live inside a `Modifier.verticalScroll` column**, which is how `App.kt` was structured. The
+screen now hands its scroll to whichever component owns it — reading mode, and the search results —
+and keeps it for the whole-file editor and everything else. Mapping a scroll offset across read and
+edit never became necessary: per-element editing removed the transition between two full-document
+renderings.
 
 ### Structural editing from both modes
 
@@ -253,22 +255,26 @@ Platform note: a floating popup suits desktop; on phones, prefer a suggestion st
 above the keyboard — the popup fights the IME and the selection handles. Same engine, two
 presentations.
 
-## Search (G2)
+## Search (G2) — done
 
-Because the client holds the whole corpus locally, search is a local problem:
+Because the client holds the whole corpus locally, search is a local problem. `shared/org/search`
+holds all of it; the screen only lists what it returns.
 
-- **Start with a linear scan.** A few megabytes of text matches in milliseconds; an index
-  is premature. Search text, heading titles and file paths in one pass, case-insensitive,
-  with an optional literal/regex toggle.
-- **Results carry location**: file, heading breadcrumb, line, and the character offset so
-  tapping a result opens the document at exactly that place.
+- **A linear scan**, as planned. Body text, heading titles and file names in one pass,
+  case-insensitive throughout. A ~4 MB corpus — larger than the real notes directory — matches in
+  well under a second, so there is no index to keep correct on every save (G7). If that ever stops
+  being true, an in-memory inverted index rebuilt on load comes before SQLite/FTS.
+- **Results carry location**: file, heading breadcrumb, line, and the character offset. The offset
+  is what makes a result openable: the element containing it is the one to show, which is the same
+  lookup the calendar jump uses.
+- **The query language is words and tags.** Every term must match, so adding one narrows; a quoted
+  phrase is one term. `tag:work` — or `:work:`, as a heading spells it — keeps only headings
+  carrying the tag, **inherited** from parent headings and `#+FILETAGS:` the way Org inherits it.
+  A tag term on its own lists the tagged headings; with words, it says where to look for them.
 - **Structured queries later**, mirroring the org-agenda habits worth keeping:
-  `todo:NEXT tag:work deadline:<=7d text:"invoice"`. Parse into a small query AST in
-  `shared/org/search` and evaluate against parsed documents; the same evaluator then powers
-  saved searches and agenda filters.
-- **Index only if needed.** If the corpus ever outgrows linear scan, add an in-memory
-  inverted index rebuilt on load and updated per save, before reaching for SQLite/FTS. Each
-  step is a dependency you would have to maintain (G7).
+  `todo:NEXT deadline:<=7d`. The parser already splits prefixed terms from words, so another
+  prefix is a case in `SearchQuery.parse` and a predicate in `searchOrgFile`; the same evaluator
+  should then power saved searches and agenda filters (T16).
 
-Today's `filterQuery` (`FileTreeViewModel.kt:42`) filters filenames only; it becomes the
-degenerate case of the above.
+`filterQuery` became the degenerate case, as intended: the drawer parses the same query, matches
+file names with it, and understands `tag:` by asking whether a file has any hit at all.

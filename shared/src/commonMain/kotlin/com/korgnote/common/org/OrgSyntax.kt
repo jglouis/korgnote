@@ -59,6 +59,9 @@ object OrgSyntax {
     /** The `#+TITLE:` keyword, capturing the title. */
     val titleKeyword = Regex("^#\\+TITLE:\\s*(.*)$", RegexOption.IGNORE_CASE)
 
+    /** The `#+FILETAGS:` keyword, capturing the tags every heading in the file inherits. */
+    val filetagsKeyword = Regex("^#\\+FILETAGS:\\s*(.*)$", RegexOption.IGNORE_CASE)
+
     /** The date at the start of a timestamp, capturing year, month and day. */
     val timestampDate = Regex("<(\\d{4})-(\\d{2})-(\\d{2})")
 

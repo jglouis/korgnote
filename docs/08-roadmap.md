@@ -4,23 +4,25 @@ Tasks are sized for one working session each and ordered so that the app keeps w
 after every one. Dependencies are explicit; anything without a shared dependency can be
 done in any order.
 
-**If you only do three things:** ~~T1~~ (done), ~~T3~~ (done — the model is lossless),
-and T8–T10 (local-first sync). Everything else is improvement; those three
-are the architecture.
+**If you only do three things:** ~~T1~~, ~~T3~~ (the model is lossless) and ~~T8–T10~~
+(local-first sync) — all done. Those three were the architecture; everything still open is
+improvement on top of it.
 
 Phase 1 (the Org core, T3–T7) is complete: the model is source-mapped and lossless, headings nest,
 the grammar covers the constructs these notes actually use, Org syntax is defined in one place, and
-edits are range replacements. T2 is done too, so everything before Phase 2 is finished. Next is
-**Phase 2** (T8–T10, local-first sync).
+edits are range replacements. Phase 2 (T8–T11) is complete too: the app holds the whole corpus
+locally, syncs through the v1 API, and merges divergent edits instead of losing them. Phase 3 is
+under way — the editor work is done bar what was deliberately deferred, and search has landed.
+What is left in it is **T13** (completion); after that, **Phase 4** (agenda).
 
 ## Status
 
-Updated 2026-09-21.
+Updated 2026-09-22.
 
 | | Task | State |
 |---|---|---|
 | ✅ | T12a Editor performance diagnostic | Done — [notes/editor-perf.md](notes/editor-perf.md) |
-| 🟡 | T12b Editor surface | Partly — see the task for what landed and what did not |
+| 🟡 | T12b Editor surface | Done bar two items deferred on purpose — see the task |
 | 🟡 | T0 / T0b Text-editing spikes | Answered in practice, findings in [06](06-editor.md#editor-surface) |
 | ✅ | T1 Server reads the disk | Done — `FileStore`, plus conflict refusal and path validation |
 | ✅ | T3 Source-mapped documents | Done — `range` on every node, `text` on the document, raw-text wire |
@@ -33,7 +35,9 @@ Updated 2026-09-21.
 | ✅ | T9 Sync API v1 | Done — manifest, conditional files, bundle, SSE fed by a file watcher |
 | ✅ | T10 Sync engine and cutover | Done — old API deleted; the client syncs through v1 |
 | ✅ | T11 Conflicts | Done — diff3 merge; divergent edits keep both versions, never markers |
-| ❌ | T10b, T13–T18 | Not started |
+| ✅ | T14 Search | Done — linear scan over the replica, words and `tag:`, results open at the match |
+| 🟡 | T10b Web client | Mostly wired by T10; what is left is listed in the task |
+| ❌ | T13, T15–T18 | Not started |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -347,7 +351,15 @@ Delete `/api/org-content`, `/api/org-tree-paths`, `/api/content/{…}` and
 appears without restarting anything; nothing in the client parses server-provided ASTs any
 more (D2, D3).
 
-### T10b · Web client on the same engine
+### T10b · Web client on the same engine — 🟡 **mostly wired by T10**
+**Already true** The wasm target builds and runs on the shared stack: `InMemoryReplicaStorage`,
+`InMemorySettingsRepository`, the same `SyncEngine` and ViewModel as the native clients, and a
+same-origin base URL from `window.location.origin`, so no host or port is configured on web.
+**Still to do** Cold start through `GET /api/v1/bundle` — the server serves it, but `SyncApi` has
+no `bundle()` yet, so every client still walks the manifest and fetches file by file; debounced
+(~1 s) autosave; and confirming the SSE loop, which reads the stream with `prepareGet`, actually
+delivers on the JS engine. The no-op `NotificationScheduler` belongs with T18, which is what
+introduces the interface.
 **Depends** T10
 **Scope** Wire the wasm target to `InMemoryReplicaStorage` + `GET /api/v1/bundle` on page
 load, debounced autosave (~1 s) through the same `SyncEngine`, SSE for live updates,
@@ -414,11 +426,15 @@ numbers.
 **Dropped as unnecessary:** block virtualisation — T12a came back as Cost A, and per-element editing
 ([09](09-element-editing.md)) removed document size as a concern.
 
-**Still outstanding:**
-- Lazy reading mode. `OrgDocumentView` renders every element eagerly in a `Column`; a `LazyColumn`
-  keyed by element is the natural fix now that elements are the unit.
-- The single-scroll-owner constraint in `App.kt`, and read↔edit scroll mapping for the *whole-file*
-  editor. Per-element editing made this moot for the main path.
+**Landed since:** lazy reading mode and the single-scroll-owner restructuring. `OrgDocumentView` is
+a `LazyColumn` keyed by element, which took first composition of the largest real file from 234 ms
+to 38 ms, and `App.kt` hands its scroll to whichever component owns it — reading mode, and now the
+search results — while keeping it for the whole-file editor and every other screen. Measurements
+and the reasoning are in [09](09-element-editing.md#known-gaps).
+
+**Still outstanding, both deferred on purpose:**
+- Read↔edit scroll mapping for the *whole-file* editor. Per-element editing removed the transition
+  that needed it, so this is only worth doing if the whole-file editor stops being an escape hatch.
 - Debounced, cancellable re-parse. Not needed at current costs; revisit if it regresses.
 
 ### T13 · Completion
@@ -428,11 +444,40 @@ the trigger table in [06](06-editor.md#completion-g3).
 **Done when** Each trigger row has a unit test, and typing `* ` then `TO` offers the
 document's own `#+TODO:` keywords (G3).
 
-### T14 · Search
+### T14 · Search — ✅ **done**
+**Landed** `shared/org/search/OrgSearch.kt`: `SearchQuery.parse` turns what was typed into words
+and `tag:` terms, and `searchOrg` scans the replica linearly, returning hits that carry the file,
+the heading breadcrumb, the line number and the character offset. A new Search screen lists them
+and opens one at the element holding the match, reusing the offset→element lookup the calendar
+jump already needed. No index, no new dependency.
+**Tags are inherited**, as they are in Org: a tag on a parent heading, or in `#+FILETAGS:`, counts
+for everything beneath it — without that, `tag:work` would miss most of what a person means by it.
+`tag:work` on its own lists the headings carrying the tag; with words, it narrows where they are
+looked for. `:work:` is accepted as typed, since that is how a heading spells it.
+**`filterQuery` really did become a special case**: the drawer's filter now parses the same query,
+so it still matches file names, and `tag:work` there lists the files with work in them. It is
+recomputed when the query or the replica changes rather than on every recomposition, because a tag
+term has to look inside the files while the drawer is redrawn constantly.
+**Verified** 16 `OrgSearchTests` and 7 `SearchTest` cases: offsets that point at the match in the
+file, breadcrumbs, line numbers that survive skipped elements, tag inheritance from both sources,
+words narrowing rather than widening, quoted phrases, a heading inside a `#+BEGIN_SRC` block not
+being treated as a heading, and the acceptance criterion directly — a ~4 MB corpus, larger than the
+real notes directory, searched in 222 ms.
+**Measured on the real notes** 366 files, 1.21 MB: a word takes 17–54 ms, a tag query 8–15 ms, and
+a tag narrows a word search as it should (`cuisine` 66 hits, `tag:house cuisine` 61). Which is the
+whole argument for the linear scan: the index this would have needed is a thing to keep correct on
+every save, and it would save tens of milliseconds.
+**Found while testing** Search results and the agenda index went stale after a local save: both are
+derived from the in-memory documents, and only the agenda one was being rebuilt. They are refreshed
+together now, from one place, since forgetting one of them is invisible until someone reads results
+describing a document as it used to be.
 **Depends** T8
 **Scope** Linear-scan full-text search over the replica with heading breadcrumbs and jump-to-offset;
 `filterQuery` becomes a special case.
 **Done when** Searching the whole corpus returns results in well under a second offline.
+**Not included** The structured query grammar (`todo:NEXT`, `deadline:<=7d`) and saved searches.
+The parser has one prefix today; adding another is a case in `SearchQuery.parse` and a predicate in
+`searchOrgFile`, which is where agenda filters should meet it (T16).
 
 ---
 

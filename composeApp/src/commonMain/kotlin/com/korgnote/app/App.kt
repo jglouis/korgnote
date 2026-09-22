@@ -53,8 +53,9 @@ fun App() {
                         Spacer(Modifier.width(8.dp))
                         OutlinedTextField(
                             value = vm.filterQuery,
-                            onValueChange = { vm.filterQuery = it },
+                            onValueChange = { vm.onFilterQueryChanged(it) },
                             label = { Text("Filter files") },
+                            placeholder = { Text("name, or tag:work") },
                             singleLine = true
                         )
                         Spacer(Modifier.width(8.dp))
@@ -145,12 +146,14 @@ fun App() {
                 }
             ) { paddingValues ->
                 // Reading mode scrolls itself, one element at a time, so that opening a large file
-                // does not have to lay out every element first. A lazy list cannot be nested in a
-                // vertically scrolling parent, so this Column yields its scroll while reading; every
-                // other screen, and the whole-file editor, still scroll here as before.
+                // does not have to lay out every element first; search does the same with its
+                // results. A lazy list cannot be nested in a vertically scrolling parent, so this
+                // Column yields its scroll to those two; every other screen, and the whole-file
+                // editor, still scroll here as before.
                 val readingDocument = selectedScreen == BottomItem.HOME &&
                     !isEditing &&
                     vm.selectedFileContent.isNotBlank()
+                val ownsItsScroll = readingDocument || selectedScreen == BottomItem.SEARCH
                 val screenScrollState = rememberScrollState()
                 Column(
                     modifier = Modifier
@@ -158,7 +161,7 @@ fun App() {
                         .padding(paddingValues)
                         .padding(16.dp)
                         .then(
-                            if (readingDocument) Modifier else Modifier.verticalScroll(screenScrollState)
+                            if (ownsItsScroll) Modifier else Modifier.verticalScroll(screenScrollState)
                         ),
                     verticalArrangement = Arrangement.Top,
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -262,6 +265,22 @@ fun App() {
                             }
                         }
 
+                        BottomItem.SEARCH -> {
+                            SearchScreen(
+                                modifier = Modifier.fillMaxSize(),
+                                query = vm.searchQuery,
+                                results = vm.searchResults,
+                                onQueryChange = { vm.onSearchQueryChanged(it) },
+                                onOpen = { hit ->
+                                    // Same shape as the calendar's jump: the view model resolves
+                                    // the place once the file's text has arrived.
+                                    vm.openSearchHit(hit)
+                                    isEditing = false
+                                    selectedScreen = BottomItem.HOME
+                                },
+                            )
+                        }
+
                         BottomItem.CALENDAR -> {
                             CalendarScreen(
                                 modifier = Modifier.fillMaxSize(),
@@ -340,17 +359,19 @@ private class EditorViewport {
 }
 
 private enum class BottomItem {
-    HOME, CALENDAR, SETTINGS;
+    HOME, SEARCH, CALENDAR, SETTINGS;
 
     @Composable
     fun getLabel() = when (this) {
         HOME -> "Home"
+        SEARCH -> "Search"
         CALENDAR -> "Calendar"
         SETTINGS -> "Settings"
     }
 
     fun getIconRes() = when (this) {
         HOME -> Icons.Filled.Home
+        SEARCH -> Icons.Filled.Search
         CALENDAR -> Icons.Filled.CalendarMonth
         SETTINGS -> Icons.Filled.Settings
     }

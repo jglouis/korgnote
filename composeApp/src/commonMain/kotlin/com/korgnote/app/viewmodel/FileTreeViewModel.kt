@@ -18,6 +18,10 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import com.korgnote.common.org.*
 import com.korgnote.common.org.edit.nodeAt
+import com.korgnote.common.org.search.SearchHit
+import com.korgnote.common.org.search.SearchQuery
+import com.korgnote.common.org.search.searchOrg
+import com.korgnote.common.org.search.searchOrgFile
 import com.korgnote.common.org.edit.toggleCheckbox
 import kotlinx.datetime.LocalDate
 import com.korgnote.common.fs.File as SharedFile
@@ -56,28 +60,57 @@ class FileTreeViewModel(
         )
     )
 
-    // Filter query for the file tree
+    // Filter query for the file tree, in the same language as search: words match the file name,
+    // and a `tag:` term keeps the files that have a heading carrying it.
     var filterQuery by mutableStateOf("")
+        private set
 
-    // Computed filtered tree based on the filter query
-    val filteredTree: Folder
-        get() {
-            val q = filterQuery.trim()
-            if (q.isEmpty()) return tree
-            return when (val filtered = filterNode(tree, q.lowercase())) {
-                is Folder -> filtered
-                is File -> Folder(name = tree.name, path = tree.path, children = listOf(filtered))
-                null -> Folder(name = tree.name, path = tree.path, children = emptyList())
-                else -> Folder(name = tree.name, path = tree.path, children = emptyList())
-            }
+    /** [tree] narrowed to what [filterQuery] keeps; the whole tree when nothing is typed. */
+    var filteredTree by mutableStateOf(tree)
+        private set
+
+    fun onFilterQueryChanged(query: String) {
+        filterQuery = query
+        refreshFilteredTree()
+    }
+
+    /**
+     * Recomputed when the query or the replica changes, rather than on every recomposition: a
+     * `tag:` term has to look inside the files, and the drawer is redrawn far more often than
+     * either of those two things moves.
+     */
+    private fun refreshFilteredTree() {
+        val query = SearchQuery.parse(filterQuery)
+        if (query.isEmpty) {
+            filteredTree = tree
+            return
         }
+        // Only "does this file have anything to show", so the scan stops at each file's first hit.
+        // The path goes in empty on purpose: whether the *name* matches is decided by [filterNode]
+        // against the node's own name, and passing the real path here would match the file twice.
+        val matching = orgContents
+            .filterValues { searchOrgFile("", it.text, query, limit = 1).isNotEmpty() }
+            .keys
+        filteredTree = when (val filtered = filterNode(tree, query, matching)) {
+            is Folder -> filtered
+            is File -> Folder(name = tree.name, path = tree.path, children = listOf(filtered))
+            else -> Folder(name = tree.name, path = tree.path, children = emptyList())
+        }
+    }
 
-    private fun filterNode(node: Node, queryLower: String): Node? {
+    private fun filterNode(node: Node, query: SearchQuery, matchingPaths: Set<String>): Node? {
         return when (node) {
-            is File -> if (node.name.lowercase().contains(queryLower)) node else null
+            is File -> {
+                val nameMatches = query.tags.isEmpty() &&
+                    query.text.all { node.name.contains(it, ignoreCase = true) }
+                if (nameMatches || node.path in matchingPaths) node else null
+            }
+
             is Folder -> {
-                val childMatches = node.children.mapNotNull { filterNode(it, queryLower) }
-                val selfMatches = node.name.lowercase().contains(queryLower)
+                val childMatches = node.children.mapNotNull { filterNode(it, query, matchingPaths) }
+                // A folder name says nothing about tags, so only words can keep one on its own.
+                val selfMatches = query.tags.isEmpty() &&
+                    query.text.all { node.name.contains(it, ignoreCase = true) }
                 if (selfMatches || childMatches.isNotEmpty()) Folder(
                     name = node.name,
                     path = node.path,
@@ -87,6 +120,47 @@ class FileTreeViewModel(
 
             else -> null
         }
+    }
+
+    // --- Search over the whole replica (T14) ---
+
+    var searchQuery by mutableStateOf("")
+        private set
+
+    var searchResults by mutableStateOf<List<SearchHit>>(emptyList())
+        private set
+
+    fun onSearchQueryChanged(query: String) {
+        searchQuery = query
+        refreshSearch()
+    }
+
+    /**
+     * Runs the search over text already in memory.
+     *
+     * Synchronous on purpose: this is a linear scan of a few megabytes, which is milliseconds, and
+     * a coroutine would only make the results arrive a frame after the keystroke that asked for
+     * them. If a corpus ever makes this visible, the fix is an index, not a thread.
+     */
+    private fun refreshSearch() {
+        searchResults = searchOrg(orgContents.mapValues { (_, doc) -> doc.text }, searchQuery)
+    }
+
+    /** Opens the file a result is in, at the element containing it. */
+    fun openSearchHit(hit: SearchHit) = onFileSelected(hit.path, scrollToOffset = hit.offset)
+
+    /**
+     * Rebuilds everything computed from the notes: the agenda index, the filtered tree and the
+     * search results.
+     *
+     * Called wherever [orgContents] changes — a sync, a save, a checkbox — because all three go
+     * stale together and forgetting one of them is invisible until someone notices results that
+     * describe a document as it used to be.
+     */
+    private fun refreshDerivedViews() {
+        scheduledByDate = buildScheduledIndex(orgContents)
+        refreshFilteredTree()
+        refreshSearch()
     }
 
     // In-memory parsed org documents keyed by file name, provided by the server
@@ -143,11 +217,20 @@ class FileTreeViewModel(
 
         val offset = section.range.first
         if (!section.range.isEmpty() && offset in text.indices) {
-            val atOffset = elements.indexOfFirst { offset >= it.start && offset < it.endExclusive }
-            if (atOffset >= 0 && isSection(elements[atOffset])) return atOffset
+            val atOffset = elementIndexOfOffset(offset)
+            if (atOffset != null && isSection(elements[atOffset])) return atOffset
         }
         return elements.indexOfFirst { isSection(it) }.takeIf { it >= 0 }
     }
+
+    /**
+     * The element containing [offset], or null when the text no longer reaches that far.
+     *
+     * This is how a search result finds its place: the hit carries a character offset, and every
+     * element already knows the range of text it renders.
+     */
+    private fun String.elementIndexOfOffset(offset: Int): Int? =
+        orgElements().indexOfFirst { offset >= it.start && offset < it.endExclusive }.takeIf { it >= 0 }
 
     /** Index into [selectedFileContent]'s elements, or null when not editing one. */
     var editingElementIndex: Int? by mutableStateOf(null)
@@ -255,7 +338,7 @@ class FileTreeViewModel(
         val updatedDoc = selectedFileContent.toOrgDocument()
         orgContents[path] = updatedDoc
         selectedOrgNode = updatedDoc
-        scheduledByDate = buildScheduledIndex(orgContents)
+        refreshDerivedViews()
         try {
             sync.sync()
             clearError()
@@ -291,6 +374,7 @@ class FileTreeViewModel(
         selectedFileContent = updatedText
         orgContents[file] = updatedDoc
         selectedOrgNode = updatedDoc
+        refreshDerivedViews()
 
         // Write locally, then push. The local write already happened above, so a failure here
         // leaves the file dirty for the next cycle rather than losing the toggle.
@@ -298,7 +382,6 @@ class FileTreeViewModel(
             try {
                 store.save(file, selectedFileContent)
                 sync.sync()
-                scheduledByDate = buildScheduledIndex(orgContents)
                 clearError()
             } catch (t: Throwable) {
                 // Rethrows if this job was cancelled, so cancellation stays cancellation
@@ -312,13 +395,14 @@ class FileTreeViewModel(
 
 
     /**
-     * Opens [path], and optionally brings [scrollToHeading] into view once its text has arrived.
+     * Opens [path], and optionally brings a place in it into view once its text has arrived —
+     * either a heading, as the calendar asks for, or a character offset, as a search result does.
      *
-     * The heading is resolved here rather than by the caller because the text loads asynchronously:
+     * The target is resolved here rather than by the caller because the text loads asynchronously:
      * resolving it at the call site reads whichever file was open *before* this one and scrolls to
      * the wrong place, or nowhere at all.
      */
-    fun onFileSelected(path: String, scrollToHeading: OrgSection? = null) {
+    fun onFileSelected(path: String, scrollToHeading: OrgSection? = null, scrollToOffset: Int? = null) {
         selectedFileLabel = "Selected: $path"
         val doc = orgContents[path]
         selectedOrgNode = doc
@@ -336,6 +420,7 @@ class FileTreeViewModel(
             if (currentFile == path && raw != null) {
                 selectedFileContent = raw
                 scrollToElementIndex = scrollToHeading?.let { raw.elementIndexOf(it) }
+                    ?: scrollToOffset?.let { raw.elementIndexOfOffset(it) }
             }
         }
     }
@@ -423,7 +508,7 @@ class FileTreeViewModel(
             store.read(path)?.let { orgContents[path] = it.toOrgDocument() }
         }
         tree = mapRootToUiFolder(TreeUtils.buildFromPaths(paths, rootName = "Documents"))
-        scheduledByDate = buildScheduledIndex(orgContents)
+        refreshDerivedViews()
 
         val current = currentFile
         if (current == null) {
