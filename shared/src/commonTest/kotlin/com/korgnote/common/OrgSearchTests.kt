@@ -175,15 +175,28 @@ class OrgSearchTests {
         assertEquals(3, searchOrgFile("work.org", work, SearchQuery.parse("work"), limit = 3).size)
     }
 
+    /**
+     * The scan at corpus size: one match, found, in more text than the real notes directory holds.
+     *
+     * Deliberately no assertion about how long it took. A clock in a test suite asserts about the
+     * machine the suite is running on — a loaded laptop fails it while the code is unchanged — so
+     * the time is printed for whoever wants it and the numbers that back the "well under a second"
+     * criterion live in [docs/08-roadmap.md], measured against the real notes. What is worth
+     * guarding here is that the result stays right at this size, and that the scan stays linear
+     * enough to finish at all: anything accidentally quadratic would not return within the build's
+     * patience, which is a failure nobody can mistake for a slow machine.
+     */
     @Test
-    fun aCorpusSizedSearchIsWellUnderASecond() {
+    fun findsOneMatchInACorpusSizedCollection() {
         // ~4 MB, larger than the real notes directory, built so the match is in the last file.
         val file = (1..400).joinToString("\n") { "* Heading $it :bulk:\n  Line $it of filler text.\n" }
         val many = (1..250).associate { "notes/file-$it.org" to file } + ("zzz.org" to "* Needle\n  findme\n")
-        val elapsed = measureTime {
-            val hits = searchOrg(many, "findme")
-            assertEquals(1, hits.size)
-        }
-        assertTrue(elapsed.inWholeMilliseconds < 1000, "corpus search took $elapsed")
+
+        lateinit var hits: List<SearchHit>
+        val elapsed = measureTime { hits = searchOrg(many, "findme") }
+
+        assertEquals(1, hits.size)
+        assertEquals("zzz.org", hits.single().path)
+        println("[search] ${many.values.sumOf { it.length }} chars scanned in $elapsed")
     }
 }

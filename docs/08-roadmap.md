@@ -461,12 +461,17 @@ term has to look inside the files while the drawer is redrawn constantly.
 **Verified** 16 `OrgSearchTests` and 7 `SearchTest` cases: offsets that point at the match in the
 file, breadcrumbs, line numbers that survive skipped elements, tag inheritance from both sources,
 words narrowing rather than widening, quoted phrases, a heading inside a `#+BEGIN_SRC` block not
-being treated as a heading, and the acceptance criterion directly — a ~4 MB corpus, larger than the
-real notes directory, searched in 222 ms.
+being treated as a heading, and the scan still finding its one match in a ~4 MB corpus, larger than
+the real notes directory.
+**The speed criterion is measured, not asserted.** A `measureTime` assertion went in first and came
+back out: a clock in a test suite asserts about the machine running it, so it fails on a loaded
+laptop while the code is unchanged. The corpus-sized test now prints its time and checks only the
+result; an accidentally quadratic scan would announce itself by never finishing, which is not a
+failure anyone can mistake for a slow machine.
 **Measured on the real notes** 366 files, 1.21 MB: a word takes 17–54 ms, a tag query 8–15 ms, and
-a tag narrows a word search as it should (`cuisine` 66 hits, `tag:house cuisine` 61). Which is the
-whole argument for the linear scan: the index this would have needed is a thing to keep correct on
-every save, and it would save tens of milliseconds.
+a tag narrows a word search as it should (`cuisine` 66 hits, `tag:house cuisine` 61). The synthetic
+4 MB corpus scans in ~200 ms. Which is the whole argument for the linear scan: the index this would
+have needed is a thing to keep correct on every save, and it would save tens of milliseconds.
 **Found while testing** Search results and the agenda index went stale after a local save: both are
 derived from the in-memory documents, and only the agenda one was being rebuilt. They are refreshed
 together now, from one place, since forgetting one of them is invisible until someone reads results
