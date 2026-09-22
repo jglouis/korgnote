@@ -17,13 +17,19 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import com.korgnote.common.org.*
+import com.korgnote.common.org.complete.CompletionContext
+import com.korgnote.common.org.complete.DEFAULT_TODO_KEYWORDS
+import com.korgnote.common.org.edit.allNodes
 import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.search.SearchHit
 import com.korgnote.common.org.search.SearchQuery
 import com.korgnote.common.org.search.searchOrg
 import com.korgnote.common.org.search.searchOrgFile
 import com.korgnote.common.org.edit.toggleCheckbox
+import kotlin.time.Clock
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import com.korgnote.common.fs.File as SharedFile
 import com.korgnote.common.fs.Folder as SharedFolder
 import com.korgnote.common.fs.Node as SharedNode
@@ -44,6 +50,15 @@ class FileTreeViewModel(
      * pushes from it arrives in T10.
      */
     private val store: DocumentStore = DocumentStore(InMemoryReplicaStorage()),
+    /**
+     * Today, for the dates completion offers.
+     *
+     * A parameter rather than a call to the clock, so a test can say what day it is instead of
+     * asserting against whatever day it runs on.
+     */
+    private val today: () -> LocalDate = {
+        Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+    },
 ) : ViewModel() {
     // Exposed error message when network/server cannot be reached
     var lastErrorMessage by mutableStateOf("")
@@ -149,6 +164,44 @@ class FileTreeViewModel(
     /** Opens the file a result is in, at the element containing it. */
     fun openSearchHit(hit: SearchHit) = onFileSelected(hit.path, scrollToOffset = hit.offset)
 
+    // --- Completion (T13) ---
+
+    /**
+     * What the editor's completion draws on.
+     *
+     * Rebuilt when the replica or the open file changes, never per keystroke: the tags and paths
+     * are corpus-wide, and walking every document for them on each character typed is exactly the
+     * cost the engine was kept pure to avoid.
+     */
+    var completionContext by mutableStateOf(CompletionContext(today = today()))
+        private set
+
+    private fun refreshCompletionContext() {
+        val document = currentFile?.let { orgContents[it] }
+        completionContext = CompletionContext(
+            todoKeywords = document?.todoConfig() ?: DEFAULT_TODO_KEYWORDS,
+            knownTags = tagsByUse(),
+            filePaths = orgContents.keys.sorted(),
+            headings = document?.sectionTitles().orEmpty(),
+            today = today(),
+        )
+    }
+
+    /** Every tag in the corpus, most-used first — which is the order they are worth offering in. */
+    private fun tagsByUse(): List<String> {
+        val counts = mutableMapOf<String, Int>()
+        for (document in orgContents.values) {
+            for (section in document.allNodes().filterIsInstance<OrgSection>()) {
+                for (tag in section.tags) counts[tag] = (counts[tag] ?: 0) + 1
+            }
+        }
+        return counts.entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+            .map { it.key }
+    }
+
+    private fun OrgDocument.sectionTitles(): List<String> =
+        allNodes().filterIsInstance<OrgSection>().map { it.title }
+
     /**
      * Rebuilds everything computed from the notes: the agenda index, the filtered tree and the
      * search results.
@@ -161,6 +214,7 @@ class FileTreeViewModel(
         scheduledByDate = buildScheduledIndex(orgContents)
         refreshFilteredTree()
         refreshSearch()
+        refreshCompletionContext()
     }
 
     // In-memory parsed org documents keyed by file name, provided by the server
@@ -408,6 +462,8 @@ class FileTreeViewModel(
         selectedOrgNode = doc
         currentFile = path
         scrollToElementIndex = null
+        // This file's `#+TODO:` keywords and headings are part of what completion offers.
+        refreshCompletionContext()
         if (doc == null) {
             selectedFileContent = "* ${path}\nNo content yet."
             return

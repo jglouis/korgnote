@@ -256,6 +256,7 @@ fun App() {
                                     elementDraft = vm.elementDraft,
                                     elementDraftCaret = vm.elementDraftCaret,
                                     onElementDraftChange = { vm.onElementDraftChanged(it) },
+                                    completionContext = vm.completionContext,
                                     onEditElement = { vm.beginElementEdit(it) },
                                     onAddElementAfter = { vm.addElementAfter(it) },
                                     scrollToElementIndex = vm.scrollToElementIndex,

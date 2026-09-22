@@ -6,7 +6,7 @@ Addresses G2, G3 and defect D6. Depends on the source-mapped model from
 > **Status.** The performance work is done and the findings below are measurements, not plans.
 > Per-element editing ([09](09-element-editing.md)) has since become the primary editing surface and
 > removed document size as a concern; the whole-file editor described here remains as an escape
-> hatch. Search is built (T14); completion (T13) is still unbuilt.
+> hatch. Search (T14) and completion (T13) are both built.
 
 ## Where it hurt
 
@@ -210,7 +210,10 @@ anything else.
 
 ## Completion (G3)
 
-Keep the engine pure and multiplatform; keep the popup dumb.
+**Done (T13).** Keep the engine pure and multiplatform; keep the popup dumb. The shapes below are
+what shipped, with two additions: `CompletionItem.Kind` includes `DATE_PICKER` for the one
+suggestion that has to ask before it can answer, and `applyTo` performs an item — the splice plus
+the caret — so the editor and the tests do it the same way.
 
 ```kotlin
 package com.korgnote.common.org.complete
@@ -248,12 +251,22 @@ Triggers, all derived from `doc.nodeAt(cursor)` plus the current line prefix:
 | `<s`, `<q`, `<e` at line start | structure templates (src/quote/example blocks), Org's `org-tempo` convention |
 
 Being pure functions of `(document, cursor, context)`, every row above is a unit test with
-no UI involved. The popup itself only renders a list, handles ↑/↓/Tab/Esc, and calls
-`state.edit { }` with the chosen item's `replace`/`insert`.
+no UI involved — 26 of them. The rules are tried in a fixed order, which is what keeps `[[` a link
+rather than a bracket and `<s` a template rather than a timestamp; inside a source block nothing is
+offered at all, because there the text is code and the parser already knows it.
 
-Platform note: a floating popup suits desktop; on phones, prefer a suggestion strip pinned
-above the keyboard — the popup fights the IME and the selection handles. Same engine, two
-presentations.
+The strip renders the list, and the field handles Tab (accept), ↑/↓/←/→ (move) and Esc (dismiss
+until the next keystroke). Accepting calls `applyTo`, which replaces the item's range and places
+the caret — inside `<…>`, or between the two lines of a block.
+
+Platform note, revised: a floating popup suits desktop and a strip suits phones, and **both get the
+strip**. The popup fights the IME and the selection handles, phones are where these notes are
+written, and one presentation is one thing to keep working. Desktop loses nothing, because the
+keyboard path does not go through the chips.
+
+The context comes from outside the document being edited: completion runs against a single element,
+while the tags are the whole replica's and the `#+TODO:` keywords are the open file's. The view
+model rebuilds it when the replica or the open file changes — not per keystroke.
 
 ## Search (G2)
 

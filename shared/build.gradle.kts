@@ -37,6 +37,9 @@ kotlin {
         androidMain.get().dependsOn(jvmSharedMain)
 
         commonMain.dependencies {
+            // `api`, not `implementation`: the completion engine's context carries a LocalDate, so
+            // anything calling it needs the type. T15 expects this dependency here anyway.
+            api(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.core)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.coroutines.core)

@@ -11,9 +11,10 @@ improvement on top of it.
 Phase 1 (the Org core, T3–T7) is complete: the model is source-mapped and lossless, headings nest,
 the grammar covers the constructs these notes actually use, Org syntax is defined in one place, and
 edits are range replacements. Phase 2 (T8–T11) is complete too: the app holds the whole corpus
-locally, syncs through the v1 API, and merges divergent edits instead of losing them. Phase 3 is
-under way — the editor work is done bar what was deliberately deferred, and search has landed.
-What is left in it is **T13** (completion); after that, **Phase 4** (agenda).
+locally, syncs through the v1 API, and merges divergent edits instead of losing them. **Phase 3 is
+complete** as well — the editor work is done bar what was deliberately deferred, and search and
+completion have landed. Next is **Phase 4** (agenda, T15–T18), whose first task is the timestamp
+parser that completion is already writing timestamps for.
 
 ## Status
 
@@ -35,9 +36,10 @@ Updated 2026-09-22.
 | ✅ | T9 Sync API v1 | Done — manifest, conditional files, bundle, SSE fed by a file watcher |
 | ✅ | T10 Sync engine and cutover | Done — old API deleted; the client syncs through v1 |
 | ✅ | T11 Conflicts | Done — diff3 merge; divergent edits keep both versions, never markers |
+| ✅ | T13 Completion | Done — pure engine, every trigger row tested; a suggestion strip, not a popup |
 | ✅ | T14 Search | Done — linear scan over the replica, words and `tag:`, results open at the match |
 | 🟡 | T10b Web client | Mostly wired by T10; what is left is listed in the task |
-| ❌ | T13, T15–T18 | Not started |
+| ❌ | T15–T18 | Not started |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -437,12 +439,39 @@ and the reasoning are in [09](09-element-editing.md#known-gaps).
   that needed it, so this is only worth doing if the whole-file editor stops being an escape hatch.
 - Debounced, cancellable re-parse. Not needed at current costs; revisit if it regresses.
 
-### T13 · Completion
+### T13 · Completion — ✅ **done**
+**Landed** `shared/org/complete/OrgComplete.kt`: `complete(doc, cursor, ctx)` returns items that
+each carry the range of typed text they stand in for and where the caret should land, so accepting
+one is a range replacement like every other edit here — `applyTo` performs it and is what both the
+editor and the tests call. All eight trigger rows are implemented, tried in a fixed order so that
+`[[` is a link before it is a bracket and `<s` is a block template before it is a timestamp.
+**A strip, not a popup.** The design sketched a floating popup for desktop and a strip for phones.
+Both platforms get the strip: the popup fights the IME and the selection handles, phones are where
+these notes are mostly written, and one presentation is one thing to keep working. Desktop loses
+nothing — the field handles Tab to accept, arrows to move and Esc to dismiss, so a hardware
+keyboard never has to reach for a chip. Tab rather than Enter, because Enter is a newline in a
+multi-line element and stealing it would make an ordinary edit depend on whether a chip happened to
+be showing.
+**Context comes from outside the document** The engine is handed one element while the useful
+material is corpus-wide, so tags (most-used first), file paths, the open file's `#+TODO:` keywords
+and today's date arrive in a `CompletionContext` the view model rebuilds when the replica or the
+open file changes — never per keystroke. Walking all 366 real notes for the tag counts costs 3 ms
+warm, 14 ms cold, so nothing cleverer is warranted.
+**Verified** 26 `OrgCompleteTests` — one or more per trigger row, asserting the text and caret the
+user ends up with rather than the shape of the item — and 5 `CompletionContextTest` cases for the
+material the app supplies. The acceptance criterion is a test by name: typing `* ` then `TO` offers
+the document's own `#+TODO:` keywords, and a document naming none falls back to Org's.
+**Found while writing it** The editor spliced items with `insert.length` instead of the item's
+`caretOffset`, which would have left the caret after `#+END_SRC` instead of inside the block. That
+is why the splice now lives in the engine as `applyTo`, where a test can reach it.
 **Depends** T12b
 **Scope** `org.complete` engine plus popup (desktop) / suggestion strip (mobile), covering
 the trigger table in [06](06-editor.md#completion-g3).
 **Done when** Each trigger row has a unit test, and typing `* ` then `TO` offers the
 document's own `#+TODO:` keywords (G3).
+**Not included** The whole-file editor, which still has no completion: it holds a `String` rather
+than a `TextFieldValue`, so it has no caret to complete at, and it is an escape hatch rather than
+the path edits take. Wiring it is the same call plus that conversion.
 
 ### T14 · Search — ✅ **done**
 **Landed** `shared/org/search/OrgSearch.kt`: `SearchQuery.parse` turns what was typed into words
