@@ -166,13 +166,16 @@ fun App() {
                 }
                 // Reading mode scrolls itself, one element at a time, so that opening a large file
                 // does not have to lay out every element first; search does the same with its
-                // results. A lazy list cannot be nested in a vertically scrolling parent, so this
-                // Column yields its scroll to those two; every other screen, and the whole-file
-                // editor, still scroll here as before.
+                // results, and the calendar with its agenda list and hour grid. A lazy list cannot
+                // be nested in a vertically scrolling parent — and a screen that fills the space
+                // left gets none inside one — so this Column yields its scroll to those three;
+                // every other screen, and the whole-file editor, still scroll here as before.
                 val readingDocument = selectedScreen == BottomItem.HOME &&
                     !isEditing &&
                     vm.selectedFileContent.isNotBlank()
-                val ownsItsScroll = readingDocument || selectedScreen == BottomItem.SEARCH
+                val ownsItsScroll = readingDocument ||
+                    selectedScreen == BottomItem.SEARCH ||
+                    selectedScreen == BottomItem.CALENDAR
                 val screenScrollState = rememberScrollState()
                 Column(
                     modifier = Modifier

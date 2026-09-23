@@ -13,8 +13,8 @@ the grammar covers the constructs these notes actually use, Org syntax is define
 edits are range replacements. Phase 2 (T8–T11) is complete too: the app holds the whole corpus
 locally, syncs through the v1 API, and merges divergent edits instead of losing them. **Phase 3 is
 complete** as well — the editor work is done bar what was deliberately deferred, and search and
-completion have landed. **Phase 4** (agenda) is under way: the parser and engine (T15–T16) are in,
-and the views (T17) are next. T19 (CI), which had to come first, is done: every push now runs the
+completion have landed. **Phase 4** (agenda) is under way: the parser, engine and views (T15–T17) are in,
+and notifications (T18) are next. T19 (CI), which had to come first, is done: every push now runs the
 suite.
 
 **Phase 5 (T19–T24) came from using the thing.** Nothing in it was foreseen when the plan was
@@ -45,7 +45,8 @@ Updated 2026-09-23.
 | 🟡 | T10b Web client | Mostly wired by T10; what is left is listed in the task |
 | ✅ | T15 Timestamp parser | Done — every syntax row, ranges, repeaters, delays; malformed stamps are skipped |
 | ✅ | T16 Agenda engine | Done — `AgendaIndex` replaces `scheduledByDate`; the calendar renders from it |
-| ❌ | T17–T18 | Not started |
+| ✅ | T17 Day and week views | Done — agenda list, day, week and month, all from `AgendaIndex` |
+| ❌ | T18 Notifications | Not started |
 | ✅ | T19 CI | Done — [ci.yml](../.github/workflows/ci.yml): Linux on every push, iOS nightly when master changed |
 | ❌ | T20 File lifecycle | Not started — notes still cannot be created, renamed or deleted (D11) |
 | ❌ | T21 Link navigation | Not started — links render but do not go anywhere |
@@ -597,7 +598,34 @@ windows, repeaters, carried-over scheduled items, body timestamps. Replaces
 **Done when** Expansion rules are unit-tested over a fixture corpus, and the existing
 calendar renders from the new index unchanged (D7).
 
-### T17 · Day and week views
+### T17 · Day and week views — ✅ **done**
+**Landed** Four modes on the calendar tab, sharing the existing header, swipe and slide animation:
+- **Agenda** (the default): an Overdue section, then a week of days, each entry with its time or
+  kind icon, status ("Deadline", "Due in 3 d.", "Scheduled 5 d. ago"), keyword, priority and tags.
+- **Day**: an all-day strip above an hour grid; timed entries are blocks, overlapping ones share
+  the width; a line at the current time.
+- **Week**: the same grid in seven columns under a row of dates. A multi-day range is one bar:
+  squared off where it continues and titled only where it starts.
+- **Month**: the existing grid with chips coloured by kind, deadlines before scheduled items before
+  appointments when space runs out, and a count of the rest. Tapping a day opens it in Day.
+
+Deadlines, scheduled items, appointments and closed items each have a colour and an icon, the
+same in every view; done entries are dimmed, and an eye toggle hides them. Every entry opens its
+heading.
+**Decisions** A deadline's countdown shows on today only — the engine gives one for every day of
+the warning period, and the agenda list would otherwise repeat it daily, as org-agenda's week
+view does not. Multi-day ranges go in the all-day strip even when they have times, as calendars
+draw a trip. Blocks are drawn at least 30 minutes tall so a stand-up has room for its title. The
+grid opens an hour before now, but never below the first timed entry on screen. "Drag horizon" and
+a configurable day start are not done: the grid scrolls, and nothing yet needed a setting.
+**Verified** `CalendarLayoutTest` (12, common): overlap layout, what each view shows, list grouping,
+labels. `CalendarScreenTest` (6, JVM): the acceptance day — two timed meetings, an all-day range and
+a deadline — renders in all four views; tapping opens the entry or the day; done entries hide.
+Screenshots of all four were checked on the desktop runtime at phone width.
+**First try on a device: empty.** The app shell scrolls every screen but reading mode and search,
+and inside a scroll the calendar's fill-the-rest content area measured zero height; the screen's
+own tests gave it a fixed size and could not see it. The calendar now owns its scroll like search,
+and `AppCalendarTest` renders the real shell and opens the tab — it fails without the fix.
 **Depends** T16
 **Scope** Day view with an hour grid and "now" line; week view with all-day strip and hour
 grid; month chips distinguishing deadline vs scheduled; agenda list view. Keep the current
