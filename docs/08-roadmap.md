@@ -17,12 +17,12 @@ completion have landed. Next is **Phase 4** (agenda, T15–T18), whose first tas
 parser that completion is already writing timestamps for — but **T19 (CI) comes before all of
 it**, for the reason given there.
 
-**Phase 5 (T19–T22) came from using the thing.** Nothing in it was foreseen when the plan was
+**Phase 5 (T19–T23) came from using the thing.** Nothing in it was foreseen when the plan was
 written: it is what a day of real use and three regressions exposed.
 
 ## Status
 
-Updated 2026-09-22.
+Updated 2026-09-23.
 
 | | Task | State |
 |---|---|---|
@@ -44,10 +44,11 @@ Updated 2026-09-22.
 | ✅ | T14 Search | Done — linear scan over the replica, words and `tag:`, results open at the match |
 | 🟡 | T10b Web client | Mostly wired by T10; what is left is listed in the task |
 | ❌ | T15–T18 | Not started |
-| ❌ | T19 CI | Not started — nothing runs the tests but a person who remembers to |
+| 🟡 | T19 CI | Workflow written ([ci.yml](../.github/workflows/ci.yml)); done once it has gone red and green on GitHub |
 | ❌ | T20 File lifecycle | Not started — notes still cannot be created, renamed or deleted (D11) |
 | ❌ | T21 Link navigation | Not started — links render but do not go anywhere |
 | ❌ | T22 Whole-file editing | Not started — decide whether the second editing surface survives |
+| ❌ | T23 Server container | Not started — a Dockerfile for the server, notes mounted from the host |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -578,7 +579,20 @@ the app closed and the network off.
 
 ## Phase 5 — What using it exposed
 
-### T19 · Continuous integration
+### T19 · Continuous integration — 🟡 **workflow written, not yet proven**
+**Landed** `.github/workflows/ci.yml`. On every push to master and every pull request, one Ubuntu job
+runs `:shared:jvmTest`, `:shared:wasmJsTest`, `:composeApp:jvmTest`, `:composeApp:wasmJsTest` and
+`:server:test`, then builds `:composeApp:wasmJsBrowserDistribution` and `:androidApp:assembleDebug`.
+Those two builds are the compile check for wasm and Android. It runs with `--continue`, so one run
+reports every failure, and uploads the HTML test reports when something fails.
+**iOS runs nightly, and only when master changed.** The repository is private, so macOS minutes
+count 10× against the free quota. A nightly run of about 10 minutes would use 3,000 of the 2,000 a
+month, so a cheap Ubuntu job first checks for commits in the last 25 hours. `workflow_dispatch` runs
+it by hand, with the iOS job on by default. The iOS simulator tests are the ones that have most
+likely never run anywhere, so their first run is the one to watch.
+**Still to prove** Every task was run locally, but nothing has run on a GitHub runner yet: the
+Android SDK platform download, headless Chrome for the wasm tests, and the Kotlin/Native download
+on macOS are the likely first failures. Done when a deliberately broken test turns a push red.
 **Depends** —
 **Scope** A workflow on every push: `:shared:jvmTest`, `:server:test`, `:composeApp:jvmTest`,
 plus a compile of each target that has no tests to run — `compileKotlinWasmJs`,
@@ -643,6 +657,36 @@ doing: they exist only for this surface.
 **Done when** There is one editing surface, or the second one has the same affordances as the
 first, and whichever it is, the reason is written down.
 
+
+### T23 · Server container
+**Depends** T2
+**Scope** A `Dockerfile` for the Ktor server and a `docker-compose.yml` example: the notes
+directory mounted from the host at `/notes` with `NOTES_DIR=/notes`, the token and the port. A
+multi-stage build: `:server:installDist` on a JDK image, then a slim JRE image to run it.
+**What to get right**
+- **Binding.** The server listens on loopback unless `KORGNOTE_TOKEN` or `KORGNOTE_ALLOW_LAN` is
+  set, and loopback inside a container cannot be reached from outside. The image should *require* a
+  token and refuse to start without one, because a container is exactly where a port gets exposed
+  by accident.
+- **File ownership.** The server writes into the mounted directory. Run as a non-root user whose
+  UID/GID can be set (`--user`, or a build argument), so files created on the host are not owned by
+  root.
+- **A missing mount must be fatal.** Today a missing notes directory falls back to the bundled
+  samples, and inside a jar to serving nothing, with only a log line. In a container that hides a
+  typo in the volume path, so fail at startup instead.
+- **The file watcher.** Edits made outside the app reach the server through a file watcher. This
+  works on Linux; bind mounts under Docker Desktop on macOS do not always pass host changes into the
+  container. Verify on the machine that will actually run it.
+- **The build context.** Gradle configures every module, and the Android ones may refuse to
+  configure without an SDK even when only `:server` is built. Check that first; if it fails, build
+  the distribution outside the image (locally or in CI) and `COPY` it in.
+**Optional** Also serve the web client from the same container (`WASM_DIR`), and have CI build the
+image and push it to GHCR on master. Both are extensions of T19 rather than part of this task.
+**Done when** `docker compose up` with a host notes directory and a token serves the app, an edit
+made on the host reaches a connected client, and a note saved from the app appears on the host
+owned by the host user.
+**Not included** TLS. The README's reverse-proxy recipe still applies in front of the container.
+
 ---
 
 ## Sequencing notes
@@ -658,6 +702,7 @@ first, and whichever it is, the reason is written down.
   the ordinal hack.
 - **T19 before Phase 4.** Everything after this point is built on a suite nothing runs; the longer
   that is true, the more of it is decoration. It is also the only task here that takes an hour.
+- T23 is independent of everything but T2 and can be done whenever a machine to run it on is ready.
 - T20 before T21: a corpus you cannot add to is a corpus whose links you cannot finish writing.
 - T22 is independent and can wait, but it should be settled before the editor is touched again,
   not after — the last three editor changes each had to ask which surface they applied to.
