@@ -79,9 +79,11 @@ class CompletionContextTest {
         assertContentEquals(listOf("TODO", "NEXT", "WAITING"), viewModel.completionContext.todoKeywords.todo.toList())
         assertContentEquals(listOf("DONE", "CANCELLED"), viewModel.completionContext.todoKeywords.done.toList())
 
-        // The other file names no workflow, so completion there falls back to Org's own.
+        // The other file names no workflow, so completion there offers what the notes declare —
+        // standing in for the editor-wide setting such a file relies on.
         viewModel.onFileSelected(home)
-        assertTrue(viewModel.completionContext.todoKeywords.todo.isEmpty())
+        assertContentEquals(listOf("TODO", "NEXT", "WAITING"), viewModel.completionContext.todoKeywords.todo.toList())
+        assertContentEquals(listOf("DONE", "CANCELLED"), viewModel.completionContext.todoKeywords.done.toList())
     }
 
     @Test

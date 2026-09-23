@@ -85,7 +85,8 @@ fun CalendarScreen(
     val today = clock.date
     var anchorDate by remember { mutableStateOf(initialAnchorDate ?: today) }
     var mode by remember { mutableStateOf(initialMode ?: CalendarMode.Agenda) }
-    var showDone by remember { mutableStateOf(true) }
+    // Finished entries are history, and a year of them buries what is still to do.
+    var showDone by remember { mutableStateOf(false) }
     var slideDirection by remember { mutableStateOf(0) } // -1 for left (next), +1 for right (prev)
 
     fun show(newMode: CalendarMode, date: LocalDate = anchorDate) {

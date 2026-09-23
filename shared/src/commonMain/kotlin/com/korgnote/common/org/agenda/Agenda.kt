@@ -4,7 +4,9 @@ import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.complete.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.orgHeadingOf
-import com.korgnote.common.org.parseTodoConfigFrom
+import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.corpusTodoKeywords
+import com.korgnote.common.org.todoKeywordsOf
 import com.korgnote.common.org.search.fileTagsOf
 import com.korgnote.common.org.sliceOf
 import kotlinx.datetime.DateTimeUnit
@@ -48,7 +50,7 @@ data class AgendaEntry(
     val file: String,
     val headingOffset: Int,
     val title: String,
-    /** The TODO keyword, if the heading has one the file declares (or `TODO`/`DONE` by default). */
+    /** The TODO keyword, if the heading has one its file declares — or, declaring none, the corpus. */
     val todo: String?,
     val done: Boolean,
     /** The heading's own tags, then those it inherits from its parents and from `#+FILETAGS:`. */
@@ -100,9 +102,18 @@ data class AgendaOptions(
 
 // --- Finding entries ---------------------------------------------------------------------------
 
-/** Every entry in every file. */
-fun agendaEntries(files: Map<String, String>): List<AgendaEntry> =
-    files.keys.sorted().flatMap { agendaEntries(it, files.getValue(it)) }
+/**
+ * Every entry in every file.
+ *
+ * A file that declares no keywords of its own is read with [keywords] — by default, those the
+ * whole corpus declares, so that a `FINISHED` entry in a note that relies on the editor's global
+ * setting is still finished.
+ */
+fun agendaEntries(
+    files: Map<String, String>,
+    keywords: OrgTodoConfig = corpusTodoKeywords(files.values),
+): List<AgendaEntry> =
+    files.keys.sorted().flatMap { agendaEntries(it, files.getValue(it), keywords) }
 
 /**
  * Every dated heading in one file.
@@ -111,12 +122,11 @@ fun agendaEntries(files: Map<String, String>): List<AgendaEntry> =
  * example block or a drawer is not an appointment: those are verbatim text. Text before the first
  * heading has no heading to attach a date to, and is passed over.
  */
-fun agendaEntries(path: String, text: String): List<AgendaEntry> {
+fun agendaEntries(path: String, text: String, fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): List<AgendaEntry> {
     // A file without a stamp has nothing to offer, and most notes have none.
     if (!OrgSyntax.timestamp.containsMatchIn(text)) return emptyList()
 
-    val todoConfig = parseTodoConfigFrom(text.lineSequence().filter { it.startsWith("#+") }.toList())
-        .takeUnless { it.todo.isEmpty() && it.done.isEmpty() } ?: DEFAULT_TODO_KEYWORDS
+    val todoConfig = todoKeywordsOf(text, fallback)
     val fileTags = fileTagsOf(text)
     val ancestors = mutableListOf<Pair<Int, List<String>>>()
     val entries = mutableListOf<AgendaEntry>()

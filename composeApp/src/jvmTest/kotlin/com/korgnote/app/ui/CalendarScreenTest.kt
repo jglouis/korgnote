@@ -116,12 +116,14 @@ class CalendarScreenTest {
     }
 
     @Test
-    fun doneEntriesCanBeHidden() = runComposeUiTest {
+    fun doneEntriesAreHiddenUntilAskedFor() = runComposeUiTest {
         show(CalendarMode.Agenda)
+        onAllNodesWithText("Water plants", substring = true).assertCountEquals(0)
+
+        onNodeWithContentDescription("Show done").performClick()
         assertShown("Water plants")
 
         onNodeWithContentDescription("Hide done").performClick()
-
         onAllNodesWithText("Water plants", substring = true).assertCountEquals(0)
     }
 

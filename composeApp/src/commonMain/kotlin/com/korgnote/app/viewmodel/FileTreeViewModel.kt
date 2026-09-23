@@ -31,6 +31,7 @@ import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOptions
+import com.korgnote.common.org.agenda.agendaEntries
 import com.korgnote.common.org.search.SearchHit
 import com.korgnote.common.org.search.SearchQuery
 import com.korgnote.common.org.search.searchOrg
@@ -302,7 +303,7 @@ class FileTreeViewModel(
     private fun refreshCompletionContext() {
         val document = currentFile?.let { orgContents[it] }
         completionContext = CompletionContext(
-            todoKeywords = document?.todoConfig() ?: DEFAULT_TODO_KEYWORDS,
+            todoKeywords = document?.let { todoKeywordsOf(it.text, corpusKeywords) } ?: corpusKeywords,
             knownTags = tagsByUse(),
             filePaths = orgContents.keys.sorted(),
             headings = document?.sectionTitles().orEmpty(),
@@ -334,11 +335,18 @@ class FileTreeViewModel(
      * describe a document as it used to be.
      */
     private fun refreshDerivedViews() {
+        corpusKeywords = corpusTodoKeywords(orgContents.values.map { it.text })
         agenda = buildAgenda()
         refreshFilteredTree()
         refreshSearch()
         refreshCompletionContext()
     }
+
+    /**
+     * The keywords a note that declares none is read with: every `#+TODO:` in the notes, standing
+     * in for the editor-wide setting the app cannot see. See [corpusTodoKeywords].
+     */
+    private var corpusKeywords: OrgTodoConfig = DEFAULT_TODO_KEYWORDS
 
     // In-memory parsed org documents keyed by file name, provided by the server
     private val orgContents: MutableMap<String, OrgDocument> = mutableMapOf()
@@ -740,5 +748,8 @@ class FileTreeViewModel(
      * old still carries over to the right day once anything changes.
      */
     private fun buildAgenda(): AgendaIndex =
-        AgendaIndex.of(orgContents.mapValues { it.value.text }, AgendaOptions(today = today()))
+        AgendaIndex(
+            agendaEntries(orgContents.mapValues { it.value.text }, corpusKeywords),
+            AgendaOptions(today = today()),
+        )
 }

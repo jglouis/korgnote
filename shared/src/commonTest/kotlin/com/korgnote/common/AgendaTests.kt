@@ -7,6 +7,7 @@ import com.korgnote.common.org.agenda.AgendaOptions
 import com.korgnote.common.org.agenda.DaySpan
 import com.korgnote.common.org.agenda.agenda
 import com.korgnote.common.org.agenda.agendaEntries
+import com.korgnote.common.org.corpusTodoKeywords
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlin.test.Test
@@ -265,6 +266,50 @@ class AgendaTests {
         assertEquals(listOf(false, true, false, false), entries.map { it.done })
         assertEquals("API review", entries[2].title)
         assertEquals("TODO Not a keyword here", entries[3].title)
+    }
+
+    @Test
+    fun aFileThatDeclaresNothingUsesTheKeywordsOfTheOthers() {
+        // agenda.org declares the workflows; the meeting notes rely on them without saying so, as
+        // they do in Emacs through `org-todo-keywords`.
+        val files = mapOf(
+            "agenda.org" to "#+TODO: TODO DOING | DONE CANCELED\n#+TODO: EVENT | FINISHED\n* EVENT Dentist <2026-09-25 Fri>\n",
+            "meetings.org" to "* FINISHED Meeting 1\nSCHEDULED: <2026-09-18 Fri>\n* CANCELED Meeting 2\nSCHEDULED: <2026-09-19 Sat>\n",
+        )
+        val found = agenda(files, day(1), day(30), options)
+        val meetings = found.filter { it.entry.file == "meetings.org" }
+        assertEquals(listOf("FINISHED", "CANCELED"), meetings.map { it.entry.todo })
+        assertTrue(meetings.all { it.entry.done })
+        // Done, so neither is carried to today as overdue.
+        assertEquals(listOf(day(18), day(19)), meetings.map { it.date })
+    }
+
+    @Test
+    fun aFileThatDeclaresItsOwnKeywordsKeepsThem() {
+        val files = mapOf(
+            "agenda.org" to "#+TODO: EVENT | FINISHED\n",
+            "work.org" to "#+TODO: NEXT | SHIPPED\n* FINISHED Not a keyword here <2026-09-24 Thu>\n",
+        )
+        val entry = agendaEntries(files).single()
+        assertEquals(null, entry.todo)
+        assertEquals("FINISHED Not a keyword here", entry.title)
+    }
+
+    @Test
+    fun theCorpusKeywordsAreEveryDeclarationPlusOrgsOwn() {
+        val keywords = corpusTodoKeywords(
+            listOf(
+                "#+TODO: TODO(t) WAIT(w@/!) | DONE(d!) CANCELED(c@/!)\n",
+                "#+TODO: EVENT(e) | FINISHED(f)\n",
+                "#+TODO: REVIEW | PARKED\n",
+                // Called open here and done above: done wins.
+                "#+TODO: PARKED | ARCHIVED\n",
+                "* No declaration\n",
+            ),
+        )
+        assertEquals(setOf("TODO", "WAIT", "EVENT", "REVIEW"), keywords.todo)
+        assertEquals(setOf("DONE", "CANCELED", "FINISHED", "PARKED", "ARCHIVED"), keywords.done)
+        assertEquals(setOf("TODO"), corpusTodoKeywords(emptyList()).todo)
     }
 
     @Test
