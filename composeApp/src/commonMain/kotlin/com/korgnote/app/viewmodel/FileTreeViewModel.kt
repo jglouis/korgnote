@@ -300,6 +300,12 @@ class FileTreeViewModel(
         refreshSuggestions()
     }
 
+    /**
+     * The open file's TODO keywords — its own `#+TODO:`, or what the notes declare when it has
+     * none — for everything that renders or edits it, as well as for completion.
+     */
+    val todoKeywords: OrgTodoConfig get() = completionContext.todoKeywords
+
     private fun refreshCompletionContext() {
         val document = currentFile?.let { orgContents[it] }
         completionContext = CompletionContext(

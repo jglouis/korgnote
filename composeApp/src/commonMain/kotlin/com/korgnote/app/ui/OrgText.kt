@@ -88,8 +88,13 @@ fun OrgText(
     // opening a file from a calendar entry. Consumed once via onScrolledToChildIndex.
     scrollToChildIndex: Int? = null,
     onScrolledToChildIndex: () -> Unit = {},
+    /**
+     * Keywords for a document that declares none of its own. Reading mode renders one heading at a
+     * time, which never holds the file's `#+TODO:` lines, so it passes the file's keywords here.
+     */
+    todoKeywords: OrgTodoConfig = DefaultOrgTodoConfig,
 ) {
-    val todoConfig = if (content is OrgDocument) orgTodoConfigOf(content) else DefaultOrgTodoConfig
+    val todoConfig = if (content is OrgDocument) orgTodoConfigOf(content, todoKeywords) else todoKeywords
     Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
         if (content is OrgDocument) {
             // One requester per top-level node so a calendar entry (which always refers to a

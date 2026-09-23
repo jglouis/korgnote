@@ -209,6 +209,9 @@ fun App() {
                                 val orgHighlighting = remember(headingColor) {
                                     OrgSyntaxHighlightTransformation(headingColor)
                                 }
+                                // The whole file is being edited, so its own #+TODO: lines win;
+                                // this only covers a file that has none.
+                                orgHighlighting.fallbackKeywords = vm.todoKeywords
                                 // Styling is limited to the characters on screen: span count, not
                                 // span production, is what drives layout cost in a large document.
                                 val viewport = remember { EditorViewport() }
@@ -274,6 +277,7 @@ fun App() {
                                     // know what is on screen, and fills what the header leaves.
                                     modifier = Modifier.weight(1f).fillMaxWidth(),
                                     text = vm.selectedFileContent,
+                                    todoKeywords = vm.todoKeywords,
                                     editingElementIndex = vm.editingElementIndex,
                                     elementDraftValue = vm.elementDraftValue,
                                     onElementDraftChange = { vm.onElementDraftChanged(it) },

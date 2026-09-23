@@ -25,6 +25,7 @@ import com.korgnote.common.org.orgSpansForLine
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.parseTodoConfigFrom
+import com.korgnote.common.org.todoKeywordsOf
 import io.ktor.http.encodeURLQueryComponent
 
 /**
@@ -58,19 +59,23 @@ object OrgColors {
     val horizontalRule = Color(0xFFB0BEC5)
 }
 
-/** TODO keywords used when a document does not declare any with `#+TODO:`. */
+/** TODO keywords used when nothing better is known: Org's own. */
 val DefaultOrgTodoConfig = OrgTodoConfig(setOf("TODO"), setOf("DONE"))
 
-/** Adds the default TODO/DONE keywords to a configuration parsed from a document. */
-fun OrgTodoConfig.withDefaults(): OrgTodoConfig =
-    OrgTodoConfig(todo + DefaultOrgTodoConfig.todo, done + DefaultOrgTodoConfig.done)
+/**
+ * The keywords [text] declares with `#+TODO:`, or [fallback] when it declares none.
+ *
+ * The fallback matters more than it looks: reading mode and the element editor work on one heading
+ * at a time, which never contains the file's `#+TODO:` lines, so without the file's own keywords
+ * handed down as the fallback a `FINISHED` heading would not read as finished. A declaration
+ * replaces the fallback rather than adding to it, as in Org and as in the calendar.
+ */
+fun orgTodoConfigOf(text: String, fallback: OrgTodoConfig = DefaultOrgTodoConfig): OrgTodoConfig =
+    todoKeywordsOf(text, fallback)
 
-/** Extracts the TODO keyword configuration (`#+TODO:` lines) from raw Org text, including defaults. */
-fun orgTodoConfigOf(text: String): OrgTodoConfig =
-    parseTodoConfigFrom(text.lineSequence().filter { it.startsWith("#+TODO", ignoreCase = true) }.toList()).withDefaults()
-
-/** Extracts the TODO keyword configuration from a parsed document, including defaults. */
-fun orgTodoConfigOf(doc: OrgDocument): OrgTodoConfig = parseTodoConfigFrom(doc.metadata).withDefaults()
+/** As [orgTodoConfigOf] for text, from a parsed document's `#+` lines. */
+fun orgTodoConfigOf(doc: OrgDocument, fallback: OrgTodoConfig = DefaultOrgTodoConfig): OrgTodoConfig =
+    parseTodoConfigFrom(doc.metadata).takeUnless { it.todo.isEmpty() && it.done.isEmpty() } ?: fallback
 
 /** Color of a TODO keyword, or null if [word] is not a known keyword. */
 fun OrgTodoConfig.colorFor(word: String): Color? = when (word) {
@@ -180,13 +185,13 @@ private class OrgHighlightCache(private val headingColor: Color) {
      * [visible] limits full styling to the characters in that range; lines outside it get
      * [appendUnstyledLine]. Passing null styles the whole document.
      */
-    fun highlight(text: String, visible: IntRange?): AnnotatedString {
-        if (visible == cachedVisible) {
+    fun highlight(text: String, visible: IntRange?, fallback: OrgTodoConfig = DefaultOrgTodoConfig): AnnotatedString {
+        val config = orgTodoConfigOf(text, fallback)
+        if (visible == cachedVisible && config == todoConfig) {
             sourceResult?.let { if (sourceText == text) return it }
         }
 
         val newLines = text.split('\n')
-        val config = orgTodoConfigOf(text)
         // A changed #+TODO: configuration restyles keywords anywhere in the document, so no cached
         // line survives it. A moved window does not invalidate anything by itself: each line is
         // cached along with whether it was styled, so only the lines crossing the window's edge are
@@ -740,8 +745,14 @@ class OrgSyntaxHighlightTransformation(headingColor: Color) : VisualTransformati
      */
     var visibleChars: IntRange? = null
 
+    /**
+     * Keywords for text that declares none of its own — the file's, when the text being edited is
+     * one heading of it. Set during composition, like [visibleChars].
+     */
+    var fallbackKeywords: OrgTodoConfig = DefaultOrgTodoConfig
+
     override fun filter(text: AnnotatedString): TransformedText {
-        val highlighted = cache.highlight(text.text, visibleChars).withSpans(::editorSpanStyle)
+        val highlighted = cache.highlight(text.text, visibleChars, fallbackKeywords).withSpans(::editorSpanStyle)
         return TransformedText(highlighted, OffsetMapping.Identity)
     }
 }

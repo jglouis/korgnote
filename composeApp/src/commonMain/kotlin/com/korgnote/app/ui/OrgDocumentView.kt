@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.sliceOf
 import com.korgnote.common.org.toOrgDocument
@@ -57,6 +58,12 @@ fun OrgDocumentView(
     onAddElementAfter: ((elementIndex: Int) -> Unit)? = null,
     scrollToElementIndex: Int? = null,
     onScrolledToElement: () -> Unit = {},
+    /**
+     * The file's TODO keywords: its own `#+TODO:`, or what the notes declare when it has none.
+     * Each element is rendered from its own slice, which does not contain the declaration, so
+     * this is the only way a `FINISHED` heading far below it can know it is finished.
+     */
+    todoKeywords: OrgTodoConfig = DefaultOrgTodoConfig,
 ) {
     val elements = remember(text) { text.orgElements() }
     val listState = rememberLazyListState()
@@ -82,6 +89,7 @@ fun OrgDocumentView(
                         value = elementDraftValue,
                         onValueChange = onElementDraftChange,
                         onCompletionKey = onCompletionKey,
+                        todoKeywords = todoKeywords,
                     )
                 } else {
                     Row(
@@ -101,6 +109,7 @@ fun OrgDocumentView(
                             val document = remember(slice) { slice.toOrgDocument() }
                             OrgText(
                                 content = document,
+                                todoKeywords = todoKeywords,
                                 // The element was parsed from its own slice, so its nodes carry
                                 // slice-relative ranges; shifting by the element's start makes them
                                 // offsets into the whole document.
@@ -177,9 +186,11 @@ private fun OrgElementEditor(
     value: TextFieldValue,
     onValueChange: (TextFieldValue) -> Unit,
     onCompletionKey: (CompletionKey) -> Boolean,
+    todoKeywords: OrgTodoConfig,
 ) {
     val headingColor = MaterialTheme.colorScheme.primary
     val highlighting = remember(headingColor) { OrgSyntaxHighlightTransformation(headingColor) }
+    highlighting.fallbackKeywords = todoKeywords
     val interactionSource = remember { MutableInteractionSource() }
     val textStyle = LocalTextStyle.current.merge(
         TextStyle(fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface)
