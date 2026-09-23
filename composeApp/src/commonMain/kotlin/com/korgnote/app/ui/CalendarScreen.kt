@@ -56,6 +56,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 
 const val SLIDE_DURATION_MS = 100
 const val FADE_DURATION_MS = 100
@@ -78,7 +79,7 @@ fun CalendarScreen(
     val clock by produceState(now ?: currentDateTime(), now) {
         if (now != null) return@produceState
         while (true) {
-            delay(60_000)
+            delay(1.minutes)
             value = currentDateTime()
         }
     }

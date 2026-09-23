@@ -153,9 +153,9 @@ class ReminderPlanTest {
     fun settingsSurviveBeingStored() {
         val settings = ReminderSettings(enabled = false, leadMinutes = 45, digestEnabled = true, digestTime = LocalTime(6, 5))
         assertEquals(settings, ReminderSettings.decode(settings.encode()))
-        assertEquals(ReminderSettings(), ReminderSettings.decode(null))
-        assertEquals(ReminderSettings(), ReminderSettings.decode("garbage"))
-        assertEquals(LocalTime(8, 0), ReminderSettings.parseTime("8:00"))
+        assertEquals(ReminderSettings.decode(null), ReminderSettings())
+        assertEquals(ReminderSettings.decode("garbage"), ReminderSettings())
+        assertEquals(ReminderSettings.parseTime("8:00"), LocalTime(8, 0))
         assertEquals(null, ReminderSettings.parseTime("25:00"))
         assertEquals(LocalDate(2026, 9, 23), now.date)
     }

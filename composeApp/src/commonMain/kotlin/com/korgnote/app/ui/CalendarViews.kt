@@ -317,7 +317,6 @@ fun TimeGridView(
                 DayColumn(
                     blocks = remember(byDate, date) { layoutTimed(byDate.getValue(date)) },
                     nowMinute = if (date == today) now.hour * 60 + now.minute else null,
-                    today = today,
                     onOpen = onOpen,
                     modifier = Modifier.weight(1f),
                 )
@@ -330,7 +329,6 @@ fun TimeGridView(
 private fun DayColumn(
     blocks: List<TimedBlock>,
     nowMinute: Int?,
-    today: LocalDate,
     onOpen: (AgendaOccurrence) -> Unit,
     modifier: Modifier,
 ) {
