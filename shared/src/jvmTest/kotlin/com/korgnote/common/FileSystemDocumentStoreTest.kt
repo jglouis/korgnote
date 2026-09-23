@@ -91,15 +91,15 @@ class DesktopReplicaRootTest {
     fun followsEachPlatformsConvention() {
         assertEquals(
             "/Users/x/Library/Application Support/KorgNote",
-            com.korgnote.common.replica.defaultDesktopReplicaRoot("Mac OS X", "/Users/x") { null }.path,
+            com.korgnote.common.replica.defaultDesktopReplicaRoot("Mac OS X", "/Users/x") { null }.invariantSeparatorsPath,
         )
         assertEquals(
             "/home/x/.local/share/KorgNote",
-            com.korgnote.common.replica.defaultDesktopReplicaRoot("Linux", "/home/x") { null }.path,
+            com.korgnote.common.replica.defaultDesktopReplicaRoot("Linux", "/home/x") { null }.invariantSeparatorsPath,
         )
         assertEquals(
             "/data/KorgNote",
-            com.korgnote.common.replica.defaultDesktopReplicaRoot("Linux", "/home/x") { "/data" }.path,
+            com.korgnote.common.replica.defaultDesktopReplicaRoot("Linux", "/home/x") { "/data" }.invariantSeparatorsPath,
         )
     }
 }
