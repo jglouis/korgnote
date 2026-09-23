@@ -14,8 +14,8 @@ edits are range replacements. Phase 2 (T8–T11) is complete too: the app holds 
 locally, syncs through the v1 API, and merges divergent edits instead of losing them. **Phase 3 is
 complete** as well — the editor work is done bar what was deliberately deferred, and search and
 completion have landed. Next is **Phase 4** (agenda, T15–T18), whose first task is the timestamp
-parser that completion is already writing timestamps for — but **T19 (CI) comes before all of
-it**, for the reason given there.
+parser that completion is already writing timestamps for. T19 (CI), which had to come first, is
+done: every push now runs the suite.
 
 **Phase 5 (T19–T23) came from using the thing.** Nothing in it was foreseen when the plan was
 written: it is what a day of real use and three regressions exposed.
@@ -44,7 +44,7 @@ Updated 2026-09-23.
 | ✅ | T14 Search | Done — linear scan over the replica, words and `tag:`, results open at the match |
 | 🟡 | T10b Web client | Mostly wired by T10; what is left is listed in the task |
 | ❌ | T15–T18 | Not started |
-| 🟡 | T19 CI | Workflow written ([ci.yml](../.github/workflows/ci.yml)); done once it has gone red and green on GitHub |
+| ✅ | T19 CI | Done — [ci.yml](../.github/workflows/ci.yml): Linux on every push, iOS nightly when master changed |
 | ❌ | T20 File lifecycle | Not started — notes still cannot be created, renamed or deleted (D11) |
 | ❌ | T21 Link navigation | Not started — links render but do not go anywhere |
 | ❌ | T22 Whole-file editing | Not started — decide whether the second editing surface survives |
@@ -579,7 +579,7 @@ the app closed and the network off.
 
 ## Phase 5 — What using it exposed
 
-### T19 · Continuous integration — 🟡 **workflow written, not yet proven**
+### T19 · Continuous integration — ✅ **done**
 **Landed** `.github/workflows/ci.yml`. On every push to master and every pull request, one Ubuntu job
 runs `:shared:jvmTest`, `:shared:wasmJsTest`, `:composeApp:jvmTest`, `:composeApp:wasmJsTest` and
 `:server:test`, then builds `:composeApp:wasmJsBrowserDistribution` and `:androidApp:assembleDebug`.
@@ -590,9 +590,14 @@ count 10× against the free quota. A nightly run of about 10 minutes would use 3
 month, so a cheap Ubuntu job first checks for commits in the last 25 hours. `workflow_dispatch` runs
 it by hand, with the iOS job on by default. The iOS simulator tests are the ones that have most
 likely never run anywhere, so their first run is the one to watch.
-**Still to prove** Every task was run locally, but nothing has run on a GitHub runner yet: the
-Android SDK platform download, headless Chrome for the wasm tests, and the Kotlin/Native download
-on macOS are the likely first failures. Done when a deliberately broken test turns a push red.
+**Proven on GitHub** Both jobs have run green. The first red run was a real one:
+`OrgSearchTests.findsOneMatchInACorpusSizedCollection` passed its assertions on wasm but took 3.4 s
+in headless Chrome, past Mocha's 2 s limit. Raising the timeout was rejected as hiding the problem.
+The search itself was slow outside the JVM (2.7 s on the iOS simulator), because it parsed every
+file before looking for the words. `searchOrgFile` now skips any file that does not contain every
+term, which took the corpus test from 189 ms → 15 ms on the JVM, 402 → 95 ms on wasm, and 2.7 s →
+363 ms on iOS. A query term present in nearly every file still parses nearly every file; T21's
+backlink scan is where that case gets measured.
 **Depends** —
 **Scope** A workflow on every push: `:shared:jvmTest`, `:server:test`, `:composeApp:jvmTest`,
 plus a compile of each target that has no tests to run — `compileKotlinWasmJs`,
