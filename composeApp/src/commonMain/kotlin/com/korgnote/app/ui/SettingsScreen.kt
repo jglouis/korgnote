@@ -11,6 +11,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.SettingsRepository
+import com.korgnote.app.notifications.ReminderSettings
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.ui.Alignment
 import com.korgnote.app.di.buildBaseUrl
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
@@ -24,11 +29,20 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     var saved by remember { mutableStateOf(false) }
+    var remindersOn by remember { mutableStateOf(true) }
+    var leadText by remember { mutableStateOf("") }
+    var digestOn by remember { mutableStateOf(false) }
+    var digestText by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         host = repo.getServerHost()
         portText = repo.getServerPort().toString()
         token = repo.getServerToken()
+        val reminders = repo.getReminderSettings()
+        remindersOn = reminders.enabled
+        leadText = reminders.leadMinutes.toString()
+        digestOn = reminders.digestEnabled
+        digestText = reminders.digestTime.hhmm()
     }
 
     Column {
@@ -57,6 +71,37 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
             label = { Text("Access token (leave empty if the server does not require one)") },
             singleLine = true,
         )
+
+        Spacer(Modifier.height(24.dp))
+        Text("Reminders")
+        Text(
+            "Notifications on this device, scheduled from the agenda. They work offline.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline,
+        )
+        Spacer(Modifier.height(8.dp))
+        LabelledSwitch("Remind me before timed entries", remindersOn) { remindersOn = it }
+        if (remindersOn) {
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = leadText,
+                onValueChange = { leadText = it.filter { ch -> ch.isDigit() }.take(4) },
+                label = { Text("Minutes before") },
+                singleLine = true,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        LabelledSwitch("Morning digest of the day's agenda", digestOn) { digestOn = it }
+        if (digestOn) {
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = digestText,
+                onValueChange = { digestText = it.filter { ch -> ch.isDigit() || ch == ':' }.take(5) },
+                label = { Text("At (HH:MM)") },
+                singleLine = true,
+            )
+        }
+
         if (error != null) {
             Spacer(Modifier.height(8.dp))
             Text(error!!)
@@ -68,6 +113,16 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
                 error = "Please enter a valid host and port (1-65535)."
                 return@Button
             }
+            val lead = leadText.toIntOrNull()
+            if (remindersOn && (lead == null || lead !in 0..1440)) {
+                error = "Please enter how many minutes before (0-1440)."
+                return@Button
+            }
+            val digestTime = ReminderSettings.parseTime(digestText)
+            if (digestOn && digestTime == null) {
+                error = "Please enter the digest time as HH:MM."
+                return@Button
+            }
             error = null
             scope.launch {
                 saving = true
@@ -75,6 +130,15 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
                     repo.setServerHost(host.trim())
                     repo.setServerPort(port)
                     repo.setServerToken(token.trim())
+                    val current = repo.getReminderSettings()
+                    repo.setReminderSettings(
+                        ReminderSettings(
+                            enabled = remindersOn,
+                            leadMinutes = lead ?: current.leadMinutes,
+                            digestEnabled = digestOn,
+                            digestTime = digestTime ?: current.digestTime,
+                        ),
+                    )
                     saved = true
                     onSaved?.invoke()
                 } finally {
@@ -99,5 +163,13 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
             Spacer(Modifier.height(4.dp))
             Text("Saved. Reloading…")
         }
+    }
+}
+
+@Composable
+private fun LabelledSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }

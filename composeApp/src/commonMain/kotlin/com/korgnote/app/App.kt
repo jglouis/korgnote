@@ -26,6 +26,8 @@ import com.korgnote.app.ui.*
 import com.korgnote.app.viewmodel.FileTreeViewModel
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.korgnote.app.notifications.ReminderTaps
 import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,6 +43,22 @@ fun App() {
             vm.loadFromServer()
             // Then follow the server's change stream for the rest of the session.
             vm.watchServer()
+        }
+        // A tapped reminder opens its note at the heading, whatever screen was showing.
+        LaunchedEffect(Unit) {
+            ReminderTaps.pending.collect { target ->
+                if (target != null) {
+                    ReminderTaps.pending.value = null
+                    vm.openReminderTarget(target)
+                    isEditing = false
+                    selectedScreen = BottomItem.HOME
+                }
+            }
+        }
+        // Coming back to the app moves the reminder window on and drops what has already fired.
+        LifecycleResumeEffect(Unit) {
+            vm.refreshReminders()
+            onPauseOrDispose { }
         }
         ModalNavigationDrawer(
             drawerState = drawerState,

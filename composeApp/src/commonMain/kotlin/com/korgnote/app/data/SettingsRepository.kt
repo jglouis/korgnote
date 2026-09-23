@@ -1,5 +1,6 @@
 package com.korgnote.app.data
 
+import com.korgnote.app.notifications.ReminderSettings
 import kotlinx.coroutines.flow.Flow
 
 interface SettingsRepository {
@@ -23,5 +24,10 @@ interface SettingsRepository {
     fun getServerToken(): String
 
     fun setServerToken(token: String)
+
+    /** Reminder lead time and daily digest (T18). */
+    fun getReminderSettings(): ReminderSettings
+
+    fun setReminderSettings(settings: ReminderSettings)
 }
 

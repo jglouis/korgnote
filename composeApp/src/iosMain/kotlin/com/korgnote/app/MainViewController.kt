@@ -4,6 +4,9 @@ import androidx.compose.ui.window.ComposeUIViewController
 import com.korgnote.app.data.PersistentSettingsRepository
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.di.initKoin
+import com.korgnote.app.notifications.IosNotificationScheduler
+import com.korgnote.app.notifications.NotificationScheduler
+import com.korgnote.app.notifications.installReminderTapHandler
 import org.koin.dsl.module
 import platform.UIKit.UIViewController
 import com.korgnote.common.replica.FileSystemReplicaStorage
@@ -15,8 +18,10 @@ fun MainViewController(): UIViewController {
     val iosModule = module {
         single<SettingsRepository> { PersistentSettingsRepository() }
         single<ReplicaStorage> { FileSystemReplicaStorage(defaultReplicaRoot()) }
+        single<NotificationScheduler> { IosNotificationScheduler() }
     }
     initKoin(extraModules = listOf(iosModule))
+    installReminderTapHandler()
 
     return ComposeUIViewController { App() }
 }

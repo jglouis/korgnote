@@ -1,5 +1,6 @@
 package com.korgnote.app.data
 
+import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.common.SERVER_PORT
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,6 +36,12 @@ class PersistentSettingsRepository : SettingsRepository {
         prefs.put(KEY_TOKEN, token)
     }
 
+    override fun getReminderSettings(): ReminderSettings = ReminderSettings.decode(prefs.get(KEY_REMINDERS, null))
+
+    override fun setReminderSettings(settings: ReminderSettings) {
+        prefs.put(KEY_REMINDERS, settings.encode())
+    }
+
     private fun loadHost(): String {
         val def = defaultServerBaseUrl().removePrefix("http://").removePrefix("https://").substringBefore(":")
         return prefs.get(KEY_HOST, def)
@@ -48,5 +55,6 @@ class PersistentSettingsRepository : SettingsRepository {
         private const val KEY_HOST = "server_host"
         private const val KEY_PORT = "server_port"
         private const val KEY_TOKEN = "server_token"
+        private const val KEY_REMINDERS = "reminders"
     }
 }

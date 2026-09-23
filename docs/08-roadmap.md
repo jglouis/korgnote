@@ -14,7 +14,7 @@ edits are range replacements. Phase 2 (T8–T11) is complete too: the app holds 
 locally, syncs through the v1 API, and merges divergent edits instead of losing them. **Phase 3 is
 complete** as well — the editor work is done bar what was deliberately deferred, and search and
 completion have landed. **Phase 4** (agenda) is under way: the parser, engine and views (T15–T17) are in,
-and notifications (T18) are next. T19 (CI), which had to come first, is done: every push now runs the
+and notifications (T18) are built and waiting on a device check. T19 (CI), which had to come first, is done: every push now runs the
 suite.
 
 **Phase 5 (T19–T24) came from using the thing.** Nothing in it was foreseen when the plan was
@@ -46,7 +46,7 @@ Updated 2026-09-23.
 | ✅ | T15 Timestamp parser | Done — every syntax row, ranges, repeaters, delays; malformed stamps are skipped |
 | ✅ | T16 Agenda engine | Done — `AgendaIndex` replaces `scheduledByDate`; the calendar renders from it |
 | ✅ | T17 Day and week views | Done — agenda list, day, week and month, all from `AgendaIndex` |
-| ❌ | T18 Notifications | Not started |
+| 🟡 | T18 Notifications | Done on Android (checked on an emulator: app closed, network off, on the minute); iOS built, not yet seen on a device |
 | ✅ | T19 CI | Done — [ci.yml](../.github/workflows/ci.yml): Linux on every push, iOS nightly when master changed |
 | ❌ | T20 File lifecycle | Not started — notes still cannot be created, renamed or deleted (D11) |
 | ❌ | T21 Link navigation | Not started — links render but do not go anywhere |
@@ -633,7 +633,36 @@ swipe/animation behaviour.
 **Done when** A day with two timed meetings, an all-day range and a deadline renders
 correctly in all four views.
 
-### T18 · Notifications
+### T18 · Notifications — 🟡 **done on Android, iOS not yet seen on a device**
+**Landed** Local notifications planned from the agenda, no server involved:
+- `planReminders` (common, pure): one reminder the lead time before each timed entry that is not
+  done — appointments, scheduled items and deadlines with a time; a multi-day range once, when it
+  starts — plus an optional morning digest listing each day that has something on it. Only what is
+  still ahead, within 14 days, soonest first, at most 60 (iOS keeps 64 pending and drops the rest).
+  Overdue items and deadline warnings are the agenda list's business, not reminders.
+- `NotificationScheduler.replaceAll` is the whole platform contract. The view model replans after
+  every change to the notes and on returning to the foreground, and hands the plan over only when
+  it changed, so a sync that changes nothing leaves the device's notifications alone. Nothing is
+  planned before the replica has been read, which would otherwise cancel everything at start-up.
+- **Android**: one exact `setExactAndAllowWhileIdle` alarm per reminder, firing a receiver that
+  posts it. The plan is kept in preferences and set again after a reboot, an app update or a
+  clock/time-zone change. `POST_NOTIFICATIONS` is asked for at start on 13+.
+- **iOS**: `UNCalendarNotificationTrigger` per reminder; permission asked on the first plan; a
+  delegate shows banners while the app is open.
+- Tapping a reminder opens its note at the heading — held until the notes are read when the tap
+  is what started the app. Desktop and web schedule nothing.
+- Settings: reminders on/off, minutes before (default 10), digest on/off and its time.
+
+**Verified** `ReminderPlanTest` (14) and `ReminderSchedulingTest` (7). On an Android 14 emulator
+holding the real replica: the permission prompt on first start; alarms set from the notes; with the
+app process killed and Wi-Fi and data off, the digest posted at 21:33:02 for 21:33; tapping it opens
+the app; a reminder's tap opens its note at the heading.
+**Inexact alarms were tried first and dropped.** The design above preferred them. Measured on the
+emulator, Android allowed a reminder three days out to arrive up to an hour late (it delays inexact
+alarms by up to 75% of the time remaining, capped at an hour), and a test digest came four minutes
+late. Exact alarms need `USE_EXACT_ALARM`, which Play reserves for calendar and alarm apps — an
+agenda is one; inexact remains the fallback if exact alarms are refused.
+**Still to prove** The same on an iPhone: the iOS scheduler compiles and links, nothing more.
 **Depends** T16
 **Scope** `NotificationScheduler` `expect/actual` for iOS and Android; idempotent
 "cancel all, schedule next N" honouring the iOS 64-pending limit; lead time and daily

@@ -1,5 +1,6 @@
 package com.korgnote.app.data
 
+import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.common.SERVER_PORT
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.Flow
@@ -34,5 +35,11 @@ class InMemorySettingsRepository(
 
     override fun setServerToken(token: String) {
         this.token.value = token
+    }
+
+    private var reminders = ReminderSettings()
+    override fun getReminderSettings(): ReminderSettings = reminders
+    override fun setReminderSettings(settings: ReminderSettings) {
+        reminders = settings
     }
 }

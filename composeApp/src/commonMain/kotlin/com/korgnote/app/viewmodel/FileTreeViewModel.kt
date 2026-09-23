@@ -32,6 +32,15 @@ import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOptions
 import com.korgnote.common.org.agenda.agendaEntries
+import com.korgnote.app.notifications.NoopNotificationScheduler
+import com.korgnote.app.notifications.NotificationScheduler
+import com.korgnote.app.notifications.Reminder
+import com.korgnote.app.notifications.ReminderSettings
+import com.korgnote.app.notifications.ReminderTarget
+import com.korgnote.app.notifications.planReminders
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.datetime.LocalDateTime
 import com.korgnote.common.org.search.SearchHit
 import com.korgnote.common.org.search.SearchQuery
 import com.korgnote.common.org.search.searchOrg
@@ -71,6 +80,14 @@ class FileTreeViewModel(
      */
     private val today: () -> LocalDate = {
         Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+    },
+    /** Where reminders go: the device's own notifications, or nowhere on desktop and web. */
+    private val notifications: NotificationScheduler = NoopNotificationScheduler,
+    /** Read each time reminders are planned, so a change in Settings applies on the next plan. */
+    private val reminderSettings: () -> ReminderSettings = { ReminderSettings() },
+    /** The wall-clock time reminders are planned from; a parameter for the same reason as [today]. */
+    private val now: () -> LocalDateTime = {
+        Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
     },
 ) : ViewModel() {
     // Exposed error message when network/server cannot be reached
@@ -343,6 +360,7 @@ class FileTreeViewModel(
     private fun refreshDerivedViews() {
         corpusKeywords = corpusTodoKeywords(orgContents.values.map { it.text })
         agenda = buildAgenda()
+        refreshReminders()
         refreshFilteredTree()
         refreshSearch()
         refreshCompletionContext()
@@ -542,6 +560,52 @@ class FileTreeViewModel(
     var agenda by mutableStateOf(buildAgenda())
         private set
 
+    /** Set once the replica has been read; see [refreshReminders]. */
+    private var notesLoaded = false
+
+    /** The reminders last handed to [notifications]; null until the notes have been read once. */
+    private var plannedReminders: List<Reminder>? = null
+
+    /** One replacement at a time, so an older plan can never land after a newer one. */
+    private val reminderLock = Mutex()
+
+    /**
+     * Plans reminders from the agenda and hands them to the device — only when the plan changed,
+     * so a sync that changes nothing leaves the device's notifications alone.
+     *
+     * Called whenever the notes change, and by the app when it comes to the foreground, which is
+     * what moves the planning window on and drops reminders that have already fired.
+     */
+    fun refreshReminders() {
+        // Before the replica has been read the agenda is empty, and replacing with that would
+        // cancel every reminder the device holds until the notes arrive.
+        if (!notesLoaded) return
+        val plan = planReminders(agenda.entries, now(), reminderSettings())
+        if (plan == plannedReminders) return
+        plannedReminders = plan
+        viewModelScope.launch {
+            reminderLock.withLock {
+                runCatching { notifications.replaceAll(plan) }
+                    .onFailure { println("[DEBUG_LOG][FileTreeViewModel] Scheduling reminders failed: ${it.message}") }
+            }
+        }
+    }
+
+    /** A tapped reminder that arrived before the notes were read, opened once they are. */
+    private var pendingReminderOpen: ReminderTarget? = null
+
+    /**
+     * Opens the note a tapped reminder points at. A tap can start the app, in which case it arrives
+     * before the replica has been read; it is then held until [showFromReplica] has run.
+     */
+    fun openReminderTarget(target: ReminderTarget) {
+        when {
+            target.file in orgContents -> onFileSelected(target.file, scrollToOffset = target.offset)
+            // Not read yet: hold it. Read, and still not there: the note is gone, so is the tap.
+            !notesLoaded -> pendingReminderOpen = target
+        }
+    }
+
     /** Opens the file an agenda entry comes from, at its heading. */
     fun openAgendaEntry(entry: AgendaEntry) = onFileSelected(entry.file, scrollToOffset = entry.headingOffset)
 
@@ -696,6 +760,7 @@ class FileTreeViewModel(
             store.read(path)?.let { orgContents[path] = it.toOrgDocument() }
         }
         tree = mapRootToUiFolder(TreeUtils.buildFromPaths(paths, rootName = "Documents"))
+        notesLoaded = true
         refreshDerivedViews()
 
         val current = currentFile
@@ -711,6 +776,10 @@ class FileTreeViewModel(
         } else {
             selectedOrgNode = orgContents[current]
             store.read(current)?.let { selectedFileContent = it }
+        }
+        pendingReminderOpen?.let { target ->
+            pendingReminderOpen = null
+            if (target.file in orgContents) onFileSelected(target.file, scrollToOffset = target.offset)
         }
     }
 

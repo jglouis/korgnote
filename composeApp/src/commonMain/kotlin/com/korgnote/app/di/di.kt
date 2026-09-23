@@ -2,6 +2,8 @@ package com.korgnote.app.di
 
 import com.korgnote.app.data.KtorSyncApi
 import com.korgnote.app.data.SettingsRepository
+import com.korgnote.app.notifications.NoopNotificationScheduler
+import com.korgnote.app.notifications.NotificationScheduler
 import com.korgnote.app.viewmodel.FileTreeViewModel
 import io.ktor.client.HttpClient
 import org.koin.core.module.dsl.viewModel
@@ -34,8 +36,17 @@ val appModule = module {
     // definition and reloads from the server anyway.
     single { DocumentStore(get()) }
 
-    // ViewModel reads and writes the replica; the repository only refreshes it.
-    viewModel { FileTreeViewModel(get<SyncEngine>(), get<DocumentStore>()) }
+    // ViewModel reads and writes the replica; the repository only refreshes it. Reminders go to
+    // the platform's scheduler where there is one (Android, iOS) and nowhere otherwise.
+    viewModel {
+        val settings = get<SettingsRepository>()
+        FileTreeViewModel(
+            get<SyncEngine>(),
+            get<DocumentStore>(),
+            notifications = getOrNull<NotificationScheduler>() ?: NoopNotificationScheduler,
+            reminderSettings = settings::getReminderSettings,
+        )
+    }
 }
 
 fun initKoin(extraModules: List<Module> = emptyList()) {
