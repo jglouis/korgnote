@@ -43,6 +43,8 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -97,12 +99,19 @@ private val chipOrder = compareBy<AgendaOccurrence>(
 /** Done entries stay visible but step back. */
 private fun Modifier.dimmedIfDone(occurrence: AgendaOccurrence) = if (occurrence.entry.done) alpha(0.45f) else this
 
-/** `TODO Title`, as the heading reads, with the priority cookie when there is one. */
-private fun AgendaOccurrence.headline(): String = listOfNotNull(
-    entry.todo,
-    entry.priority?.let { "[#$it]" },
-    entry.title,
-).joinToString(" ")
+/**
+ * `TODO Title`, as the heading reads, with the priority cookie when there is one.
+ *
+ * The title goes through the same inline rendering as reading mode, so a link shows as its
+ * description and emphasis as emphasis rather than as markup. The links themselves are left out:
+ * tapping an entry opens it, and a link inside it must not take the tap.
+ */
+private fun AgendaOccurrence.headline(prefix: String? = null): AnnotatedString = buildAnnotatedString {
+    val keywords = listOfNotNull(prefix, entry.todo, entry.priority?.let { "[#$it]" }).joinToString(" ")
+    if (keywords.isNotEmpty()) append("$keywords ")
+    val title = buildOrgInlineString(entry.title, viewMode = true)
+    append(AnnotatedString(title.text, title.spanStyles))
+}
 
 private val LocalDate.shortWeekday get() = dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.titlecase() }
 private val LocalDate.longWeekday get() = dayOfWeek.name.lowercase().replaceFirstChar { it.titlecase() }
@@ -415,8 +424,8 @@ private fun EventChip(
         }
         Text(
             text = when {
-                !showTitle -> " "
-                !compact && status != null && occurrence.entry.kind == AgendaKind.Deadline -> "$status: ${occurrence.headline()}"
+                !showTitle -> AnnotatedString(" ")
+                !compact && status != null && occurrence.entry.kind == AgendaKind.Deadline -> occurrence.headline(prefix = "$status:")
                 else -> occurrence.headline()
             },
             fontSize = if (compact) 9.sp else 11.sp,

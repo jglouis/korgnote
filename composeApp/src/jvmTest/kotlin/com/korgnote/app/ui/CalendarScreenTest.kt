@@ -39,6 +39,7 @@ class CalendarScreenTest {
                 DEADLINE: <2026-09-23 Wed>
                 * DONE Water plants
                 SCHEDULED: <2026-09-23 Wed>
+                * Call with the CEO of [[https://www.heliovision.be/][HelioVision]] about *pricing* <2026-09-23 Wed 16:00>
             """.trimIndent(),
             "life.org" to "* Conference in Lyon\n<2026-09-22 Tue>--<2026-09-24 Thu>\n",
         ),
@@ -75,6 +76,20 @@ class CalendarScreenTest {
 
         onNodeWithText("Lunch with Sam").performClick()
         assertEquals(listOf("Lunch with Sam"), opened.map { it.title })
+    }
+
+    @Test
+    fun linksAndEmphasisReadAsTheyDoInTheNote() = runComposeUiTest {
+        for (mode in CalendarMode.entries) {
+            show(mode)
+            if (mode == CalendarMode.Day || mode == CalendarMode.Week) {
+                assertShown("Call with the CEO of HelioVision about pricing")
+            }
+            if (mode == CalendarMode.Agenda) assertShown("Call with the CEO of HelioVision about pricing")
+            onAllNodesWithText("[[", substring = true).assertCountEquals(0)
+            onAllNodesWithText("https://", substring = true).assertCountEquals(0)
+            onAllNodesWithText("*pricing*", substring = true).assertCountEquals(0)
+        }
     }
 
     @Test
