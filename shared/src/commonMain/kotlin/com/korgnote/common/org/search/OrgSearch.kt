@@ -151,6 +151,12 @@ fun searchOrgFile(
         )
     }
 
+    // Splitting into elements and parsing headings is most of the cost, and most files cannot match
+    // at all. A line hit needs every word in the file, and a tag — on a heading or in `#+FILETAGS:`
+    // — is text in the same file, so a file missing any term is passed over unparsed. This is the
+    // same case-insensitive test `matchIn` applies per line, so it never drops a real hit.
+    if ((query.text + query.tags).any { !text.contains(it, ignoreCase = true) }) return hits
+
     val fileTags = fileTagsOf(text)
     val ancestors = mutableListOf<Heading>()
     var line = 1
