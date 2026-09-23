@@ -48,8 +48,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.tooling.preview.Preview
-import com.korgnote.common.org.OrgNode
-import com.korgnote.common.org.OrgPlanning
+import com.korgnote.common.org.OrgSection
+import com.korgnote.common.org.agenda.AgendaEntry
+import com.korgnote.common.org.agenda.AgendaIndex
+import com.korgnote.common.org.agenda.AgendaKind
+import com.korgnote.common.org.agenda.AgendaOccurrence
+import com.korgnote.common.org.agenda.AgendaOptions
 import kotlin.time.Clock
 
 const val SLIDE_DURATION_MS = 100
@@ -58,8 +62,8 @@ const val FADE_DURATION_MS = 100
 @Composable
 fun CalendarScreen(
     modifier: Modifier = Modifier,
-    scheduledByDate: Map<LocalDate, List<Pair<String, OrgNode>>> = emptyMap(),
-    onOpenScheduled: (Pair<String, OrgNode>) -> Unit = {},
+    agenda: AgendaIndex = AgendaIndex.EMPTY,
+    onOpenEntry: (AgendaEntry) -> Unit = {},
     initialMode: CalendarMode? = null,
     initialAnchorDate: LocalDate? = null,
     initialDialogDate: LocalDate? = null
@@ -155,7 +159,7 @@ fun CalendarScreen(
         Spacer(Modifier.height(4.dp))
 
         var dialogDate by remember { mutableStateOf(initialDialogDate) }
-        val dialogEntries = dialogDate?.let { scheduledByDate[it] }
+        val dialogEntries = dialogDate?.let { agenda.calendarDay(it) }
 
         Box(
             modifier = Modifier
@@ -222,23 +226,23 @@ fun CalendarScreen(
                     CalendarMode.Month -> MonthGrid(
                         anchorDate = aDate,
                         today = today,
-                        scheduledByDate = scheduledByDate
+                        hasEntries = { agenda.calendarDay(it).isNotEmpty() }
                     ) { date ->
-                        if (!scheduledByDate[date].isNullOrEmpty()) dialogDate = date
+                        if (agenda.calendarDay(date).isNotEmpty()) dialogDate = date
                     }
 
                     CalendarMode.Week -> WeekRow(
                         anchorDate = aDate,
                         today = today,
-                        scheduledByDate = scheduledByDate
+                        hasEntries = { agenda.calendarDay(it).isNotEmpty() }
                     ) { date ->
-                        if (!scheduledByDate[date].isNullOrEmpty()) dialogDate = date
+                        if (agenda.calendarDay(date).isNotEmpty()) dialogDate = date
                     }
                 }
             }
         }
 
-        // Dialog showing scheduled entries for selected date
+        // Dialog showing the entries dated on the selected day
         if (!dialogEntries.isNullOrEmpty() && dialogDate != null) {
             AlertDialog(
                 onDismissRequest = { dialogDate = null },
@@ -257,7 +261,7 @@ fun CalendarScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        onOpenScheduled(e)
+                                        onOpenEntry(e.entry)
                                         dialogDate = null
                                     }
                                     .padding(vertical = 8.dp),
@@ -273,8 +277,17 @@ fun CalendarScreen(
                                         )
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                // Reuse OrgText composable to render the org node consistently
-                                OrgText(content = e.second)
+                                Column {
+                                    // The heading alone, rendered as the document renders it.
+                                    OrgText(content = e.entry.asHeading())
+                                    e.caption()?.let {
+                                        Text(
+                                            text = it,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -302,14 +315,14 @@ enum class CalendarMode {
 private fun WeekRow(
     anchorDate: LocalDate,
     today: LocalDate,
-    scheduledByDate: Map<LocalDate, List<Pair<String, OrgNode>>>,
+    hasEntries: (LocalDate) -> Boolean,
     onDateClick: (LocalDate) -> Unit
 ) {
     val start = anchorDate.startOfWeek()
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         for (i in 0 until 7) {
             val d = start.plus(i, DateTimeUnit.DAY)
-            val has = !scheduledByDate[d].isNullOrEmpty()
+            val has = hasEntries(d)
             Box(modifier = Modifier.weight(1f)) {
                 DayCell(date = d, isToday = d == today, isOtherMonth = false, hasSchedule = has) {
                     if (has) onDateClick(d)
@@ -323,7 +336,7 @@ private fun WeekRow(
 private fun MonthGrid(
     anchorDate: LocalDate,
     today: LocalDate,
-    scheduledByDate: Map<LocalDate, List<Pair<String, OrgNode>>>,
+    hasEntries: (LocalDate) -> Boolean,
     onDateClick: (LocalDate) -> Unit
 ) {
     val firstOfMonth = LocalDate(anchorDate.year, anchorDate.month, 1)
@@ -338,7 +351,7 @@ private fun MonthGrid(
                     val idx = row * 7 + col
                     val date = start.plus(idx, DateTimeUnit.DAY)
                     val isOther = date.month != anchorDate.month
-                    val hasSchedule = !scheduledByDate[date].isNullOrEmpty()
+                    val hasSchedule = hasEntries(date)
                     Box(modifier = Modifier.weight(1f)) {
                         DayCell(
                             date = date,
@@ -398,37 +411,51 @@ private fun LocalDate.startOfWeek(): LocalDate {
 }
 
 
+/**
+ * What the month and week grids show for [date]: each entry on its own date only. A deadline's
+ * advance warnings and overdue items brought forward to today belong to the agenda list (T17),
+ * where they can be told apart; here they would only be more dots.
+ */
+private fun AgendaIndex.calendarDay(date: LocalDate): List<AgendaOccurrence> = on(date).filter { it.isOnOwnDate }
+
+/** A heading-only section, so the dialog renders the entry exactly as the document does. */
+private fun AgendaEntry.asHeading() = OrgSection(title = title, todo = todo, level = 1, tags = tags, priority = priority)
+
+/** The time and kind, when there is anything to say beyond the date the dialog already shows. */
+private fun AgendaOccurrence.caption(): String? {
+    val time = time?.let { start -> endTime?.let { "$start–$it" } ?: "$start" }
+    val kind = when (entry.kind) {
+        AgendaKind.Deadline -> "Deadline"
+        AgendaKind.Closed -> "Closed"
+        AgendaKind.Scheduled, AgendaKind.Timestamp -> null
+    }
+    return listOfNotNull(kind, time).joinToString(" · ").ifEmpty { null }
+}
+
 // -----------------------
 // Previews
 // -----------------------
 
-private fun previewSampleScheduled(): Map<LocalDate, List<Pair<String, OrgNode>>> {
+private fun previewSampleAgenda(): AgendaIndex = AgendaIndex.of(
     // Fixed sample data focused on September 2025
-    val date1 = LocalDate(2025, 9, 10)
-    val date2 = LocalDate(2025, 9, 15)
-    val date3 = LocalDate(2025, 9, 21)
-    val date4 = LocalDate(2025, 9, 30)
-    return mapOf(
-        date1 to listOf(
-            "sep-2025.org" to OrgPlanning("SCHEDULED", "<2025-09-10 Wed>")
-        ),
-        date2 to listOf(
-            "sep-2025.org" to OrgPlanning("SCHEDULED", "<2025-09-15 Mon>")
-        ),
-        date3 to listOf(
-            "next-actions.org" to OrgPlanning("SCHEDULED", "<2025-09-21 Sun>")
-        ),
-        date4 to listOf(
-            "sep-2025.org" to OrgPlanning("SCHEDULED", "<2025-09-30 Tue>")
-        )
-    )
-}
+    mapOf(
+        "sep-2025.org" to """
+            * TODO Pay invoices
+            SCHEDULED: <2025-09-10 Wed>
+            * Dentist <2025-09-15 Mon 14:30>
+            * TODO Quarterly report
+            DEADLINE: <2025-09-30 Tue>
+        """.trimIndent(),
+        "next-actions.org" to "* NEXT Plan the trip\nSCHEDULED: <2025-09-21 Sun>\n",
+    ),
+    AgendaOptions(today = LocalDate(2025, 9, 15)),
+)
 
 @Preview
 @Composable
 private fun Preview_Calendar_Month_NoDialog() {
     CalendarScreen(
-        scheduledByDate = previewSampleScheduled(),
+        agenda = previewSampleAgenda(),
         initialMode = CalendarMode.Month,
         initialAnchorDate = LocalDate(2025, 9, 15)
     )
@@ -438,7 +465,7 @@ private fun Preview_Calendar_Month_NoDialog() {
 @Composable
 private fun Preview_Calendar_Week_NoDialog() {
     CalendarScreen(
-        scheduledByDate = previewSampleScheduled(),
+        agenda = previewSampleAgenda(),
         initialMode = CalendarMode.Week,
         initialAnchorDate = LocalDate(2025, 9, 15)
     )
@@ -449,7 +476,7 @@ private fun Preview_Calendar_Week_NoDialog() {
 private fun Preview_Calendar_Month_WithDialog() {
     val dateWithEntries = LocalDate(2025, 9, 10)
     CalendarScreen(
-        scheduledByDate = previewSampleScheduled(),
+        agenda = previewSampleAgenda(),
         initialMode = CalendarMode.Month,
         initialAnchorDate = LocalDate(2025, 9, 1),
         initialDialogDate = dateWithEntries
@@ -461,7 +488,7 @@ private fun Preview_Calendar_Month_WithDialog() {
 private fun Preview_Calendar_Week_WithDialog() {
     val dateWithEntries = LocalDate(2025, 9, 21)
     CalendarScreen(
-        scheduledByDate = previewSampleScheduled(),
+        agenda = previewSampleAgenda(),
         initialMode = CalendarMode.Week,
         initialAnchorDate = LocalDate(2025, 9, 21),
         initialDialogDate = dateWithEntries

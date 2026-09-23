@@ -28,6 +28,9 @@ import com.korgnote.common.org.complete.orgStamp
 import com.korgnote.common.org.complete.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.edit.allNodes
 import com.korgnote.common.org.edit.nodeAt
+import com.korgnote.common.org.agenda.AgendaEntry
+import com.korgnote.common.org.agenda.AgendaIndex
+import com.korgnote.common.org.agenda.AgendaOptions
 import com.korgnote.common.org.search.SearchHit
 import com.korgnote.common.org.search.SearchQuery
 import com.korgnote.common.org.search.searchOrg
@@ -331,7 +334,7 @@ class FileTreeViewModel(
      * describe a document as it used to be.
      */
     private fun refreshDerivedViews() {
-        scheduledByDate = buildScheduledIndex(orgContents)
+        agenda = buildAgenda()
         refreshFilteredTree()
         refreshSearch()
         refreshCompletionContext()
@@ -367,41 +370,10 @@ class FileTreeViewModel(
     }
 
     /**
-     * Finds the element rendering [section], or null if it is not in this text.
-     *
-     * The section comes from the document parsed for the calendar, while elements are cut from the
-     * file's raw text, so the two are different objects describing the same heading and have to be
-     * matched rather than compared.
-     *
-     * Preferred match is the section's source range, which T3 gives it: the element containing that
-     * character is unambiguously the right one. Titles are not — two headings can share a title, and
-     * one can be a suffix of another. The range is only trusted when the heading found there really
-     * is the section's, because the file may have changed since the calendar indexed it; otherwise
-     * this falls back to searching by title.
-     */
-    private fun String.elementIndexOf(section: OrgSection): Int? {
-        val text = this
-        val elements = orgElements()
-
-        fun isSection(element: OrgElement): Boolean {
-            if (element.isPreamble || element.level != section.level) return false
-            val headingLine = element.sliceOf(text).lineSequence().firstOrNull() ?: return false
-            return orgHeadingOf(headingLine).title == section.title
-        }
-
-        val offset = section.range.first
-        if (!section.range.isEmpty() && offset in text.indices) {
-            val atOffset = elementIndexOfOffset(offset)
-            if (atOffset != null && isSection(elements[atOffset])) return atOffset
-        }
-        return elements.indexOfFirst { isSection(it) }.takeIf { it >= 0 }
-    }
-
-    /**
      * The element containing [offset], or null when the text no longer reaches that far.
      *
-     * This is how a search result finds its place: the hit carries a character offset, and every
-     * element already knows the range of text it renders.
+     * This is how a search result or an agenda entry finds its place: each carries a character
+     * offset, and every element already knows the range of text it renders.
      */
     private fun String.elementIndexOfOffset(offset: Int): Int? =
         orgElements().indexOfFirst { offset >= it.start && offset < it.endExclusive }.takeIf { it >= 0 }
@@ -552,8 +524,12 @@ class FileTreeViewModel(
     var selectedOrgNode: OrgNode? by mutableStateOf(null)
         private set
 
-    // Map of scheduled entries by LocalDate, computed from all contents
-    var scheduledByDate by mutableStateOf(buildScheduledIndex(orgContents))
+    /** Every dated entry in the notes, which the calendar asks for a day at a time. */
+    var agenda by mutableStateOf(buildAgenda())
+        private set
+
+    /** Opens the file an agenda entry comes from, at its heading. */
+    fun openAgendaEntry(entry: AgendaEntry) = onFileSelected(entry.file, scrollToOffset = entry.headingOffset)
 
     /**
      * Ticks the checkbox whose source contains [offsetInDocument].
@@ -592,14 +568,14 @@ class FileTreeViewModel(
 
 
     /**
-     * Opens [path], and optionally brings a place in it into view once its text has arrived —
-     * either a heading, as the calendar asks for, or a character offset, as a search result does.
+     * Opens [path], and optionally brings a place in it into view once its text has arrived. The
+     * place is a character offset: an agenda entry's heading, or a search hit's line.
      *
      * The target is resolved here rather than by the caller because the text loads asynchronously:
      * resolving it at the call site reads whichever file was open *before* this one and scrolls to
      * the wrong place, or nowhere at all.
      */
-    fun onFileSelected(path: String, scrollToHeading: OrgSection? = null, scrollToOffset: Int? = null) {
+    fun onFileSelected(path: String, scrollToOffset: Int? = null) {
         selectedFileLabel = "Selected: $path"
         val doc = orgContents[path]
         selectedOrgNode = doc
@@ -618,8 +594,7 @@ class FileTreeViewModel(
             val raw = store.read(path)
             if (currentFile == path && raw != null) {
                 selectedFileContent = raw
-                scrollToElementIndex = scrollToHeading?.let { raw.elementIndexOf(it) }
-                    ?: scrollToOffset?.let { raw.elementIndexOfOffset(it) }
+                scrollToElementIndex = scrollToOffset?.let { raw.elementIndexOfOffset(it) }
             }
         }
     }
@@ -760,31 +735,10 @@ class FileTreeViewModel(
 
     private fun mapRootToUiFolder(shared: SharedFolder): Folder = mapSharedToUi(shared) as Folder
 
-    private fun buildScheduledIndex(contents: Map<String, OrgDocument>): Map<LocalDate, List<Pair<String, OrgNode>>> {
-        val result = mutableMapOf<LocalDate, MutableList<Pair<String, OrgNode>>>()
-
-        // A planning line is a child of the heading it was written under, so the walk carries the
-        // enclosing section down with it instead of guessing from document order. Headings nest, so
-        // a SCHEDULED under a sub-heading is attributed to that sub-heading, not to its parent.
-        fun visit(fileName: String, node: OrgNode, enclosing: OrgSection?) {
-            val section = node as? OrgSection ?: enclosing
-            if (node is OrgPlanning && node.planType == "SCHEDULED" && section != null) {
-                OrgSyntax.timestampDate.find(node.timestamp)?.let { m ->
-                    val date = LocalDate(
-                        m.groupValues[1].toInt(),
-                        m.groupValues[2].toInt(),
-                        m.groupValues[3].toInt(),
-                    )
-                    result.getOrPut(date) { mutableListOf() }.add(fileName to section)
-                }
-            }
-            node.children.forEach { visit(fileName, it, section) }
-        }
-
-        contents.forEach { (fileName, doc) -> visit(fileName, doc, null) }
-
-        return result.mapValues { (_, list) ->
-            list.map { it.first to (it.second ) }
-        }
-    }
+    /**
+     * Rebuilt with everything else derived from the notes. Today is read here, so the index a day
+     * old still carries over to the right day once anything changes.
+     */
+    private fun buildAgenda(): AgendaIndex =
+        AgendaIndex.of(orgContents.mapValues { it.value.text }, AgendaOptions(today = today()))
 }

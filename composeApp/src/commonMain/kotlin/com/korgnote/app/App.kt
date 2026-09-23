@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.ui.*
 import com.korgnote.app.viewmodel.FileTreeViewModel
-import com.korgnote.common.org.OrgSection
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
@@ -313,12 +312,12 @@ fun App() {
                         BottomItem.CALENDAR -> {
                             CalendarScreen(
                                 modifier = Modifier.fillMaxSize(),
-                                scheduledByDate = vm.scheduledByDate,
-                                onOpenScheduled = { pair ->
+                                agenda = vm.agenda,
+                                onOpenEntry = { entry ->
                                     // The heading is resolved by the view model once the file's text
                                     // has loaded: that text arrives asynchronously, so working it out
                                     // here would search the previously open file.
-                                    vm.onFileSelected(pair.first, scrollToHeading = pair.second as? OrgSection)
+                                    vm.openAgendaEntry(entry)
                                     isEditing = false
                                     selectedScreen = BottomItem.HOME
                                 }

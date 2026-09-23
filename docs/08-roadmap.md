@@ -13,11 +13,11 @@ the grammar covers the constructs these notes actually use, Org syntax is define
 edits are range replacements. Phase 2 (T8–T11) is complete too: the app holds the whole corpus
 locally, syncs through the v1 API, and merges divergent edits instead of losing them. **Phase 3 is
 complete** as well — the editor work is done bar what was deliberately deferred, and search and
-completion have landed. Next is **Phase 4** (agenda, T15–T18), whose first task is the timestamp
-parser that completion is already writing timestamps for. T19 (CI), which had to come first, is
-done: every push now runs the suite.
+completion have landed. **Phase 4** (agenda) is under way: the parser and engine (T15–T16) are in,
+and the views (T17) are next. T19 (CI), which had to come first, is done: every push now runs the
+suite.
 
-**Phase 5 (T19–T23) came from using the thing.** Nothing in it was foreseen when the plan was
+**Phase 5 (T19–T24) came from using the thing.** Nothing in it was foreseen when the plan was
 written: it is what a day of real use and three regressions exposed.
 
 ## Status
@@ -43,12 +43,15 @@ Updated 2026-09-23.
 | ✅ | T13 Completion | Done — pure engine, every trigger row tested; a suggestion strip, not a popup |
 | ✅ | T14 Search | Done — linear scan over the replica, words and `tag:`, results open at the match |
 | 🟡 | T10b Web client | Mostly wired by T10; what is left is listed in the task |
-| ❌ | T15–T18 | Not started |
+| ✅ | T15 Timestamp parser | Done — every syntax row, ranges, repeaters, delays; malformed stamps are skipped |
+| ✅ | T16 Agenda engine | Done — `AgendaIndex` replaces `scheduledByDate`; the calendar renders from it |
+| ❌ | T17–T18 | Not started |
 | ✅ | T19 CI | Done — [ci.yml](../.github/workflows/ci.yml): Linux on every push, iOS nightly when master changed |
 | ❌ | T20 File lifecycle | Not started — notes still cannot be created, renamed or deleted (D11) |
 | ❌ | T21 Link navigation | Not started — links render but do not go anywhere |
 | ❌ | T22 Whole-file editing | Not started — decide whether the second editing surface survives |
 | ❌ | T23 Server container | Not started — a Dockerfile for the server, notes mounted from the host |
+| ❌ | T24 Reading-mode affordances | Not started — tap to edit, one fold toggle instead of pencil and **+** |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -544,14 +547,49 @@ The parser has one prefix today; adding another is a case in `SearchQuery.parse`
 
 ## Phase 4 — Agenda ([07](07-calendar-agenda.md))
 
-### T15 · Timestamp parser
+### T15 · Timestamp parser — ✅ **done**
+**Landed** `shared/…/org/agenda/OrgTimestamp.kt`. Stamps are found with `OrgSyntax.timestamp`,
+the pattern the highlighter already colours, so the agenda never counts something the editor does
+not show as a stamp; the match is then parsed strictly. `OrgTimestamp` follows [07](07-calendar-agenda.md)
+with one rename: `warning` is `delay: OrgDelay(by, firstOnly)`, since the same `-2d` is a warning
+on a `DEADLINE` and a delay on a `SCHEDULED`, and `--2d` means "first repeat only". Units are
+Org's own `OrgTimeUnit` (h/d/w/m/y) rather than `DateTimeUnit`.
+**Malformed input** A stamp whose date does not exist or whose brackets do not pair is not a
+stamp. An unrecognised token inside one — a French day name, `25:00` — is skipped and the date
+kept. A backwards `<b>--<a>` is two stamps, not a range.
+**Verified** `OrgTimestampTests`: one table row per construct, the malformed cases, offsets into a
+whole document, and a round trip through what completion writes.
 **Depends** T3 (`kotlinx-datetime` added to `shared/`)
 **Scope** Full `OrgTimestamp`: times, time ranges, multi-day ranges, repeaters, warnings,
 active/inactive.
 **Done when** A table-driven test covers every row of the syntax table, including
 malformed input degrading gracefully.
 
-### T16 · Agenda engine
+### T16 · Agenda engine — ✅ **done**
+**Landed** `shared/…/org/agenda/Agenda.kt`. Entries are read from raw text (like search), element
+by element, skipping blocks and drawers; one planning line can hold several keywords. Every rule in
+[07](07-calendar-agenda.md#agenda-engine) is a test in `AgendaTests`. Choices the doc left open:
+- Deadline warnings run from **today**, not from before it, and only for the **next** repeat, or a
+  daily deadline would fill each day with a fortnight of copies of itself.
+- An overdue deadline is carried to today like a scheduled item, with a negative
+  `daysUntilDeadline`.
+- An unfinished repeating scheduled item is carried once, from the date it started at.
+- A heading's stamp is shown as the date, so it is stripped from the entry's title.
+
+`AgendaIndex` holds the entries and expands them a month at a time as a view asks, since a daily
+repeater has an occurrence on every month nobody looks at. The view model rebuilds it with
+everything else derived from the notes, and the calendar opens an entry by its heading's offset —
+the same path as a search hit — which retired the title-matching lookup.
+**Calendar, unchanged in behaviour** The month and week grids show occurrences on their own date
+only (`isOnOwnDate`): warnings and carried-over items are dots without meaning until T17 can draw
+them differently. The dialog now shows deadlines and appointments as well as scheduled items,
+with a caption for the time and for "Deadline".
+**Measured** The real notes (366 files, 1.2 MB): 1,874 entries indexed in 89 ms on the JVM; two
+months expanded in 7 ms.
+**Found on the real notes** Five files use `EVENT`/`FINISHED` without a `#+TODO:` line — they rely
+on the Emacs-wide `org-todo-keywords` — so their finished meetings read as undone and are carried
+to today. The app assumes `TODO | DONE` for such files everywhere (highlighting, completion), so
+this wants one app-wide answer: a keyword setting, or the corpus's declared keywords as the default.
 **Depends** T15, T5
 **Scope** `AgendaEntry`/`AgendaOccurrence`, occurrence expansion including deadline warning
 windows, repeaters, carried-over scheduled items, body timestamps. Replaces
@@ -692,6 +730,58 @@ made on the host reaches a connected client, and a note saved from the app appea
 owned by the host user.
 **Not included** TLS. The README's reverse-proxy recipe still applies in front of the container.
 
+### T24 · Tap to edit, fold instead of pencil and +
+**Depends** T4
+**Why** Every element in reading mode has two icons on its right, a pencil and a **+**. With a few
+hundred elements in a file, that is a few hundred pairs of identical icons. They take width from the
+text, and they make the note look like a form. Neither needs to be there all the time. Editing
+already has a gesture (long-press), and adding a heading after one particular element is rare
+compared with how often a heading is read.
+**Scope**
+- **Tap an element to edit it.** A plain tap opens the inline editor, just as long-press and the
+  pencil do today. The pencil goes. Inner tap targets still win: a checkbox toggles, a
+  `:LOCATION:` link opens, and so will the links T21 adds. A tap on anything else in the element
+  edits it. This reverses a choice recorded in [09](09-element-editing.md#the-surface) ("plain taps
+  are deliberately left alone"). That choice protected the inner targets, and letting the inner
+  target consume the tap first protects them just as well. A scroll or fling must never open an
+  editor.
+- **Remove the per-element +.** Its job moves to places that are not on screen all the time. The
+  recommendation, which this task should confirm on a device:
+  - **Long-press** opens a small menu instead of the editor: *Add heading below*, *Add sub-heading*.
+    It also leaves room for later actions on one element, such as delete or move (see T22).
+  - **In the inline editor**, an *Add heading below* action saves the draft and opens a new sibling.
+    Most additions happen right after editing the element above, so this is the common path.
+  - The reading-mode **+** FAB stays: it appends at the end of the file.
+  - Typing a new `* ` line inside a draft already creates a heading when the draft is saved, because
+    the splice is plain text. That path needs no UI, but it should be tested.
+- **One fold toggle per heading.** A chevron at the heading line, where the icons were. It
+  collapses the heading's **subtree**: its body and all its descendants, like `org-cycle` between
+  folded and expanded. The toggle appears only when there is something to hide.
+**What to get right**
+- **Elements are flat, and folds are not.** An element runs to the next heading of *any* level
+  ([09](09-element-editing.md#the-model)). Folding therefore needs the subtree range that T4 gave
+  sections, so that hiding a heading hides every element inside it. Keep the rule *an item's index
+  is its element's index*, because scroll targets depend on it. A folded element still has an item.
+  It just renders nothing, like an element that is already empty.
+- **Jumps unfold.** When the calendar, search or (later) a link scrolls to an element inside a
+  collapsed subtree, its ancestors expand first. The target must never be hidden.
+- **Editing unfolds.** An element that is opened for editing, or inserted, is visible. Discarding an
+  insertion does not re-fold anything.
+- **Where fold state lives.** Per open file in the view model, keyed by the heading's position in
+  the tree rather than by list index, so that an edit above a fold does not move it to the wrong
+  heading. Everything starts expanded. It is not persisted and never written into the note. Honouring
+  `#+STARTUP: overview` and the `VISIBILITY` property is a possible follow-up, not part of this task.
+- **Accessibility.** The toggle announces "Collapse" or "Expand" with the heading title. Because the
+  pencil is gone, the element needs a click label ("Edit") so screen readers still offer editing.
+**Done when** Reading mode shows no per-element pencil or **+**. Tapping text edits it, while
+tapping a checkbox or link does what it did before, and scrolling opens nothing. Every way of adding
+a heading that existed before still exists, and each is covered by a test in `ElementEditingTest`.
+Collapsing a heading hides its whole subtree, and a calendar or search jump into a collapsed
+subtree lands on a visible element. [09](09-element-editing.md) is updated to describe the new
+interactions.
+**Not included** Fold-all or unfold-all commands, persisting folds between sessions, and
+`#+STARTUP` visibility. Add them if using the app shows that they are needed.
+
 ---
 
 ## Sequencing notes
@@ -711,3 +801,6 @@ owned by the host user.
 - T20 before T21: a corpus you cannot add to is a corpus whose links you cannot finish writing.
 - T22 is independent and can wait, but it should be settled before the editor is touched again,
   not after — the last three editor changes each had to ask which surface they applied to.
+- T24 needs only T4 and can be done at any time. It changes the reading surface, not either
+  editing surface, so it does not have to wait for T22. It should land before T21, though, so that
+  link taps are designed as inner targets from the start rather than fitted around tap-to-edit.
