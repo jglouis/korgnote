@@ -136,6 +136,86 @@ Before running the server, run this:
 To build and run the development version of the iOS app, use the run configuration from the run widget
 in your IDE’s toolbar or open the [/iosApp](./iosApp) directory in Xcode and run it from there.
 
+### Run Tests
+
+#### One-time setup on macOS: point the tools at Xcode
+
+The iOS tests run in the simulator, which needs `simctl` from the full Xcode. If `xcode-select -p`
+prints `/Library/Developer/CommandLineTools`, the terminal build fails with:
+
+```
+xcrun: error: unable to find utility "simctl", not a developer tool or in PATH
+> Task :shared:iosSimulatorArm64Test FAILED
+```
+
+IntelliJ finds Xcode by itself, which is why `allTests` works there but not in the terminal. Fix it once for
+the whole machine:
+
+```shell
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+```
+
+Or, without `sudo`, only for the current shell (or put it in `~/.zshrc`):
+
+```shell
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+```
+
+On Linux and Windows the iOS test tasks are skipped, so this step doesn't apply.
+
+#### Run everything
+
+```shell
+./gradlew allTests :server:test --continue
+```
+
+- `allTests` is the same task IntelliJ runs. Started from the root, it runs `:shared:allTests` and
+  `:composeApp:allTests`: the JVM, iOS simulator and Wasm (headless browser) tests of both modules.
+- `:server:test` has to be listed separately. The server is a plain JVM module, so `allTests` does not
+  include it.
+- `--continue` keeps going after a failing module, so one run reports every failure.
+
+To run only one target or module, which is much faster while working on it:
+
+```shell
+./gradlew :shared:jvmTest                 # shared, JVM only
+./gradlew :composeApp:jvmTest             # compose UI tests on the desktop runtime
+./gradlew :shared:iosSimulatorArm64Test   # shared, iOS simulator only
+./gradlew :shared:wasmJsTest              # shared, Wasm in a headless browser
+./gradlew :server:test --tests 'com.korgnote.server.FileStoreTest'   # a single class
+```
+
+HTML reports are written to `<module>/build/reports/tests/<task>/index.html`. `allTests` also writes a
+combined report to `<module>/build/reports/tests/allTests/index.html`.
+
+#### Force tests to run again (bypass the cache)
+
+Gradle skips a test task whose inputs have not changed. It prints `UP-TO-DATE`, or `FROM-CACHE` when it
+reuses the result from the build cache (`org.gradle.caching=true` in `gradle.properties`). Nothing runs,
+and the old result is reported as a pass. This is usually what you want, but not when chasing a flaky
+test or after changing something Gradle cannot see, such as a file under `notes/`.
+
+The `--rerun` flag only affects the task written just before it. It works for a single task:
+
+```shell
+./gradlew :shared:jvmTest --rerun
+```
+
+but `./gradlew allTests --rerun` only reruns the report task, not the tests it depends on. To rerun
+every test without recompiling anything, delete the test results and turn off the build cache for this
+run:
+
+```shell
+./gradlew cleanAllTests allTests :server:cleanTest :server:test --no-build-cache --continue
+```
+
+Without `--no-build-cache`, Gradle restores the deleted results from the cache and prints `FROM-CACHE`
+instead of running the tests. You can put `clean` in front of any task name to clean it
+(`cleanJvmTest`, `:server:cleanTest`, …).
+
+The heavy option is `--rerun-tasks`. It reruns every task in the build, including all compilation for
+every target, so it takes minutes instead of seconds. Only use it if you suspect the build itself.
+
 ---
 
 Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html),
