@@ -55,14 +55,14 @@ class SearchTest {
            The tap in the kitchen drips.
     """.trimIndent() + "\n"
 
-    private lateinit var viewModel: FileTreeViewModel
+    private lateinit var viewModel: NotesViewModel
 
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val store = DocumentStore(InMemoryReplicaStorage())
         val api = FakeSyncApi(mutableMapOf(work to workText, home to homeText))
-        viewModel = FileTreeViewModel(SyncEngine(store, api), store)
+        viewModel = NotesViewModel(SyncEngine(store, api), store)
     }
 
     @AfterTest
@@ -77,163 +77,163 @@ class SearchTest {
      * is asserting about the moment before the search, not after it.
      */
     private fun TestScope.search(query: String) {
-        viewModel.onSearchQueryChanged(query)
+        viewModel.search.onQueryChanged(query)
         advanceUntilIdle()
     }
 
     private fun TestScope.filterFiles(query: String) {
-        viewModel.onFilterQueryChanged(query)
+        viewModel.search.onFilterQueryChanged(query)
         advanceUntilIdle()
     }
 
     @Test
     fun searchesEveryFileInTheReplica() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
         search("the")
 
-        assertTrue(viewModel.searchResults.any { it.path == work })
-        assertTrue(viewModel.searchResults.any { it.path == home })
+        assertTrue(viewModel.search.results.any { it.path == work })
+        assertTrue(viewModel.search.results.any { it.path == home })
     }
 
     @Test
     fun openingAResultShowsItsFileAtItsElement() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         search("kitchen")
 
-        viewModel.openSearchHit(viewModel.searchResults.single { it.path == home })
+        viewModel.search.openHit(viewModel.search.results.single { it.path == home })
 
-        assertEquals(homeText, viewModel.selectedFileContent)
+        assertEquals(homeText, viewModel.note.content)
         // preamble, Repairs, Fix the tap — the match is in the body of the last one.
-        assertEquals(2, viewModel.scrollToElementIndex)
+        assertEquals(2, viewModel.note.scrollToElementIndex)
     }
 
     /** The regression the calendar jump already had: resolve against the file being opened. */
     @Test
     fun openingAResultResolvesAgainstTheNewFile() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         viewModel.onFileSelected(work)
         search("drips")
 
-        viewModel.openSearchHit(viewModel.searchResults.single())
+        viewModel.search.openHit(viewModel.search.results.single())
 
-        assertEquals(homeText, viewModel.selectedFileContent)
-        assertEquals(2, viewModel.scrollToElementIndex)
+        assertEquals(homeText, viewModel.note.content)
+        assertEquals(2, viewModel.note.scrollToElementIndex)
     }
 
     @Test
     fun resultsFollowTheReplica() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         search("marmalade")
-        assertEquals(0, viewModel.searchResults.size)
+        assertEquals(0, viewModel.search.results.size)
 
         viewModel.onFileSelected(home)
-        viewModel.onContentChanged(homeText + "* Buy marmalade\n")
+        viewModel.note.onContentChanged(homeText + "* Buy marmalade\n")
         viewModel.saveCurrentFile()
 
-        assertEquals(1, viewModel.searchResults.size)
+        assertEquals(1, viewModel.search.results.size)
     }
 
     @Test
     fun theDrawerFilterStillMatchesFileNames() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
         filterFiles("home")
 
-        assertEquals(listOf(home), viewModel.filteredTree.filePaths())
+        assertEquals(listOf(home), viewModel.search.filteredTree.filePaths())
     }
 
     @Test
     fun theDrawerFilterUnderstandsTags() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
         filterFiles("tag:work")
 
         // Only the file with a heading carrying the tag, even though neither file is named "work"
         // in a way the tag query looks at.
-        assertEquals(listOf(work), viewModel.filteredTree.filePaths())
+        assertEquals(listOf(work), viewModel.search.filteredTree.filePaths())
     }
 
     @Test
     fun anEmptyFilterKeepsTheWholeTree() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
         filterFiles("tag:work")
-        viewModel.onFilterQueryChanged("")
+        viewModel.search.onFilterQueryChanged("")
 
-        assertEquals(listOf(home, work), viewModel.filteredTree.filePaths().sorted())
+        assertEquals(listOf(home, work), viewModel.search.filteredTree.filePaths().sorted())
     }
 
     // --- Searching waits for the typing to stop ---
 
     @Test
     fun theScanWaitsForAPauseInTheTyping() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
-        viewModel.onSearchQueryChanged("kitchen")
+        viewModel.search.onQueryChanged("kitchen")
         advanceTimeBy(100.milliseconds)
         runCurrent()
-        assertTrue(viewModel.searchResults.isEmpty(), "searched while the typing was still going")
+        assertTrue(viewModel.search.results.isEmpty(), "searched while the typing was still going")
 
         advanceTimeBy(150.milliseconds)
         runCurrent()
-        assertEquals(1, viewModel.searchResults.size)
+        assertEquals(1, viewModel.search.results.size)
     }
 
     /** Which is the point: typing a word costs one scan, not one per letter. */
     @Test
     fun eachKeystrokeReplacesThePendingScan() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
-        viewModel.onSearchQueryChanged("kitch")
+        viewModel.search.onQueryChanged("kitch")
         advanceTimeBy(150.milliseconds)
-        viewModel.onSearchQueryChanged("kitchen")
+        viewModel.search.onQueryChanged("kitchen")
         advanceTimeBy(150.milliseconds)
         runCurrent()
         // 300 ms since the first keystroke, but only 150 since the last: nothing has run.
-        assertTrue(viewModel.searchResults.isEmpty())
+        assertTrue(viewModel.search.results.isEmpty())
 
         advanceUntilIdle()
         // And what finally ran was the finished word.
-        assertEquals(1, viewModel.searchResults.size)
-        assertEquals("kitchen", viewModel.searchQuery)
+        assertEquals(1, viewModel.search.results.size)
+        assertEquals("kitchen", viewModel.search.query)
     }
 
     @Test
     fun clearingTheQueryTakesEffectAtOnce() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         search("kitchen")
-        assertTrue(viewModel.searchResults.isNotEmpty())
+        assertTrue(viewModel.search.results.isNotEmpty())
 
-        viewModel.onSearchQueryChanged("")
+        viewModel.search.onQueryChanged("")
 
         // No waiting: an empty box means an empty list, now.
-        assertTrue(viewModel.searchResults.isEmpty())
+        assertTrue(viewModel.search.results.isEmpty())
     }
 
     @Test
     fun clearingTheFilterRestoresTheTreeAtOnce() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         filterFiles("tag:work")
-        assertEquals(listOf(work), viewModel.filteredTree.filePaths())
+        assertEquals(listOf(work), viewModel.search.filteredTree.filePaths())
 
-        viewModel.onFilterQueryChanged("")
+        viewModel.search.onFilterQueryChanged("")
 
-        assertEquals(listOf(home, work), viewModel.filteredTree.filePaths().sorted())
+        assertEquals(listOf(home, work), viewModel.search.filteredTree.filePaths().sorted())
     }
 
     /** Stale results beat a blank list that flickers on every letter. */
     @Test
     fun theLastResultsStayWhileTheNextScanIsPending() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         search("kitchen")
-        val before = viewModel.searchResults
+        val before = viewModel.search.results
 
-        viewModel.onSearchQueryChanged("kitchen sink")
+        viewModel.search.onQueryChanged("kitchen sink")
         advanceTimeBy(100.milliseconds)
         runCurrent()
 
-        assertEquals(before, viewModel.searchResults)
+        assertEquals(before, viewModel.search.results)
     }
 
     private fun Folder.filePaths(): List<String> {

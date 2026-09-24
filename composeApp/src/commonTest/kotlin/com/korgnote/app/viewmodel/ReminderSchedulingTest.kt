@@ -38,14 +38,14 @@ class ReminderSchedulingTest {
     }
     private var settings = ReminderSettings()
     private lateinit var api: FakeSyncApi
-    private lateinit var viewModel: FileTreeViewModel
+    private lateinit var viewModel: NotesViewModel
 
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val store = DocumentStore(InMemoryReplicaStorage())
         api = FakeSyncApi(mutableMapOf(work to workText))
-        viewModel = FileTreeViewModel(
+        viewModel = NotesViewModel(
             SyncEngine(store, api),
             store,
             today = { LocalDate(2026, 9, 23) },
@@ -64,30 +64,30 @@ class ReminderSchedulingTest {
     fun nothingIsReplacedBeforeTheNotesHaveBeenRead() {
         // Coming to the foreground before the replica is read would otherwise cancel every
         // reminder the device holds.
-        viewModel.refreshReminders()
+        viewModel.agenda.refreshReminders()
         assertEquals(emptyList(), handedOver)
     }
 
     @Test
     fun readingTheNotesSchedulesTheirReminders() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         assertEquals(listOf(listOf("Design review")), handedOver.map { plan -> plan.map { it.title } })
     }
 
     @Test
     fun aSyncThatChangesNothingLeavesThemAlone() = runTest {
-        viewModel.loadFromServer()
-        viewModel.loadFromServer()
-        viewModel.refreshReminders()
+        viewModel.server.load()
+        viewModel.server.load()
+        viewModel.agenda.refreshReminders()
         assertEquals(1, handedOver.size)
     }
 
     @Test
     fun anEditThatAddsAnAppointmentReplacesThem() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         viewModel.onFileSelected(work)
 
-        viewModel.onContentChanged(workText.replace("* Other", "* Lunch <2026-09-23 Wed 12:30>"))
+        viewModel.note.onContentChanged(workText.replace("* Other", "* Lunch <2026-09-23 Wed 12:30>"))
         viewModel.saveCurrentFile()
 
         assertEquals(listOf("Design review", "Lunch"), handedOver.last().map { it.title })
@@ -95,34 +95,34 @@ class ReminderSchedulingTest {
 
     @Test
     fun aChangedSettingAppliesOnTheNextPlan() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
         settings = ReminderSettings(enabled = false)
-        viewModel.refreshReminders()
+        viewModel.agenda.refreshReminders()
 
         assertEquals(emptyList(), handedOver.last())
     }
 
     @Test
     fun aTapThatArrivesBeforeTheNotesOpensTheNoteOnceTheyAreRead() = runTest {
-        viewModel.openReminderTarget(ReminderTarget(work, offset = workText.indexOf("* Other")))
+        viewModel.agenda.openReminderTarget(ReminderTarget(work, offset = workText.indexOf("* Other")))
 
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
-        assertEquals(workText, viewModel.selectedFileContent)
-        assertEquals(1, viewModel.scrollToElementIndex)
+        assertEquals(workText, viewModel.note.content)
+        assertEquals(1, viewModel.note.scrollToElementIndex)
     }
 
     @Test
     fun aTapForANoteThatIsGoneIsDropped() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         viewModel.onFileSelected(work)
 
-        viewModel.openReminderTarget(ReminderTarget("deleted.org", offset = 0))
+        viewModel.agenda.openReminderTarget(ReminderTarget("deleted.org", offset = 0))
         // A later sync must not suddenly act on it either.
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
-        assertEquals(workText, viewModel.selectedFileContent)
-        assertEquals(null, viewModel.scrollToElementIndex)
+        assertEquals(workText, viewModel.note.content)
+        assertEquals(null, viewModel.note.scrollToElementIndex)
     }
 }

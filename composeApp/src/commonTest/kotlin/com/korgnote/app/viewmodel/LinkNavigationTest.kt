@@ -37,14 +37,14 @@ class LinkNavigationTest {
         Then [[*Morning]], [[id:missing]] and [[file:../project.org::*Renamed]].
     """.trimIndent() + "\n"
 
-    private lateinit var viewModel: FileTreeViewModel
+    private lateinit var viewModel: NotesViewModel
 
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val server = FakeSyncApi(mutableMapOf("project.org" to project, "daily/today.org" to daily))
         val store = DocumentStore(InMemoryReplicaStorage())
-        viewModel = FileTreeViewModel(SyncEngine(store, server), store)
+        viewModel = NotesViewModel(SyncEngine(store, server), store)
     }
 
     @AfterTest
@@ -53,7 +53,7 @@ class LinkNavigationTest {
     }
 
     private suspend fun openDaily() {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         viewModel.onFileSelected("daily/today.org")
     }
 
@@ -64,57 +64,69 @@ class LinkNavigationTest {
     fun anIdLinkOpensItsNoteAtTheHeading() = runTest {
         openDaily()
 
-        viewModel.followLink("id:plan-id")
+        viewModel.links.follow("id:plan-id")
 
-        assertEquals("Selected: project.org", viewModel.selectedFileLabel)
-        assertEquals(elementAt(project, "* Plan"), viewModel.scrollToElementIndex)
+        assertEquals("Selected: project.org", viewModel.note.label)
+        assertEquals(elementAt(project, "* Plan"), viewModel.note.scrollToElementIndex)
     }
 
     @Test
     fun backReturnsToWhereTheLinkWasTapped() = runTest {
         openDaily()
         val work = elementAt(daily, "* Work")
-        viewModel.onReadingPositionChanged(work)
-        assertFalse(viewModel.canGoBack)
+        viewModel.links.onReadingPositionChanged(work)
+        assertFalse(viewModel.links.canGoBack)
 
-        viewModel.followLink("file:../project.org")
-        assertTrue(viewModel.canGoBack)
-        viewModel.goBack()
+        viewModel.links.follow("file:../project.org")
+        assertTrue(viewModel.links.canGoBack)
+        viewModel.links.goBack()
 
-        assertEquals("Selected: daily/today.org", viewModel.selectedFileLabel)
-        assertEquals(work, viewModel.scrollToElementIndex)
-        assertFalse(viewModel.canGoBack)
+        assertEquals("Selected: daily/today.org", viewModel.note.label)
+        assertEquals(work, viewModel.note.scrollToElementIndex)
+        assertFalse(viewModel.links.canGoBack)
     }
 
     @Test
     fun aLinkWithinTheNoteMovesWithinIt() = runTest {
         openDaily()
 
-        viewModel.followLink("*Morning")
+        viewModel.links.follow("*Morning")
 
-        assertEquals("Selected: daily/today.org", viewModel.selectedFileLabel)
-        assertEquals(0, viewModel.scrollToElementIndex)
-        assertTrue(viewModel.canGoBack)
+        assertEquals("Selected: daily/today.org", viewModel.note.label)
+        assertEquals(0, viewModel.note.scrollToElementIndex)
+        assertTrue(viewModel.links.canGoBack)
+    }
+
+    @Test
+    fun backSkipsANoteDeletedSince() = runTest {
+        openDaily()
+        viewModel.links.follow("file:../project.org")
+        viewModel.deleteNote("daily/today.org")
+
+        viewModel.links.goBack()
+
+        assertEquals("Selected: project.org", viewModel.note.label, "there is nothing left to go back to")
+        assertFalse(viewModel.links.canGoBack)
     }
 
     @Test
     fun aBrokenLinkSaysSoAndGoesNowhere() = runTest {
         openDaily()
 
-        viewModel.followLink("id:missing")
+        viewModel.links.follow("id:missing")
 
-        assertEquals("Selected: daily/today.org", viewModel.selectedFileLabel)
+        assertEquals("Selected: daily/today.org", viewModel.note.label)
         assertTrue(viewModel.lastErrorMessage.contains("Nothing in the notes"), viewModel.lastErrorMessage)
-        assertFalse(viewModel.canGoBack)
+        assertFalse(viewModel.links.canGoBack)
     }
 
     @Test
     fun aRenamedHeadingStillOpensTheNoteAndSaysWhatWasMissing() = runTest {
         openDaily()
 
-        viewModel.followLink("file:../project.org::*Renamed")
+        viewModel.links.follow("file:../project.org::*Renamed")
 
-        assertEquals("Selected: project.org", viewModel.selectedFileLabel)
+        assertEquals("Selected: project.org", viewModel.note.label)
         assertTrue(viewModel.lastErrorMessage.contains("*Renamed"), viewModel.lastErrorMessage)
     }
 
@@ -124,20 +136,20 @@ class LinkNavigationTest {
         viewModel.onFileSelected("project.org")
 
         // The id link, the file link, and the file link whose heading search no longer matches.
-        assertEquals(listOf("Work", "Work", "Work"), viewModel.backlinks.map { it.context })
-        assertEquals(setOf("daily/today.org"), viewModel.backlinks.map { it.path }.toSet())
+        assertEquals(listOf("Work", "Work", "Work"), viewModel.links.backlinks.map { it.context })
+        assertEquals(setOf("daily/today.org"), viewModel.links.backlinks.map { it.path }.toSet())
 
-        viewModel.openBacklink(viewModel.backlinks.first())
-        assertEquals("Selected: daily/today.org", viewModel.selectedFileLabel)
-        assertEquals(elementAt(daily, "* Work"), viewModel.scrollToElementIndex)
-        assertTrue(viewModel.canGoBack, "back returns to the note the backlink was listed in")
+        viewModel.links.openBacklink(viewModel.links.backlinks.first())
+        assertEquals("Selected: daily/today.org", viewModel.note.label)
+        assertEquals(elementAt(daily, "* Work"), viewModel.note.scrollToElementIndex)
+        assertTrue(viewModel.links.canGoBack, "back returns to the note the backlink was listed in")
     }
 
     @Test
     fun completionLinksFromTheNoteBeingEdited() = runTest {
         openDaily()
 
-        val context = viewModel.completionContext
+        val context = viewModel.completion.context
         assertEquals("daily/today.org", context.currentPath)
         assertEquals(mapOf("project.org" to "project-id"), context.noteIds)
         assertEquals("Project", context.noteTitles["project.org"])

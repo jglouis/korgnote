@@ -41,14 +41,14 @@ class CompletionEditingTest {
         * Second task                                :home:garden:
     """.trimIndent() + "\n"
 
-    private lateinit var viewModel: FileTreeViewModel
+    private lateinit var viewModel: NotesViewModel
 
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val store = DocumentStore(InMemoryReplicaStorage())
         val api = FakeSyncApi(mutableMapOf(path to initialText))
-        viewModel = FileTreeViewModel(SyncEngine(store, api), store, today = { LocalDate(2026, 9, 23) })
+        viewModel = NotesViewModel(SyncEngine(store, api), store, today = { LocalDate(2026, 9, 23) })
     }
 
     @AfterTest
@@ -57,27 +57,27 @@ class CompletionEditingTest {
     }
 
     private suspend fun openAndEdit(draft: String, caret: Int = draft.length) {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         viewModel.onFileSelected(path)
-        viewModel.beginElementEdit(1)
-        viewModel.onElementDraftChanged(TextFieldValue(draft, TextRange(caret)))
+        viewModel.editor.beginEdit(1)
+        viewModel.editor.onDraftChanged(TextFieldValue(draft, TextRange(caret)))
     }
 
     @Test
     fun typingAHeadingKeywordOffersTheDocumentsKeywords() = runTest {
         openAndEdit("* TO")
 
-        assertEquals(listOf("TODO"), viewModel.completionSuggestions.map { it.label })
+        assertEquals(listOf("TODO"), viewModel.completion.suggestions.map { it.label })
     }
 
     @Test
     fun acceptingRewritesTheDraftAndMovesTheCaret() = runTest {
         openAndEdit("* TO")
 
-        viewModel.acceptCompletion(viewModel.completionSuggestions.single())
+        viewModel.completion.accept(viewModel.completion.suggestions.single())
 
-        assertEquals("* TODO ", viewModel.elementDraft)
-        assertEquals("* TODO ".length, viewModel.elementDraftCaret)
+        assertEquals("* TODO ", viewModel.editor.draft)
+        assertEquals("* TODO ".length, viewModel.editor.draftCaret)
     }
 
     /** The caret belongs inside the block, not after it — which is what `caretOffset` is for. */
@@ -85,112 +85,112 @@ class CompletionEditingTest {
     fun acceptingABlockTemplateLeavesTheCaretInsideIt() = runTest {
         openAndEdit("<s")
 
-        viewModel.acceptCompletion(viewModel.completionSuggestions.single())
+        viewModel.completion.accept(viewModel.completion.suggestions.single())
 
-        assertEquals("#+BEGIN_SRC\n\n#+END_SRC", viewModel.elementDraft)
-        assertEquals("#+BEGIN_SRC\n".length, viewModel.elementDraftCaret)
+        assertEquals("#+BEGIN_SRC\n\n#+END_SRC", viewModel.editor.draft)
+        assertEquals("#+BEGIN_SRC\n".length, viewModel.editor.draftCaret)
     }
 
     @Test
     fun theKeyboardAcceptsWhateverItMovedTo() = runTest {
         openAndEdit("* Buy milk :")
-        val second = viewModel.completionSuggestions[1].label
+        val second = viewModel.completion.suggestions[1].label
 
-        viewModel.moveCompletionSelection(1)
-        assertTrue(viewModel.acceptSelectedCompletion())
+        viewModel.completion.moveSelection(1)
+        assertTrue(viewModel.completion.acceptSelected())
 
-        assertEquals("* Buy milk $second", viewModel.elementDraft)
+        assertEquals("* Buy milk $second", viewModel.editor.draft)
     }
 
     @Test
     fun movingWrapsAroundInBothDirections() = runTest {
         openAndEdit("* Buy milk :")
-        val count = viewModel.completionSuggestions.size
+        val count = viewModel.completion.suggestions.size
         assertTrue(count > 1)
 
-        viewModel.moveCompletionSelection(-1)
-        assertEquals(count - 1, viewModel.selectedSuggestion)
-        viewModel.moveCompletionSelection(1)
-        assertEquals(0, viewModel.selectedSuggestion)
+        viewModel.completion.moveSelection(-1)
+        assertEquals(count - 1, viewModel.completion.selectedIndex)
+        viewModel.completion.moveSelection(1)
+        assertEquals(0, viewModel.completion.selectedIndex)
     }
 
     @Test
     fun acceptingWithNothingShowingDoesNothing() = runTest {
         openAndEdit("Just prose")
 
-        assertTrue(viewModel.completionSuggestions.isEmpty())
-        assertEquals(false, viewModel.acceptSelectedCompletion())
-        assertEquals("Just prose", viewModel.elementDraft)
+        assertTrue(viewModel.completion.suggestions.isEmpty())
+        assertEquals(false, viewModel.completion.acceptSelected())
+        assertEquals("Just prose", viewModel.editor.draft)
     }
 
     @Test
     fun dismissingHidesTheSuggestionsUntilTheNextKeystroke() = runTest {
         openAndEdit("* TO")
 
-        viewModel.dismissCompletion()
-        assertTrue(viewModel.completionSuggestions.isEmpty())
+        viewModel.completion.dismiss()
+        assertTrue(viewModel.completion.suggestions.isEmpty())
 
-        viewModel.onElementDraftChanged(TextFieldValue("* TOD", TextRange(5)))
-        assertEquals(listOf("TODO"), viewModel.completionSuggestions.map { it.label })
+        viewModel.editor.onDraftChanged(TextFieldValue("* TOD", TextRange(5)))
+        assertEquals(listOf("TODO"), viewModel.completion.suggestions.map { it.label })
     }
 
     @Test
     fun aSelectionIsNotACaretSoNothingIsOffered() = runTest {
         // The word "TO" selected rather than a caret after it: completing would delete it silently.
         openAndEdit("* TO")
-        viewModel.onElementDraftChanged(TextFieldValue("* TO", TextRange(2, 4)))
+        viewModel.editor.onDraftChanged(TextFieldValue("* TO", TextRange(2, 4)))
 
-        assertTrue(viewModel.completionSuggestions.isEmpty())
+        assertTrue(viewModel.completion.suggestions.isEmpty())
     }
 
     @Test
     fun thePickerAsksBeforeItInserts() = runTest {
         openAndEdit("* Buy milk\nSCHEDULED: ")
-        val picker = viewModel.completionSuggestions.single { it.kind == CompletionItem.Kind.DATE_PICKER }
+        val picker = viewModel.completion.suggestions.single { it.kind == CompletionItem.Kind.DATE_PICKER }
 
-        viewModel.acceptCompletion(picker)
+        viewModel.completion.accept(picker)
         // Nothing has gone into the draft yet; the dialog is open.
-        assertEquals("* Buy milk\nSCHEDULED: ", viewModel.elementDraft)
-        assertEquals(picker, viewModel.pendingDatePicker)
+        assertEquals("* Buy milk\nSCHEDULED: ", viewModel.editor.draft)
+        assertEquals(picker, viewModel.completion.pendingDatePicker)
 
-        viewModel.onDatePicked(LocalDate(2026, 12, 24))
+        viewModel.completion.onDatePicked(LocalDate(2026, 12, 24))
 
-        assertEquals("* Buy milk\nSCHEDULED: <2026-12-24 Thu>", viewModel.elementDraft)
-        assertNull(viewModel.pendingDatePicker)
+        assertEquals("* Buy milk\nSCHEDULED: <2026-12-24 Thu>", viewModel.editor.draft)
+        assertNull(viewModel.completion.pendingDatePicker)
     }
 
     @Test
     fun dismissingThePickerLeavesTheDraftAlone() = runTest {
         openAndEdit("* Buy milk\nDEADLINE: ")
-        viewModel.acceptCompletion(viewModel.completionSuggestions.single { it.kind == CompletionItem.Kind.DATE_PICKER })
+        viewModel.completion.accept(viewModel.completion.suggestions.single { it.kind == CompletionItem.Kind.DATE_PICKER })
 
-        viewModel.dismissDatePicker()
+        viewModel.completion.dismissDatePicker()
 
-        assertEquals("* Buy milk\nDEADLINE: ", viewModel.elementDraft)
-        assertNull(viewModel.pendingDatePicker)
+        assertEquals("* Buy milk\nDEADLINE: ", viewModel.editor.draft)
+        assertNull(viewModel.completion.pendingDatePicker)
     }
 
     @Test
     fun endingTheEditClearsTheStrip() = runTest {
         openAndEdit("* TO")
-        assertTrue(viewModel.completionSuggestions.isNotEmpty())
+        assertTrue(viewModel.completion.suggestions.isNotEmpty())
 
-        viewModel.cancelElementEdit()
+        viewModel.editor.cancel()
 
-        assertTrue(viewModel.completionSuggestions.isEmpty())
-        assertNull(viewModel.editingElementIndex)
+        assertTrue(viewModel.completion.suggestions.isEmpty())
+        assertNull(viewModel.editor.editingIndex)
     }
 
     /** Committing goes through the same path, and the strip must not survive it either. */
     @Test
     fun committingClearsTheStripToo() = runTest {
         openAndEdit("* TODO First task :work:\n")
-        viewModel.onElementDraftChanged(TextFieldValue("* TODO First task :", TextRange("* TODO First task :".length)))
-        assertTrue(viewModel.completionSuggestions.isNotEmpty())
+        viewModel.editor.onDraftChanged(TextFieldValue("* TODO First task :", TextRange("* TODO First task :".length)))
+        assertTrue(viewModel.completion.suggestions.isNotEmpty())
 
-        viewModel.commitElementEdit()
+        viewModel.editor.commit()
 
-        assertTrue(viewModel.completionSuggestions.isEmpty())
-        assertNull(viewModel.editingElementIndex)
+        assertTrue(viewModel.completion.suggestions.isEmpty())
+        assertNull(viewModel.editor.editingIndex)
     }
 }

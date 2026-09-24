@@ -27,7 +27,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.ui.*
-import com.korgnote.app.viewmodel.FileTreeViewModel
+import com.korgnote.app.viewmodel.NotesViewModel
+import com.korgnote.app.viewmodel.OpenNote
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -42,18 +43,18 @@ fun App() {
         var isEditing by remember { mutableStateOf(false) }
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val scope = rememberCoroutineScope()
-        val vm = koinViewModel<FileTreeViewModel>()
+        val vm = koinViewModel<NotesViewModel>()
         LaunchedEffect(Unit) {
-            vm.loadFromServer()
+            vm.server.load()
             // Then follow the server's change stream for the rest of the session.
-            vm.watchServer()
+            vm.server.watch()
         }
         // A tapped reminder opens its note at the heading, whatever screen was showing.
         LaunchedEffect(Unit) {
             ReminderTaps.pending.collect { target ->
                 if (target != null) {
                     ReminderTaps.pending.value = null
-                    vm.openReminderTarget(target)
+                    vm.agenda.openReminderTarget(target)
                     isEditing = false
                     selectedScreen = BottomItem.HOME
                 }
@@ -61,7 +62,7 @@ fun App() {
         }
         // Coming back to the app moves the reminder window on and drops what has already fired.
         LifecycleResumeEffect(Unit) {
-            vm.refreshReminders()
+            vm.agenda.refreshReminders()
             onPauseOrDispose { }
         }
         // At most one of these is open; each names the note it is about.
@@ -127,7 +128,7 @@ fun App() {
             object : UriHandler {
                 override fun openUri(uri: String) {
                     if (uri.startsWith(NOTE_LINK_URI_PREFIX)) {
-                        vm.followLink(uri.removePrefix(NOTE_LINK_URI_PREFIX))
+                        vm.links.follow(uri.removePrefix(NOTE_LINK_URI_PREFIX))
                         isEditing = false
                         selectedScreen = BottomItem.HOME
                     } else {
@@ -155,18 +156,18 @@ fun App() {
                             }
                             Spacer(Modifier.width(8.dp))
                             OutlinedTextField(
-                                value = vm.filterQuery,
-                                onValueChange = { vm.onFilterQueryChanged(it) },
+                                value = vm.search.filterQuery,
+                                onValueChange = { vm.search.onFilterQueryChanged(it) },
                                 label = { Text("Filter files") },
                                 placeholder = { Text("name, or tag:work") },
                                 singleLine = true
                             )
                             Spacer(Modifier.width(8.dp))
                             FileTree(
-                                root = vm.filteredTree,
+                                root = vm.search.filteredTree,
                                 // While filtering, show what matched even inside folders the reader
                                 // had closed: a hidden match looks like a filter that does not work.
-                                expandAll = vm.filterQuery.isNotBlank(),
+                                expandAll = vm.search.filterQuery.isNotBlank(),
                                 onFileSelected = { name ->
                                     scope.launch {
                                         vm.onFileSelected(name)
@@ -197,12 +198,12 @@ fun App() {
                             },
                             actions = {
                                 // Back from a followed link, to where it was tapped.
-                                if (selectedScreen == BottomItem.HOME && vm.canGoBack && !isEditing) {
-                                    IconButton(onClick = { vm.goBack() }) {
+                                if (selectedScreen == BottomItem.HOME && vm.links.canGoBack && !isEditing) {
+                                    IconButton(onClick = { vm.links.goBack() }) {
                                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                                     }
                                 }
-                                if (selectedScreen == BottomItem.HOME && vm.selectedFileLabel != "No file selected") {
+                                if (selectedScreen == BottomItem.HOME && vm.note.label != OpenNote.NO_FILE_LABEL) {
                                     if (isEditing) {
                                         IconButton(onClick = {
                                             scope.launch {
@@ -223,25 +224,25 @@ fun App() {
                     },
                     floatingActionButton = {
                         // Saving an element is explicit: edits stay local until this is pressed.
-                        if (vm.editingElementIndex != null) {
+                        if (vm.editor.editingIndex != null) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                SmallFloatingActionButton(onClick = { vm.cancelElementEdit() }) {
+                                SmallFloatingActionButton(onClick = { vm.editor.cancel() }) {
                                     Icon(Icons.Filled.Close, contentDescription = "Discard changes to this element")
                                 }
                                 // Most headings are added right after editing the one above.
-                                SmallFloatingActionButton(onClick = { scope.launch { vm.commitElementEditAndAddBelow() } }) {
+                                SmallFloatingActionButton(onClick = { scope.launch { vm.editor.commitAndAddBelow() } }) {
                                     Icon(Icons.Filled.Add, contentDescription = "Save and add a heading below")
                                 }
-                                FloatingActionButton(onClick = { scope.launch { vm.commitElementEdit() } }) {
+                                FloatingActionButton(onClick = { scope.launch { vm.editor.commit() } }) {
                                     Icon(Icons.Filled.Save, contentDescription = "Save this element")
                                 }
                             }
                         } else if (
                             selectedScreen == BottomItem.HOME &&
                             !isEditing &&
-                            vm.selectedFileLabel != "No file selected"
+                            vm.note.label != OpenNote.NO_FILE_LABEL
                         ) {
-                            FloatingActionButton(onClick = { vm.addElementAtEnd() }) {
+                            FloatingActionButton(onClick = { vm.editor.addAtEnd() }) {
                                 Icon(Icons.Filled.Add, contentDescription = "Add a heading at the end of the file")
                             }
                         }
@@ -251,11 +252,11 @@ fun App() {
                         // screen, which is where the keyboard pushes everything else against. The
                         // navigation bar goes away with them: switching tabs mid-edit only ever
                         // happened by accident.
-                        if (vm.editingElementIndex != null) {
+                        if (vm.editor.editingIndex != null) {
                             CompletionStrip(
-                                items = vm.completionSuggestions,
-                                selectedIndex = vm.selectedSuggestion,
-                                onAccept = { vm.acceptCompletion(it) },
+                                items = vm.completion.suggestions,
+                                selectedIndex = vm.completion.selectedIndex,
+                                onAccept = { vm.completion.accept(it) },
                             )
                         } else NavigationBar {
                             BottomItem.entries.forEach { item ->
@@ -275,11 +276,11 @@ fun App() {
                         }
                     }
                 ) { paddingValues ->
-                    vm.pendingDatePicker?.let {
+                    vm.completion.pendingDatePicker?.let {
                         OrgDatePickerDialog(
-                            initial = vm.completionContext.today,
-                            onPick = { date -> vm.onDatePicked(date) },
-                            onDismiss = { vm.dismissDatePicker() },
+                            initial = vm.completion.context.today,
+                            onPick = { date -> vm.completion.onDatePicked(date) },
+                            onDismiss = { vm.completion.dismissDatePicker() },
                         )
                     }
                     // Reading mode scrolls itself, one element at a time, so that opening a large file
@@ -290,7 +291,7 @@ fun App() {
                     // every other screen, and the whole-file editor, still scroll here as before.
                     val readingDocument = selectedScreen == BottomItem.HOME &&
                         !isEditing &&
-                        vm.selectedFileContent.isNotBlank()
+                        vm.note.content.isNotBlank()
                     val ownsItsScroll = readingDocument ||
                         selectedScreen == BottomItem.SEARCH ||
                         selectedScreen == BottomItem.CALENDAR
@@ -319,7 +320,7 @@ fun App() {
                                     Spacer(modifier = Modifier.height(8.dp))
                                 }
                                 // Reflect selection from ViewModel in UI
-                                Text(text = vm.selectedFileLabel)
+                                Text(text = vm.note.label)
                                 Spacer(modifier = Modifier.height(16.dp))
 
                                 if (isEditing) {
@@ -356,8 +357,8 @@ fun App() {
                                     // onTextLayout, which is how the visible character range is found.
                                     // The Material look is preserved by the decoration box below.
                                     BasicTextField(
-                                        value = vm.selectedFileContent,
-                                        onValueChange = { vm.onContentChanged(it) },
+                                        value = vm.note.content,
+                                        onValueChange = { vm.note.onContentChanged(it) },
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .onGloballyPositioned { coordinates ->
@@ -374,7 +375,7 @@ fun App() {
                                         visualTransformation = orgHighlighting,
                                         decorationBox = { innerTextField ->
                                             OutlinedTextFieldDefaults.DecorationBox(
-                                                value = vm.selectedFileContent,
+                                                value = vm.note.content,
                                                 innerTextField = innerTextField,
                                                 enabled = true,
                                                 singleLine = false,
@@ -387,40 +388,40 @@ fun App() {
                                             )
                                         }
                                     )
-                                } else if (vm.selectedFileContent.isBlank()) {
+                                } else if (vm.note.content.isBlank()) {
                                     Text("Select an .org file to view its content")
                                 } else {
                                     OrgDocumentView(
                                         // weight, not wrap: the lazy list needs a bounded height to
                                         // know what is on screen, and fills what the header leaves.
                                         modifier = Modifier.weight(1f).fillMaxWidth(),
-                                        text = vm.selectedFileContent,
+                                        text = vm.note.content,
                                         todoKeywords = vm.todoKeywords,
-                                        editingElementIndex = vm.editingElementIndex,
-                                        elementDraftValue = vm.elementDraftValue,
-                                        onElementDraftChange = { vm.onElementDraftChanged(it) },
+                                        editingElementIndex = vm.editor.editingIndex,
+                                        elementDraftValue = vm.editor.draftValue,
+                                        onElementDraftChange = { vm.editor.onDraftChanged(it) },
                                         onCompletionKey = { key ->
                                             // Nothing showing means the key was never ours: an arrow
                                             // has to go on moving the caret.
-                                            if (vm.completionSuggestions.isEmpty()) false else when (key) {
-                                                CompletionKey.ACCEPT -> vm.acceptSelectedCompletion()
-                                                CompletionKey.DISMISS -> { vm.dismissCompletion(); true }
-                                                CompletionKey.NEXT -> { vm.moveCompletionSelection(1); true }
-                                                CompletionKey.PREVIOUS -> { vm.moveCompletionSelection(-1); true }
+                                            if (vm.completion.suggestions.isEmpty()) false else when (key) {
+                                                CompletionKey.ACCEPT -> vm.completion.acceptSelected()
+                                                CompletionKey.DISMISS -> { vm.completion.dismiss(); true }
+                                                CompletionKey.NEXT -> { vm.completion.moveSelection(1); true }
+                                                CompletionKey.PREVIOUS -> { vm.completion.moveSelection(-1); true }
                                             }
                                         },
-                                        onEditElement = { vm.beginElementEdit(it) },
-                                        onAddHeadingBelow = { vm.addElementAfter(it) },
-                                        onAddSubheading = { vm.addSubheading(it) },
-                                        onDeleteSection = { scope.launch { vm.deleteSection(it) } },
-                                        foldedElements = vm.foldedElements,
-                                        onToggleFold = { vm.toggleFold(it) },
-                                        scrollToElementIndex = vm.scrollToElementIndex,
-                                        onScrolledToElement = { vm.onScrolledToElement() },
+                                        onEditElement = { vm.editor.beginEdit(it) },
+                                        onAddHeadingBelow = { vm.editor.addAfter(it) },
+                                        onAddSubheading = { vm.editor.addSubheading(it) },
+                                        onDeleteSection = { scope.launch { vm.editor.deleteSection(it) } },
+                                        foldedElements = vm.folds.folded,
+                                        onToggleFold = { vm.folds.toggle(it) },
+                                        scrollToElementIndex = vm.note.scrollToElementIndex,
+                                        onScrolledToElement = { vm.note.onScrolledToElement() },
                                         onToggleCheckbox = { offset -> vm.toggleCheckboxAt(offset, scope) },
-                                        backlinks = vm.backlinks,
-                                        onOpenBacklink = { vm.openBacklink(it) },
-                                        onFirstVisibleElement = { vm.onReadingPositionChanged(it) },
+                                        backlinks = vm.links.backlinks,
+                                        onOpenBacklink = { vm.links.openBacklink(it) },
+                                        onFirstVisibleElement = { vm.links.onReadingPositionChanged(it) },
                                     )
                                 }
                             }
@@ -428,13 +429,13 @@ fun App() {
                             BottomItem.SEARCH -> {
                                 SearchScreen(
                                     modifier = Modifier.fillMaxSize(),
-                                    query = vm.searchQuery,
-                                    results = vm.searchResults,
-                                    onQueryChange = { vm.onSearchQueryChanged(it) },
+                                    query = vm.search.query,
+                                    results = vm.search.results,
+                                    onQueryChange = { vm.search.onQueryChanged(it) },
                                     onOpen = { hit ->
                                         // Same shape as the calendar's jump: the view model resolves
                                         // the place once the file's text has arrived.
-                                        vm.openSearchHit(hit)
+                                        vm.search.openHit(hit)
                                         isEditing = false
                                         selectedScreen = BottomItem.HOME
                                     },
@@ -444,12 +445,12 @@ fun App() {
                             BottomItem.CALENDAR -> {
                                 CalendarScreen(
                                     modifier = Modifier.fillMaxSize(),
-                                    agenda = vm.agenda,
+                                    agenda = vm.agenda.index,
                                     onOpenEntry = { entry ->
                                         // The heading is resolved by the view model once the file's text
                                         // has loaded: that text arrives asynchronously, so working it out
                                         // here would search the previously open file.
-                                        vm.openAgendaEntry(entry)
+                                        vm.agenda.openEntry(entry)
                                         isEditing = false
                                         selectedScreen = BottomItem.HOME
                                     }
@@ -458,7 +459,7 @@ fun App() {
 
                             BottomItem.SETTINGS -> {
                                 val settingsRepo = koinInject<SettingsRepository>()
-                                SettingsScreen(repo = settingsRepo, onSaved = { scope.launch { vm.loadFromServer() } })
+                                SettingsScreen(repo = settingsRepo, onSaved = { scope.launch { vm.server.load() } })
                             }
                         }
                     }

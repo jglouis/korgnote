@@ -39,37 +39,37 @@ class OfflineReplicaTest {
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
 
-    private fun viewModel(): FileTreeViewModel {
+    private fun viewModel(): NotesViewModel {
         val store = DocumentStore(storage)
-        return FileTreeViewModel(SyncEngine(store, repository), store)
+        return NotesViewModel(SyncEngine(store, repository), store)
     }
 
     @Test
     fun anOnlineLoadFillsTheReplica() = runTest {
-        viewModel().loadFromServer()
+        viewModel().server.load()
         assertEquals(serverText, DocumentStore(storage).read(path))
     }
 
     /** The headline: with the server down, the app still opens its notes. */
     @Test
     fun theAppOpensItsNotesWithTheServerUnreachable() = runTest {
-        viewModel().loadFromServer()
+        viewModel().server.load()
         repository.online = false
 
         val offline = viewModel()
-        offline.loadFromServer()
+        offline.server.load()
 
-        assertEquals(serverText, offline.selectedFileContent)
+        assertEquals(serverText, offline.note.content)
         assertTrue(offline.lastErrorMessage.isNotBlank(), "the user should be told it is stale")
     }
 
     @Test
     fun anEditMadeOfflineIsKeptAndStaysDirty() = runTest {
         val online = viewModel()
-        online.loadFromServer()
+        online.server.load()
         repository.online = false
 
-        online.onContentChanged("* TODO Edited on a train\n")
+        online.note.onContentChanged("* TODO Edited on a train\n")
         online.saveCurrentFile()
 
         val store = DocumentStore(storage)
@@ -82,29 +82,29 @@ class OfflineReplicaTest {
     @Test
     fun anOfflineEditSurvivesARestart() = runTest {
         val before = viewModel()
-        before.loadFromServer()
+        before.server.load()
         repository.online = false
-        before.onContentChanged("* TODO Written offline\n")
+        before.note.onContentChanged("* TODO Written offline\n")
         before.saveCurrentFile()
 
         val afterRestart = viewModel()
-        afterRestart.loadFromServer()
+        afterRestart.server.load()
 
-        assertEquals("* TODO Written offline\n", afterRestart.selectedFileContent)
+        assertEquals("* TODO Written offline\n", afterRestart.note.content)
     }
 
     /** Coming back online must not silently discard the work done while away. */
     @Test
     fun reconnectingDoesNotOverwriteTheOfflineEdit() = runTest {
         val vm = viewModel()
-        vm.loadFromServer()
+        vm.server.load()
         repository.online = false
-        vm.onContentChanged("* TODO Written offline\n")
+        vm.note.onContentChanged("* TODO Written offline\n")
         vm.saveCurrentFile()
 
         repository.online = true
-        vm.loadFromServer()
+        vm.server.load()
 
-        assertEquals("* TODO Written offline\n", vm.selectedFileContent)
+        assertEquals("* TODO Written offline\n", vm.note.content)
     }
 }

@@ -11,7 +11,7 @@ import com.korgnote.app.data.InMemorySettingsRepository
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.ui.OrgColors
 import com.korgnote.app.viewmodel.FakeSyncApi
-import com.korgnote.app.viewmodel.FileTreeViewModel
+import com.korgnote.app.viewmodel.NotesViewModel
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
@@ -51,13 +51,13 @@ class AppTodoKeywordsTest {
         meetings to "* FINISHED Meeting with the board\n",
     )
 
-    private lateinit var viewModel: FileTreeViewModel
+    private lateinit var viewModel: NotesViewModel
 
     @BeforeTest
     fun setUp() {
         val store = DocumentStore(InMemoryReplicaStorage())
-        viewModel = FileTreeViewModel(SyncEngine(store, FakeSyncApi(files)), store)
-        runBlocking { viewModel.loadFromServer() }
+        viewModel = NotesViewModel(SyncEngine(store, FakeSyncApi(files)), store)
+        runBlocking { viewModel.server.load() }
         startKoin {
             modules(
                 module {

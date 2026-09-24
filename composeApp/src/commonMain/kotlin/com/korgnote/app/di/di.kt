@@ -4,7 +4,7 @@ import com.korgnote.app.data.KtorSyncApi
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.notifications.NoopNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
-import com.korgnote.app.viewmodel.FileTreeViewModel
+import com.korgnote.app.viewmodel.NotesViewModel
 import io.ktor.client.HttpClient
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.context.startKoin
@@ -40,7 +40,7 @@ val appModule = module {
     // the platform's scheduler where there is one (Android, iOS) and nowhere otherwise.
     viewModel {
         val settings = get<SettingsRepository>()
-        FileTreeViewModel(
+        NotesViewModel(
             get<SyncEngine>(),
             get<DocumentStore>(),
             notifications = getOrNull<NotificationScheduler>() ?: NoopNotificationScheduler,

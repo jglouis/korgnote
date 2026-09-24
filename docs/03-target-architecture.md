@@ -86,6 +86,12 @@ Split `FileTreeViewModel` (currently holds everything) into `LibraryViewModel` (
 search, sync status), `DocumentViewModel` (one open document, editing, completion) and
 `CalendarViewModel` (agenda window). They observe the same `DocumentStore`.
 
+*As built:* one `NotesViewModel` owning plain state holders instead — `NoteLibrary`,
+`OpenNote`, `Folds`, `ElementEditor`, `CompletionController`, `NoteSearch`, `LinkNavigator`,
+`NoteAgenda`, `ServerSync` — which the UI reads directly. Separate ViewModels would each have
+needed the parsed notes and the open note, and every one of them follows an open, so they would
+have spent their time notifying each other; the view model keeps only what crosses them.
+
 ### `server/` — thin
 
 Keeps: Ktor, static hosting of the web build. Gains: file-store abstraction over `NOTES_DIR`

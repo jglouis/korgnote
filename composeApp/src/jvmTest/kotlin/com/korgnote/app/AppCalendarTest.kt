@@ -8,7 +8,7 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import com.korgnote.app.data.InMemorySettingsRepository
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.viewmodel.FakeSyncApi
-import com.korgnote.app.viewmodel.FileTreeViewModel
+import com.korgnote.app.viewmodel.NotesViewModel
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
@@ -44,7 +44,7 @@ class AppCalendarTest {
             modules(
                 module {
                     single<SettingsRepository> { InMemorySettingsRepository() }
-                    viewModel { FileTreeViewModel(SyncEngine(store, api), store) }
+                    viewModel { NotesViewModel(SyncEngine(store, api), store) }
                 },
             )
         }

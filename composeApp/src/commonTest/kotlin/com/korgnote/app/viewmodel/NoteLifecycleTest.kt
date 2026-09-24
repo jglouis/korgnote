@@ -27,7 +27,7 @@ class NoteLifecycleTest {
 
     private lateinit var server: FakeSyncApi
     private lateinit var store: DocumentStore
-    private lateinit var viewModel: FileTreeViewModel
+    private lateinit var viewModel: NotesViewModel
     private var inbox = "inbox"
 
     @BeforeTest
@@ -35,7 +35,7 @@ class NoteLifecycleTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         server = FakeSyncApi(mutableMapOf(existing to existingText))
         store = DocumentStore(InMemoryReplicaStorage())
-        viewModel = FileTreeViewModel(SyncEngine(store, server), store, newNotesFolder = { inbox })
+        viewModel = NotesViewModel(SyncEngine(store, server), store, newNotesFolder = { inbox })
     }
 
     @AfterTest
@@ -51,41 +51,41 @@ class NoteLifecycleTest {
 
     @Test
     fun aNewNoteIsCreatedInTheInboxOpenedAtItsFirstHeadingAndPushed() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
         val path = viewModel.createNote("Call the plumber")
 
         assertEquals("inbox/call_the_plumber.org", path)
-        assertEquals("Selected: inbox/call_the_plumber.org", viewModel.selectedFileLabel)
-        assertTrue("inbox/call_the_plumber.org" in viewModel.tree.paths())
+        assertEquals("Selected: inbox/call_the_plumber.org", viewModel.note.label)
+        assertTrue("inbox/call_the_plumber.org" in viewModel.library.tree.paths())
         assertEquals("#+TITLE: Call the plumber\n\n", server.files[path], "pushed without waiting for an edit")
-        assertEquals(1, viewModel.editingElementIndex, "straight into the first heading")
-        assertEquals("* \n", viewModel.elementDraft)
+        assertEquals(1, viewModel.editor.editingIndex, "straight into the first heading")
+        assertEquals("* \n", viewModel.editor.draft)
 
-        viewModel.onElementDraftChanged("* TODO Ask about the boiler\n")
-        viewModel.commitElementEdit()
+        viewModel.editor.onDraftChanged("* TODO Ask about the boiler\n")
+        viewModel.editor.commit()
         assertEquals("#+TITLE: Call the plumber\n\n* TODO Ask about the boiler\n", server.files[path])
     }
 
     @Test
     fun aNoteCreatedOfflineReachesTheServerOnTheNextSync() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         server.online = false
 
         val path = viewModel.createNote("Offline idea")
         assertNotNull(path)
-        assertTrue(path in viewModel.tree.paths(), "it exists here at once")
+        assertTrue(path in viewModel.library.tree.paths(), "it exists here at once")
         assertNull(server.files[path])
 
         server.online = true
-        viewModel.loadFromServer()
+        viewModel.server.load()
         assertEquals("#+TITLE: Offline idea\n\n", server.files[path])
     }
 
     @Test
     fun aNoteIsNotCreatedOverAnother() = runTest {
         inbox = ""
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
         assertNull(viewModel.createNote("Notes"))
 
@@ -95,7 +95,7 @@ class NoteLifecycleTest {
 
     @Test
     fun aTitleWithNothingInItIsRefused() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
         assertNull(viewModel.createNote("  ?! "))
         assertNull(viewModel.newNotePathFor(""))
@@ -103,30 +103,30 @@ class NoteLifecycleTest {
 
     @Test
     fun renamingTheOpenNoteMovesItEverywhereAndKeepsItOpen() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         viewModel.onFileSelected(existing)
-        viewModel.toggleFold(1)
+        viewModel.folds.toggle(1)
 
         assertTrue(viewModel.renameNote(existing, "archive/old notes"))
 
         val target = "archive/old notes.org"
         assertEquals(existingText, server.files[target])
         assertNull(server.files[existing])
-        assertEquals(listOf(target), viewModel.tree.paths())
-        assertEquals("Selected: $target", viewModel.selectedFileLabel)
-        assertEquals(existingText, viewModel.selectedFileContent)
-        assertEquals(setOf(1), viewModel.foldedElements, "the fold moved with the note")
+        assertEquals(listOf(target), viewModel.library.tree.paths())
+        assertEquals("Selected: $target", viewModel.note.label)
+        assertEquals(existingText, viewModel.note.content)
+        assertEquals(setOf(1), viewModel.folds.folded, "the fold moved with the note")
     }
 
     @Test
     fun renamingKeepsAnUnsyncedEdit() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         server.online = false
         store.save(existing, "#+TITLE: Notes\n\n* TODO Edited offline\n")
 
         assertTrue(viewModel.renameNote(existing, "renamed.org"))
         server.online = true
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
         assertEquals("#+TITLE: Notes\n\n* TODO Edited offline\n", server.files["renamed.org"])
         assertNull(server.files[existing])
@@ -135,7 +135,7 @@ class NoteLifecycleTest {
     @Test
     fun renamingRefusesATakenOrInvalidName() = runTest {
         server.files["other.org"] = "* Other\n"
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
         assertFalse(viewModel.renameNote(existing, "other.org"))
         assertFalse(viewModel.renameNote(existing, "../outside.org"))
@@ -147,41 +147,41 @@ class NoteLifecycleTest {
     @Test
     fun deletingTheOpenNoteRemovesItFromBothSidesAndOpensAnother() = runTest {
         server.files["other.org"] = "* Other\n"
-        viewModel.loadFromServer()
+        viewModel.server.load()
         viewModel.onFileSelected(existing)
 
         viewModel.deleteNote(existing)
 
         assertNull(server.files[existing])
-        assertEquals(listOf("other.org"), viewModel.tree.paths())
-        assertEquals("Selected: other.org", viewModel.selectedFileLabel)
-        viewModel.loadFromServer()
-        assertEquals(listOf("other.org"), viewModel.tree.paths(), "it does not come back")
+        assertEquals(listOf("other.org"), viewModel.library.tree.paths())
+        assertEquals("Selected: other.org", viewModel.note.label)
+        viewModel.server.load()
+        assertEquals(listOf("other.org"), viewModel.library.tree.paths(), "it does not come back")
     }
 
     @Test
     fun aDeleteWarnsAboutUnsyncedEditsAndMadeOfflineStillHappens() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         assertFalse(viewModel.hasUnsyncedChanges(existing))
         server.online = false
         store.save(existing, "#+TITLE: Notes\n\n* Unsynced\n")
         assertTrue(viewModel.hasUnsyncedChanges(existing))
 
         viewModel.deleteNote(existing)
-        assertEquals(emptyList(), viewModel.tree.paths())
+        assertEquals(emptyList(), viewModel.library.tree.paths())
         server.online = true
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
         assertNull(server.files[existing])
-        assertEquals(emptyList(), viewModel.tree.paths())
+        assertEquals(emptyList(), viewModel.library.tree.paths())
     }
 
     @Test
     fun deletingTheLastNoteLeavesNothingSelected() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         viewModel.deleteNote(existing)
 
-        assertEquals("No file selected", viewModel.selectedFileLabel)
-        assertEquals("", viewModel.selectedFileContent)
+        assertEquals("No file selected", viewModel.note.label)
+        assertEquals("", viewModel.note.content)
     }
 }

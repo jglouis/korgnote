@@ -50,14 +50,14 @@ class CalendarNavigationTest {
         * TODO Delta
     """.trimIndent() + "\n"
 
-    private lateinit var viewModel: FileTreeViewModel
+    private lateinit var viewModel: NotesViewModel
 
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val store = DocumentStore(InMemoryReplicaStorage())
         val api = FakeSyncApi(mutableMapOf(agenda to agendaText, other to otherText))
-        viewModel = FileTreeViewModel(SyncEngine(store, api), store, today = { today })
+        viewModel = NotesViewModel(SyncEngine(store, api), store, today = { today })
     }
 
     @AfterTest
@@ -66,13 +66,13 @@ class CalendarNavigationTest {
     }
 
     private fun entry(file: String, title: String): AgendaEntry =
-        viewModel.agenda.on(sep25).map { it.entry }.first { it.file == file && it.title == title }
+        viewModel.agenda.index.on(sep25).map { it.entry }.first { it.file == file && it.title == title }
 
     @Test
     fun theCalendarSeesEveryDatedHeadingInEveryFile() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
-        val onThe25th = viewModel.agenda.on(sep25).map { it.entry.file to it.entry.title }
+        val onThe25th = viewModel.agenda.index.on(sep25).map { it.entry.file to it.entry.title }
 
         assertEquals(
             listOf(agenda to "Final Review", agenda to "Review", agenda to "Gamma", other to "Gamma"),
@@ -82,65 +82,65 @@ class CalendarNavigationTest {
 
     @Test
     fun theIndexFollowsAnEdit() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         viewModel.onFileSelected(other)
 
-        viewModel.onContentChanged(otherText.replace("* TODO Delta", "* TODO Delta\nSCHEDULED: <2026-09-25 Fri>"))
+        viewModel.note.onContentChanged(otherText.replace("* TODO Delta", "* TODO Delta\nSCHEDULED: <2026-09-25 Fri>"))
         viewModel.saveCurrentFile()
 
-        assertTrue(viewModel.agenda.on(sep25).any { it.entry.title == "Delta" })
+        assertTrue(viewModel.agenda.index.on(sep25).any { it.entry.title == "Delta" })
     }
 
     @Test
     fun opensTheEntryAtItsHeading() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
-        viewModel.openAgendaEntry(entry(agenda, "Gamma"))
+        viewModel.agenda.openEntry(entry(agenda, "Gamma"))
 
         // preamble, Alpha, Final Review, Review, Gamma
-        assertEquals(4, viewModel.scrollToElementIndex)
+        assertEquals(4, viewModel.note.scrollToElementIndex)
     }
 
     /** "Review" must not land on "Final Review", which comes first and ends with the same word. */
     @Test
     fun opensTheHeadingItCameFromNotOneWithASimilarTitle() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
-        viewModel.openAgendaEntry(entry(agenda, "Review"))
+        viewModel.agenda.openEntry(entry(agenda, "Review"))
 
-        assertEquals(3, viewModel.scrollToElementIndex)
+        assertEquals(3, viewModel.note.scrollToElementIndex)
     }
 
     /** The regression: the heading must be found in the file being opened, not the one being left. */
     @Test
     fun resolvesAgainstTheNewFileNotThePreviousOne() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         viewModel.onFileSelected(agenda)
 
-        viewModel.openAgendaEntry(entry(other, "Gamma"))
+        viewModel.agenda.openEntry(entry(other, "Gamma"))
 
         // "Gamma" is index 4 in agenda.org but index 1 in other.org.
-        assertEquals(otherText, viewModel.selectedFileContent)
-        assertEquals(1, viewModel.scrollToElementIndex)
+        assertEquals(otherText, viewModel.note.content)
+        assertEquals(1, viewModel.note.scrollToElementIndex)
     }
 
     @Test
     fun openingWithoutATargetClearsAnEarlierOne() = runTest {
-        viewModel.loadFromServer()
-        viewModel.openAgendaEntry(entry(agenda, "Gamma"))
+        viewModel.server.load()
+        viewModel.agenda.openEntry(entry(agenda, "Gamma"))
 
         viewModel.onFileSelected(other)
 
-        assertNull(viewModel.scrollToElementIndex)
+        assertNull(viewModel.note.scrollToElementIndex)
     }
 
     @Test
     fun theTargetIsConsumedOnceItHasBeenScrolledTo() = runTest {
-        viewModel.loadFromServer()
-        viewModel.openAgendaEntry(entry(agenda, "Gamma"))
+        viewModel.server.load()
+        viewModel.agenda.openEntry(entry(agenda, "Gamma"))
 
-        viewModel.onScrolledToElement()
+        viewModel.note.onScrolledToElement()
 
-        assertNull(viewModel.scrollToElementIndex)
+        assertNull(viewModel.note.scrollToElementIndex)
     }
 }

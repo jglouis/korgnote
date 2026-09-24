@@ -5,7 +5,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.korgnote.app.viewmodel.FakeSyncApi
-import com.korgnote.app.viewmodel.FileTreeViewModel
+import com.korgnote.app.viewmodel.NotesViewModel
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
@@ -35,15 +35,15 @@ class DrawerOpensFileTest {
     private val inboxText = "* TODO Buy milk\n"
     private val journalText = "* Went for a walk\n"
 
-    private lateinit var viewModel: FileTreeViewModel
+    private lateinit var viewModel: NotesViewModel
 
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val store = DocumentStore(InMemoryReplicaStorage())
         val api = FakeSyncApi(mutableMapOf(inbox to inboxText, journal to journalText))
-        viewModel = FileTreeViewModel(SyncEngine(store, api), store)
-        runBlocking { viewModel.loadFromServer() }
+        viewModel = NotesViewModel(SyncEngine(store, api), store)
+        runBlocking { viewModel.server.load() }
     }
 
     @AfterTest
@@ -54,13 +54,13 @@ class DrawerOpensFileTest {
     @Test
     fun clickingARowOpensThatDocument() = runComposeUiTest {
         setContent {
-            FileTree(root = viewModel.filteredTree, onFileSelected = { viewModel.onFileSelected(it) })
+            FileTree(root = viewModel.search.filteredTree, onFileSelected = { viewModel.onFileSelected(it) })
         }
 
         onNodeWithText("2025-01-01.org").performClick()
 
-        assertEquals(journalText, viewModel.selectedFileContent)
-        assertEquals("Selected: $journal", viewModel.selectedFileLabel)
+        assertEquals(journalText, viewModel.note.content)
+        assertEquals("Selected: $journal", viewModel.note.label)
     }
 
     // There is deliberately no test here for clicking a row while the tree is filtered.

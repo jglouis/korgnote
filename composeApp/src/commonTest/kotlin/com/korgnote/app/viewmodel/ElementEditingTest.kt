@@ -31,14 +31,14 @@ class ElementEditingTest {
     """.trimIndent() + "\n"
 
     private lateinit var repository: FakeSyncApi
-    private lateinit var viewModel: FileTreeViewModel
+    private lateinit var viewModel: NotesViewModel
 
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         repository = FakeSyncApi(mutableMapOf(path to initialText))
         val store = DocumentStore(InMemoryReplicaStorage())
-        viewModel = FileTreeViewModel(SyncEngine(store, repository), store)
+        viewModel = NotesViewModel(SyncEngine(store, repository), store)
     }
 
     @AfterTest
@@ -47,7 +47,7 @@ class ElementEditingTest {
     }
 
     private suspend fun openFile() {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         viewModel.onFileSelected(path)
     }
 
@@ -55,14 +55,14 @@ class ElementEditingTest {
     fun addingAHeadingAtTheEndSavesIt() = runTest {
         openFile()
 
-        viewModel.addElementAtEnd()
-        viewModel.onElementDraftChanged("* TODO Buy milk\n")
-        viewModel.commitElementEdit()
+        viewModel.editor.addAtEnd()
+        viewModel.editor.onDraftChanged("* TODO Buy milk\n")
+        viewModel.editor.commit()
 
-        assertTrue(viewModel.selectedFileContent.endsWith("* TODO Buy milk\n"), viewModel.selectedFileContent)
-        assertEquals(initialText + "* TODO Buy milk\n", viewModel.selectedFileContent)
-        assertEquals(viewModel.selectedFileContent, repository.saves.last().second)
-        assertNull(viewModel.editingElementIndex)
+        assertTrue(viewModel.note.content.endsWith("* TODO Buy milk\n"), viewModel.note.content)
+        assertEquals(initialText + "* TODO Buy milk\n", viewModel.note.content)
+        assertEquals(viewModel.note.content, repository.saves.last().second)
+        assertNull(viewModel.editor.editingIndex)
     }
 
     @Test
@@ -70,54 +70,54 @@ class ElementEditingTest {
         openFile()
         val firstTask = 1 // preamble, first task, second task
 
-        viewModel.addElementAfter(firstTask)
-        viewModel.onElementDraftChanged("* TODO Inserted\n")
-        viewModel.commitElementEdit()
+        viewModel.editor.addAfter(firstTask)
+        viewModel.editor.onDraftChanged("* TODO Inserted\n")
+        viewModel.editor.commit()
 
         assertEquals(
             initialText.replace("\n* TODO Second task", "\n* TODO Inserted\n* TODO Second task"),
-            viewModel.selectedFileContent,
+            viewModel.note.content,
         )
-        assertEquals(viewModel.selectedFileContent, repository.saves.last().second)
+        assertEquals(viewModel.note.content, repository.saves.last().second)
     }
 
     @Test
     fun cancellingAnAddedHeadingRemovesItAgain() = runTest {
         openFile()
 
-        viewModel.addElementAtEnd()
-        viewModel.onElementDraftChanged("* TODO Never mind\n")
-        viewModel.cancelElementEdit()
+        viewModel.editor.addAtEnd()
+        viewModel.editor.onDraftChanged("* TODO Never mind\n")
+        viewModel.editor.cancel()
 
-        assertEquals(initialText, viewModel.selectedFileContent)
+        assertEquals(initialText, viewModel.note.content)
         assertTrue(repository.saves.isEmpty(), "cancelling must not write anything")
-        assertNull(viewModel.editingElementIndex)
+        assertNull(viewModel.editor.editingIndex)
     }
 
     @Test
     fun editingAnExistingElementSavesOnlyThatElement() = runTest {
         openFile()
 
-        viewModel.beginElementEdit(1)
-        viewModel.onElementDraftChanged("* TODO First task\nRewritten body.\n\n")
-        viewModel.commitElementEdit()
+        viewModel.editor.beginEdit(1)
+        viewModel.editor.onDraftChanged("* TODO First task\nRewritten body.\n\n")
+        viewModel.editor.commit()
 
         assertEquals(
             initialText.replace("Body of the first task.", "Rewritten body."),
-            viewModel.selectedFileContent,
+            viewModel.note.content,
         )
-        assertEquals(viewModel.selectedFileContent, repository.saves.last().second)
+        assertEquals(viewModel.note.content, repository.saves.last().second)
     }
 
     @Test
     fun cancellingAnExistingElementLeavesTheDocumentAlone() = runTest {
         openFile()
 
-        viewModel.beginElementEdit(1)
-        viewModel.onElementDraftChanged("* TODO First task\nDiscarded.\n")
-        viewModel.cancelElementEdit()
+        viewModel.editor.beginEdit(1)
+        viewModel.editor.onDraftChanged("* TODO First task\nDiscarded.\n")
+        viewModel.editor.cancel()
 
-        assertEquals(initialText, viewModel.selectedFileContent)
+        assertEquals(initialText, viewModel.note.content)
         assertTrue(repository.saves.isEmpty())
     }
 
@@ -125,25 +125,25 @@ class ElementEditingTest {
     fun theCaretStartsAfterTheStarsOfANewHeading() = runTest {
         openFile()
 
-        viewModel.addElementAtEnd()
+        viewModel.editor.addAtEnd()
 
-        assertEquals("* \n", viewModel.elementDraft)
-        assertEquals(2, viewModel.elementDraftCaret)
+        assertEquals("* \n", viewModel.editor.draft)
+        assertEquals(2, viewModel.editor.draftCaret)
     }
 
     @Test
     fun addingTwoHeadingsInARowKeepsBoth() = runTest {
         openFile()
 
-        viewModel.addElementAtEnd()
-        viewModel.onElementDraftChanged("* TODO One\n")
-        viewModel.commitElementEdit()
+        viewModel.editor.addAtEnd()
+        viewModel.editor.onDraftChanged("* TODO One\n")
+        viewModel.editor.commit()
 
-        viewModel.addElementAtEnd()
-        viewModel.onElementDraftChanged("* TODO Two\n")
-        viewModel.commitElementEdit()
+        viewModel.editor.addAtEnd()
+        viewModel.editor.onDraftChanged("* TODO Two\n")
+        viewModel.editor.commit()
 
-        assertEquals(initialText + "* TODO One\n* TODO Two\n", viewModel.selectedFileContent)
+        assertEquals(initialText + "* TODO One\n* TODO Two\n", viewModel.note.content)
     }
 
     // --- Every way of adding a heading (T24 moved them; none may be lost) ---
@@ -158,7 +158,7 @@ class ElementEditingTest {
 
     private suspend fun openProject() {
         repository.files["project.org"] = projectText
-        viewModel.loadFromServer()
+        viewModel.server.load()
         viewModel.onFileSelected("project.org")
     }
 
@@ -166,13 +166,13 @@ class ElementEditingTest {
     fun addingBelowAHeadingGoesAfterItsWholeSubtree() = runTest {
         openProject()
 
-        viewModel.addElementAfter(0) // Project
-        viewModel.onElementDraftChanged("* Sibling\n")
-        viewModel.commitElementEdit()
+        viewModel.editor.addAfter(0) // Project
+        viewModel.editor.onDraftChanged("* Sibling\n")
+        viewModel.editor.commit()
 
         assertEquals(
             projectText.replace("* Other", "* Sibling\n* Other"),
-            viewModel.selectedFileContent,
+            viewModel.note.content,
             "a sibling inserted before the steps would have taken them over",
         )
     }
@@ -181,14 +181,14 @@ class ElementEditingTest {
     fun addingASubheadingMakesAFirstChild() = runTest {
         openProject()
 
-        viewModel.addSubheading(0)
-        assertEquals("** \n", viewModel.elementDraft)
-        viewModel.onElementDraftChanged("** Step zero\n")
-        viewModel.commitElementEdit()
+        viewModel.editor.addSubheading(0)
+        assertEquals("** \n", viewModel.editor.draft)
+        viewModel.editor.onDraftChanged("** Step zero\n")
+        viewModel.editor.commit()
 
         assertEquals(
             projectText.replace("** Step one", "** Step zero\n** Step one"),
-            viewModel.selectedFileContent,
+            viewModel.note.content,
         )
     }
 
@@ -196,13 +196,13 @@ class ElementEditingTest {
     fun addingBelowThePreambleMakesTheFirstHeading() = runTest {
         openFile()
 
-        viewModel.addElementAfter(0)
-        viewModel.onElementDraftChanged("* TODO Zeroth task\n")
-        viewModel.commitElementEdit()
+        viewModel.editor.addAfter(0)
+        viewModel.editor.onDraftChanged("* TODO Zeroth task\n")
+        viewModel.editor.commit()
 
         assertEquals(
             initialText.replace("\n* TODO First task", "\n* TODO Zeroth task\n* TODO First task"),
-            viewModel.selectedFileContent,
+            viewModel.note.content,
         )
     }
 
@@ -210,20 +210,20 @@ class ElementEditingTest {
     fun savingAndAddingBelowKeepsTheDraftAndOpensASibling() = runTest {
         openFile()
 
-        viewModel.beginElementEdit(1)
-        viewModel.onElementDraftChanged("* TODO First task\nEdited.\n\n")
-        viewModel.commitElementEditAndAddBelow()
+        viewModel.editor.beginEdit(1)
+        viewModel.editor.onDraftChanged("* TODO First task\nEdited.\n\n")
+        viewModel.editor.commitAndAddBelow()
 
         val saved = initialText.replace("Body of the first task.", "Edited.")
         assertEquals(saved, repository.saves.last().second, "the draft is saved before anything else")
-        assertEquals(2, viewModel.editingElementIndex)
-        assertEquals("* \n", viewModel.elementDraft)
+        assertEquals(2, viewModel.editor.editingIndex)
+        assertEquals("* \n", viewModel.editor.draft)
 
-        viewModel.onElementDraftChanged("* TODO Right after\n")
-        viewModel.commitElementEdit()
+        viewModel.editor.onDraftChanged("* TODO Right after\n")
+        viewModel.editor.commit()
         assertEquals(
             saved.replace("\n* TODO Second task", "\n* TODO Right after\n* TODO Second task"),
-            viewModel.selectedFileContent,
+            viewModel.note.content,
         )
     }
 
@@ -231,19 +231,19 @@ class ElementEditingTest {
     fun savingAndAddingBelowFollowsTheLastHeadingInTheDraft() = runTest {
         openFile()
 
-        viewModel.beginElementEdit(1)
-        viewModel.onElementDraftChanged("* TODO First task\n** Typed child\n")
-        viewModel.commitElementEditAndAddBelow()
+        viewModel.editor.beginEdit(1)
+        viewModel.editor.onDraftChanged("* TODO First task\n** Typed child\n")
+        viewModel.editor.commitAndAddBelow()
 
-        assertEquals("** \n", viewModel.elementDraft, "a sibling of the typed child, at its level")
-        viewModel.onElementDraftChanged("** Another child\n")
-        viewModel.commitElementEdit()
+        assertEquals("** \n", viewModel.editor.draft, "a sibling of the typed child, at its level")
+        viewModel.editor.onDraftChanged("** Another child\n")
+        viewModel.editor.commit()
         assertEquals(
             initialText.replace(
                 "* TODO First task\nBody of the first task.\n\n",
                 "* TODO First task\n** Typed child\n** Another child\n",
             ),
-            viewModel.selectedFileContent,
+            viewModel.note.content,
         )
     }
 
@@ -251,13 +251,13 @@ class ElementEditingTest {
     fun typingAHeadingLineInADraftAddsAHeadingOnSave() = runTest {
         openFile()
 
-        viewModel.beginElementEdit(1)
-        viewModel.onElementDraftChanged("* TODO First task\nBody of the first task.\n* TODO Typed\n\n")
-        viewModel.commitElementEdit()
+        viewModel.editor.beginEdit(1)
+        viewModel.editor.onDraftChanged("* TODO First task\nBody of the first task.\n* TODO Typed\n\n")
+        viewModel.editor.commit()
 
         assertEquals(
             listOf("TODO First task", "TODO Typed", "TODO Second task"),
-            viewModel.selectedFileContent.let { text -> text.orgElements().drop(1).map { it.title } },
+            viewModel.note.content.let { text -> text.orgElements().drop(1).map { it.title } },
         )
     }
 
@@ -265,10 +265,10 @@ class ElementEditingTest {
     fun discardingASubheadingRemovesIt() = runTest {
         openProject()
 
-        viewModel.addSubheading(0)
-        viewModel.cancelElementEdit()
+        viewModel.editor.addSubheading(0)
+        viewModel.editor.cancel()
 
-        assertEquals(projectText, viewModel.selectedFileContent)
+        assertEquals(projectText, viewModel.note.content)
     }
 
     // --- Deleting a heading ---
@@ -277,9 +277,9 @@ class ElementEditingTest {
     fun deletingAHeadingRemovesItsSubtreeAndSaves() = runTest {
         openProject()
 
-        assertTrue(viewModel.deleteSection(0))
+        assertTrue(viewModel.editor.deleteSection(0))
 
-        assertEquals("* Other\n", viewModel.selectedFileContent)
+        assertEquals("* Other\n", viewModel.note.content)
         assertEquals("* Other\n", repository.files["project.org"], "pushed like any edit")
     }
 
@@ -287,28 +287,28 @@ class ElementEditingTest {
     fun deletingASubheadingLeavesItsParentAndSiblings() = runTest {
         openProject()
 
-        viewModel.deleteSection(1) // Step one
+        viewModel.editor.deleteSection(1) // Step one
 
-        assertEquals(projectText.replace("** Step one\n", ""), viewModel.selectedFileContent)
+        assertEquals(projectText.replace("** Step one\n", ""), viewModel.note.content)
     }
 
     @Test
     fun deletingIsRefusedWhileAnElementIsBeingEdited() = runTest {
         openProject()
-        viewModel.beginElementEdit(3)
+        viewModel.editor.beginEdit(3)
 
-        assertFalse(viewModel.deleteSection(1))
+        assertFalse(viewModel.editor.deleteSection(1))
 
-        assertEquals(projectText, viewModel.selectedFileContent)
-        assertEquals(3, viewModel.editingElementIndex, "the draft is left alone")
+        assertEquals(projectText, viewModel.note.content)
+        assertEquals(3, viewModel.editor.editingIndex, "the draft is left alone")
     }
 
     @Test
     fun thePreambleCannotBeDeleted() = runTest {
         openFile()
 
-        assertFalse(viewModel.deleteSection(0))
-        assertEquals(initialText, viewModel.selectedFileContent)
+        assertFalse(viewModel.editor.deleteSection(0))
+        assertEquals(initialText, viewModel.note.content)
         assertTrue(repository.saves.isEmpty())
     }
 }

@@ -44,14 +44,14 @@ class CompletionContextTest {
         * Repairs                                    :house:
     """.trimIndent() + "\n"
 
-    private lateinit var viewModel: FileTreeViewModel
+    private lateinit var viewModel: NotesViewModel
 
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val store = DocumentStore(InMemoryReplicaStorage())
         val api = FakeSyncApi(mutableMapOf(work to workText, home to homeText))
-        viewModel = FileTreeViewModel(SyncEngine(store, api), store, today = { LocalDate(2026, 9, 23) })
+        viewModel = NotesViewModel(SyncEngine(store, api), store, today = { LocalDate(2026, 9, 23) })
     }
 
     @AfterTest
@@ -61,58 +61,58 @@ class CompletionContextTest {
 
     @Test
     fun tagsComeFromTheWholeReplicaMostUsedFirst() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
         viewModel.onFileSelected(home)
 
         // `work` appears three times, the rest once each — and `house`, from the other file, is
         // offered while editing this one.
-        assertEquals("work", viewModel.completionContext.knownTags.first())
-        assertTrue(viewModel.completionContext.knownTags.containsAll(listOf("house", "money")))
+        assertEquals("work", viewModel.completion.context.knownTags.first())
+        assertTrue(viewModel.completion.context.knownTags.containsAll(listOf("house", "money")))
     }
 
     @Test
     fun todoKeywordsComeFromTheOpenFile() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
         viewModel.onFileSelected(work)
-        assertContentEquals(listOf("TODO", "NEXT", "WAITING"), viewModel.completionContext.todoKeywords.todo.toList())
-        assertContentEquals(listOf("DONE", "CANCELLED"), viewModel.completionContext.todoKeywords.done.toList())
+        assertContentEquals(listOf("TODO", "NEXT", "WAITING"), viewModel.completion.context.todoKeywords.todo.toList())
+        assertContentEquals(listOf("DONE", "CANCELLED"), viewModel.completion.context.todoKeywords.done.toList())
 
         // The other file names no workflow, so completion there offers what the notes declare —
         // standing in for the editor-wide setting such a file relies on.
         viewModel.onFileSelected(home)
-        assertContentEquals(listOf("TODO", "NEXT", "WAITING"), viewModel.completionContext.todoKeywords.todo.toList())
-        assertContentEquals(listOf("DONE", "CANCELLED"), viewModel.completionContext.todoKeywords.done.toList())
+        assertContentEquals(listOf("TODO", "NEXT", "WAITING"), viewModel.completion.context.todoKeywords.todo.toList())
+        assertContentEquals(listOf("DONE", "CANCELLED"), viewModel.completion.context.todoKeywords.done.toList())
     }
 
     @Test
     fun headingsAndPathsAreOfferedForLinks() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
         viewModel.onFileSelected(work)
 
-        assertContentEquals(listOf(home, work), viewModel.completionContext.filePaths)
-        assertContentEquals(listOf("Projects", "Invoices", "Meetings"), viewModel.completionContext.headings)
+        assertContentEquals(listOf(home, work), viewModel.completion.context.filePaths)
+        assertContentEquals(listOf("Projects", "Invoices", "Meetings"), viewModel.completion.context.headings)
     }
 
     @Test
     fun aNewTagIsOfferedAsSoonAsItIsSaved() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
         viewModel.onFileSelected(home)
-        assertTrue("garden" !in viewModel.completionContext.knownTags)
+        assertTrue("garden" !in viewModel.completion.context.knownTags)
 
-        viewModel.onContentChanged(homeText + "* Lawn :garden:\n")
+        viewModel.note.onContentChanged(homeText + "* Lawn :garden:\n")
         viewModel.saveCurrentFile()
 
-        assertTrue("garden" in viewModel.completionContext.knownTags)
-        assertTrue("Lawn" in viewModel.completionContext.headings)
+        assertTrue("garden" in viewModel.completion.context.knownTags)
+        assertTrue("Lawn" in viewModel.completion.context.headings)
     }
 
     @Test
     fun todayIsWhateverTheClockSays() = runTest {
-        viewModel.loadFromServer()
+        viewModel.server.load()
 
-        assertEquals(LocalDate(2026, 9, 23), viewModel.completionContext.today)
+        assertEquals(LocalDate(2026, 9, 23), viewModel.completion.context.today)
     }
 }
