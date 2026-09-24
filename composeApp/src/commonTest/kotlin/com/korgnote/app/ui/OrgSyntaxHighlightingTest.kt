@@ -117,10 +117,19 @@ class OrgSyntaxHighlightingTest {
         val out = buildOrgInlineString("see [[https://orgmode.org][Org]] and [[file:notes.org][notes]] and [[Plain]]")
         assertEquals("see Org and notes and Plain", out.text)
         val links = out.getLinkAnnotations(0, out.length)
-        assertEquals(1, links.size)
-        assertEquals("https://orgmode.org", (links.single().item as LinkAnnotation.Url).url)
-        assertEquals(4, links.single().start)
-        assertEquals(7, links.single().end)
+        // Web links go to the platform; links into the notes carry the prefix the app intercepts (T21).
+        assertEquals(
+            listOf("https://orgmode.org", "${NOTE_LINK_URI_PREFIX}file:notes.org", "${NOTE_LINK_URI_PREFIX}Plain"),
+            links.map { (it.item as LinkAnnotation.Url).url },
+        )
+        assertEquals(4, links.first().start)
+        assertEquals(7, links.first().end)
+    }
+
+    @Test
+    fun linksThatAreNotNotesAreNotFollowable() {
+        val out = buildOrgInlineString("press [[kbd:C-c C-c]] or open [[file:~/Sync/invoice.pdf][the invoice]]")
+        assertEquals(emptyList(), out.getLinkAnnotations(0, out.length))
     }
 
     @Test

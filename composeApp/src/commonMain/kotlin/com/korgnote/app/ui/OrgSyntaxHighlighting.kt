@@ -14,6 +14,7 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
+import com.korgnote.common.org.link.isNoteLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
@@ -663,7 +664,15 @@ private fun AnnotatedString.Builder.appendLink(m: MatchResult, viewMode: Boolean
     val target = m.groupValues[1]
     val description = m.groupValues[2]
     if (viewMode) {
-        appendUrl(target, description.ifEmpty { target.removePrefix("file:") }, viewMode = true)
+        val label = description.ifEmpty { target.removePrefix("file:") }
+        if (isNoteLink(target)) {
+            // Opened by the app, not the platform: see [NOTE_LINK_URI_PREFIX].
+            withLink(LinkAnnotation.Url(NOTE_LINK_URI_PREFIX + target, TextLinkStyles(style = linkStyle))) {
+                append(label)
+            }
+        } else {
+            appendUrl(target, label, viewMode = true)
+        }
         return
     }
     withStyle(SpanStyle(color = OrgColors.markup)) { append("[[") }
@@ -674,6 +683,14 @@ private fun AnnotatedString.Builder.appendLink(m: MatchResult, viewMode: Boolean
     }
     withStyle(SpanStyle(color = OrgColors.markup)) { append("]]") }
 }
+
+/**
+ * Marks a link into the notes. Reading mode renders them as ordinary URL links under this prefix,
+ * and the app's [androidx.compose.ui.platform.UriHandler] takes anything carrying it — so a link
+ * works wherever Org text is drawn (a note, the calendar, search results) without threading a
+ * callback through every builder that draws inline text.
+ */
+const val NOTE_LINK_URI_PREFIX = "korgnote-link:"
 
 private fun isExternalUrl(target: String) =
     target.startsWith("http://") || target.startsWith("https://") || target.startsWith("mailto:") ||

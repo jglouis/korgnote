@@ -80,6 +80,8 @@ on: every rendered element knows the range it came from.
 | *Add heading below* | Inserts a sibling of the same level after the element's **whole subtree**, and opens it |
 | *Add sub-heading* | Inserts a child one level deeper directly under the element's own body (its first child), and opens it |
 | *Delete heading* | After a confirmation that counts the sub-headings, removes the heading, its body and its whole subtree (`org-cut-subtree`), and saves |
+| Tap a link into the notes | Opens its target — see [08 T21](08-roadmap.md#t21--following-links-between-notes---done); the back arrow returns |
+| *Linked from* at the end | Every link elsewhere that leads to this note; tapping one opens it at the link |
 | Chevron on a heading | Folds or unfolds the heading's subtree — see [Folding](#folding) |
 | **+** FAB in reading mode | Appends a heading at the end of the file, and opens it |
 | Save FAB | Splices the draft back and saves |

@@ -9,6 +9,9 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.korgnote.common.fs.NotePaths
+import com.korgnote.common.org.link.OrgLinkResolution
+import com.korgnote.common.org.link.OrgLinkIndex
+import com.korgnote.common.org.link.OrgBacklink
 import com.korgnote.common.fs.TreeUtils
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.DocumentStore
@@ -334,6 +337,9 @@ class FileTreeViewModel(
             todoKeywords = document?.let { todoKeywordsOf(it.text, corpusKeywords) } ?: corpusKeywords,
             knownTags = tagsByUse(),
             filePaths = orgContents.keys.sorted(),
+            currentPath = currentFile.orEmpty(),
+            noteIds = noteIds,
+            noteTitles = noteTitles,
             headings = document?.sectionTitles().orEmpty(),
             today = today(),
         )
@@ -364,6 +370,7 @@ class FileTreeViewModel(
      */
     private fun refreshDerivedViews() {
         corpusKeywords = corpusTodoKeywords(orgContents.values.map { it.text })
+        refreshLinks()
         agenda = buildAgenda()
         refreshReminders()
         refreshFilteredTree()
@@ -665,6 +672,95 @@ class FileTreeViewModel(
         }
     }
 
+    // --- Links between notes (T21) ---
+
+    /** Resolves links against the notes as last read; rebuilt whenever they change. */
+    private var linkIndex = OrgLinkIndex(emptyMap())
+
+    /** Each note's own `:ID:` and `#+TITLE:`, which completion writes links with. */
+    private var noteIds: Map<String, String> = emptyMap()
+    private var noteTitles: Map<String, String> = emptyMap()
+
+    /** Every link in the notes that leads to the open one. */
+    var backlinks by mutableStateOf<List<OrgBacklink>>(emptyList())
+        private set
+
+    private fun refreshLinks() {
+        val texts = orgContents.mapValues { (_, doc) -> doc.text }
+        linkIndex = OrgLinkIndex(texts)
+        noteIds = texts.keys.mapNotNull { path -> linkIndex.fileIdOf(path)?.let { path to it } }.toMap()
+        noteTitles = texts.mapNotNull { (path, text) ->
+            TITLE_LINE.find(text)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }?.let { path to it }
+        }.toMap()
+        refreshBacklinks()
+    }
+
+    private fun refreshBacklinks() {
+        backlinks = currentFile?.let { linkIndex.backlinksTo(it) }.orEmpty()
+    }
+
+    /**
+     * Where to go back to: the notes a link was followed from, most recent last, each with the
+     * offset of the element that was on screen. Session only, like a browser's history.
+     */
+    private val history = ArrayDeque<Pair<String, Int>>()
+    var canGoBack by mutableStateOf(false)
+        private set
+
+    /** The element at the top of the reading view, reported by it so [goBack] can return there. */
+    private var readingElementIndex = 0
+
+    fun onReadingPositionChanged(elementIndex: Int) {
+        readingElementIndex = elementIndex
+    }
+
+    /**
+     * Follows a link tapped in reading mode: to the note, and the place in it, that [target] names.
+     * Says why when it cannot — the note is gone, the id is unknown, or it is not a note at all.
+     */
+    fun followLink(target: String) {
+        val from = currentFile ?: return
+        when (val resolved = linkIndex.resolve(target, from)) {
+            is OrgLinkResolution.Note -> {
+                val here = selectedFileContent.orgElements().getOrNull(readingElementIndex)?.start ?: 0
+                history.addLast(from to here)
+                canGoBack = true
+                onFileSelected(resolved.path, scrollToOffset = resolved.offset)
+                lastErrorMessage = resolved.missedSearch
+                    ?.let { "\"$it\" is not in ${resolved.path} any more; opened the note instead." }
+                    .orEmpty()
+            }
+            is OrgLinkResolution.NotFound -> lastErrorMessage = "Nothing in the notes matches [[$target]]."
+            is OrgLinkResolution.NotANote -> lastErrorMessage = "[[$target]] is not a note, so it cannot be opened here."
+            // Web links are opened by the platform before they get here; this is the fallback.
+            is OrgLinkResolution.External -> lastErrorMessage = "Open $target in a browser."
+        }
+    }
+
+    /** Returns to where the last followed link was tapped. */
+    fun goBack() {
+        // A note deleted or renamed since is skipped, not shown as an empty placeholder.
+        var entry = history.removeLastOrNull() ?: return
+        while (entry.first !in orgContents) entry = history.removeLastOrNull() ?: run {
+            canGoBack = false
+            return
+        }
+        val (path, offset) = entry
+        canGoBack = history.isNotEmpty()
+        cancelElementEdit()
+        onFileSelected(path, scrollToOffset = offset)
+    }
+
+    /** Opens the note a backlink is in, at the link. Back returns here, as for a followed link. */
+    fun openBacklink(backlink: OrgBacklink) {
+        currentFile?.let { from ->
+            val here = selectedFileContent.orgElements().getOrNull(readingElementIndex)?.start ?: 0
+            history.addLast(from to here)
+            canGoBack = true
+        }
+        onFileSelected(backlink.path, scrollToOffset = backlink.offset)
+    }
+
     // --- Creating, renaming and deleting notes (T20) ---
 
     /** Where a note titled [title] would be created, or null when the title makes no file name. */
@@ -872,8 +968,10 @@ class FileTreeViewModel(
         selectedOrgNode = doc
         currentFile = path
         scrollToElementIndex = null
+        readingElementIndex = 0
         // This file's `#+TODO:` keywords and headings are part of what completion offers.
         refreshCompletionContext()
+        refreshBacklinks()
         if (doc == null) {
             selectedFileContent = "* ${path}\nNo content yet."
             return false
@@ -1022,6 +1120,8 @@ class FileTreeViewModel(
     }
 
     private companion object {
+        val TITLE_LINE = Regex("(?im)^[ \\t]*#\\+TITLE:[ \\t]*(.+)$")
+
         /**
          * How long the typing has to stop before the corpus is scanned.
          *

@@ -1,6 +1,7 @@
 package com.korgnote.app.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -18,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -32,6 +34,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.link.OrgBacklink
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.sliceOf
 import com.korgnote.common.org.subtreeEnd
@@ -79,6 +82,11 @@ fun OrgDocumentView(
      * this is the only way a `FINISHED` heading far below it can know it is finished.
      */
     todoKeywords: OrgTodoConfig = DefaultOrgTodoConfig,
+    /** Links elsewhere in the notes that lead here, listed after the last element. */
+    backlinks: List<OrgBacklink> = emptyList(),
+    onOpenBacklink: (OrgBacklink) -> Unit = {},
+    /** The element at the top of the view, as the reader scrolls; where Back returns to. */
+    onFirstVisibleElement: (Int) -> Unit = {},
 ) {
     val elements = remember(text) { text.orgElements() }
     // An element is hidden when it lies inside a folded heading's subtree. The folded heading itself
@@ -184,6 +192,15 @@ fun OrgDocumentView(
                 }
             }
         }
+
+        // After every element, so an element's item index is still its element index.
+        if (backlinks.isNotEmpty()) {
+            item(key = "backlinks") { BacklinksSection(backlinks, onOpenBacklink) }
+        }
+    }
+
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex }.collect { onFirstVisibleElement(it) }
     }
 
     confirmingDelete?.let { index ->
@@ -219,6 +236,36 @@ fun OrgDocumentView(
             listState.layoutInfo.visibleItemsInfo.none { it.index == index }
         ) {
             listState.scrollToItem(index)
+        }
+    }
+}
+
+/**
+ * "What links here": each link elsewhere that leads to this note, by note and the heading it sits
+ * under. Tapping one opens that note at the link.
+ */
+@Composable
+private fun BacklinksSection(backlinks: List<OrgBacklink>, onOpen: (OrgBacklink) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp)) {
+        HorizontalDivider()
+        Text(
+            "Linked from (${backlinks.size})",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+        for (backlink in backlinks) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClickLabel = "Open") { onOpen(backlink) }
+                    .padding(vertical = 6.dp),
+            ) {
+                Text(backlink.context, style = MaterialTheme.typography.bodyMedium, color = OrgColors.link)
+                if (backlink.context != backlink.path) {
+                    Text(backlink.path, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                }
+            }
         }
     }
 }

@@ -5,6 +5,7 @@ import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.edit.nodeAt
+import com.korgnote.common.org.link.relativeNotePath
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.plus
@@ -25,6 +26,15 @@ data class CompletionContext(
     val knownTags: List<String> = emptyList(),
     /** Every note's path, for `[[file:…]]`. */
     val filePaths: List<String> = emptyList(),
+    /**
+     * The note being edited. A `file:` link is written relative to its folder, which is how Org
+     * reads it back; written from the notes' root instead, it breaks in every subfolder.
+     */
+    val currentPath: String = "",
+    /** A note's own `:ID:`, when it has one: linked by id, as org-roam links, so a rename cannot break it. */
+    val noteIds: Map<String, String> = emptyMap(),
+    /** A note's `#+TITLE:`, used as the link's description so reading mode shows a name, not a path. */
+    val noteTitles: Map<String, String> = emptyMap(),
     /** Headings of the document being edited, for `[[*Heading]]`. */
     val headings: List<String> = emptyList(),
     val today: LocalDate,
@@ -143,9 +153,11 @@ private fun linkItems(prefix: String, lineStart: Int, cursor: Int, ctx: Completi
     val paths = ctx.filePaths
         .filter { it.contains(typed, ignoreCase = true) }
         .map { path ->
+            val title = ctx.noteTitles[path] ?: path.substringAfterLast('/').removeSuffix(".org")
+            val target = ctx.noteIds[path]?.let { "id:$it" } ?: "file:${relativeNotePath(path, ctx.currentPath)}"
             CompletionItem(
                 label = path,
-                insert = "[[file:$path]]",
+                insert = "[[$target][$title]]",
                 replace = replace,
                 kind = CompletionItem.Kind.LINK,
             )

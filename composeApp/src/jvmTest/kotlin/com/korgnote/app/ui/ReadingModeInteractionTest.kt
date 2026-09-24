@@ -1,5 +1,10 @@
 package com.korgnote.app.ui
 
+import androidx.compose.ui.test.onChildren
+import com.korgnote.common.org.link.OrgBacklink
+import androidx.compose.ui.platform.UriHandler
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -130,5 +135,46 @@ class ReadingModeInteractionTest {
         onNodeWithText("Cancel").performClick()
 
         assertTrue(deleted.isEmpty())
+    }
+
+    /** A link is an inner target: a tap follows it, through the app's URI handler, and edits nothing. */
+    @Test
+    fun aTapOnANoteLinkFollowsItInsteadOfEditing() = runComposeUiTest {
+        val opened = mutableListOf<String>()
+        val edited = mutableListOf<Int>()
+        val handler = object : UriHandler {
+            override fun openUri(uri: String) { opened += uri }
+        }
+        setContent {
+            CompositionLocalProvider(LocalUriHandler provides handler) {
+                OrgDocumentView(text = "* Links\n[[id:plan-id][the plan]]\n", onEditElement = { edited += it })
+            }
+        }
+
+        // The element row merges its text for accessibility, so the link's own clickable node — the
+        // one a finger on the link hits — is found in the unmerged tree, under its paragraph.
+        onNodeWithText("the plan", useUnmergedTree = true).onChildren().onFirst().performClick()
+
+        assertEquals(listOf("${NOTE_LINK_URI_PREFIX}id:plan-id"), opened)
+        assertTrue(edited.isEmpty(), "following a link is not editing")
+    }
+
+    @Test
+    fun backlinksAreListedAfterTheNoteAndOpenWhenTapped() = runComposeUiTest {
+        val backlink = OrgBacklink(path = "daily/today.org", offset = 12, context = "Work")
+        val opened = mutableListOf<OrgBacklink>()
+        setContent {
+            OrgDocumentView(
+                modifier = Modifier.fillMaxSize(),
+                text = text,
+                backlinks = listOf(backlink),
+                onOpenBacklink = { opened += it },
+            )
+        }
+
+        onNodeWithText("Linked from (1)").assertExists()
+        onNodeWithText("Work").performClick()
+
+        assertEquals(listOf(backlink), opened)
     }
 }

@@ -49,7 +49,7 @@ Updated 2026-09-24.
 | 🟡 | T18 Notifications | Done on Android (checked on an emulator: app closed, network off, on the minute); iOS built, not yet seen on a device |
 | ✅ | T19 CI | Done — [ci.yml](../.github/workflows/ci.yml): Linux on every push, iOS nightly when master changed |
 | ✅ | T20 File lifecycle | Done — create into an inbox folder, rename/move, delete; offline-safe through tombstones |
-| ❌ | T21 Link navigation | Not started — links render but do not go anywhere |
+| ✅ | T21 Link navigation | Done — `id:`, `file:`, `*Heading`, `#id` and fuzzy links open their target; backlinks; Back |
 | ❌ | T22 Whole-file editing | Not started — decide whether the second editing surface survives |
 | ❌ | T23 Server container | Not started — a Dockerfile for the server, notes mounted from the host |
 | ✅ | T24 Reading-mode affordances | Done — tap to edit, long-press menu, one fold chevron per heading; [09](09-element-editing.md#the-surface) |
@@ -741,7 +741,32 @@ on another is the same question T11 answered for content, asked again for existe
 anything; deleting one removes it from both; renaming keeps its content and its sync state; and
 none of the three can lose an unsynced edit.
 
-### T21 · Following links between notes
+### T21 · Following links between notes — ✅ **done**
+**Landed** In reading mode — and in the calendar and search, which draw the same inline text — a
+tap on a link into the notes opens its target at the right element; web links still go to the
+browser, and `kbd:`, PDFs and other files stay plain text. A back arrow in the top bar returns to
+where the link was tapped. Every note ends with *Linked from (N)*, each entry opening its source
+at the link. Rules, in `shared/…/org/link/OrgLinks.kt`:
+- `id:` → the heading or file whose drawer declares that `:ID:` (the notes are org-roam's: 344
+  files carry one, and 104 links use them — more than any other note link).
+- `file:` → relative to the linking note, as Org reads it; failing that, the longest tail of the
+  path that names a note, so Emacs paths like `~/org-roam/daily/x.org` work. `::*Heading`,
+  `::#custom-id`, `::line` and fuzzy searches land inside; a search that no longer matches still
+  opens the note and says so, as Org does.
+- `*Heading`, `#custom-id` and plain `[[text]]` (`<<target>>`, `#+NAME:`, then a heading) resolve
+  within the note. Headings compare without keyword, priority, cookies, tags or case.
+**Completion now agrees with it** It used to write `[[file:notes/x.org]]` from the notes' root,
+which Org reads from the linking note's folder and so broke in every subfolder. It now writes the
+path relative to the note being edited, or `[[id:…][Title]]` when the target has its own `:ID:`,
+as org-roam does — which also survives a rename. A test completes every note and resolves it.
+**Verified** `OrgLinksTest` (15), `LinkNavigationTest`, UI tests for a real link tap (an inner
+target: it follows, never edits) and the backlinks list. Against the real notes: 103/104 `id:`
+links, every `file:` link to a note inside them, and 111 fuzzy links resolve; the misses are links
+that are broken in Emacs too. One backlink pass over all 367 notes takes ~33 ms on desktop, and is
+done once per change to the notes, not per note opened.
+**Not included** Following links from inside the editor, and the system back gesture (the arrow
+in the top bar is the way back for now).
+
 **Depends** T14
 **Scope** `[[file:…]]`, `[[*Heading]]` and `[[id:…]]` become navigation: tapping one in reading
 mode opens the target at the right element, which is the offset-to-element lookup the calendar and

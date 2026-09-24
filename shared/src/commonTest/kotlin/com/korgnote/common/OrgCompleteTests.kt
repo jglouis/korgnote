@@ -211,7 +211,28 @@ class OrgCompleteTests {
     fun acceptingALinkReplacesTheOpeningBrackets() {
         val fixture = "See [[groc‸"
         val item = completeAt(fixture).single()
-        assertEquals("See [[file:notes/groceries.org]]‸", apply(fixture, item))
+        assertEquals("See [[file:notes/groceries.org][groceries]]‸", apply(fixture, item))
+    }
+
+    /** Org reads a relative `file:` link from the linking note's folder, so it is written from there. */
+    @Test
+    fun aFileLinkIsWrittenRelativeToTheNoteBeingEdited() {
+        val fromDaily = ctx.copy(currentPath = "daily/2026-09-24.org")
+        val item = completeAt("See [[groc‸", fromDaily).single()
+        assertEquals("[[file:../notes/groceries.org][groceries]]", item.insert)
+
+        val sameFolder = ctx.copy(currentPath = "notes/inbox.org")
+        assertEquals("[[file:groceries.org][groceries]]", completeAt("See [[groc‸", sameFolder).single().insert)
+    }
+
+    /** A note with its own `:ID:` is linked the org-roam way, which survives a rename. */
+    @Test
+    fun aNoteWithAnIdIsLinkedByIdAndNamedByItsTitle() {
+        val withId = ctx.copy(
+            noteIds = mapOf("notes/groceries.org" to "abc-123"),
+            noteTitles = mapOf("notes/groceries.org" to "Groceries"),
+        )
+        assertEquals("[[id:abc-123][Groceries]]", completeAt("See [[groc‸", withId).single().insert)
     }
 
     @Test
