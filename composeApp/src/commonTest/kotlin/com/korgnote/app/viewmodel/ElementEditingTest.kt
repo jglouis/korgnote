@@ -270,4 +270,45 @@ class ElementEditingTest {
 
         assertEquals(projectText, viewModel.selectedFileContent)
     }
+
+    // --- Deleting a heading ---
+
+    @Test
+    fun deletingAHeadingRemovesItsSubtreeAndSaves() = runTest {
+        openProject()
+
+        assertTrue(viewModel.deleteSection(0))
+
+        assertEquals("* Other\n", viewModel.selectedFileContent)
+        assertEquals("* Other\n", repository.files["project.org"], "pushed like any edit")
+    }
+
+    @Test
+    fun deletingASubheadingLeavesItsParentAndSiblings() = runTest {
+        openProject()
+
+        viewModel.deleteSection(1) // Step one
+
+        assertEquals(projectText.replace("** Step one\n", ""), viewModel.selectedFileContent)
+    }
+
+    @Test
+    fun deletingIsRefusedWhileAnElementIsBeingEdited() = runTest {
+        openProject()
+        viewModel.beginElementEdit(3)
+
+        assertFalse(viewModel.deleteSection(1))
+
+        assertEquals(projectText, viewModel.selectedFileContent)
+        assertEquals(3, viewModel.editingElementIndex, "the draft is left alone")
+    }
+
+    @Test
+    fun thePreambleCannotBeDeleted() = runTest {
+        openFile()
+
+        assertFalse(viewModel.deleteSection(0))
+        assertEquals(initialText, viewModel.selectedFileContent)
+        assertTrue(repository.saves.isEmpty())
+    }
 }

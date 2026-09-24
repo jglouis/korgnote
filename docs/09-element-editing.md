@@ -76,9 +76,10 @@ on: every rendered element knows the range it came from.
 | Interaction | Effect |
 |---|---|
 | Tap an element | Opens it in an inline editor, in place |
-| Long-press an element | A menu: *Add heading below*, *Add sub-heading* |
+| Long-press an element | A menu: *Add heading below*, *Add sub-heading*, *Delete heading* |
 | *Add heading below* | Inserts a sibling of the same level after the element's **whole subtree**, and opens it |
 | *Add sub-heading* | Inserts a child one level deeper directly under the element's own body (its first child), and opens it |
+| *Delete heading* | After a confirmation that counts the sub-headings, removes the heading, its body and its whole subtree (`org-cut-subtree`), and saves |
 | Chevron on a heading | Folds or unfolds the heading's subtree — see [Folding](#folding) |
 | **+** FAB in reading mode | Appends a heading at the end of the file, and opens it |
 | Save FAB | Splices the draft back and saves |
@@ -96,6 +97,11 @@ its long-press *More actions*, since there is no longer a pencil to find.
 hundred identical pairs, taking width from the text and making a note look like a form. Editing now
 has the tap, and adding after one particular element is rare next to reading, so it moved into the
 long-press menu and the editor.
+
+*Delete heading* takes the subtree for the same reason Org does: a heading's sub-headings belong
+to it, and leaving them behind would re-parent them under whatever heading came before. The
+confirmation says how many go with it, since they may be folded or off screen. It is refused while
+another element is open in the editor, whose position the cut would move.
 
 *Add heading below* goes after the subtree rather than directly after the element: a heading
 inserted between a parent and its children would take the children over. Below the preamble it

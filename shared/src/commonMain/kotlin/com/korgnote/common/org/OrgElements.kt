@@ -179,3 +179,19 @@ fun List<OrgElement>.ancestorsOf(index: Int): List<Int> {
     }
     return ancestors.asReversed()
 }
+
+/**
+ * The document without the heading at [index] and its whole subtree — body and every descendant,
+ * as Org's `org-cut-subtree` removes them. Null for the preamble, which is not a heading, or an
+ * index that is not there.
+ *
+ * Elements start at line starts, so the text before the removed range already ends in a newline,
+ * and what follows keeps its own line: nothing around the cut is touched.
+ */
+fun String.withoutOrgSubtree(index: Int): String? {
+    val elements = orgElements()
+    val element = elements.getOrNull(index) ?: return null
+    if (element.isPreamble) return null
+    val end = elements[elements.subtreeEnd(index) - 1].endExclusive
+    return removeRange(element.start, end)
+}

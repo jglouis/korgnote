@@ -386,6 +386,7 @@ fun App() {
                                     onEditElement = { vm.beginElementEdit(it) },
                                     onAddHeadingBelow = { vm.addElementAfter(it) },
                                     onAddSubheading = { vm.addSubheading(it) },
+                                    onDeleteSection = { scope.launch { vm.deleteSection(it) } },
                                     foldedElements = vm.foldedElements,
                                     onToggleFold = { vm.toggleFold(it) },
                                     scrollToElementIndex = vm.scrollToElementIndex,

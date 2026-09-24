@@ -551,6 +551,22 @@ class FileTreeViewModel(
     }
 
     /**
+     * Deletes the heading at [index] with its body and every sub-heading, then saves.
+     *
+     * Refused while an element is open in the editor: the draft's position would move under it.
+     * Returns whether anything was deleted.
+     */
+    suspend fun deleteSection(index: Int): Boolean {
+        if (editingElementIndex != null) {
+            lastErrorMessage = "Save or discard the element you are editing first."
+            return false
+        }
+        selectedFileContent = selectedFileContent.withoutOrgSubtree(index) ?: return false
+        saveCurrentFile()
+        return true
+    }
+
+    /**
      * Saves the draft, then opens a new heading after it — the editor's own way of adding, since
      * most headings are added right after editing the one above.
      *

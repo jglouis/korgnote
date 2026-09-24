@@ -66,6 +66,8 @@ fun OrgDocumentView(
     onAddHeadingBelow: ((elementIndex: Int) -> Unit)? = null,
     /** From the long-press menu: a first child of the element. */
     onAddSubheading: ((elementIndex: Int) -> Unit)? = null,
+    /** From the long-press menu, once confirmed: the heading with its body and sub-headings. */
+    onDeleteSection: ((elementIndex: Int) -> Unit)? = null,
     /** Folded headings: each shows only its heading line, and its descendants render nothing. */
     foldedElements: Set<Int> = emptySet(),
     onToggleFold: ((elementIndex: Int) -> Unit)? = null,
@@ -89,6 +91,8 @@ fun OrgDocumentView(
         }
     }
     val listState = rememberLazyListState()
+    // The heading a delete is waiting to be confirmed for.
+    var confirmingDelete by remember { mutableStateOf<Int?>(null) }
 
     LazyColumn(
         modifier = modifier,
@@ -159,6 +163,7 @@ fun OrgDocumentView(
                                 isPreamble = element.isPreamble,
                                 onAddHeadingBelow = onAddHeadingBelow?.let { add -> { add(index) } },
                                 onAddSubheading = onAddSubheading?.let { add -> { add(index) } },
+                                onDelete = onDeleteSection?.let { { confirmingDelete = index } },
                             )
                         }
                         if (foldable && onToggleFold != null) {
@@ -178,6 +183,20 @@ fun OrgDocumentView(
                     }
                 }
             }
+        }
+    }
+
+    confirmingDelete?.let { index ->
+        val element = elements.getOrNull(index)
+        if (element == null || onDeleteSection == null) {
+            confirmingDelete = null
+        } else {
+            DeleteSectionDialog(
+                title = element.title,
+                subheadings = elements.subtreeEnd(index) - index - 1,
+                onDelete = { confirmingDelete = null; onDeleteSection(index) },
+                onDismiss = { confirmingDelete = null },
+            )
         }
     }
 
@@ -215,6 +234,7 @@ private fun ElementMenu(
     isPreamble: Boolean,
     onAddHeadingBelow: (() -> Unit)?,
     onAddSubheading: (() -> Unit)?,
+    onDelete: (() -> Unit)?,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         if (onAddHeadingBelow != null) {
@@ -230,7 +250,47 @@ private fun ElementMenu(
                 onClick = { onDismiss(); onAddSubheading() },
             )
         }
+        if (onDelete != null && !isPreamble) {
+            DropdownMenuItem(
+                text = { Text("Delete heading", color = MaterialTheme.colorScheme.error) },
+                onClick = { onDismiss(); onDelete() },
+            )
+        }
     }
+}
+
+/**
+ * Confirms deleting a heading. It says how much goes with it, because the sub-headings may be
+ * folded away or scrolled off screen, and a subtree is easy to underestimate.
+ */
+@Composable
+private fun DeleteSectionDialog(
+    title: String,
+    subheadings: Int,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete this heading?") },
+        text = {
+            Text(
+                buildString {
+                    append(title.ifBlank { "This heading" })
+                    append(" and its body")
+                    when (subheadings) {
+                        0 -> append(" will be deleted.")
+                        1 -> append(", with 1 sub-heading, will be deleted.")
+                        else -> append(", with $subheadings sub-headings, will be deleted.")
+                    }
+                },
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /**

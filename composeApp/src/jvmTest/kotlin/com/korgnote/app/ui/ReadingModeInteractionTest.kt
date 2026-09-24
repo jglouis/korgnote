@@ -105,4 +105,30 @@ class ReadingModeInteractionTest {
         onNodeWithContentDescription("Expand Project").performClick()
         onNodeWithText("Step body.").assertExists()
     }
+
+    @Test
+    fun deletingAHeadingIsConfirmedAndSaysWhatGoesWithIt() = runComposeUiTest {
+        val deleted = mutableListOf<Int>()
+        setContent { OrgDocumentView(text = text, onDeleteSection = { deleted += it }) }
+
+        onNodeWithText("Project").performTouchInput { longClick() }
+        onNodeWithText("Delete heading").performClick()
+        onNodeWithText("with 1 sub-heading", substring = true).assertExists()
+        assertTrue(deleted.isEmpty(), "nothing is deleted before it is confirmed")
+
+        onNodeWithText("Delete").performClick()
+        assertEquals(listOf(0), deleted)
+    }
+
+    @Test
+    fun cancellingADeleteKeepsTheHeading() = runComposeUiTest {
+        val deleted = mutableListOf<Int>()
+        setContent { OrgDocumentView(text = text, onDeleteSection = { deleted += it }) }
+
+        onNodeWithText("Step body.").performTouchInput { longClick() }
+        onNodeWithText("Delete heading").performClick()
+        onNodeWithText("Cancel").performClick()
+
+        assertTrue(deleted.isEmpty())
+    }
 }

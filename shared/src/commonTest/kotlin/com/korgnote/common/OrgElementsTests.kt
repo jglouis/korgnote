@@ -7,6 +7,7 @@ import com.korgnote.common.org.replaceOrgElement
 import com.korgnote.common.org.sliceOf
 import com.korgnote.common.org.subtreeEnd
 import com.korgnote.common.org.withNewOrgElement
+import com.korgnote.common.org.withoutOrgSubtree
 import com.korgnote.common.org.toOrgDocument
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -227,5 +228,23 @@ class OrgElementsTests {
         assertEquals(listOf(1), elements.ancestorsOf(4))
         assertEquals(emptyList(), elements.ancestorsOf(5))
         assertEquals(emptyList(), elements.ancestorsOf(0))
+    }
+
+    @Test
+    fun removingAHeadingTakesItsWholeSubtreeAndNothingElse() {
+        // preamble, Project, Step one, Detail, Step two, Other
+        assertEquals("#+TITLE: Tree\n\n* Other\n", nested.withoutOrgSubtree(1))
+        assertEquals(
+            "#+TITLE: Tree\n\n* Project\n** Step two\n* Other\n",
+            nested.withoutOrgSubtree(2),
+            "a sub-heading goes with its own children, not its siblings",
+        )
+        assertEquals("#+TITLE: Tree\n\n* Project\n** Step one\n*** Detail\n** Step two\n", nested.withoutOrgSubtree(5))
+    }
+
+    @Test
+    fun removingThePreambleOrNothingIsRefused() {
+        assertNull(nested.withoutOrgSubtree(0))
+        assertNull(nested.withoutOrgSubtree(42))
     }
 }
