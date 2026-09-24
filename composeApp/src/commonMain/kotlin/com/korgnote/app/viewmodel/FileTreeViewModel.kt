@@ -8,6 +8,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.korgnote.common.fs.NotePaths
 import com.korgnote.common.fs.TreeUtils
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.DocumentStore
@@ -90,6 +91,8 @@ class FileTreeViewModel(
     private val now: () -> LocalDateTime = {
         Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
     },
+    /** Where [createNote] puts a note; read each time, so a change in Settings applies at once. */
+    private val newNotesFolder: () -> String = { "" },
 ) : ViewModel() {
     // Exposed error message when network/server cannot be reached
     var lastErrorMessage by mutableStateOf("")
@@ -646,6 +649,94 @@ class FileTreeViewModel(
         }
     }
 
+    // --- Creating, renaming and deleting notes (T20) ---
+
+    /** Where a note titled [title] would be created, or null when the title makes no file name. */
+    fun newNotePathFor(title: String): String? =
+        NotePaths.fileNameFor(title)?.let { NotePaths.join(newNotesFolder(), it) }
+
+    /**
+     * Creates a note titled [title] in the new-notes folder, opens it, and starts its first heading:
+     * a capture, so what was worth writing down gets written before anything else is asked.
+     *
+     * Returns the new path, or null — with [lastErrorMessage] saying why — when the title makes no
+     * file name or a note already has it. Works offline; the next sync pushes it.
+     */
+    suspend fun createNote(title: String): String? {
+        val path = newNotePathFor(title)
+        if (path == null) {
+            lastErrorMessage = "A note needs a title with at least one letter or digit."
+            return null
+        }
+        if (!store.create(path, "#+TITLE: ${title.trim()}\n\n")) {
+            lastErrorMessage = "There is already a note called $path."
+            return null
+        }
+        cancelElementEdit()
+        currentFile = path
+        showFromReplica()
+        openNote(path)
+        addElementAtEnd()
+        syncQuietly()
+        return path
+    }
+
+    /**
+     * Renames [from] to [to], a path as typed. Content, unsynced edits and folds go with it.
+     * Returns false, with [lastErrorMessage] saying why, when [to] is not a valid path or is taken.
+     */
+    suspend fun renameNote(from: String, to: String): Boolean {
+        val target = NotePaths.normalize(to)
+        if (target == null) {
+            lastErrorMessage = "\"$to\" is not a note path: use folders and a name, like notes/idea.org."
+            return false
+        }
+        if (target == from) return true
+        val wasOpen = currentFile == from
+        // The element editor holds offsets into the note being moved; finish nothing half-way.
+        if (wasOpen) cancelElementEdit()
+        if (!store.rename(from, target)) {
+            lastErrorMessage = "There is already a note called $target."
+            return false
+        }
+        foldsByFile[from]?.let { foldsByFile = foldsByFile - from + (target to it) }
+        if (wasOpen) currentFile = target
+        showFromReplica()
+        if (wasOpen) openNote(target)
+        syncQuietly()
+        return true
+    }
+
+    /** True when [path] holds edits the server has not seen, which a delete would take with it. */
+    suspend fun hasUnsyncedChanges(path: String): Boolean = store.isDirty(path)
+
+    /**
+     * Deletes [path] here and, at the next sync, on the server — only the version deleted here, so
+     * an edit made elsewhere in the meantime brings the note back instead of being lost.
+     * The server keeps a copy in its trash either way.
+     */
+    suspend fun deleteNote(path: String) {
+        if (currentFile == path) {
+            cancelElementEdit()
+            currentFile = null
+        }
+        foldsByFile = foldsByFile - path
+        store.delete(path)
+        showFromReplica()
+        syncQuietly()
+    }
+
+    /** Pushes what just changed, if the server can be reached; offline, it waits for the next sync. */
+    private suspend fun syncQuietly() {
+        try {
+            sync.sync()
+            showFromReplica()
+        } catch (t: Throwable) {
+            currentCoroutineContext().ensureActive()
+            println("[DEBUG_LOG][FileTreeViewModel] Sync after a file change failed: ${t.message}")
+        }
+    }
+
     // Selected node for structural rendering in UI
     var selectedOrgNode: OrgNode? by mutableStateOf(null)
         private set
@@ -748,6 +839,18 @@ class FileTreeViewModel(
      * the wrong place, or nowhere at all.
      */
     fun onFileSelected(path: String, scrollToOffset: Int? = null) {
+        if (!beginOpening(path)) return
+        // From the replica, so opening a note works offline and does not wait on a round trip.
+        viewModelScope.launch { finishOpening(path, scrollToOffset) }
+    }
+
+    /** [onFileSelected] for callers that go on to edit the note and so must wait for its text. */
+    private suspend fun openNote(path: String) {
+        if (beginOpening(path)) finishOpening(path, scrollToOffset = null)
+    }
+
+    /** The part of opening that needs no text. False when there is no text to wait for. */
+    private fun beginOpening(path: String): Boolean {
         selectedFileLabel = "Selected: $path"
         val doc = orgContents[path]
         selectedOrgNode = doc
@@ -757,20 +860,23 @@ class FileTreeViewModel(
         refreshCompletionContext()
         if (doc == null) {
             selectedFileContent = "* ${path}\nNo content yet."
-            return
+            return false
         }
-        // From the replica, so opening a note works offline and does not wait on a round trip.
-        // The raw text is kept rather than re-serialised from the parse tree, so saving an
-        // unchanged file round-trips it byte for byte.
-        viewModelScope.launch {
-            val raw = store.read(path)
-            if (currentFile == path && raw != null) {
-                selectedFileContent = raw
-                scrollToElementIndex = scrollToOffset?.let { raw.elementIndexOfOffset(it) }
-                // A jump must never land inside a fold: open everything around the target, and
-                // the target itself, since what was asked for may be in its body.
-                scrollToElementIndex?.let { unfoldAncestorsOf(it, includingItself = true) }
-            }
+        return true
+    }
+
+    /**
+     * Shows [path]'s text. The raw text is kept rather than re-serialised from the parse tree, so
+     * saving an unchanged file round-trips it byte for byte.
+     */
+    private suspend fun finishOpening(path: String, scrollToOffset: Int?) {
+        val raw = store.read(path)
+        if (currentFile == path && raw != null) {
+            selectedFileContent = raw
+            scrollToElementIndex = scrollToOffset?.let { raw.elementIndexOfOffset(it) }
+            // A jump must never land inside a fold: open everything around the target, and
+            // the target itself, since what was asked for may be in its body.
+            scrollToElementIndex?.let { unfoldAncestorsOf(it, includingItself = true) }
         }
     }
 
@@ -860,8 +966,10 @@ class FileTreeViewModel(
         notesLoaded = true
         refreshDerivedViews()
 
-        val current = currentFile
+        // The open note may be gone: deleted here, or on another device.
+        val current = currentFile?.takeIf { it in orgContents }
         if (current == null) {
+            currentFile = null
             val first = paths.minOrNull()
             if (first != null) {
                 onFileSelected(first)
@@ -872,7 +980,13 @@ class FileTreeViewModel(
             }
         } else {
             selectedOrgNode = orgContents[current]
-            store.read(current)?.let { selectedFileContent = it }
+            store.read(current)?.let { fresh ->
+                // A heading being inserted is not in the replica until it is saved. When the note
+                // is otherwise unchanged — a sync that only pushed it — keep it on screen, or the
+                // editor would be left pointing at a heading that is gone.
+                if (textBeforeInsertion != null && fresh == textBeforeInsertion) return@let
+                selectedFileContent = fresh
+            }
         }
         pendingReminderOpen?.let { target ->
             pendingReminderOpen = null

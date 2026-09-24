@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.notifications.ReminderSettings
+import com.korgnote.common.fs.NotePaths
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -33,6 +34,7 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
     var leadText by remember { mutableStateOf("") }
     var digestOn by remember { mutableStateOf(false) }
     var digestText by remember { mutableStateOf("") }
+    var newNotesFolder by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         host = repo.getServerHost()
@@ -43,6 +45,7 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
         leadText = reminders.leadMinutes.toString()
         digestOn = reminders.digestEnabled
         digestText = reminders.digestTime.hhmm()
+        newNotesFolder = repo.getNewNotesFolder()
     }
 
     Column {
@@ -102,6 +105,18 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
             )
         }
 
+        Spacer(Modifier.height(24.dp))
+        Text("New notes")
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = newNotesFolder,
+            onValueChange = { newNotesFolder = it },
+            label = { Text("Folder for new notes (empty for the top)") },
+            placeholder = { Text("inbox") },
+            singleLine = true,
+        )
+
         if (error != null) {
             Spacer(Modifier.height(8.dp))
             Text(error!!)
@@ -123,6 +138,12 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
                 error = "Please enter the digest time as HH:MM."
                 return@Button
             }
+            val folder = newNotesFolder.trim().trim('/')
+            // Checked as a note path would be, so a bad folder is refused here and not by the server.
+            if (folder.isNotEmpty() && NotePaths.normalize("$folder/x.org") == null) {
+                error = "Please enter a folder inside the notes, like inbox or notes/inbox."
+                return@Button
+            }
             error = null
             scope.launch {
                 saving = true
@@ -139,6 +160,7 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
                             digestTime = digestTime ?: current.digestTime,
                         ),
                     )
+                    repo.setNewNotesFolder(folder)
                     saved = true
                     onSaved?.invoke()
                 } finally {

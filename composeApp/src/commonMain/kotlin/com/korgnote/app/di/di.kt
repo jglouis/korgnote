@@ -45,6 +45,7 @@ val appModule = module {
             get<DocumentStore>(),
             notifications = getOrNull<NotificationScheduler>() ?: NoopNotificationScheduler,
             reminderSettings = settings::getReminderSettings,
+            newNotesFolder = settings::getNewNotesFolder,
         )
     }
 }

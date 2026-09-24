@@ -42,6 +42,12 @@ class PersistentSettingsRepository : SettingsRepository {
         defaults.setObject(settings.encode(), forKey = KEY_REMINDERS)
     }
 
+    override fun getNewNotesFolder(): String = defaults.stringForKey(KEY_NEW_NOTES_FOLDER) ?: ""
+
+    override fun setNewNotesFolder(folder: String) {
+        defaults.setObject(folder, forKey = KEY_NEW_NOTES_FOLDER)
+    }
+
     private fun loadHost(): String {
         val def = defaultServerBaseUrl().removePrefix("http://").removePrefix("https://").substringBefore(":")
         val value = defaults.stringForKey(KEY_HOST)
@@ -62,5 +68,6 @@ class PersistentSettingsRepository : SettingsRepository {
         private const val KEY_PORT = "server_port"
         private const val KEY_TOKEN = "server_token"
         private const val KEY_REMINDERS = "reminders"
+        private const val KEY_NEW_NOTES_FOLDER = "new_notes_folder"
     }
 }

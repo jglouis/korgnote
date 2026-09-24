@@ -44,6 +44,12 @@ class PersistentSettingsRepository(appContext: Context) : SettingsRepository {
         prefs.edit { putString(KEY_REMINDERS, settings.encode()) }
     }
 
+    override fun getNewNotesFolder(): String = prefs.getString(KEY_NEW_NOTES_FOLDER, "") ?: ""
+
+    override fun setNewNotesFolder(folder: String) {
+        prefs.edit { putString(KEY_NEW_NOTES_FOLDER, folder) }
+    }
+
     private fun loadHost(): String {
         val def = defaultServerBaseUrl()
             .removePrefix("http://")
@@ -58,6 +64,7 @@ class PersistentSettingsRepository(appContext: Context) : SettingsRepository {
 
     companion object {
         private const val KEY_HOST = "server_host"
+        private const val KEY_NEW_NOTES_FOLDER = "new_notes_folder"
         private const val KEY_PORT = "server_port"
         private const val KEY_TOKEN = "server_token"
         private const val KEY_REMINDERS = "reminders"

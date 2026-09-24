@@ -177,8 +177,8 @@ Not included: fold-all or unfold-all, folds that survive a restart, and `#+START
   report confirms, but it changed recomposition not at all (13/5/5 ms either way), because `remember`
   hands back the same instance. Only eager composition ever mattered.
 
-- Creating, renaming and deleting **files** is still impossible — the server rejects any path it did
-  not see at startup (D11). That is the next gap once adding sections feels good.
+- ~~Creating, renaming and deleting **files** is still impossible~~ **Fixed** by T20; see
+  [05](05-sync-protocol.md#creating-renaming-and-deleting-t20).
 - The calendar's "scroll to this heading" is now exact, using the source range T3 gives every node:
   the element containing the section's first character is the one to show. It falls back to a title
   search when that range no longer fits the file, which happens if the file changed after the agenda

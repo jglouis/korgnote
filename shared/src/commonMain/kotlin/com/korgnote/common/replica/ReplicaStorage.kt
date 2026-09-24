@@ -24,6 +24,14 @@ data class FileMeta(
      * says so. Losing an edit silently would be far worse than showing a warning.
      */
     val conflicted: Boolean = false,
+    /**
+     * A tombstone: deleted here, and the server has not been told yet.
+     *
+     * The working copy and base are already gone; what is kept is [etag], the version the delete
+     * was made against, so the server deletes only that version. Without it the next full manifest
+     * would list the file and the replica would take it straight back.
+     */
+    val deleted: Boolean = false,
 )
 
 /** The whole of `meta.json`: what the replica believes about every file it holds. */

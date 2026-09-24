@@ -1,5 +1,6 @@
 package com.korgnote.app.data
 
+import com.korgnote.common.replica.DeleteResult
 import com.korgnote.common.replica.PushResult
 import com.korgnote.common.replica.RemoteEntry
 import com.korgnote.common.replica.RemoteFile
@@ -18,6 +19,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
+import io.ktor.http.encodeURLPathPart
 import io.ktor.http.HttpStatusCode
 import io.ktor.utils.io.readLine
 import kotlinx.serialization.Serializable
@@ -47,6 +49,12 @@ class KtorSyncApi(
 
     private fun url(suffix: String) = "${baseUrlProvider()}/api/v1$suffix"
 
+    /**
+     * A file's URL, each segment percent-encoded: a note named with a space, `#` or `?` would
+     * otherwise address some other path, or none.
+     */
+    private fun fileUrl(path: String) = url("/files/" + path.split('/').joinToString("/") { it.encodeURLPathPart() })
+
     private fun HttpRequestBuilder.authorize() {
         val token = tokenProvider().trim()
         if (token.isNotEmpty()) header(HttpHeaders.Authorization, "Bearer $token")
@@ -64,16 +72,22 @@ class KtorSyncApi(
     }
 
     override suspend fun fetch(path: String): RemoteFile? {
-        val response = client.get(url("/files/$path")) { authorize() }
+        val response = client.get(fileUrl(path)) { authorize() }
         if (response.status != HttpStatusCode.OK) return null
         val etag = response.headers[HttpHeaders.ETag]?.trim('"') ?: return null
         return RemoteFile(path, etag, response.bodyAsText())
     }
 
-    override suspend fun push(path: String, content: String, ifMatch: String?): PushResult {
-        val response = client.put(url("/files/$path")) {
+    override suspend fun push(
+        path: String,
+        content: String,
+        ifMatch: String?,
+        mustNotExist: Boolean,
+    ): PushResult {
+        val response = client.put(fileUrl(path)) {
             authorize()
             if (ifMatch != null) header(HttpHeaders.IfMatch, ifMatch)
+            if (mustNotExist) header(HttpHeaders.IfNoneMatch, "*")
             setBody(content)
         }
         return when (response.status) {
@@ -115,12 +129,17 @@ class KtorSyncApi(
         }
     }
 
-    override suspend fun delete(path: String, ifMatch: String): Boolean {
-        val response = client.delete(url("/files/$path")) {
+    override suspend fun delete(path: String, ifMatch: String): DeleteResult {
+        val response = client.delete(fileUrl(path)) {
             authorize()
             header(HttpHeaders.IfMatch, ifMatch)
         }
-        return response.status == HttpStatusCode.NoContent
+        return when (response.status) {
+            HttpStatusCode.NoContent -> DeleteResult.Deleted
+            HttpStatusCode.Conflict -> DeleteResult.Conflict(response.headers[HttpHeaders.ETag]?.trim('"'))
+            HttpStatusCode.NotFound -> DeleteResult.Gone
+            else -> DeleteResult.Failed("${response.status}")
+        }
     }
 }
 

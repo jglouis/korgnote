@@ -52,8 +52,31 @@ class SyncEngine(
 
         val remote = manifest.entries.associateBy { it.path }
         val localPaths = store.paths().toSet()
+        val tombstones = store.tombstones().associateBy { it.path }
+        // Deletions wait until everything else is pushed: a rename is a new note and a tombstone,
+        // and another device must never catch the old one gone before the new one exists.
+        val pendingDeletes = mutableListOf<FileMeta>()
+
+        fun record(outcome: PushOutcome, path: String) = when (outcome) {
+            PushOutcome.PUSHED -> pushed.add(path)
+            PushOutcome.CONFLICT -> conflicted.add(path)
+            PushOutcome.FAILED -> failed.add(path)
+            PushOutcome.SKIPPED -> Unit
+        }
 
         for (entry in manifest.entries) {
+            val tombstone = tombstones[entry.path]
+            if (tombstone != null) {
+                if (tombstone.etag == entry.etag) {
+                    pendingDeletes.add(tombstone)
+                } else {
+                    // Edited elsewhere after the version deleted here: the edit wins, and the note
+                    // comes back rather than taking someone's work with it.
+                    store.forgetTombstone(entry.path)
+                    if (pull(entry.path)) pulled.add(entry.path)
+                }
+                continue
+            }
             val meta = store.meta(entry.path)
             val haveLocally = entry.path in localPaths
             val dirty = meta?.dirty == true
@@ -69,12 +92,7 @@ class SyncEngine(
                 !dirty -> if (pull(entry.path)) pulled.add(entry.path)
 
                 // Edited locally, server unchanged since we synced: push.
-                meta.etag == entry.etag -> when (pushLocal(entry.path, meta.etag)) {
-                    PushOutcome.PUSHED -> pushed.add(entry.path)
-                    PushOutcome.CONFLICT -> conflicted.add(entry.path)
-                    PushOutcome.FAILED -> failed.add(entry.path)
-                    PushOutcome.SKIPPED -> Unit
-                }
+                meta.etag == entry.etag -> record(pushLocal(entry.path, meta.etag), entry.path)
 
                 // Both moved: try to reconcile them, and only involve the user if that fails.
                 else -> when (reconcile(entry.path, entry.etag)) {
@@ -92,22 +110,23 @@ class SyncEngine(
                 val meta = store.meta(path)
                 when {
                     // Never synced: it is a local creation, not a remote deletion.
-                    meta?.etag == null ->
-                        if (pushNew(path)) pushed.add(path) else failed.add(path)
+                    meta?.etag == null -> record(pushNew(path), path)
                     // Deleted on the server but edited here: keep it and put it back.
-                    meta.dirty -> if (pushNew(path)) pushed.add(path) else failed.add(path)
+                    meta.dirty -> record(pushNew(path), path)
                     else -> {
                         store.removeLocally(path)
                         deletedRemotely.add(path)
                     }
                 }
             }
+            // Deleted on both sides: nothing left to tell the server.
+            for (path in tombstones.keys - remote.keys) store.forgetTombstone(path)
         }
 
         for (path in manifest.deleted) {
             val meta = store.meta(path) ?: continue
             if (meta.dirty) {
-                if (pushNew(path)) pushed.add(path) else failed.add(path)
+                record(pushNew(path), path)
             } else {
                 store.removeLocally(path)
                 deletedRemotely.add(path)
@@ -122,16 +141,26 @@ class SyncEngine(
                 localPaths.filter { store.meta(it)?.etag == null }
             for (path in unsynced - covered) {
                 val etag = store.meta(path)?.etag
-                if (etag == null) {
-                    if (pushNew(path)) pushed.add(path) else failed.add(path)
-                } else {
-                    when (pushLocal(path, etag)) {
-                        PushOutcome.PUSHED -> pushed.add(path)
-                        PushOutcome.CONFLICT -> conflicted.add(path)
-                        PushOutcome.FAILED -> failed.add(path)
-                        PushOutcome.SKIPPED -> Unit
-                    }
+                record(if (etag == null) pushNew(path) else pushLocal(path, etag), path)
+            }
+            // Absent from a delta means unchanged on the server, so still the version deleted here.
+            pendingDeletes += tombstones.values.filter { it.path !in covered }
+        }
+
+        for (tombstone in pendingDeletes) {
+            val etag = tombstone.etag ?: continue
+            when (api.delete(tombstone.path, etag)) {
+                DeleteResult.Deleted -> {
+                    store.forgetTombstone(tombstone.path)
+                    deletedLocally.add(tombstone.path)
                 }
+                // Edited elsewhere in the meantime: as above, the edit wins.
+                is DeleteResult.Conflict -> {
+                    store.forgetTombstone(tombstone.path)
+                    if (pull(tombstone.path)) pulled.add(tombstone.path)
+                }
+                DeleteResult.Gone -> store.forgetTombstone(tombstone.path)
+                is DeleteResult.Failed -> failed.add(tombstone.path)
             }
         }
 
@@ -153,7 +182,8 @@ class SyncEngine(
      * A local edit wins: the event is a hint, and the next full cycle will decide properly.
      */
     suspend fun pull(path: String): Boolean {
-        if (store.meta(path)?.dirty == true) return false
+        // A local deletion is local work too: the next full cycle decides, not a hint.
+        if (store.meta(path)?.let { it.dirty || it.deleted } == true) return false
         val file = api.fetch(path) ?: return false
         store.acceptFromServer(path, file.text, file.etag)
         return true
@@ -233,15 +263,28 @@ class SyncEngine(
         }
     }
 
-    /** Pushes a file the server does not have, or no longer has. */
-    private suspend fun pushNew(path: String): Boolean {
-        val content = store.read(path) ?: return false
-        return when (val result = api.push(path, content, ifMatch = null)) {
+    /**
+     * Pushes a file the server does not have, or no longer has.
+     *
+     * Only as a creation (`If-None-Match: *`): a note made here must never replace one someone
+     * made at the same path elsewhere. When that has happened, theirs takes the path and ours is
+     * kept beside it as a conflict copy, which is pushed like any other new note.
+     */
+    private suspend fun pushNew(path: String): PushOutcome {
+        val content = store.read(path) ?: return PushOutcome.SKIPPED
+        return when (val result = api.push(path, content, ifMatch = null, mustNotExist = true)) {
             is PushResult.Pushed -> {
                 store.markPushed(path, result.etag, content)
-                true
+                PushOutcome.PUSHED
             }
-            else -> false
+            is PushResult.Conflict -> {
+                val theirs = api.fetch(path) ?: return PushOutcome.FAILED
+                val same = theirs.text == content
+                if (!same) store.writeConflictCopy(path, content, timestamp())
+                store.acceptFromServer(path, theirs.text, theirs.etag)
+                if (same) PushOutcome.SKIPPED else PushOutcome.CONFLICT
+            }
+            is PushResult.Failed -> PushOutcome.FAILED
         }
     }
 }

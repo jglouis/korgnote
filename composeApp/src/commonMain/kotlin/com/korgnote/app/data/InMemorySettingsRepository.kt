@@ -42,4 +42,10 @@ class InMemorySettingsRepository(
     override fun setReminderSettings(settings: ReminderSettings) {
         reminders = settings
     }
+
+    private var newNotesFolder = ""
+    override fun getNewNotesFolder(): String = newNotesFolder
+    override fun setNewNotesFolder(folder: String) {
+        newNotesFolder = folder
+    }
 }

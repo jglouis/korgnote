@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -60,13 +61,78 @@ fun App() {
             vm.refreshReminders()
             onPauseOrDispose { }
         }
+        // At most one of these is open; each names the note it is about.
+        var creatingNote by remember { mutableStateOf(false) }
+        var renamingNote by remember { mutableStateOf<String?>(null) }
+        var deletingNote by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+        var noteDialogError by remember { mutableStateOf<String?>(null) }
+
+        if (creatingNote) {
+            NewNoteDialog(
+                pathFor = vm::newNotePathFor,
+                error = noteDialogError,
+                onDismiss = { creatingNote = false; noteDialogError = null },
+                onCreate = { title ->
+                    scope.launch {
+                        // Stays open when refused, with the reason shown behind it.
+                        if (vm.createNote(title) == null) {
+                            noteDialogError = vm.lastErrorMessage.also { vm.clearError() }
+                        } else {
+                            creatingNote = false
+                            noteDialogError = null
+                            isEditing = false
+                            selectedScreen = BottomItem.HOME
+                            drawerState.close()
+                        }
+                    }
+                },
+            )
+        }
+        renamingNote?.let { path ->
+            RenameNoteDialog(
+                path = path,
+                error = noteDialogError,
+                onDismiss = { renamingNote = null; noteDialogError = null },
+                onRename = { target ->
+                    scope.launch {
+                        if (vm.renameNote(path, target)) {
+                            renamingNote = null
+                            noteDialogError = null
+                        } else {
+                            noteDialogError = vm.lastErrorMessage.also { vm.clearError() }
+                        }
+                    }
+                },
+            )
+        }
+        deletingNote?.let { (path, unsynced) ->
+            DeleteNoteDialog(
+                path = path,
+                hasUnsyncedChanges = unsynced,
+                onDismiss = { deletingNote = null },
+                onDelete = {
+                    deletingNote = null
+                    scope.launch { vm.deleteNote(path) }
+                },
+            )
+        }
+
         ModalNavigationDrawer(
             drawerState = drawerState,
             gesturesEnabled = selectedScreen != BottomItem.CALENDAR,
             drawerContent = {
                 ModalDrawerSheet(modifier = Modifier.width(280.dp)) {
                     Column(modifier = Modifier.padding(8.dp)) {
-                        Text("Files", style = MaterialTheme.typography.titleMedium)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Files",
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconButton(onClick = { creatingNote = true }) {
+                                Icon(Icons.AutoMirrored.Filled.NoteAdd, contentDescription = "New note")
+                            }
+                        }
                         Spacer(Modifier.width(8.dp))
                         OutlinedTextField(
                             value = vm.filterQuery,
@@ -87,6 +153,10 @@ fun App() {
                                     isEditing = false
                                     drawerState.close()
                                 }
+                            },
+                            onRenameFile = { renamingNote = it },
+                            onDeleteFile = { path ->
+                                scope.launch { deletingNote = path to vm.hasUnsyncedChanges(path) }
                             },
                             modifier = Modifier.weight(1f)
                         )

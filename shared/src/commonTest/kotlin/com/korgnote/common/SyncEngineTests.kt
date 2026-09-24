@@ -1,5 +1,6 @@
 package com.korgnote.common
 
+import com.korgnote.common.replica.DeleteResult
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.PushResult
@@ -72,23 +73,31 @@ class SyncEngineTests {
             return RemoteFile(path, etag, text)
         }
 
-        override suspend fun push(path: String, content: String, ifMatch: String?): PushResult {
+        /** Every write in the order it arrived, as `PUT path` or `DELETE path`. */
+        val log = mutableListOf<String>()
+
+        override suspend fun push(path: String, content: String, ifMatch: String?, mustNotExist: Boolean): PushResult {
             pushed.add(path)
             val current = files[path]
             if (ifMatch != null && current != null && current.first != ifMatch) {
                 return PushResult.Conflict(current.first)
             }
+            if (mustNotExist && current != null) return PushResult.Conflict(current.first)
+            log.add("PUT $path")
             val etag = "e-$path-${content.hashCode()}"
             files[path] = etag to content
             generation++
             return PushResult.Pushed(etag)
         }
 
-        override suspend fun delete(path: String, ifMatch: String): Boolean {
+        override suspend fun delete(path: String, ifMatch: String): DeleteResult {
+            val current = files[path] ?: return DeleteResult.Gone
+            if (current.first != ifMatch) return DeleteResult.Conflict(current.first)
             deleted.add(path)
+            log.add("DELETE $path")
             files.remove(path)
             generation++
-            return true
+            return DeleteResult.Deleted
         }
     }
 
@@ -386,5 +395,156 @@ class SyncEngineTests {
 
         assertTrue(store.isDirty("a.org"), "the newer edit is still unsynced")
         assertEquals("* First edit\n", store.read("a.org"))
+    }
+
+    // --- File lifecycle (T20) ---
+
+    @Test
+    fun aNoteDeletedHereIsDeletedOnTheServerAndStaysDeleted() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* A\n")
+        engine.sync()
+
+        store.delete("a.org")
+        val report = engine.sync()
+
+        assertEquals(listOf("a.org"), report.deletedLocally)
+        assertNull(server.files["a.org"])
+        assertEquals(emptyList(), store.tombstones(), "the tombstone is dropped once the server agrees")
+        assertFalse(engine.sync().changedAnything, "and the note does not come back")
+    }
+
+    @Test
+    fun aDeletionMadeOfflineSurvivesUntilTheNextSync() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* A\n")
+        engine.sync()
+
+        store.delete("a.org")
+        // A full manifest still lists it; without the tombstone this would pull it straight back.
+        assertEquals(listOf("a.org"), store.tombstones().map { it.path })
+        engine.sync()
+
+        assertNull(store.read("a.org"))
+        assertNull(server.files["a.org"])
+    }
+
+    @Test
+    fun aNoteEditedElsewhereComesBackRatherThanBeingDeleted() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* A\n")
+        engine.sync()
+
+        store.delete("a.org")
+        server.put("a.org", "* A, edited on the laptop\n")
+        val report = engine.sync()
+
+        assertEquals(listOf("a.org"), report.pulled)
+        assertEquals("* A, edited on the laptop\n", store.read("a.org"), "their edit is not lost")
+        assertEquals("* A, edited on the laptop\n", server.files["a.org"]?.second)
+        assertEquals(emptyList(), server.deleted)
+    }
+
+    @Test
+    fun aDeletionOfANoteAlreadyDeletedElsewhereIsQuiet() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* A\n")
+        engine.sync()
+
+        store.delete("a.org")
+        server.files.remove("a.org")
+        val report = engine.sync()
+
+        assertEquals(emptyList(), report.failed)
+        assertEquals(emptyList(), store.tombstones())
+    }
+
+    @Test
+    fun aDeletionIsSentWhenADeltaDoesNotMentionTheFile() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* A\n")
+        engine.sync()
+
+        server.completeManifests = false
+        server.deltaEntries = emptySet()
+        store.delete("a.org")
+        engine.sync()
+
+        assertNull(server.files["a.org"])
+    }
+
+    @Test
+    fun aNeverSyncedNoteIsDeletedWithoutTellingTheServer() = runTest {
+        val (server, store, engine) = setUp()
+        store.create("draft.org", "* Draft\n")
+
+        store.delete("draft.org")
+        engine.sync()
+
+        assertEquals(emptyList(), store.tombstones())
+        assertEquals(emptyList(), server.log)
+    }
+
+    @Test
+    fun aRenameCreatesTheNewNoteBeforeDeletingTheOldOne() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("old.org", "* Content\n")
+        engine.sync()
+
+        assertTrue(store.rename("old.org", "new.org"))
+        val report = engine.sync()
+
+        assertEquals(listOf("PUT new.org", "DELETE old.org"), server.log)
+        assertEquals("* Content\n", server.files["new.org"]?.second)
+        assertNull(server.files["old.org"])
+        assertEquals(listOf("new.org"), report.pushed)
+        assertEquals(listOf("old.org"), report.deletedLocally)
+        assertEquals(listOf("new.org"), store.paths())
+    }
+
+    @Test
+    fun aRenameCarriesUnsyncedEdits() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("old.org", "* Content\n")
+        engine.sync()
+
+        store.save("old.org", "* Content, edited offline\n")
+        store.rename("old.org", "new.org")
+        engine.sync()
+
+        assertEquals("* Content, edited offline\n", server.files["new.org"]?.second)
+        assertNull(server.files["old.org"])
+    }
+
+    @Test
+    fun aRenameRefusesATakenNameAndChangesNothing() = runTest {
+        val (_, store, _) = setUp()
+        store.create("a.org", "* A\n")
+        store.create("b.org", "* B\n")
+
+        assertFalse(store.rename("a.org", "b.org"))
+        assertFalse(store.create("a.org", "* Other\n"))
+
+        assertEquals("* A\n", store.read("a.org"))
+        assertEquals("* B\n", store.read("b.org"))
+    }
+
+    @Test
+    fun aNewNoteNeverReplacesOneMadeElsewhereAtTheSamePath() = runTest {
+        val (server, store, engine) = setUp()
+        engine.sync()
+        store.create("inbox/idea.org", "* Mine\n")
+        // Created on the laptop meanwhile; the delta that would have said so is not seen.
+        server.completeManifests = false
+        server.deltaEntries = emptySet()
+        server.put("inbox/idea.org", "* Theirs\n")
+
+        val report = engine.sync()
+
+        assertEquals(listOf("inbox/idea.org"), report.conflicted)
+        assertEquals("* Theirs\n", server.files["inbox/idea.org"]?.second, "theirs is not overwritten")
+        assertEquals("* Theirs\n", store.read("inbox/idea.org"))
+        val copy = store.paths().single { it.startsWith("inbox/idea.sync-conflict-") }
+        assertEquals("* Mine\n", store.read(copy), "and mine is kept beside it")
     }
 }

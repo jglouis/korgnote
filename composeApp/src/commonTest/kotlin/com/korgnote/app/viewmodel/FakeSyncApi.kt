@@ -1,5 +1,6 @@
 package com.korgnote.app.viewmodel
 
+import com.korgnote.common.replica.DeleteResult
 import com.korgnote.common.replica.PushResult
 import com.korgnote.common.replica.RemoteEntry
 import com.korgnote.common.replica.RemoteFile
@@ -33,11 +34,12 @@ class FakeSyncApi(val files: MutableMap<String, String> = mutableMapOf()) : Sync
         return RemoteFile(path, etagOf(path), text)
     }
 
-    override suspend fun push(path: String, content: String, ifMatch: String?): PushResult {
+    override suspend fun push(path: String, content: String, ifMatch: String?, mustNotExist: Boolean): PushResult {
         requireOnline()
         if (ifMatch != null && files.containsKey(path) && ifMatch != etagOf(path)) {
             return PushResult.Conflict(etagOf(path))
         }
+        if (mustNotExist && files.containsKey(path)) return PushResult.Conflict(etagOf(path))
         files[path] = content
         saves.add(path to content)
         generation++
@@ -57,10 +59,15 @@ class FakeSyncApi(val files: MutableMap<String, String> = mutableMapOf()) : Sync
         pending.clear()
     }
 
-    override suspend fun delete(path: String, ifMatch: String): Boolean {
+    val deletes = mutableListOf<String>()
+
+    override suspend fun delete(path: String, ifMatch: String): DeleteResult {
         requireOnline()
+        if (path !in files) return DeleteResult.Gone
+        if (ifMatch != etagOf(path)) return DeleteResult.Conflict(etagOf(path))
         files.remove(path)
+        deletes.add(path)
         generation++
-        return true
+        return DeleteResult.Deleted
     }
 }

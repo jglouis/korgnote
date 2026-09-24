@@ -1,6 +1,14 @@
 package com.korgnote.app.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -63,6 +71,9 @@ fun FileTree(
     onFileSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
     expandAll: Boolean = false,
+    /** Offered on a long-press of a note; either may be null to leave it out. */
+    onRenameFile: ((path: String) -> Unit)? = null,
+    onDeleteFile: ((path: String) -> Unit)? = null,
 ) {
     // Keyed by path, not by node: the tree is a new object graph after every filter keystroke and
     // every sync, so identity-keyed state would be lost each time — re-opening every folder the
@@ -89,6 +100,8 @@ fun FileTree(
                     file = node,
                     depth = row.depth,
                     onFileSelected = onFileSelected,
+                    onRename = onRenameFile,
+                    onDelete = onDeleteFile,
                     modifier = Modifier.animateItem(),
                 )
 
@@ -140,24 +153,49 @@ private fun TreeFolderItem(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TreeFileItem(
     file: File,
     depth: Int,
     onFileSelected: (String) -> Unit,
+    onRename: ((String) -> Unit)?,
+    onDelete: ((String) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable { onFileSelected(file.path) }
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.Start
-    ) {
-        Spacer(Modifier.width((depth * 16).dp))
-        Icon(imageVector = Icons.Filled.Description, contentDescription = "File")
-        Spacer(Modifier.width(8.dp))
-        Text(file.name, style = MaterialTheme.typography.bodyMedium)
+    var menuOpen by remember { mutableStateOf(false) }
+    val hasMenu = onRename != null || onDelete != null
+    Box(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = { onFileSelected(file.path) },
+                    onLongClickLabel = if (hasMenu) "Rename or delete" else null,
+                    onLongClick = if (hasMenu) ({ menuOpen = true }) else null,
+                )
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.Start
+        ) {
+            Spacer(Modifier.width((depth * 16).dp))
+            Icon(imageVector = Icons.Filled.Description, contentDescription = "File")
+            Spacer(Modifier.width(8.dp))
+            Text(file.name, style = MaterialTheme.typography.bodyMedium)
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            if (onRename != null) {
+                DropdownMenuItem(
+                    text = { Text("Rename or move") },
+                    onClick = { menuOpen = false; onRename(file.path) },
+                )
+            }
+            if (onDelete != null) {
+                DropdownMenuItem(
+                    text = { Text("Delete") },
+                    onClick = { menuOpen = false; onDelete(file.path) },
+                )
+            }
+        }
     }
 }
 

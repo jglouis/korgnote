@@ -29,5 +29,13 @@ interface SettingsRepository {
     fun getReminderSettings(): ReminderSettings
 
     fun setReminderSettings(settings: ReminderSettings)
+
+    /**
+     * Where a new note goes (T20), relative to the notes directory; empty for its top. A capture
+     * inbox: the folder a note typed in a hurry lands in, to be filed properly later.
+     */
+    fun getNewNotesFolder(): String
+
+    fun setNewNotesFolder(folder: String)
 }
 

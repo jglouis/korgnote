@@ -48,7 +48,7 @@ Updated 2026-09-24.
 | ✅ | T17 Day and week views | Done — agenda list, day, week and month, all from `AgendaIndex` |
 | 🟡 | T18 Notifications | Done on Android (checked on an emulator: app closed, network off, on the minute); iOS built, not yet seen on a device |
 | ✅ | T19 CI | Done — [ci.yml](../.github/workflows/ci.yml): Linux on every push, iOS nightly when master changed |
-| ❌ | T20 File lifecycle | Not started — notes still cannot be created, renamed or deleted (D11) |
+| ✅ | T20 File lifecycle | Done — create into an inbox folder, rename/move, delete; offline-safe through tombstones |
 | ❌ | T21 Link navigation | Not started — links render but do not go anywhere |
 | ❌ | T22 Whole-file editing | Not started — decide whether the second editing surface survives |
 | ❌ | T23 Server container | Not started — a Dockerfile for the server, notes mounted from the host |
@@ -707,7 +707,26 @@ caught any of them. Tests nobody runs are documentation.
 **Done when** A push that breaks any target, or any test, fails the build and names what broke.
 **Not included** Signing, publishing, or distributing builds. This is a gate, not a pipeline.
 
-### T20 · Creating, renaming and deleting notes
+### T20 · Creating, renaming and deleting notes — ✅ **done**
+**Landed** In the drawer, a *New note* button asks for a title, shows the file it will make (lower
+case, `_`-joined, like the existing notes) in the folder set under Settings → *New notes*, creates
+it with a `#+TITLE:` and opens straight into its first heading. A long-press on a note offers
+*Rename or move* (the whole path is editable) and *Delete*, which warns when the note holds edits
+the server has not seen. All three work offline.
+**How the hard parts were answered** ([05](05-sync-protocol.md#creating-renaming-and-deleting-t20))
+- A deletion is a tombstone carrying the etag it was made at; the server deletes only that version,
+  and an edit made elsewhere in the meantime brings the note back instead of being lost.
+- A new note is pushed with `If-None-Match: *`, so it can never replace a same-named note from
+  another device — which the engine used to do, with an unconditional `PUT`.
+- A rename is a create and a tombstone under one lock; deletions are sent after every push, so the
+  other device may see both names for a moment, never neither.
+- File URLs are now percent-encoded, so a note named with a space or `#` is addressable.
+**Verified** `SyncEngineTests` (10 new cases), `NotePathsTest`, `NoteLifecycleTest` (view model to
+fake server), `NoteLifecycleUiTest` (drawer menu, dialogs), and two new `SyncApiV1Test` cases
+(encoded path, stale delete refused). Not yet tried against the real server from a phone.
+**Not included** Templates beyond `#+TITLE:`, and creating or deleting folders — an empty folder
+does not exist in this model, and one appears when a note is moved into it.
+
 **Depends** T10
 **Scope** The app side of D11. The server can already take a file it has never seen — `put` with
 `If-None-Match` — and `delete` exists, so what is missing is above it: view-model operations for

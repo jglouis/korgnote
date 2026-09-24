@@ -74,15 +74,105 @@ class DocumentStore(private val storage: ReplicaStorage) {
         _changes.emit(ReplicaChange.Saved(path))
     }
 
-    /** Removes [path] and its base copy. */
+    /**
+     * Deletes [path] here and records it for the server as a tombstone.
+     *
+     * A file the server never had is simply forgotten; there is nobody to tell. Otherwise the
+     * tombstone keeps the etag the file was last synced at, and sync deletes only that version.
+     */
     suspend fun delete(path: String) {
-        mutex.withLock {
-            storage.delete(path)
-            storage.deleteBase(path)
-            val meta = storage.readMeta()
-            storage.writeMeta(meta.copy(files = meta.files - path))
-        }
+        mutex.withLock { tombstoneLocked(path) }
         _changes.emit(ReplicaChange.Deleted(path))
+    }
+
+    private suspend fun tombstoneLocked(path: String) {
+        storage.delete(path)
+        storage.deleteBase(path)
+        val meta = storage.readMeta()
+        val existing = meta.files[path]
+        val files = if (existing?.etag == null) {
+            meta.files - path
+        } else {
+            meta.files + (path to existing.copy(deleted = true, dirty = false, conflicted = false, size = 0))
+        }
+        storage.writeMeta(meta.copy(files = files))
+    }
+
+    /** True when a note exists at [path] here. */
+    private suspend fun isTaken(path: String): Boolean =
+        storage.read(path) != null
+
+    /**
+     * Creates [path] with [content], dirty and never synced, so the next sync pushes it as new.
+     * Returns false, writing nothing, when a note already exists there.
+     *
+     * A path whose tombstone has not reached the server yet is taken over rather than refused: the
+     * new content is pushed as an edit of the version that was deleted, which is what the user sees.
+     */
+    suspend fun create(path: String, content: String): Boolean {
+        requireSafeReplicaPath(path)
+        val created = mutex.withLock {
+            if (isTaken(path)) return@withLock false
+            createLocked(path, content, inheriting = null)
+            true
+        }
+        if (created) _changes.emit(ReplicaChange.Saved(path))
+        return created
+    }
+
+    private suspend fun createLocked(path: String, content: String, inheriting: FileMeta?) {
+        storage.write(path, content)
+        val meta = storage.readMeta()
+        val tombstone = meta.files[path]?.takeIf { it.deleted }
+        storage.writeMeta(
+            meta.copy(
+                files = meta.files + (path to FileMeta(
+                    path = path,
+                    size = content.length.toLong(),
+                    etag = tombstone?.etag,
+                    dirty = true,
+                    conflicted = inheriting?.conflicted == true,
+                )),
+            ),
+        )
+    }
+
+    /**
+     * Moves [from] to [to]: a new note with the same content, and a tombstone for the old one.
+     * Returns false, changing nothing, when [from] is missing or [to] is taken.
+     *
+     * Both happen under one lock, so nothing here ever sees one without the other; the sync engine
+     * pushes the new note before it deletes the old one, so another device may briefly see both,
+     * but never neither. Unsynced edits travel with the content, and a conflict flag stays with it.
+     */
+    suspend fun rename(from: String, to: String): Boolean {
+        requireSafeReplicaPath(to)
+        if (from == to) return false
+        val renamed = mutex.withLock {
+            val content = storage.read(from) ?: return@withLock false
+            if (isTaken(to)) return@withLock false
+            val previous = storage.readMeta().files[from]
+            createLocked(to, content, inheriting = previous)
+            tombstoneLocked(from)
+            true
+        }
+        if (renamed) {
+            _changes.emit(ReplicaChange.Deleted(from))
+            _changes.emit(ReplicaChange.Saved(to))
+        }
+        return renamed
+    }
+
+    /** Deletions the server has not been told about yet. */
+    suspend fun tombstones(): List<FileMeta> =
+        storage.readMeta().files.values.filter { it.deleted }.sortedBy { it.path }
+
+    /** Drops [path]'s tombstone once the server has deleted it, or it no longer needs deleting. */
+    suspend fun forgetTombstone(path: String) {
+        mutex.withLock {
+            val meta = storage.readMeta()
+            if (meta.files[path]?.deleted == true) storage.writeMeta(meta.copy(files = meta.files - path))
+        }
     }
 
     /**
@@ -131,7 +221,8 @@ class DocumentStore(private val storage: ReplicaStorage) {
             val updated = meta.files.toMutableMap()
             for ((path, content) in contents) {
                 requireSafeReplicaPath(path)
-                if (meta.files[path]?.dirty == true) continue
+                // Local work — an edit, or a deletion — outranks what the server sent.
+                if (meta.files[path]?.let { it.dirty || it.deleted } == true) continue
                 storage.write(path, content)
                 storage.writeBase(path, content)
                 updated[path] = FileMeta(

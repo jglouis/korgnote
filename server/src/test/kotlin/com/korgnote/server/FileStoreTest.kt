@@ -162,4 +162,30 @@ class FileStoreTest {
         val strays = root.toFile().listFiles()?.filter { it.name.startsWith(".korgnote") }.orEmpty()
         assertTrue(strays.isEmpty(), "temporary files should be moved into place, not left: $strays")
     }
+
+    private fun modeOf(relative: String): String =
+        java.nio.file.attribute.PosixFilePermissions.toString(
+            java.nio.file.Files.getPosixFilePermissions(root.resolve(relative)),
+        )
+
+    /** A save used to leave every note readable by its owner only, whatever it was before. */
+    @Test
+    fun aSavedNoteKeepsItsPermissions() {
+        writeFile("shared.org", "* A\n")
+        java.nio.file.Files.setPosixFilePermissions(
+            root.resolve("shared.org"),
+            java.nio.file.attribute.PosixFilePermissions.fromString("rw-rw-r--"),
+        )
+
+        store.put("shared.org", "* A, edited\n")
+
+        assertEquals("rw-rw-r--", modeOf("shared.org"))
+    }
+
+    @Test
+    fun aNoteCreatedFromTheAppIsReadableLikeTheOthers() {
+        store.put("inbox/new.org", "* New\n", mustNotExist = true)
+
+        assertEquals("rw-r--r--", modeOf("inbox/new.org"))
+    }
 }

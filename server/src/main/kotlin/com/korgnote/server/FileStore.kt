@@ -4,6 +4,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDate
 import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.PosixFilePermissions
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.path.exists
@@ -150,6 +151,7 @@ class FileStore(
             val temporary = Files.createTempFile(file.parent, ".korgnote", ".tmp")
             try {
                 Files.write(temporary, bytes)
+                keepPermissions(temporary, replacing = file.takeIf { exists })
                 Files.move(
                     temporary,
                     file,
@@ -190,6 +192,22 @@ class FileStore(
             WriteResult.Written(current)
         } catch (failure: Exception) {
             WriteResult.Rejected(failure.message ?: "delete failed")
+        }
+    }
+
+    /**
+     * Gives a freshly written temporary file the permissions the note should have.
+     *
+     * `createTempFile` makes files readable by their owner only, and the atomic move carries that
+     * onto the note — so every save used to turn a `rw-r--r--` note into `rw-------`, and every
+     * note created from the app was born that way. A replaced note keeps its own mode; a new one
+     * gets the usual `rw-r--r--`. Skipped where the filesystem has no POSIX permissions.
+     */
+    private fun keepPermissions(temporary: Path, replacing: Path?) {
+        runCatching {
+            val permissions = replacing?.let { Files.getPosixFilePermissions(it) }
+                ?: PosixFilePermissions.fromString("rw-r--r--")
+            Files.setPosixFilePermissions(temporary, permissions)
         }
     }
 

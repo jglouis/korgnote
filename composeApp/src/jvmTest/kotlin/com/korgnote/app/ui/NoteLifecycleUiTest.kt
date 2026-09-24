@@ -1,0 +1,75 @@
+package com.korgnote.app.ui
+
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.v2.runComposeUiTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+/** The affordances T20 adds: a note's long-press menu in the drawer, and the dialogs it opens. */
+@OptIn(ExperimentalTestApi::class)
+class NoteLifecycleUiTest {
+
+    private val root = Folder(
+        name = "Documents",
+        path = "",
+        children = listOf(File("inbox.org", "inbox.org"), File("journal.org", "journal.org")),
+    )
+
+    @Test
+    fun aLongPressOnANoteOffersRenameAndDelete() = runComposeUiTest {
+        val opened = mutableListOf<String>()
+        val renamed = mutableListOf<String>()
+        val deleted = mutableListOf<String>()
+        setContent {
+            FileTree(
+                root = root,
+                onFileSelected = { opened += it },
+                onRenameFile = { renamed += it },
+                onDeleteFile = { deleted += it },
+            )
+        }
+
+        onNodeWithText("journal.org").performTouchInput { longClick() }
+        onNodeWithText("Rename or move").performClick()
+        onNodeWithText("inbox.org").performTouchInput { longClick() }
+        onNodeWithText("Delete").performClick()
+
+        assertEquals(listOf("journal.org"), renamed)
+        assertEquals(listOf("inbox.org"), deleted)
+        assertTrue(opened.isEmpty(), "a long-press does not open the note")
+    }
+
+    @Test
+    fun theNewNoteDialogShowsTheFileItWillMake() = runComposeUiTest {
+        val created = mutableListOf<String>()
+        setContent {
+            NewNoteDialog(
+                pathFor = { title -> title.takeIf { it.isNotBlank() }?.let { "inbox/${it.lowercase()}.org" } },
+                onCreate = { created += it },
+                onDismiss = {},
+            )
+        }
+        onNodeWithText("Create").assertIsNotEnabled()
+
+        onNodeWithText("Title").performTextInput("Idea")
+        onNodeWithText("inbox/idea.org").assertExists()
+        onNodeWithText("Create").performClick()
+
+        assertEquals(listOf("Idea"), created)
+    }
+
+    @Test
+    fun theDeleteDialogWarnsAboutUnsyncedChanges() = runComposeUiTest {
+        setContent { DeleteNoteDialog("inbox.org", hasUnsyncedChanges = true, onDelete = {}, onDismiss = {}) }
+
+        onNodeWithText("have not reached the server", substring = true).assertExists()
+        onNodeWithText("Delete anyway").assertExists()
+    }
+}

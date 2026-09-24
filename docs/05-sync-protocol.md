@@ -187,8 +187,31 @@ Per path, compare three versions: **L** local, **B** base (last synced), **R** r
 | changed | changed, `L == R` | converged independently: update `base/` only |
 | changed | changed, `L != R` | **merge** (below) |
 | deleted locally | same | `DELETE` with `If-Match` |
+| deleted locally | changed | forget the deletion and pull R — never discard an edit |
+| deleted locally | deleted remotely | forget the deletion |
 | same | deleted remotely | delete locally |
 | changed | deleted remotely | keep local, re-push as a new file, log it — never discard an edit |
+| created locally | absent | `PUT` with `If-None-Match: *` |
+| created locally | created remotely | R takes the path; L is kept beside it as a conflict copy |
+
+### Creating, renaming and deleting (T20)
+
+A **local deletion is a tombstone**: `FileMeta.deleted`, with the working copy and base gone and the
+etag the file was deleted at kept. Without it the next complete manifest would list the file and the
+client would take it straight back. The engine sends `DELETE` with that etag, so the server deletes
+only the version the user saw; a `409` means it was edited elsewhere, and the edit wins — the
+deletion is dropped and the file pulled. A file the server never had is simply forgotten.
+
+A **new file is pushed with `If-None-Match: *`**, never unconditionally: a note made here must not
+replace one made at the same path elsewhere. On `409` the server's file takes the path and ours is
+written beside it as a conflict copy, as for a content conflict.
+
+A **rename is a create and a tombstone**, made under the store's lock so the replica never holds one
+without the other. The engine sends every deletion after every push, so another device may briefly
+see both names, but never neither. The content travels with its unsynced edits, if it had any.
+
+Paths are percent-encoded per segment on the wire, so a name with a space, `#` or `?` addresses the
+note it names.
 
 ### Merging
 

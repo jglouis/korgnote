@@ -20,6 +20,15 @@ sealed interface PushResult {
     data class Failed(val reason: String) : PushResult
 }
 
+sealed interface DeleteResult {
+    data object Deleted : DeleteResult
+    /** The server's copy moved since the etag the delete was made against; it holds [currentEtag]. */
+    data class Conflict(val currentEtag: String?) : DeleteResult
+    /** Nothing at that path any more: someone else deleted it first. */
+    data object Gone : DeleteResult
+    data class Failed(val reason: String) : DeleteResult
+}
+
 /**
  * The sync API v1 as the client needs it.
  *
@@ -29,8 +38,19 @@ sealed interface PushResult {
 interface SyncApi {
     suspend fun manifest(since: Long? = null): RemoteManifest
     suspend fun fetch(path: String): RemoteFile?
-    suspend fun push(path: String, content: String, ifMatch: String?): PushResult
-    suspend fun delete(path: String, ifMatch: String): Boolean
+    /**
+     * Writes [path]. With [ifMatch], only over that version; with [mustNotExist] (`If-None-Match: *`),
+     * only when the server has nothing there, so a new note never replaces one made elsewhere.
+     */
+    suspend fun push(
+        path: String,
+        content: String,
+        ifMatch: String?,
+        mustNotExist: Boolean = false,
+    ): PushResult
+
+    /** Deletes [path], but only the version [ifMatch] names: an edit made elsewhere is never deleted. */
+    suspend fun delete(path: String, ifMatch: String): DeleteResult
 
     /**
      * Streams change notifications until cancelled.

@@ -228,4 +228,33 @@ class SyncApiV1Test {
             client.get("/api/v1/files/../../etc/passwd.org").status,
         )
     }
+
+    /** The app percent-encodes each segment (T20), so a name with a space is still one note. */
+    @Test
+    fun anEncodedPathAddressesTheNoteItNames() = testApplication {
+        val dir = notesDir()
+        serve(dir)
+
+        val created = client.put("/api/v1/files/archive/old%20notes.org") {
+            header(HttpHeaders.IfNoneMatch, "*")
+            setBody("* Kept\n")
+        }
+        assertEquals(HttpStatusCode.OK, created.status)
+        assertEquals("* Kept\n", File(dir, "archive/old notes.org").readText())
+        assertEquals("* Kept\n", client.get("/api/v1/files/archive/old%20notes.org").bodyAsText())
+    }
+
+    /** A delete made against an old version must not take a newer edit with it. */
+    @Test
+    fun deletingAVersionThatHasSinceChangedIsRefused() = testApplication {
+        val dir = notesDir("a.org" to "* A\n")
+        serve(dir)
+        val etag = client.get("/api/v1/files/a.org").headers[HttpHeaders.ETag]!!
+        File(dir, "a.org").writeText("* A, edited in Emacs\n")
+
+        val response = client.delete("/api/v1/files/a.org") { header(HttpHeaders.IfMatch, etag) }
+
+        assertEquals(HttpStatusCode.Conflict, response.status)
+        assertEquals("* A, edited in Emacs\n", File(dir, "a.org").readText())
+    }
 }

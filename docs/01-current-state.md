@@ -146,5 +146,5 @@ Status added 2026-09-20. Everything unmarked is unchanged since the documents we
 | D8 | No authentication, no TLS, binds `0.0.0.0` | `Application.kt:36` | Personal notes are readable and writable by anyone who can reach the port |
 | D9 | No conflict detection on save | `Application.kt` | **Partly closed.** An *external* edit is now detected and refused, and `If-Match` is honoured. Two app clients racing still resolve last-writer-wins; needs the sync protocol (T9/T11) |
 | D10 | No compression on server responses | `Application.kt` | Org text compresses ~4–5×; free bandwidth win being left on the table |
-| D11 | Cannot create, rename or delete files from the app | `Application.kt:189` | Still open. Adding *sections* now works ([09](09-element-editing.md)); adding *files* does not |
+| D11 | Cannot create, rename or delete files from the app | `Application.kt:189` | **Fixed** by T20: the drawer creates, renames and deletes notes, offline too, synced through tombstones ([05](05-sync-protocol.md#creating-renaming-and-deleting-t20)) |
 | D12 | Flat document model (sections are not nested) | `OrgMode.kt:19,93` | Subtree operations (fold, promote, filter by ancestor tag) cannot be expressed |
