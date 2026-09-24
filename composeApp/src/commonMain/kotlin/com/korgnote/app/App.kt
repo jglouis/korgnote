@@ -132,6 +132,10 @@ fun App() {
                             SmallFloatingActionButton(onClick = { vm.cancelElementEdit() }) {
                                 Icon(Icons.Filled.Close, contentDescription = "Discard changes to this element")
                             }
+                            // Most headings are added right after editing the one above.
+                            SmallFloatingActionButton(onClick = { scope.launch { vm.commitElementEditAndAddBelow() } }) {
+                                Icon(Icons.Filled.Add, contentDescription = "Save and add a heading below")
+                            }
                             FloatingActionButton(onClick = { scope.launch { vm.commitElementEdit() } }) {
                                 Icon(Icons.Filled.Save, contentDescription = "Save this element")
                             }
@@ -310,7 +314,10 @@ fun App() {
                                         }
                                     },
                                     onEditElement = { vm.beginElementEdit(it) },
-                                    onAddElementAfter = { vm.addElementAfter(it) },
+                                    onAddHeadingBelow = { vm.addElementAfter(it) },
+                                    onAddSubheading = { vm.addSubheading(it) },
+                                    foldedElements = vm.foldedElements,
+                                    onToggleFold = { vm.toggleFold(it) },
                                     scrollToElementIndex = vm.scrollToElementIndex,
                                     onScrolledToElement = { vm.onScrolledToElement() },
                                     onToggleCheckbox = { offset -> vm.toggleCheckboxAt(offset, scope) }

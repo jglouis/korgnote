@@ -75,13 +75,33 @@ on: every rendered element knows the range it came from.
 
 | Interaction | Effect |
 |---|---|
-| Long-press an element, or tap its pencil | Opens it in an inline editor, in place |
-| Tap its **+** | Inserts a sibling heading of the same level directly after it, and opens that |
+| Tap an element | Opens it in an inline editor, in place |
+| Long-press an element | A menu: *Add heading below*, *Add sub-heading* |
+| *Add heading below* | Inserts a sibling of the same level after the element's **whole subtree**, and opens it |
+| *Add sub-heading* | Inserts a child one level deeper directly under the element's own body (its first child), and opens it |
+| Chevron on a heading | Folds or unfolds the heading's subtree — see [Folding](#folding) |
 | **+** FAB in reading mode | Appends a heading at the end of the file, and opens it |
 | Save FAB | Splices the draft back and saves |
+| **+** FAB while editing | Saves the draft, then opens a new heading after it — a sibling of the last heading the draft holds |
 | Discard FAB | Drops the draft; if the heading was *just inserted*, removes it again |
 
-Plain taps are deliberately left alone — checkboxes and `:LOCATION:` links already use them.
+**A tap edits unless something inside the element wants it.** A checkbox, a link, a drawer's
+toggle and the fold chevron are clickables of their own, and Compose hands the tap to the innermost
+one first, so the element's own tap only sees what they leave. That replaces an earlier rule —
+"plain taps are left alone" — which protected those targets by giving up the tap altogether. A
+scroll or fling never becomes a tap. For screen readers the element's tap is labelled *Edit* and
+its long-press *More actions*, since there is no longer a pencil to find.
+
+**There used to be a pencil and a +** on every element. With a few hundred elements that was a few
+hundred identical pairs, taking width from the text and making a note look like a form. Editing now
+has the tap, and adding after one particular element is rare next to reading, so it moved into the
+long-press menu and the editor.
+
+*Add heading below* goes after the subtree rather than directly after the element: a heading
+inserted between a parent and its children would take the children over. Below the preamble it
+makes the first heading; the preamble offers no sub-heading, as it is not a heading. Typing a new
+`* ` line inside a draft also adds a heading when the draft is saved, because the splice is plain
+text — tested, and needing no UI.
 
 A new heading is inserted as bare stars (`* `, or `** ` to match the level) with the caret after
 them. There is no template: completion ([06](06-editor.md#completion-g3)) is the better answer to
@@ -91,7 +111,32 @@ Checkbox ordinals are per-element in rendering but reported document-wide, using
 `orgCheckboxesBefore` to offset each element's numbering.
 
 State lives in `FileTreeViewModel`: `editingElementIndex`, `elementDraft`, `elementDraftCaret`, plus
-the text before an insertion so that discarding removes it. Covered by `ElementEditingTest`.
+the text before an insertion so that discarding removes it. Covered by `ElementEditingTest`, which
+has a test for every way of adding a heading, and `ReadingModeInteractionTest` for the gestures.
+
+### Folding
+
+Each heading with something beneath it — a body, or descendants — has a chevron. Folding it
+collapses its **subtree**, like `org-cycle` between folded and expanded: the heading shows only its
+heading line, and every element inside its subtree renders nothing. Elements are flat, so the subtree
+is computed (`subtreeEnd`, next to `orgElements`) as everything up to the next heading at the same
+level or above. A hidden element keeps its item, so *an item's index is its element's index* still
+holds and scroll targets need no translation.
+
+Anything that takes you to an element opens the folds around it: a calendar, search or reminder jump
+unfolds the target's ancestors and the target itself (the match may be in its body); opening an
+element for editing, or inserting one, unfolds its ancestors. Discarding an insertion does not fold
+anything again.
+
+Fold state is per file, for the session, in the view model. It is never persisted and never written
+into the note, and everything starts expanded. It is keyed by **the heading line plus how many
+identical lines precede it**, not by list index — adding a heading anywhere above a fold shifts
+every index below it. That is a deliberate change from the roadmap's "position in the tree", which
+has the same problem whenever a sibling is added before the fold's branch. The cost is that editing a
+folded heading's own line forgets its fold. Covered by `FoldingTest`.
+
+Not included: fold-all or unfold-all, folds that survive a restart, and `#+STARTUP: overview` or
+`VISIBILITY`. Add them if using the app shows that they are needed.
 
 ## Consequences
 

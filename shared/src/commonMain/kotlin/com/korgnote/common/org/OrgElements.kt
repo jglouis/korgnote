@@ -147,3 +147,35 @@ fun String.withNewOrgElement(at: Int, level: Int): OrgInsertion {
         caret = elementStart + stars.length + 1,
     )
 }
+
+/**
+ * One past the last element of [index]'s subtree: the next element at its level or above, or the
+ * end of the list.
+ *
+ * Elements are flat — a heading's children are elements of their own — so this is how a heading
+ * finds everything beneath it, the same range T4 gives a section. The preamble owns no subtree.
+ */
+fun List<OrgElement>.subtreeEnd(index: Int): Int {
+    val element = getOrNull(index) ?: return index
+    if (element.isPreamble) return index + 1
+    var end = index + 1
+    while (end < size && this[end].level > element.level) end++
+    return end
+}
+
+/** The headings whose subtree holds [index], outermost first. */
+fun List<OrgElement>.ancestorsOf(index: Int): List<Int> {
+    val element = getOrNull(index) ?: return emptyList()
+    if (element.isPreamble) return emptyList()
+    val ancestors = mutableListOf<Int>()
+    var level = element.level
+    for (i in index - 1 downTo 0) {
+        val candidate = this[i]
+        if (candidate.isPreamble) break
+        if (candidate.level < level) {
+            ancestors.add(i)
+            level = candidate.level
+        }
+    }
+    return ancestors.asReversed()
+}

@@ -1,9 +1,11 @@
 package com.korgnote.common
 
 import com.korgnote.common.org.OrgSection
+import com.korgnote.common.org.ancestorsOf
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.replaceOrgElement
 import com.korgnote.common.org.sliceOf
+import com.korgnote.common.org.subtreeEnd
 import com.korgnote.common.org.withNewOrgElement
 import com.korgnote.common.org.toOrgDocument
 import kotlin.test.Test
@@ -198,4 +200,32 @@ class OrgElementsTests {
         assertEquals(2, inserted.level)
     }
 
+    private val nested = """
+        #+TITLE: Tree
+
+        * Project
+        ** Step one
+        *** Detail
+        ** Step two
+        * Other
+    """.trimIndent() + "\n"
+
+    @Test
+    fun aSubtreeRunsToTheNextHeadingAtItsLevelOrAbove() {
+        val elements = nested.orgElements() // preamble, Project, Step one, Detail, Step two, Other
+        assertEquals(5, elements.subtreeEnd(1), "Project owns both steps and the detail")
+        assertEquals(4, elements.subtreeEnd(2), "Step one owns its detail, not its sibling")
+        assertEquals(4, elements.subtreeEnd(3))
+        assertEquals(6, elements.subtreeEnd(5), "the last heading runs to the end")
+        assertEquals(1, elements.subtreeEnd(0), "the preamble owns nothing below it")
+    }
+
+    @Test
+    fun ancestorsAreTheHeadingsAboveAtShallowerLevels() {
+        val elements = nested.orgElements()
+        assertEquals(listOf(1, 2), elements.ancestorsOf(3))
+        assertEquals(listOf(1), elements.ancestorsOf(4))
+        assertEquals(emptyList(), elements.ancestorsOf(5))
+        assertEquals(emptyList(), elements.ancestorsOf(0))
+    }
 }

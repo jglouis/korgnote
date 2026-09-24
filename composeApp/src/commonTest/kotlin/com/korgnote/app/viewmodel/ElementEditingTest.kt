@@ -1,5 +1,6 @@
 package com.korgnote.app.viewmodel
 
+import com.korgnote.common.org.orgElements
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
@@ -143,5 +144,130 @@ class ElementEditingTest {
         viewModel.commitElementEdit()
 
         assertEquals(initialText + "* TODO One\n* TODO Two\n", viewModel.selectedFileContent)
+    }
+
+    // --- Every way of adding a heading (T24 moved them; none may be lost) ---
+
+    private val projectText = """
+        * Project
+        Project body.
+        ** Step one
+        ** Step two
+        * Other
+    """.trimIndent() + "\n"
+
+    private suspend fun openProject() {
+        repository.files["project.org"] = projectText
+        viewModel.loadFromServer()
+        viewModel.onFileSelected("project.org")
+    }
+
+    @Test
+    fun addingBelowAHeadingGoesAfterItsWholeSubtree() = runTest {
+        openProject()
+
+        viewModel.addElementAfter(0) // Project
+        viewModel.onElementDraftChanged("* Sibling\n")
+        viewModel.commitElementEdit()
+
+        assertEquals(
+            projectText.replace("* Other", "* Sibling\n* Other"),
+            viewModel.selectedFileContent,
+            "a sibling inserted before the steps would have taken them over",
+        )
+    }
+
+    @Test
+    fun addingASubheadingMakesAFirstChild() = runTest {
+        openProject()
+
+        viewModel.addSubheading(0)
+        assertEquals("** \n", viewModel.elementDraft)
+        viewModel.onElementDraftChanged("** Step zero\n")
+        viewModel.commitElementEdit()
+
+        assertEquals(
+            projectText.replace("** Step one", "** Step zero\n** Step one"),
+            viewModel.selectedFileContent,
+        )
+    }
+
+    @Test
+    fun addingBelowThePreambleMakesTheFirstHeading() = runTest {
+        openFile()
+
+        viewModel.addElementAfter(0)
+        viewModel.onElementDraftChanged("* TODO Zeroth task\n")
+        viewModel.commitElementEdit()
+
+        assertEquals(
+            initialText.replace("\n* TODO First task", "\n* TODO Zeroth task\n* TODO First task"),
+            viewModel.selectedFileContent,
+        )
+    }
+
+    @Test
+    fun savingAndAddingBelowKeepsTheDraftAndOpensASibling() = runTest {
+        openFile()
+
+        viewModel.beginElementEdit(1)
+        viewModel.onElementDraftChanged("* TODO First task\nEdited.\n\n")
+        viewModel.commitElementEditAndAddBelow()
+
+        val saved = initialText.replace("Body of the first task.", "Edited.")
+        assertEquals(saved, repository.saves.last().second, "the draft is saved before anything else")
+        assertEquals(2, viewModel.editingElementIndex)
+        assertEquals("* \n", viewModel.elementDraft)
+
+        viewModel.onElementDraftChanged("* TODO Right after\n")
+        viewModel.commitElementEdit()
+        assertEquals(
+            saved.replace("\n* TODO Second task", "\n* TODO Right after\n* TODO Second task"),
+            viewModel.selectedFileContent,
+        )
+    }
+
+    @Test
+    fun savingAndAddingBelowFollowsTheLastHeadingInTheDraft() = runTest {
+        openFile()
+
+        viewModel.beginElementEdit(1)
+        viewModel.onElementDraftChanged("* TODO First task\n** Typed child\n")
+        viewModel.commitElementEditAndAddBelow()
+
+        assertEquals("** \n", viewModel.elementDraft, "a sibling of the typed child, at its level")
+        viewModel.onElementDraftChanged("** Another child\n")
+        viewModel.commitElementEdit()
+        assertEquals(
+            initialText.replace(
+                "* TODO First task\nBody of the first task.\n\n",
+                "* TODO First task\n** Typed child\n** Another child\n",
+            ),
+            viewModel.selectedFileContent,
+        )
+    }
+
+    @Test
+    fun typingAHeadingLineInADraftAddsAHeadingOnSave() = runTest {
+        openFile()
+
+        viewModel.beginElementEdit(1)
+        viewModel.onElementDraftChanged("* TODO First task\nBody of the first task.\n* TODO Typed\n\n")
+        viewModel.commitElementEdit()
+
+        assertEquals(
+            listOf("TODO First task", "TODO Typed", "TODO Second task"),
+            viewModel.selectedFileContent.let { text -> text.orgElements().drop(1).map { it.title } },
+        )
+    }
+
+    @Test
+    fun discardingASubheadingRemovesIt() = runTest {
+        openProject()
+
+        viewModel.addSubheading(0)
+        viewModel.cancelElementEdit()
+
+        assertEquals(projectText, viewModel.selectedFileContent)
     }
 }

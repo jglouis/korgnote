@@ -9,17 +9,22 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -29,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.sliceOf
+import com.korgnote.common.org.subtreeEnd
 import com.korgnote.common.org.toOrgDocument
 
 /**
@@ -54,8 +60,15 @@ fun OrgDocumentView(
      * or Escape still does whatever it would normally do.
      */
     onCompletionKey: (CompletionKey) -> Boolean = { false },
+    /** A plain tap on an element, anywhere an inner target (checkbox, link, drawer) does not claim. */
     onEditElement: ((elementIndex: Int) -> Unit)? = null,
-    onAddElementAfter: ((elementIndex: Int) -> Unit)? = null,
+    /** From the long-press menu: a sibling after the element's whole subtree. */
+    onAddHeadingBelow: ((elementIndex: Int) -> Unit)? = null,
+    /** From the long-press menu: a first child of the element. */
+    onAddSubheading: ((elementIndex: Int) -> Unit)? = null,
+    /** Folded headings: each shows only its heading line, and its descendants render nothing. */
+    foldedElements: Set<Int> = emptySet(),
+    onToggleFold: ((elementIndex: Int) -> Unit)? = null,
     scrollToElementIndex: Int? = null,
     onScrolledToElement: () -> Unit = {},
     /**
@@ -66,6 +79,15 @@ fun OrgDocumentView(
     todoKeywords: OrgTodoConfig = DefaultOrgTodoConfig,
 ) {
     val elements = remember(text) { text.orgElements() }
+    // An element is hidden when it lies inside a folded heading's subtree. The folded heading itself
+    // stays, reduced to its heading line.
+    val hidden = remember(elements, foldedElements) {
+        BooleanArray(elements.size).also { hidden ->
+            for (folded in foldedElements) {
+                for (i in folded + 1 until elements.subtreeEnd(folded)) hidden[i] = true
+            }
+        }
+    }
     val listState = rememberLazyListState()
 
     LazyColumn(
@@ -73,9 +95,11 @@ fun OrgDocumentView(
         state = listState,
         horizontalAlignment = Alignment.Start,
     ) {
-        // Every element gets an item, including a blank preamble that renders nothing, so that an
-        // item's index is its element's index and a scroll target needs no translation.
+        // Every element gets an item, including a blank preamble or a folded-away heading that
+        // renders nothing, so that an item's index is its element's index and a scroll target
+        // needs no translation.
         itemsIndexed(elements, key = { index, _ -> index }) { index, element ->
+            if (hidden[index]) return@itemsIndexed
             val slice = remember(text, element) { element.sliceOf(text) }
             if (element.isPreamble && slice.isBlank()) return@itemsIndexed
 
@@ -92,21 +116,33 @@ fun OrgDocumentView(
                         todoKeywords = todoKeywords,
                     )
                 } else {
+                    val folded = index in foldedElements
+                    val foldable = !element.isPreamble && (
+                        elements.subtreeEnd(index) > index + 1 ||
+                            slice.substringAfter('\n', "").isNotBlank()
+                        )
+                    var menuOpen by remember { mutableStateOf(false) }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .combinedClickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
-                                // Plain taps are left alone: checkboxes and links already use them.
-                                onClick = {},
-                                onLongClick = { onEditElement?.invoke(index) },
+                                // Inner targets — a checkbox, a link, a drawer's toggle — are
+                                // clickables of their own and take their tap first; anything
+                                // else in the element edits it. A scroll never becomes a tap.
+                                onClickLabel = "Edit",
+                                onClick = { onEditElement?.invoke(index) },
+                                onLongClickLabel = "More actions",
+                                onLongClick = { menuOpen = true },
                             ),
                         verticalAlignment = Alignment.Top,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Box(modifier = Modifier.weight(1f)) {
-                            val document = remember(slice) { slice.toOrgDocument() }
+                            // Folded, only the heading line shows, as `org-cycle` leaves it.
+                            val shown = if (folded) slice.substringBefore('\n') else slice
+                            val document = remember(shown) { shown.toOrgDocument() }
                             OrgText(
                                 content = document,
                                 todoKeywords = todoKeywords,
@@ -117,31 +153,26 @@ fun OrgDocumentView(
                                     { item -> toggle(element.start + item.range.first) }
                                 },
                             )
+                            ElementMenu(
+                                expanded = menuOpen,
+                                onDismiss = { menuOpen = false },
+                                isPreamble = element.isPreamble,
+                                onAddHeadingBelow = onAddHeadingBelow?.let { add -> { add(index) } },
+                                onAddSubheading = onAddSubheading?.let { add -> { add(index) } },
+                            )
                         }
-                        Column {
-                            if (onEditElement != null) {
-                                IconButton(
-                                    onClick = { onEditElement(index) },
-                                    modifier = Modifier.size(32.dp),
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Edit,
-                                        contentDescription = "Edit this element",
-                                        tint = MaterialTheme.colorScheme.outline,
-                                    )
-                                }
-                            }
-                            if (onAddElementAfter != null) {
-                                IconButton(
-                                    onClick = { onAddElementAfter(index) },
-                                    modifier = Modifier.size(32.dp),
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Add,
-                                        contentDescription = "Add a heading after this element",
-                                        tint = MaterialTheme.colorScheme.outline,
-                                    )
-                                }
+                        if (foldable && onToggleFold != null) {
+                            val action = if (folded) "Expand" else "Collapse"
+                            IconButton(
+                                onClick = { onToggleFold(index) },
+                                modifier = Modifier.size(32.dp)
+                                    .semantics { contentDescription = "$action ${element.title}" },
+                            ) {
+                                Icon(
+                                    if (folded) Icons.Filled.ChevronRight else Icons.Filled.ExpandMore,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.outline,
+                                )
                             }
                         }
                     }
@@ -162,13 +193,42 @@ fun OrgDocumentView(
 
     // A lazy list only composes what is on screen, so an element added at the far end (the FAB)
     // has no editor to focus and nothing would bring it into view: go to it. An element already
-    // visible — long-pressed or added from its neighbour — is left where the user sees it.
+    // visible — tapped, or added from its neighbour's menu — is left where the user sees it.
     LaunchedEffect(editingElementIndex) {
         val index = editingElementIndex ?: return@LaunchedEffect
         if (index in elements.indices &&
             listState.layoutInfo.visibleItemsInfo.none { it.index == index }
         ) {
             listState.scrollToItem(index)
+        }
+    }
+}
+
+/**
+ * What a long-press offers. Adding a heading used to be a **+** on every element; it is rare next
+ * to reading, so it lives here, out of sight, with room for more actions on one element later.
+ */
+@Composable
+private fun ElementMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    isPreamble: Boolean,
+    onAddHeadingBelow: (() -> Unit)?,
+    onAddSubheading: (() -> Unit)?,
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        if (onAddHeadingBelow != null) {
+            DropdownMenuItem(
+                text = { Text(if (isPreamble) "Add heading" else "Add heading below") },
+                onClick = { onDismiss(); onAddHeadingBelow() },
+            )
+        }
+        // The preamble is not a heading, so there is nothing to put a child under.
+        if (onAddSubheading != null && !isPreamble) {
+            DropdownMenuItem(
+                text = { Text("Add sub-heading") },
+                onClick = { onDismiss(); onAddSubheading() },
+            )
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.korgnote.app.viewmodel
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -93,7 +94,8 @@ class FileTreeViewModel(
     // Exposed error message when network/server cannot be reached
     var lastErrorMessage by mutableStateOf("")
         private set
-    private var currentFile: String? = null
+    // Observable because derived state reads it: the open file's folds depend on which file it is.
+    private var currentFile: String? by mutableStateOf(null)
 
 
     // File tree populated from server; wrapped in state so UI recomposes
@@ -444,16 +446,33 @@ class FileTreeViewModel(
         textBeforeInsertion = null
         elementOriginal = original
         editingElementIndex = index
+        unfoldAncestorsOf(index)
         setDraft(original, caret = original.length)
     }
 
     /** Adds a heading at the end of the document and opens it for editing. */
     fun addElementAtEnd() = insertElementAndEdit(selectedFileContent.length, level = 1)
 
-    /** Adds a sibling heading directly after [index] and opens it for editing. */
+    /**
+     * Adds a sibling heading after [index]'s whole subtree and opens it for editing.
+     *
+     * After the subtree, not directly after the element: a heading inserted between a parent and its
+     * children would take the children over. Below the preamble, it is the first heading.
+     */
     fun addElementAfter(index: Int) {
+        val elements = selectedFileContent.orgElements()
+        val element = elements.getOrNull(index) ?: return
+        val end = elements.getOrNull(elements.subtreeEnd(index) - 1)?.endExclusive ?: return
+        insertElementAndEdit(end, level = element.level)
+    }
+
+    /**
+     * Adds a child heading directly under [index]'s own body, as its first child, and opens it for
+     * editing. First rather than last so that it appears next to the heading it was asked from.
+     */
+    fun addSubheading(index: Int) {
         val element = selectedFileContent.orgElements().getOrNull(index) ?: return
-        insertElementAndEdit(element.endExclusive, level = element.level)
+        insertElementAndEdit(element.endExclusive, level = element.level + 1)
     }
 
     private fun insertElementAndEdit(at: Int, level: Int) {
@@ -469,6 +488,7 @@ class FileTreeViewModel(
         textBeforeInsertion = previousText
         elementOriginal = element.sliceOf(insertion.text)
         editingElementIndex = index
+        unfoldAncestorsOf(index)
         setDraft(elementOriginal.orEmpty(), caret = insertion.caret - element.start)
     }
 
@@ -525,6 +545,80 @@ class FileTreeViewModel(
         selectedFileContent = updated
         clearElementEdit()
         saveCurrentFile()
+    }
+
+    /**
+     * Saves the draft, then opens a new heading after it — the editor's own way of adding, since
+     * most headings are added right after editing the one above.
+     *
+     * The new heading follows the *last* heading the draft holds, at that heading's level: a draft
+     * that gained a `** ` line of its own continues from there, as Org's M-RET would at its end.
+     */
+    suspend fun commitElementEditAndAddBelow() {
+        val index = editingElementIndex ?: return
+        val start = selectedFileContent.orgElements().getOrNull(index)?.start ?: return
+        val draftEnd = start + (elementDraft.length - 1).coerceAtLeast(0)
+        commitElementEdit()
+        if (editingElementIndex != null) return // refused; the draft is still open
+        val last = selectedFileContent.elementIndexOfOffset(draftEnd) ?: return
+        addElementAfter(last)
+    }
+
+    // --- Folding ---
+
+    /**
+     * Folded headings, per file, for this session only. Never persisted, never written to the note.
+     *
+     * Keyed by the heading line and how many identical lines come before it, not by element index:
+     * adding a heading anywhere above a fold shifts every index below it, and would move the fold
+     * onto the wrong heading. A fold on a heading whose line is edited is simply forgotten.
+     */
+    private var foldsByFile by mutableStateOf<Map<String, Set<HeadingKey>>>(emptyMap())
+
+    private data class HeadingKey(val line: String, val occurrence: Int)
+
+    private fun headingKeys(text: String, elements: List<OrgElement>): List<HeadingKey?> {
+        val seen = mutableMapOf<String, Int>()
+        return elements.map { element ->
+            if (element.isPreamble) null else {
+                val line = element.sliceOf(text).substringBefore('\n')
+                val occurrence = seen[line] ?: 0
+                seen[line] = occurrence + 1
+                HeadingKey(line, occurrence)
+            }
+        }
+    }
+
+    /** Indices of the open file's folded headings, into its current elements. */
+    val foldedElements: Set<Int> by derivedStateOf {
+        val folds = currentFile?.let { foldsByFile[it] }.orEmpty()
+        if (folds.isEmpty()) return@derivedStateOf emptySet()
+        val text = selectedFileContent
+        headingKeys(text, text.orgElements()).withIndex()
+            .filter { (_, key) -> key != null && key in folds }
+            .map { it.index }
+            .toSet()
+    }
+
+    /** Collapses or expands the heading at [index], hiding or showing its body and descendants. */
+    fun toggleFold(index: Int) {
+        setFolded { folded -> if (index in folded) folded - index else folded + index }
+    }
+
+    private fun unfoldAncestorsOf(index: Int, includingItself: Boolean = false) {
+        val elements = selectedFileContent.orgElements()
+        val opening = elements.ancestorsOf(index).toSet() + (if (includingItself) setOf(index) else emptySet())
+        if (foldedElements.none { it in opening }) return
+        setFolded { folded -> folded - opening }
+    }
+
+    private fun setFolded(change: (Set<Int>) -> Set<Int>) {
+        val path = currentFile ?: return
+        val text = selectedFileContent
+        val keys = headingKeys(text, text.orgElements())
+        // Rebuilt from indices each time, which also drops keys whose heading no longer exists.
+        val folded = change(foldedElements).mapNotNull { keys.getOrNull(it) }.toSet()
+        foldsByFile = foldsByFile + (path to folded)
     }
 
     /**
@@ -673,6 +767,9 @@ class FileTreeViewModel(
             if (currentFile == path && raw != null) {
                 selectedFileContent = raw
                 scrollToElementIndex = scrollToOffset?.let { raw.elementIndexOfOffset(it) }
+                // A jump must never land inside a fold: open everything around the target, and
+                // the target itself, since what was asked for may be in its body.
+                scrollToElementIndex?.let { unfoldAncestorsOf(it, includingItself = true) }
             }
         }
     }

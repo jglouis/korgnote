@@ -22,7 +22,7 @@ written: it is what a day of real use and three regressions exposed.
 
 ## Status
 
-Updated 2026-09-23.
+Updated 2026-09-24.
 
 | | Task | State |
 |---|---|---|
@@ -52,7 +52,7 @@ Updated 2026-09-23.
 | ❌ | T21 Link navigation | Not started — links render but do not go anywhere |
 | ❌ | T22 Whole-file editing | Not started — decide whether the second editing surface survives |
 | ❌ | T23 Server container | Not started — a Dockerfile for the server, notes mounted from the host |
-| ❌ | T24 Reading-mode affordances | Not started — tap to edit, one fold toggle instead of pencil and **+** |
+| ✅ | T24 Reading-mode affordances | Done — tap to edit, long-press menu, one fold chevron per heading; [09](09-element-editing.md#the-surface) |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -787,7 +787,18 @@ made on the host reaches a connected client, and a note saved from the app appea
 owned by the host user.
 **Not included** TLS. The README's reverse-proxy recipe still applies in front of the container.
 
-### T24 · Tap to edit, fold instead of pencil and +
+### T24 · Tap to edit, fold instead of pencil and + — ✅ **done**
+**Landed** A tap edits; inner targets (checkbox, link, drawer, chevron) keep their own taps. The
+pencil and per-element **+** are gone: a long-press menu offers *Add heading below* (after the
+whole subtree, so it never adopts the element's children) and *Add sub-heading* (first child), and
+the editor has a **+** FAB that saves and opens the next heading. One chevron per heading folds its
+subtree; jumps and edits unfold what they need. [09](09-element-editing.md#the-surface) describes it.
+**One deviation** Folds are keyed by heading line plus occurrence rather than tree position, which
+also moves when a sibling is added above; see [09](09-element-editing.md#folding).
+**Verified** `ElementEditingTest` (every way of adding a heading), `FoldingTest`,
+`ReadingModeInteractionTest` (tap, checkbox, long-press menu, fold) on desktop JVM. Not yet tried on
+a phone — the long-press menu placement in particular should be looked at there.
+
 **Depends** T4
 **Why** Every element in reading mode has two icons on its right, a pencil and a **+**. With a few
 hundred elements in a file, that is a few hundred pairs of identical icons. They take width from the
