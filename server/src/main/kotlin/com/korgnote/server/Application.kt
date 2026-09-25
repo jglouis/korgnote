@@ -16,15 +16,38 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import java.io.File
 import java.nio.file.Paths
+import kotlin.system.exitProcess
 
 fun main() {
     val security = ServerSecurity.fromEnvironment()
+    security.startupError()?.let {
+        System.err.println(it)
+        exitProcess(1)
+    }
     // KORGNOTE_PORT mostly exists so a second instance can be run alongside the real one while
     // testing, without stopping the one being used.
     val port = System.getenv("KORGNOTE_PORT")?.trim()?.toIntOrNull() ?: SERVER_PORT
-    embeddedServer(Netty, port = port, host = security.bindHost) { module(security, watchFiles = true) }
-        .start(wait = true)
+    fun isSet(name: String) = System.getenv(name)?.trim()?.lowercase() in setOf("1", "true", "yes")
+    embeddedServer(Netty, port = port, host = security.bindHost) {
+        module(
+            security,
+            watchFiles = true,
+            requireNotesDir = isSet(REQUIRE_NOTES_DIR_VARIABLE),
+            serveWebClient = !isSet(DISABLE_WEB_VARIABLE),
+        )
+    }.start(wait = true)
 }
+
+/** Serve the API only, even when a web client build is present (the container ships one). */
+const val DISABLE_WEB_VARIABLE = "KORGNOTE_DISABLE_WEB"
+
+/**
+ * Set by the container image: a missing or unwritable notes directory stops the server instead of
+ * falling back to the bundled samples. In a container that fallback would hide a typo in the volume
+ * path, or a UID that cannot write to the mount, behind a server that looks healthy.
+ */
+const val REQUIRE_NOTES_DIR_VARIABLE = "KORGNOTE_REQUIRE_NOTES_DIR"
+
 
 /**
  * [security] defaults to open because that is what the test host and a plain local run want; `main`
@@ -40,6 +63,10 @@ fun Application.module(
      * themselves. `main` turns it on.
      */
     watchFiles: Boolean = false,
+    /** Fail instead of falling back to the samples; see [REQUIRE_NOTES_DIR_VARIABLE]. */
+    requireNotesDir: Boolean = false,
+    /** Serve the wasm client at `/` when a build of it is found; see [DISABLE_WEB_VARIABLE]. */
+    serveWebClient: Boolean = true,
 ) {
     log.info(security.describe())
 
@@ -114,6 +141,21 @@ fun Application.module(
      */
     fun openStore(): FileStore {
         val notesDir = resolvePath(notesDirOverride)
+        if (requireNotesDir) {
+            check(notesDir.isDirectory) {
+                "Notes directory '${notesDir.absolutePath}' does not exist and $REQUIRE_NOTES_DIR_VARIABLE is set. " +
+                    "Is the volume mounted?"
+            }
+            // Write a file rather than ask canWrite(): through Docker Desktop's file sharing a
+            // directory can report itself writable and still refuse the write.
+            val writable = runCatching {
+                File.createTempFile(".korgnote-write-check", null, notesDir).delete()
+            }.isSuccess
+            check(writable) {
+                "Notes directory '${notesDir.absolutePath}' is not writable by this user. " +
+                    "Run as the UID/GID that owns it."
+            }
+        }
         if (notesDir.exists() && notesDir.isDirectory) {
             log.info("Serving .org files from ${notesDir.absolutePath}")
             return FileStore(notesDir.toPath())
@@ -171,9 +213,10 @@ fun Application.module(
             return paths.map { Paths.get(it).toFile() }
         }
 
-        val wasmOut = wasmCandidates().firstOrNull { it.exists() }
+        val wasmOut = if (serveWebClient) wasmCandidates().firstOrNull { it.exists() } else null
         println(
-            "Working dir: ${System.getProperty("user.dir")} | Using WASM dir: ${wasmOut?.absolutePath ?: "<not found>"}"
+            "Working dir: ${System.getProperty("user.dir")} | Using WASM dir: " +
+                (wasmOut?.absolutePath ?: if (serveWebClient) "<not found>" else "<disabled by $DISABLE_WEB_VARIABLE>")
         )
 
         if (wasmOut != null) {

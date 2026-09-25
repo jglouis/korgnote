@@ -18,8 +18,8 @@ and notifications (T18) are built and waiting on a device check. T19 (CI), which
 suite.
 
 **Phase 5 (T19–T24) came from using the thing.** Nothing in it was foreseen when the plan was
-written: it is what a day of real use and three regressions exposed. All of it is done but T23, the
-server container. T22 settled the editor question: there is one editing surface now.
+written: it is what a day of real use and three regressions exposed. All of it is done, T23 (the server
+container) included. T22 settled the editor question: there is one editing surface now.
 
 ## Status
 
@@ -52,7 +52,7 @@ Updated 2026-09-25.
 | ✅ | T20 File lifecycle | Done — create into an inbox folder, rename/move, delete; offline-safe through tombstones |
 | ✅ | T21 Link navigation | Done — `id:`, `file:`, `*Heading`, `#id` and fuzzy links open their target; backlinks; Back |
 | ✅ | T22 Whole-file editing | Done — retired; the long-press menu moves, promotes and demotes instead |
-| ❌ | T23 Server container | Not started — a Dockerfile for the server, notes mounted from the host |
+| ✅ | T23 Server container | Done — `Dockerfile` + `docker-compose.yml`; refuses to start without a token or a writable `/notes` |
 | ✅ | T24 Reading-mode affordances | Done — tap to edit, long-press menu, one fold chevron per heading; [09](09-element-editing.md#the-surface) |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
@@ -823,7 +823,27 @@ doing: they exist only for this surface.
 first, and whichever it is, the reason is written down.
 
 
-### T23 · Server container
+### T23 · Server container — ✅ **done**
+**Landed** A multi-stage [`Dockerfile`](../Dockerfile) (`:server:installDist` on a JDK 25 image, then
+a JRE image) and a [`docker-compose.yml`](../docker-compose.yml). Two new switches, both set by the
+image: `KORGNOTE_REQUIRE_TOKEN` refuses to start without a token (`KORGNOTE_ALLOW_LAN` does not
+satisfy it), and `KORGNOTE_REQUIRE_NOTES_DIR` makes a missing or unwritable notes directory fatal.
+Writability is checked by writing a probe file, because through Docker Desktop's file sharing a
+`chmod 555` directory reports `canWrite()` as true and then refuses the write. The container runs as a
+non-root user, and compose sets it to `KORGNOTE_UID:KORGNOTE_GID`. `UID` itself cannot be used
+because it is read-only in bash and zsh.
+**Build context** Not a problem: with `local.properties` excluded and no SDK in the image, Gradle
+configures the Android modules and builds `:server` without complaint, so the build stays inside
+the image.
+**Verified** On Docker Desktop for macOS: `401` without the token; a host edit arrived as an SSE
+`changed` event within seconds through the bind mount; a `PUT` from a client created the file on the
+host owned by the host UID; each refusal (no token, `ALLOW_LAN` without a token, no mount, `:ro`
+mount, unwritable directory) exits with a message. Not yet run on a Linux host.
+**Optional, half done** The image builds the wasm client alongside the server and serves it at `/`
+(`WASM_DIR=/opt/korgnote/web`); `KORGNOTE_DISABLE_WEB=1` turns that off at run time. The build stage
+needs `libatomic1`, which the Node that the Kotlin plugin downloads links against. Pushing the image
+to GHCR from CI is not done.
+
 **Depends** T2
 **Scope** A `Dockerfile` for the Ktor server and a `docker-compose.yml` example: the notes
 directory mounted from the host at `/notes` with `NOTES_DIR=/notes`, the token and the port. A

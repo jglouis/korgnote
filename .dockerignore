@@ -1,0 +1,14 @@
+# Keep the build context to what `:server:installDist` needs to configure and compile.
+.git
+.gradle
+.kotlin
+.idea
+**/build/
+build/
+notes/
+iosApp/
+docs/
+# Holds the host's Android SDK path, which means nothing inside the image.
+local.properties
+*.iml
+.DS_Store

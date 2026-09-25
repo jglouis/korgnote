@@ -10,10 +10,15 @@ package com.korgnote.server
  * app is developed against real phones over a LAN, and making that require a token every time would
  * be a tax on every test run. It is a deliberate, logged, opt-in hole: never use it on a network you
  * do not control.
+ *
+ * `KORGNOTE_REQUIRE_TOKEN=1` turns a missing token into a refusal to start. The container image sets
+ * it, because a container is exactly where a port gets published by accident, and inside one the
+ * loopback default would only make the server unreachable rather than safe.
  */
 data class ServerSecurity(
     val token: String?,
     val allowLanWithoutToken: Boolean,
+    val tokenMandatory: Boolean = false,
 ) {
     /** Loopback unless something has explicitly made it safe — or explicitly accepted the risk. */
     val bindHost: String
@@ -29,17 +34,29 @@ data class ServerSecurity(
 
         const val TOKEN_VARIABLE = "KORGNOTE_TOKEN"
         const val ALLOW_LAN_VARIABLE = "KORGNOTE_ALLOW_LAN"
+        const val REQUIRE_TOKEN_VARIABLE = "KORGNOTE_REQUIRE_TOKEN"
 
         fun fromEnvironment(read: (String) -> String? = System::getenv): ServerSecurity =
             ServerSecurity(
                 token = read(TOKEN_VARIABLE)?.trim()?.takeUnless { it.isEmpty() },
-                allowLanWithoutToken = read(ALLOW_LAN_VARIABLE)?.trim()?.lowercase()
-                    in setOf("1", "true", "yes"),
+                allowLanWithoutToken = isSet(read(ALLOW_LAN_VARIABLE)),
+                tokenMandatory = isSet(read(REQUIRE_TOKEN_VARIABLE)),
             )
+
+        private fun isSet(value: String?): Boolean = value?.trim()?.lowercase() in setOf("1", "true", "yes")
 
         /** No token and reachable: what the test host and local development use. */
         fun open(): ServerSecurity = ServerSecurity(token = null, allowLanWithoutToken = true)
     }
+
+    /** Why this configuration must not start, or null when it may. */
+    fun startupError(): String? =
+        if (tokenMandatory && token == null) {
+            "$REQUIRE_TOKEN_VARIABLE is set but $TOKEN_VARIABLE is not: refusing to start without a token. " +
+                "Generate one with `openssl rand -hex 16`."
+        } else {
+            null
+        }
 
     /** A line for the log explaining, in one sentence, what this server will accept. */
     fun describe(): String = when {

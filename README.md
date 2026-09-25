@@ -68,6 +68,9 @@ in your IDE’s toolbar or run it directly from the terminal:
 | `KORGNOTE_TOKEN` | Require `Authorization: Bearer <token>` on `/api`, and listen on all interfaces. |
 | `KORGNOTE_ALLOW_LAN` | `1` to listen on all interfaces **without** a token. For testing only. |
 | `KORGNOTE_PORT` | Port to listen on. Defaults to 8080; handy for a second instance while testing. |
+| `KORGNOTE_DISABLE_WEB` | `1` to serve the API only, even when a web client build is present. |
+| `KORGNOTE_REQUIRE_TOKEN` | `1` to refuse to start without `KORGNOTE_TOKEN`. Set by the container image. |
+| `KORGNOTE_REQUIRE_NOTES_DIR` | `1` to refuse to start when `NOTES_DIR` is missing or not writable, instead of serving the samples. Set by the container image. |
 
 With no variables set the server listens on **127.0.0.1 only**, so an unauthenticated server is not
 reachable from the network. It logs, on startup, one line saying which of these three modes it is in.
@@ -113,6 +116,32 @@ server {
 
 Set `KORGNOTE_TOKEN` as well: the proxy protects the traffic, the token protects the endpoint. Point
 the app at `https://notes.example.com` (host field) with port `443`.
+
+#### In a container
+
+A `Dockerfile` and a `docker-compose.yml` at the repository root run the server with a notes
+directory from the host:
+
+```shell
+export KORGNOTE_TOKEN=$(openssl rand -hex 16)   # also goes into the app
+export NOTES_HOST_DIR=~/notes
+export KORGNOTE_UID=$(id -u) KORGNOTE_GID=$(id -g)
+docker compose up --build
+```
+
+The image is stricter than a plain run: it refuses to start without a token, and a missing or
+unwritable `/notes` stops it rather than falling back to the samples, so a wrong volume path fails
+loudly. It runs as `KORGNOTE_UID:KORGNOTE_GID` so notes created from the app belong to you on the
+host. `KORGNOTE_HOST_PORT` changes the published port (default 8080).
+
+The image also carries the web client, built in the same stage, and serves it at `/` on the same
+origin as the API: open `http://<host>:8080/` and enter the token in Settings. Set
+`KORGNOTE_DISABLE_WEB=1` to serve the API only. Behind the reverse proxy above,
+publish it on loopback only (`127.0.0.1:8080:8080`).
+
+Edits made on the host reach connected clients through the server's file watcher. That has been
+checked through a Docker Desktop bind mount on macOS; if a host edit ever does not show up, check the
+watcher on the machine that runs the container.
 
 Responses are gzipped when the client asks for it, which matters most for `/api/org-content` — over a
 megabyte of text for a real notes directory.

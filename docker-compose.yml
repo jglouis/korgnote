@@ -1,0 +1,24 @@
+# T23 — the sync server with the notes directory from the host.
+#
+#   export KORGNOTE_TOKEN=$(openssl rand -hex 16)   # the app needs this token too
+#   export NOTES_HOST_DIR=~/notes
+#   export KORGNOTE_UID=$(id -u) KORGNOTE_GID=$(id -g)
+#   docker compose up --build
+#
+# No TLS here: put the reverse proxy from the README in front of it for anything beyond your own LAN.
+services:
+  korgnote:
+    build: .
+    image: korgnote-server
+    # Notes the app creates must belong to you on the host, not to root or to UID 1000.
+    user: "${KORGNOTE_UID:-1000}:${KORGNOTE_GID:-1000}"
+    environment:
+      # Required: the image refuses to start without it.
+      KORGNOTE_TOKEN: "${KORGNOTE_TOKEN:?set KORGNOTE_TOKEN (openssl rand -hex 16)}"
+      # The web client is served at / by default; uncomment to serve the API only.
+      # KORGNOTE_DISABLE_WEB: "1"
+    volumes:
+      - "${NOTES_HOST_DIR:?set NOTES_HOST_DIR to your notes directory}:/notes"
+    ports:
+      - "${KORGNOTE_HOST_PORT:-8080}:8080"
+    restart: unless-stopped

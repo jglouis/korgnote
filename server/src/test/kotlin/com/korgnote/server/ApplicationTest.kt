@@ -158,4 +158,96 @@ class ApplicationTest {
             tempDir.deleteRecursively()
         }
     }
+
+    // --- KORGNOTE_REQUIRE_NOTES_DIR (T23) ---
+
+    /** A mistyped volume path must stop the server, not quietly serve the samples. */
+    @Test
+    fun aRequiredNotesDirectoryThatIsMissingFailsStartup() {
+        System.setProperty("notes.dir", "temp_notes_does_not_exist")
+        try {
+            val failure = assertFails {
+                testApplication {
+                    application { module(requireNotesDir = true) }
+                    startApplication()
+                }
+            }
+            assertTrue(failure.message.orEmpty().contains("does not exist"), failure.message)
+        } finally {
+            System.clearProperty("notes.dir")
+        }
+    }
+
+    @Test
+    fun aRequiredNotesDirectoryThatIsReadOnlyFailsStartup() {
+        val tempDir = File("temp_notes_read_only")
+        tempDir.mkdirs()
+        tempDir.setWritable(false)
+        System.setProperty("notes.dir", tempDir.path)
+        try {
+            val failure = assertFails {
+                testApplication {
+                    application { module(requireNotesDir = true) }
+                    startApplication()
+                }
+            }
+            assertTrue(failure.message.orEmpty().contains("not writable"), failure.message)
+        } finally {
+            System.clearProperty("notes.dir")
+            tempDir.setWritable(true)
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun aRequiredNotesDirectoryThatExistsIsServed() {
+        val tempDir = File("temp_notes_required")
+        tempDir.mkdirs()
+        File(tempDir, "only.org").writeText("* Only")
+        System.setProperty("notes.dir", tempDir.path)
+        try {
+            testApplication {
+                application { module(requireNotesDir = true) }
+                val body = client.get("/api/v1/manifest").bodyAsText()
+                assertTrue(body.contains("only.org"))
+                assertFalse(body.contains("inbox.org"), "the samples must not be mixed in")
+            }
+        } finally {
+            System.clearProperty("notes.dir")
+            tempDir.deleteRecursively()
+        }
+    }
+
+    // --- KORGNOTE_DISABLE_WEB ---
+
+    @Test
+    fun theWebClientIsServedAtTheRootWhenPresent() = withWebClient {
+        testApplication {
+            application { module() }
+            assertTrue(client.get("/").bodyAsText().contains("web client"))
+        }
+    }
+
+    @Test
+    fun theWebClientCanBeTurnedOff() = withWebClient {
+        testApplication {
+            application { module(serveWebClient = false) }
+            val body = client.get("/").bodyAsText()
+            assertFalse(body.contains("web client"))
+            assertTrue(body.startsWith("Ktor:"))
+        }
+    }
+
+    private fun withWebClient(block: () -> Unit) {
+        val webDir = File("temp_web_client")
+        webDir.mkdirs()
+        File(webDir, "index.html").writeText("<html>web client</html>")
+        System.setProperty("wasm.dir", webDir.path)
+        try {
+            block()
+        } finally {
+            System.clearProperty("wasm.dir")
+            webDir.deleteRecursively()
+        }
+    }
 }

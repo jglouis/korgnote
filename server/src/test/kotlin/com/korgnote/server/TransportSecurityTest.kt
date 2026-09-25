@@ -9,6 +9,8 @@ import io.ktor.server.testing.testApplication
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -53,6 +55,46 @@ class TransportSecurityTest {
         val security = ServerSecurity.fromEnvironment { if (it == ServerSecurity.TOKEN_VARIABLE) "   " else "no" }
         assertFalse(security.requiresToken)
         assertEquals(ServerSecurity.LOOPBACK, security.bindHost)
+    }
+
+    // --- The container's mandatory token (T23) ---
+
+    @Test
+    fun aMandatoryTokenThatIsMissingRefusesToStart() {
+        val security = ServerSecurity.fromEnvironment {
+            if (it == ServerSecurity.REQUIRE_TOKEN_VARIABLE) "1" else null
+        }
+        assertNotNull(security.startupError())
+    }
+
+    /** Opting into the unauthenticated LAN hole does not satisfy a mandatory token. */
+    @Test
+    fun allowLanDoesNotSatisfyAMandatoryToken() {
+        val security = ServerSecurity.fromEnvironment {
+            when (it) {
+                ServerSecurity.REQUIRE_TOKEN_VARIABLE, ServerSecurity.ALLOW_LAN_VARIABLE -> "1"
+                else -> null
+            }
+        }
+        assertNotNull(security.startupError())
+    }
+
+    @Test
+    fun aMandatoryTokenThatIsSetStarts() {
+        val security = ServerSecurity.fromEnvironment {
+            when (it) {
+                ServerSecurity.REQUIRE_TOKEN_VARIABLE -> "1"
+                ServerSecurity.TOKEN_VARIABLE -> token
+                else -> null
+            }
+        }
+        assertNull(security.startupError())
+        assertEquals(ServerSecurity.ALL_INTERFACES, security.bindHost)
+    }
+
+    @Test
+    fun withoutTheMandateNoTokenIsFine() {
+        assertNull(ServerSecurity.fromEnvironment { null }.startupError())
     }
 
     // --- Compression ---
