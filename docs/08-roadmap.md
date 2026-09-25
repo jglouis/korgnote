@@ -18,16 +18,17 @@ and notifications (T18) are built and waiting on a device check. T19 (CI), which
 suite.
 
 **Phase 5 (T19–T24) came from using the thing.** Nothing in it was foreseen when the plan was
-written: it is what a day of real use and three regressions exposed.
+written: it is what a day of real use and three regressions exposed. All of it is done but T23, the
+server container. T22 settled the editor question: there is one editing surface now.
 
 ## Status
 
-Updated 2026-09-24.
+Updated 2026-09-25.
 
 | | Task | State |
 |---|---|---|
 | ✅ | T12a Editor performance diagnostic | Done — [notes/editor-perf.md](notes/editor-perf.md) |
-| 🟡 | T12b Editor surface | Done bar two items deferred on purpose — see the task |
+| ✅ | T12b Editor surface | Done — the two deferred items went with the whole-file editor (T22) |
 | 🟡 | T0 / T0b Text-editing spikes | Answered in practice, findings in [06](06-editor.md#editor-surface) |
 | ✅ | T1 Server reads the disk | Done — `FileStore`, plus conflict refusal and path validation |
 | ✅ | T3 Source-mapped documents | Done — `range` on every node, `text` on the document, raw-text wire |
@@ -50,7 +51,7 @@ Updated 2026-09-24.
 | ✅ | T19 CI | Done — [ci.yml](../.github/workflows/ci.yml): Linux on every push, iOS nightly when master changed |
 | ✅ | T20 File lifecycle | Done — create into an inbox folder, rename/move, delete; offline-safe through tombstones |
 | ✅ | T21 Link navigation | Done — `id:`, `file:`, `*Heading`, `#id` and fuzzy links open their target; backlinks; Back |
-| ❌ | T22 Whole-file editing | Not started — decide whether the second editing surface survives |
+| ✅ | T22 Whole-file editing | Done — retired; the long-press menu moves, promotes and demotes instead |
 | ❌ | T23 Server container | Not started — a Dockerfile for the server, notes mounted from the host |
 | ✅ | T24 Reading-mode affordances | Done — tap to edit, long-press menu, one fold chevron per heading; [09](09-element-editing.md#the-surface) |
 
@@ -428,7 +429,7 @@ measurement, not speculation.
 **Done when** The dominant cost — A (highlighting) or B (layout) — is written down with
 numbers.
 
-### T12b · Editor surface — 🟡 **partly done**
+### T12b · Editor surface — ✅ **done**
 **Depends** T12a
 
 **Landed:** per-line highlight cache with memoisation; viewport-scoped styling driven by
@@ -447,10 +448,9 @@ to 38 ms, and `App.kt` hands its scroll to whichever component owns it — readi
 search results — while keeping it for the whole-file editor and every other screen. Measurements
 and the reasoning are in [09](09-element-editing.md#known-gaps).
 
-**Still outstanding, both deferred on purpose:**
-- Read↔edit scroll mapping for the *whole-file* editor. Per-element editing removed the transition
-  that needed it, so this is only worth doing if the whole-file editor stops being an escape hatch.
-- Debounced, cancellable re-parse. Not needed at current costs; revisit if it regresses.
+**Closed by T22:** the two items deferred here — read↔edit scroll mapping and a debounced,
+cancellable re-parse — existed only for the whole-file editor, and went with it. Viewport-scoped
+styling went too; the per-line cache and metric-neutral styling remain, for the element editor.
 
 ### T13 · Completion — ✅ **done**
 **Landed** `shared/org/complete/OrgComplete.kt`: `complete(doc, cursor, ctx)` returns items that
@@ -493,9 +493,7 @@ is why the splice now lives in the engine as `applyTo`, where a test can reach i
 the trigger table in [06](06-editor.md#completion-g3).
 **Done when** Each trigger row has a unit test, and typing `* ` then `TO` offers the
 document's own `#+TODO:` keywords (G3).
-**Not included** The whole-file editor, which still has no completion: it holds a `String` rather
-than a `TextFieldValue`, so it has no caret to complete at, and it is an escape hatch rather than
-the path edits take. Wiring it is the same call plus that conversion.
+**Not included** The whole-file editor, which never had completion — moot since T22 retired it.
 
 ### T14 · Search — ✅ **done**
 **Landed** `shared/org/search/OrgSearch.kt`: `SearchQuery.parse` turns what was typed into words
@@ -782,7 +780,30 @@ links to it; both work offline, and the backlink scan of the real corpus stays w
 **Not included** An `ID:` property scheme of its own, or `org-roam`'s database. The corpus is
 small enough to scan, and an index is a thing to keep correct on every save (G7).
 
-### T22 · Whole-file editing, reconsidered
+### T22 · Whole-file editing, reconsidered — ✅ **done: retired**
+**Decision** Retire it. Per-element editing was already the path every edit took; the whole-file
+editor was kept only for restructuring, and that is now in the long-press menu. The preamble needed
+nothing new: it is element 0, and a tap edits it like any other.
+**Landed**
+- `withOrgSubtreesSwapped`, `withOrgSubtreeShifted`, `previousSibling` and `nextSibling` in
+  `OrgElements.kt`, next to `withoutOrgSubtree`: pure text edits over element ranges, so the rest
+  of the file is byte-identical, and a `*` line inside a block is left alone exactly when the
+  splitter leaves it alone.
+- *Move up*, *Move down*, *Promote* and *Demote* in the long-press menu, each acting on the whole
+  subtree as Org's `org-move-subtree-*` and `org-promote/demote-subtree` do. Unavailable ones are
+  shown disabled. Like delete, they are refused while an element is being edited. Folds follow the
+  headings by index, and a moved heading that leaves the screen is scrolled back to.
+- Removed: the top bar's Edit/Save buttons, the whole-file `BasicTextField`, `EditorViewport`,
+  viewport-scoped styling in `OrgSyntaxHighlightTransformation` with `OrgViewportHighlightTest`, and
+  `OpenNote.onContentChanged`.
+**Verified** `OrgElementsTests` (sibling, swap and shift cases), `ElementEditingTest` (moves, shifts,
+folds, refusal while editing) and `ReadingModeInteractionTest` (the menu offers only the moves that
+apply).
+**Not included** Moving a heading out of its parent or to another file (refile), and keyboard
+shortcuts for any of it.
+
+The task as it was written:
+
 **Depends** T12b, T13
 **Scope** A decision, then the work it implies. Per-element editing ([09](09-element-editing.md))
 became the main path and the whole-file editor stayed behind as an escape hatch — holding a plain
@@ -911,8 +932,8 @@ interactions.
   that is true, the more of it is decoration. It is also the only task here that takes an hour.
 - T23 is independent of everything but T2 and can be done whenever a machine to run it on is ready.
 - T20 before T21: a corpus you cannot add to is a corpus whose links you cannot finish writing.
-- T22 is independent and can wait, but it should be settled before the editor is touched again,
-  not after — the last three editor changes each had to ask which surface they applied to.
+- ~~T22 is independent and can wait, but it should be settled before the editor is touched again,
+  not after~~ — settled: one surface.
 - T24 needs only T4 and can be done at any time. It changes the reading surface, not either
   editing surface, so it does not have to wait for T22. It should land before T21, though, so that
   link taps are designed as inner targets from the start rather than fitted around tap-to-edit.

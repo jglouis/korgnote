@@ -1,9 +1,7 @@
 package com.korgnote.app
 
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -13,17 +11,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.findRootCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.ui.*
@@ -40,7 +29,6 @@ import org.koin.compose.viewmodel.koinViewModel
 fun App() {
     MaterialTheme {
         var selectedScreen by remember { mutableStateOf(BottomItem.HOME) }
-        var isEditing by remember { mutableStateOf(false) }
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val scope = rememberCoroutineScope()
         val vm = koinViewModel<NotesViewModel>()
@@ -55,7 +43,6 @@ fun App() {
                 if (target != null) {
                     ReminderTaps.pending.value = null
                     vm.agenda.openReminderTarget(target)
-                    isEditing = false
                     selectedScreen = BottomItem.HOME
                 }
             }
@@ -84,7 +71,6 @@ fun App() {
                         } else {
                             creatingNote = false
                             noteDialogError = null
-                            isEditing = false
                             selectedScreen = BottomItem.HOME
                             drawerState.close()
                         }
@@ -129,7 +115,6 @@ fun App() {
                 override fun openUri(uri: String) {
                     if (uri.startsWith(NOTE_LINK_URI_PREFIX)) {
                         vm.links.follow(uri.removePrefix(NOTE_LINK_URI_PREFIX))
-                        isEditing = false
                         selectedScreen = BottomItem.HOME
                     } else {
                         platformUriHandler.openUri(uri)
@@ -171,7 +156,6 @@ fun App() {
                                 onFileSelected = { name ->
                                     scope.launch {
                                         vm.onFileSelected(name)
-                                        isEditing = false
                                         drawerState.close()
                                     }
                                 },
@@ -198,25 +182,9 @@ fun App() {
                             },
                             actions = {
                                 // Back from a followed link, to where it was tapped.
-                                if (selectedScreen == BottomItem.HOME && vm.links.canGoBack && !isEditing) {
+                                if (selectedScreen == BottomItem.HOME && vm.links.canGoBack) {
                                     IconButton(onClick = { vm.links.goBack() }) {
                                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                                    }
-                                }
-                                if (selectedScreen == BottomItem.HOME && vm.note.label != OpenNote.NO_FILE_LABEL) {
-                                    if (isEditing) {
-                                        IconButton(onClick = {
-                                            scope.launch {
-                                                vm.saveCurrentFile()
-                                                isEditing = false
-                                            }
-                                        }) {
-                                            Icon(Icons.Filled.Save, contentDescription = "Save file")
-                                        }
-                                    } else {
-                                        IconButton(onClick = { isEditing = true }) {
-                                            Icon(Icons.Filled.Edit, contentDescription = "Edit file")
-                                        }
                                     }
                                 }
                             }
@@ -239,7 +207,6 @@ fun App() {
                             }
                         } else if (
                             selectedScreen == BottomItem.HOME &&
-                            !isEditing &&
                             vm.note.label != OpenNote.NO_FILE_LABEL
                         ) {
                             FloatingActionButton(onClick = { vm.editor.addAtEnd() }) {
@@ -288,9 +255,8 @@ fun App() {
                     // results, and the calendar with its agenda list and hour grid. A lazy list cannot
                     // be nested in a vertically scrolling parent — and a screen that fills the space
                     // left gets none inside one — so this Column yields its scroll to those three;
-                    // every other screen, and the whole-file editor, still scroll here as before.
+                    // every other screen still scrolls here.
                     val readingDocument = selectedScreen == BottomItem.HOME &&
-                        !isEditing &&
                         vm.note.content.isNotBlank()
                     val ownsItsScroll = readingDocument ||
                         selectedScreen == BottomItem.SEARCH ||
@@ -323,72 +289,7 @@ fun App() {
                                 Text(text = vm.note.label)
                                 Spacer(modifier = Modifier.height(16.dp))
 
-                                if (isEditing) {
-                                    val headingColor = MaterialTheme.colorScheme.primary
-                                    val orgHighlighting = remember(headingColor) {
-                                        OrgSyntaxHighlightTransformation(headingColor)
-                                    }
-                                    // The whole file is being edited, so its own #+TODO: lines win;
-                                    // this only covers a file that has none.
-                                    orgHighlighting.fallbackKeywords = vm.todoKeywords
-                                    // Styling is limited to the characters on screen: span count, not
-                                    // span production, is what drives layout cost in a large document.
-                                    val viewport = remember { EditorViewport() }
-                                    // Seeded rather than null: null means "style everything", which
-                                    // would make the first frame after entering edit mode pay for the
-                                    // whole document. The real range replaces this once the field has
-                                    // been laid out.
-                                    var styledRange by remember {
-                                        mutableStateOf<IntRange?>(0..EditorViewport.INITIAL_STYLED_CHARS)
-                                    }
-                                    orgHighlighting.visibleChars = styledRange
-                                    val interactionSource = remember { MutableInteractionSource() }
-                                    val editorTextStyle = LocalTextStyle.current.merge(
-                                        TextStyle(
-                                            fontFamily = FontFamily.Monospace,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                        )
-                                    )
-                                    // No fillMaxSize/weight here: the field grows to its natural height so
-                                    // the surrounding screen Column's own scroll (shared with reading mode
-                                    // below) is what scrolls it, keeping the scroll position when toggling
-                                    // between reading and editing.
-                                    // BasicTextField rather than OutlinedTextField: only it exposes
-                                    // onTextLayout, which is how the visible character range is found.
-                                    // The Material look is preserved by the decoration box below.
-                                    BasicTextField(
-                                        value = vm.note.content,
-                                        onValueChange = { vm.note.onContentChanged(it) },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .onGloballyPositioned { coordinates ->
-                                                viewport.onPositioned(coordinates)
-                                                viewport.widenIfNeeded(styledRange)?.let { styledRange = it }
-                                            },
-                                        textStyle = editorTextStyle,
-                                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                                        interactionSource = interactionSource,
-                                        onTextLayout = { layout ->
-                                            viewport.onTextLayout(layout)
-                                            viewport.widenIfNeeded(styledRange)?.let { styledRange = it }
-                                        },
-                                        visualTransformation = orgHighlighting,
-                                        decorationBox = { innerTextField ->
-                                            OutlinedTextFieldDefaults.DecorationBox(
-                                                value = vm.note.content,
-                                                innerTextField = innerTextField,
-                                                enabled = true,
-                                                singleLine = false,
-                                                // None on purpose: the decoration box only needs the
-                                                // text, and passing the real transformation would run
-                                                // the highlighter a second time on every keystroke.
-                                                visualTransformation = VisualTransformation.None,
-                                                interactionSource = interactionSource,
-                                                label = { Text("Content") },
-                                            )
-                                        }
-                                    )
-                                } else if (vm.note.content.isBlank()) {
+                                if (vm.note.content.isBlank()) {
                                     Text("Select an .org file to view its content")
                                 } else {
                                     OrgDocumentView(
@@ -414,10 +315,18 @@ fun App() {
                                         onAddHeadingBelow = { vm.editor.addAfter(it) },
                                         onAddSubheading = { vm.editor.addSubheading(it) },
                                         onDeleteSection = { scope.launch { vm.editor.deleteSection(it) } },
+                                        onMoveSection = { index, up -> scope.launch { vm.editor.moveSection(index, up) } },
+                                        onShiftSection = { index, delta ->
+                                            scope.launch {
+                                                if (delta < 0) vm.editor.promoteSection(index) else vm.editor.demoteSection(index)
+                                            }
+                                        },
                                         foldedElements = vm.folds.folded,
                                         onToggleFold = { vm.folds.toggle(it) },
                                         scrollToElementIndex = vm.note.scrollToElementIndex,
                                         onScrolledToElement = { vm.note.onScrolledToElement() },
+                                        revealElementIndex = vm.note.revealElementIndex,
+                                        onRevealed = { vm.note.onRevealed() },
                                         onToggleCheckbox = { offset -> vm.toggleCheckboxAt(offset, scope) },
                                         backlinks = vm.links.backlinks,
                                         onOpenBacklink = { vm.links.openBacklink(it) },
@@ -436,7 +345,6 @@ fun App() {
                                         // Same shape as the calendar's jump: the view model resolves
                                         // the place once the file's text has arrived.
                                         vm.search.openHit(hit)
-                                        isEditing = false
                                         selectedScreen = BottomItem.HOME
                                     },
                                 )
@@ -451,7 +359,6 @@ fun App() {
                                         // has loaded: that text arrives asynchronously, so working it out
                                         // here would search the previously open file.
                                         vm.agenda.openEntry(entry)
-                                        isEditing = false
                                         selectedScreen = BottomItem.HOME
                                     }
                                 )
@@ -466,57 +373,6 @@ fun App() {
                 }
             }
         }
-    }
-}
-
-/**
- * Tracks which characters of the editor are on screen, so the highlighter can style only those.
- *
- * The field has no height of its own — it grows to fit the document inside the screen's scroll
- * container — so "visible" is derived from where the field currently sits in the window rather
- * than from a scroll offset, which keeps this independent of who owns the scrolling.
- */
-private class EditorViewport {
-    private var layout: TextLayoutResult? = null
-    private var topInRoot = 0f
-    private var rootHeight = 0f
-
-    fun onPositioned(coordinates: LayoutCoordinates) {
-        topInRoot = coordinates.positionInRoot().y
-        rootHeight = coordinates.findRootCoordinates().size.height.toFloat()
-    }
-
-    fun onTextLayout(result: TextLayoutResult) {
-        layout = result
-    }
-
-    /**
-     * Returns a new range to style when [current] no longer covers what is on screen, else null.
-     *
-     * The returned range is padded by a screenful on each side, so ordinary scrolling stays inside
-     * it and does not re-trigger. Widening only when the visible region escapes the current window
-     * is also what stops layout → range → re-layout from looping.
-     */
-    fun widenIfNeeded(current: IntRange?): IntRange? {
-        val result = layout ?: return null
-        if (rootHeight <= 0f) return null
-
-        val topInField = (-topInRoot).coerceAtLeast(0f)
-        val firstLine = result.getLineForVerticalPosition(topInField)
-        val lastLine = result.getLineForVerticalPosition(topInField + rootHeight)
-        val start = result.getLineStart(firstLine)
-        val end = result.getLineEnd(lastLine, visibleEnd = true)
-        if (current != null && start >= current.first && end <= current.last) return null
-
-        val padding = (end - start).coerceAtLeast(MIN_PADDING_CHARS)
-        return (start - padding).coerceAtLeast(0)..(end + padding)
-    }
-
-    companion object {
-        private const val MIN_PADDING_CHARS = 1_000
-
-        /** Styled up front, before the first layout tells us what is actually on screen. */
-        const val INITIAL_STYLED_CHARS = 4_000
     }
 }
 

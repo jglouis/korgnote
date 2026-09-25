@@ -102,7 +102,7 @@ class CompletionContextTest {
         viewModel.onFileSelected(home)
         assertTrue("garden" !in viewModel.completion.context.knownTags)
 
-        viewModel.note.onContentChanged(homeText + "* Lawn :garden:\n")
+        viewModel.note.content = homeText + "* Lawn :garden:\n"
         viewModel.saveCurrentFile()
 
         assertTrue("garden" in viewModel.completion.context.knownTags)

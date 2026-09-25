@@ -2,15 +2,20 @@ package com.korgnote.common
 
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.ancestorsOf
+import com.korgnote.common.org.nextSibling
 import com.korgnote.common.org.orgElements
+import com.korgnote.common.org.previousSibling
 import com.korgnote.common.org.replaceOrgElement
 import com.korgnote.common.org.sliceOf
 import com.korgnote.common.org.subtreeEnd
 import com.korgnote.common.org.withNewOrgElement
+import com.korgnote.common.org.withOrgSubtreeShifted
+import com.korgnote.common.org.withOrgSubtreesSwapped
 import com.korgnote.common.org.withoutOrgSubtree
 import com.korgnote.common.org.toOrgDocument
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -246,5 +251,79 @@ class OrgElementsTests {
     fun removingThePreambleOrNothingIsRefused() {
         assertNull(nested.withoutOrgSubtree(0))
         assertNull(nested.withoutOrgSubtree(42))
+    }
+
+    @Test
+    fun siblingsShareALevelAndAParent() {
+        val elements = nested.orgElements() // preamble, Project, Step one, Detail, Step two, Other
+        assertEquals(4, elements.nextSibling(2), "past its own children")
+        assertEquals(2, elements.previousSibling(4), "past the sibling's children")
+        assertEquals(5, elements.nextSibling(1))
+        assertEquals(1, elements.previousSibling(5))
+        assertNull(elements.previousSibling(2), "the first child has only its parent above")
+        assertNull(elements.nextSibling(4), "the parent ends before another sibling")
+        assertNull(elements.nextSibling(3), "an only child")
+        assertNull(elements.previousSibling(1), "the preamble is not a sibling")
+        assertNull(elements.nextSibling(0))
+    }
+
+    @Test
+    fun swappingSiblingsMovesTheirWholeSubtrees() {
+        assertEquals(
+            "#+TITLE: Tree\n\n* Project\n** Step two\n** Step one\n*** Detail\n* Other\n",
+            nested.withOrgSubtreesSwapped(2, 4),
+        )
+        assertEquals(
+            "#+TITLE: Tree\n\n* Other\n* Project\n** Step one\n*** Detail\n** Step two\n",
+            nested.withOrgSubtreesSwapped(1, 5),
+        )
+    }
+
+    @Test
+    fun swappingOnlyAcceptsANextSibling() {
+        assertNull(nested.withOrgSubtreesSwapped(4, 2), "wrong way round")
+        assertNull(nested.withOrgSubtreesSwapped(2, 3), "a child is not a sibling")
+        assertNull(nested.withOrgSubtreesSwapped(0, 1), "nor is the preamble")
+    }
+
+    @Test
+    fun swappingKeepsAMissingFinalNewlineMissing() {
+        val text = "* One\nbody\n* Two\nlast line"
+        assertEquals("* Two\nlast line\n* One\nbody", text.withOrgSubtreesSwapped(0, 1))
+    }
+
+    @Test
+    fun swappingKeepsTheSameCharacters() {
+        val swapped = assertNotNull(document.withOrgSubtreesSwapped(1, 3))
+        assertEquals(document.toList().sorted(), swapped.toList().sorted())
+        assertEquals(document.orgElements().size, swapped.orgElements().size)
+    }
+
+    @Test
+    fun shiftingRestarsTheWholeSubtree() {
+        assertEquals(
+            "#+TITLE: Tree\n\n* Project\n*** Step one\n**** Detail\n** Step two\n* Other\n",
+            nested.withOrgSubtreeShifted(2, 1),
+        )
+        assertEquals(
+            "#+TITLE: Tree\n\n* Project\n* Step one\n** Detail\n** Step two\n* Other\n",
+            nested.withOrgSubtreeShifted(2, -1),
+        )
+    }
+
+    @Test
+    fun shiftingLeavesStarsInsideBlocksAlone() {
+        val text = "* Parent\n#+BEGIN_SRC\n* not a heading\n#+END_SRC\n** Child\n"
+        assertEquals(
+            "** Parent\n#+BEGIN_SRC\n* not a heading\n#+END_SRC\n*** Child\n",
+            text.withOrgSubtreeShifted(0, 1),
+        )
+    }
+
+    @Test
+    fun shiftingIsRefusedAboveLevelOneAndForThePreamble() {
+        assertNull(nested.withOrgSubtreeShifted(1, -1))
+        assertNull(nested.withOrgSubtreeShifted(0, 1))
+        assertNull(nested.withOrgSubtreeShifted(42, 1))
     }
 }

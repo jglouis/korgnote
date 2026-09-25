@@ -2,8 +2,9 @@
 
 **Status: built and in use.** This document describes what exists, not a plan.
 
-Reading mode is the primary surface. Each element — a heading with its own body — can be edited
-in place, and editing one is a text replacement over that element's character range.
+Reading mode is the only surface. Each element — a heading with its own body — can be edited
+in place, and editing one is a text replacement over that element's character range. There is no
+whole-file editor: T22 retired it once the long-press menu could restructure a note.
 
 ## Why it exists
 
@@ -34,6 +35,9 @@ data class OrgElement(val start: Int, val endExclusive: Int, val level: Int, val
 fun String.orgElements(): List<OrgElement>
 fun String.replaceOrgElement(element: OrgElement, expected: String, replacement: String): String?
 fun String.withNewOrgElement(at: Int, level: Int): OrgInsertion
+fun String.withoutOrgSubtree(index: Int): String?
+fun String.withOrgSubtreesSwapped(first: Int, second: Int): String?
+fun String.withOrgSubtreeShifted(index: Int, delta: Int): String?
 fun String.orgCheckboxesBefore(offset: Int): Int
 ```
 
@@ -76,10 +80,12 @@ on: every rendered element knows the range it came from.
 | Interaction | Effect |
 |---|---|
 | Tap an element | Opens it in an inline editor, in place |
-| Long-press an element | A menu: *Add heading below*, *Add sub-heading*, *Delete heading* |
+| Long-press an element | A menu: *Add heading below*, *Add sub-heading*, *Move up*, *Move down*, *Promote*, *Demote*, *Delete heading* |
 | *Add heading below* | Inserts a sibling of the same level after the element's **whole subtree**, and opens it |
 | *Add sub-heading* | Inserts a child one level deeper directly under the element's own body (its first child), and opens it |
 | *Delete heading* | After a confirmation that counts the sub-headings, removes the heading, its body and its whole subtree (`org-cut-subtree`), and saves |
+| *Move up* / *Move down* | Swaps the heading's whole subtree with its previous or next sibling (`org-move-subtree-up`/`-down`), and saves. Disabled where there is no sibling that way |
+| *Promote* / *Demote* | Adds or removes a star on every heading in the subtree (`org-promote-subtree`/`org-demote-subtree`), and saves. *Promote* is disabled at level 1 |
 | Tap a link into the notes | Opens its target — see [08 T21](08-roadmap.md#t21--following-links-between-notes---done); the back arrow returns |
 | *Linked from* at the end | Every link elsewhere that leads to this note; tapping one opens it at the link |
 | Chevron on a heading | Folds or unfolds the heading's subtree — see [Folding](#folding) |
@@ -105,6 +111,13 @@ to it, and leaving them behind would re-parent them under whatever heading came 
 confirmation says how many go with it, since they may be folded or off screen. It is refused while
 another element is open in the editor, whose position the cut would move.
 
+*Move*, *Promote* and *Demote* are what the whole-file editor used to be kept for. Like delete, they
+act on the whole subtree, are refused while an element is open in the editor, and change nothing but
+the text they move or the stars they rewrite. A move never leaves the parent — there is no refile —
+and keeps a missing final newline missing. Folds go with the headings, by index, since restarring
+changes the heading lines they are otherwise keyed by. A moved heading that leaves the screen is
+scrolled back into view.
+
 *Add heading below* goes after the subtree rather than directly after the element: a heading
 inserted between a parent and its children would take the children over. Below the preamble it
 makes the first heading; the preamble offers no sub-heading, as it is not a heading. Typing a new
@@ -118,9 +131,10 @@ them. There is no template: completion ([06](06-editor.md#completion-g3)) is the
 Checkbox ordinals are per-element in rendering but reported document-wide, using
 `orgCheckboxesBefore` to offset each element's numbering.
 
-State lives in `FileTreeViewModel`: `editingElementIndex`, `elementDraft`, `elementDraftCaret`, plus
+State lives in `ElementEditor`, owned by `NotesViewModel`: `editingIndex` and `draftValue`, plus
 the text before an insertion so that discarding removes it. Covered by `ElementEditingTest`, which
-has a test for every way of adding a heading, and `ReadingModeInteractionTest` for the gestures.
+has a test for every way of adding, moving, restarring and deleting a heading, and
+`ReadingModeInteractionTest` for the gestures.
 
 ### Folding
 
@@ -148,8 +162,10 @@ Not included: fold-all or unfold-all, folds that survive a restart, and `#+START
 
 ## Consequences
 
-- **The whole-file editor stays** as an escape hatch for restructuring, with the viewport scoping
-  and per-line cache from [06](06-editor.md). It is no longer the main path.
+- **The whole-file editor is gone** (T22). It stayed for a while as an escape hatch for
+  restructuring; once moving, promoting and demoting were in the long-press menu, and the preamble
+  was editable as an element, nothing was left that only it could do. Its viewport highlighting went
+  with it. Two surfaces meant every editor decision was taken twice or forgotten once.
 - **Scroll position across read/edit no longer matters** — you never transition between two
   full-document renderings, so there is nothing to preserve.
 - **Capture is now within reach**: adding a heading from a template into a designated inbox is a
@@ -168,8 +184,8 @@ Not included: fold-all or unfold-all, folds that survive a restart, and `#+START
   | empty document (framework floor) | 7 ms |
 
   A lazy list cannot be nested inside a vertically scrolling parent, so the screen `Column` in
-  `App.kt` gives up its own scroll while a document is being read, and keeps it for the whole-file
-  editor and every other screen. Each element gets an item even when it renders nothing, so an
+  `App.kt` gives up its own scroll while a document is being read, and keeps it for every other
+  screen. Each element gets an item even when it renders nothing, so an
   item's index is its element's index and a scroll target needs no translation — which is also why
   the calendar's jump uses `scrollToItem` rather than `BringIntoViewRequester`: the target is
   normally far off screen and has not been composed yet, so there is no node to bring anywhere.

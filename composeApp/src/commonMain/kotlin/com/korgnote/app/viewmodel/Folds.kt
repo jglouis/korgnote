@@ -58,6 +58,11 @@ class Folds(private val note: OpenNote) {
         setFolded { folded -> folded - opening }
     }
 
+    /** Folds exactly [indices] of the open file, for an edit that knows where each heading went. */
+    internal fun replaceAll(indices: Set<Int>) {
+        setFolded { indices }
+    }
+
     /** Carries [from]'s folds over to [to], for a note that was renamed. */
     internal fun move(from: String, to: String) {
         byFile[from]?.let { byFile = byFile - from + (to to it) }

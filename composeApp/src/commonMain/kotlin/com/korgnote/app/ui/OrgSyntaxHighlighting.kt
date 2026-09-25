@@ -155,21 +155,6 @@ private fun headingFontSize(level: Int): TextUnit = when (level) {
     else -> TextUnit.Unspecified
 }
 
-/**
- * Appends a line that lies outside the styled window: its characters, unstyled.
- *
- * Nothing is styled because nothing the editor applies changes text metrics ([editorSpanStyle]), so
- * an unstyled line occupies exactly the space a styled one would and the document does not shift as
- * the window follows the viewport.
- *
- * The branch order still mirrors [appendHighlightedLine] so [state] advances identically, which is
- * what lets a visible line inside a block or drawer be styled correctly.
- */
-private fun AnnotatedString.Builder.appendUnstyledLine(line: String, state: OrgLineState) {
-    orgSpansForLine(line, state, classify = false)
-    append(line)
-}
-
 private class OrgHighlightCache(private val headingColor: Color) {
     private var sourceText: String? = null
     private var sourceResult: AnnotatedString? = null
@@ -178,25 +163,17 @@ private class OrgHighlightCache(private val headingColor: Color) {
     private var lineResults: List<AnnotatedString> = emptyList()
     private var statesBefore: List<OrgLineState> = emptyList()
     private var statesAfter: List<OrgLineState> = emptyList()
-    private var lineStyled: List<Boolean> = emptyList()
-    private var cachedVisible: IntRange? = null
-    private var hasCachedVisible = false
 
-    /**
-     * [visible] limits full styling to the characters in that range; lines outside it get
-     * [appendUnstyledLine]. Passing null styles the whole document.
-     */
-    fun highlight(text: String, visible: IntRange?, fallback: OrgTodoConfig = DefaultOrgTodoConfig): AnnotatedString {
+    /** Styles [text], restyling only the lines an edit changed since the previous call. */
+    fun highlight(text: String, fallback: OrgTodoConfig = DefaultOrgTodoConfig): AnnotatedString {
         val config = orgTodoConfigOf(text, fallback)
-        if (visible == cachedVisible && config == todoConfig) {
+        if (config == todoConfig) {
             sourceResult?.let { if (sourceText == text) return it }
         }
 
         val newLines = text.split('\n')
         // A changed #+TODO: configuration restyles keywords anywhere in the document, so no cached
-        // line survives it. A moved window does not invalidate anything by itself: each line is
-        // cached along with whether it was styled, so only the lines crossing the window's edge are
-        // recomputed.
+        // line survives it.
         val oldLines = if (config == todoConfig) lines else emptyList()
 
         val prefix = commonPrefixLength(oldLines, newLines)
@@ -205,39 +182,30 @@ private class OrgHighlightCache(private val headingColor: Color) {
         val results = ArrayList<AnnotatedString>(newLines.size)
         val before = ArrayList<OrgLineState>(newLines.size)
         val after = ArrayList<OrgLineState>(newLines.size)
-        val styledFlags = ArrayList<Boolean>(newLines.size)
         val state = OrgLineState()
-        var lineStart = 0
 
         for (i in newLines.indices) {
             val incoming = state.copy()
             before.add(incoming)
-            val lineEnd = lineStart + newLines[i].length
-            val styled = visible == null || (lineStart <= visible.last && lineEnd >= visible.first)
-            lineStart = lineEnd + 1
             val oldIndex = when {
                 i < prefix -> i
                 i >= newLines.size - suffix -> oldLines.size - (newLines.size - i)
                 else -> -1
             }
-            // A line's styling depends on the state it starts in and on whether it was inside
-            // the window, so a matching text is only reusable when both of those match too.
-            val reusable = oldIndex >= 0 && oldIndex < lineResults.size &&
-                statesBefore[oldIndex] == incoming && lineStyled[oldIndex] == styled
+            // A line's styling depends on the state it starts in, so a matching text is only
+            // reusable when that matches too.
+            val reusable = oldIndex >= 0 && oldIndex < lineResults.size && statesBefore[oldIndex] == incoming
             if (reusable) {
                 results.add(lineResults[oldIndex])
                 state.restoreFrom(statesAfter[oldIndex])
-            } else if (styled) {
+            } else {
                 results.add(
                     buildAnnotatedString {
                         appendHighlightedLine(newLines[i], headingColor, config, viewMode = false, state)
                     }
                 )
-            } else {
-                results.add(buildAnnotatedString { appendUnstyledLine(newLines[i], state) })
             }
             after.add(state.copy())
-            styledFlags.add(styled)
         }
 
         val assembled = buildAnnotatedString {
@@ -254,9 +222,6 @@ private class OrgHighlightCache(private val headingColor: Color) {
         lineResults = results
         statesBefore = before
         statesAfter = after
-        lineStyled = styledFlags
-        cachedVisible = visible
-        hasCachedVisible = true
         return assembled
     }
 }
@@ -705,19 +670,6 @@ private fun AnnotatedString.Builder.appendUrl(target: String, label: String, vie
     }
 }
 
-///**
-// * [VisualTransformation] that applies Org-mode syntax colors to the text of a text field while
-// * keeping the underlying text untouched (identity offset mapping).
-// */
-//class OrgSyntaxHighlightTransformation(private val headingColor: Color) : VisualTransformation {
-//    override fun filter(text: AnnotatedString): TransformedText {
-//        return TransformedText(
-//            buildOrgHighlightedString(text.text, headingColor),
-//            OffsetMapping.Identity
-//        )
-//    }
-//}
-
 /**
  * The subset of a [SpanStyle] the editor may apply.
  *
@@ -753,23 +705,17 @@ class OrgSyntaxHighlightTransformation(headingColor: Color) : VisualTransformati
     private val cache = OrgHighlightCache(headingColor)
 
     /**
-     * Character range to style fully; lines outside it receive layout-affecting styling only. The
-     * editor updates this as the viewport moves; null styles the whole document.
+     * Keywords for text that declares none of its own — the file's, when the text being edited is
+     * one heading of it.
      *
      * A plain property rather than Compose state on purpose: [filter] is not a composable and could
      * not observe state anyway. The editor writes it during recomposition, which is exactly when
      * the field is about to re-run [filter].
      */
-    var visibleChars: IntRange? = null
-
-    /**
-     * Keywords for text that declares none of its own — the file's, when the text being edited is
-     * one heading of it. Set during composition, like [visibleChars].
-     */
     var fallbackKeywords: OrgTodoConfig = DefaultOrgTodoConfig
 
     override fun filter(text: AnnotatedString): TransformedText {
-        val highlighted = cache.highlight(text.text, visibleChars, fallbackKeywords).withSpans(::editorSpanStyle)
+        val highlighted = cache.highlight(text.text, fallbackKeywords).withSpans(::editorSpanStyle)
         return TransformedText(highlighted, OffsetMapping.Identity)
     }
 }

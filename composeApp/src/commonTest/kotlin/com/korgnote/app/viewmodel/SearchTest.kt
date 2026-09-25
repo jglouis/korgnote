@@ -128,7 +128,7 @@ class SearchTest {
         assertEquals(0, viewModel.search.results.size)
 
         viewModel.onFileSelected(home)
-        viewModel.note.onContentChanged(homeText + "* Buy marmalade\n")
+        viewModel.note.content = homeText + "* Buy marmalade\n"
         viewModel.saveCurrentFile()
 
         assertEquals(1, viewModel.search.results.size)

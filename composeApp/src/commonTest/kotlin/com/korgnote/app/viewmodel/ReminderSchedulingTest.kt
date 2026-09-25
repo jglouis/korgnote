@@ -87,7 +87,7 @@ class ReminderSchedulingTest {
         viewModel.server.load()
         viewModel.onFileSelected(work)
 
-        viewModel.note.onContentChanged(workText.replace("* Other", "* Lunch <2026-09-23 Wed 12:30>"))
+        viewModel.note.content = workText.replace("* Other", "* Lunch <2026-09-23 Wed 12:30>")
         viewModel.saveCurrentFile()
 
         assertEquals(listOf("Design review", "Lunch"), handedOver.last().map { it.title })

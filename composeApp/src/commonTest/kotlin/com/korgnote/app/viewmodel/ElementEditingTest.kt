@@ -311,4 +311,75 @@ class ElementEditingTest {
         assertEquals(initialText, viewModel.note.content)
         assertTrue(repository.saves.isEmpty())
     }
+
+    // --- Moving, promoting and demoting a heading ---
+    // Elements of projectText: Project, Step one, Step two, Other.
+
+    @Test
+    fun movingAHeadingDownTakesItsSubtreePastTheNextSibling() = runTest {
+        openProject()
+
+        assertTrue(viewModel.editor.moveSection(0, up = false))
+
+        assertEquals("* Other\n* Project\nProject body.\n** Step one\n** Step two\n", viewModel.note.content)
+        assertEquals(viewModel.note.content, repository.files["project.org"], "pushed like any edit")
+        assertEquals(1, viewModel.note.revealElementIndex, "kept in sight where it went")
+    }
+
+    @Test
+    fun movingASubheadingUpStaysUnderItsParent() = runTest {
+        openProject()
+
+        assertTrue(viewModel.editor.moveSection(2, up = true))
+        assertEquals(projectText.replace("** Step one\n** Step two", "** Step two\n** Step one"), viewModel.note.content)
+
+        assertFalse(viewModel.editor.moveSection(1, up = true), "the first child has no sibling above")
+        assertFalse(viewModel.editor.moveSection(2, up = false), "nor the last one below")
+    }
+
+    @Test
+    fun foldsGoWithAMovedSubtree() = runTest {
+        openProject()
+        viewModel.folds.toggle(0) // Project
+
+        viewModel.editor.moveSection(0, up = false)
+
+        assertEquals(setOf(1), viewModel.folds.folded)
+    }
+
+    @Test
+    fun promotingAndDemotingRestarTheSubtree() = runTest {
+        openProject()
+
+        assertTrue(viewModel.editor.demoteSection(0))
+        assertEquals(
+            "** Project\nProject body.\n*** Step one\n*** Step two\n* Other\n",
+            viewModel.note.content,
+        )
+        assertTrue(viewModel.editor.promoteSection(0))
+        assertEquals(projectText, viewModel.note.content)
+        assertFalse(viewModel.editor.promoteSection(0), "a level-1 heading has nowhere to go")
+    }
+
+    @Test
+    fun aFoldSurvivesItsHeadingBeingDemoted() = runTest {
+        openProject()
+        viewModel.folds.toggle(0)
+
+        viewModel.editor.demoteSection(0)
+
+        assertEquals(setOf(0), viewModel.folds.folded, "the heading line changed, the fold did not")
+    }
+
+    @Test
+    fun restructuringIsRefusedWhileAnElementIsBeingEdited() = runTest {
+        openProject()
+        viewModel.editor.beginEdit(3)
+
+        assertFalse(viewModel.editor.moveSection(0, up = false))
+        assertFalse(viewModel.editor.demoteSection(0))
+
+        assertEquals(projectText, viewModel.note.content)
+        assertEquals(3, viewModel.editor.editingIndex)
+    }
 }

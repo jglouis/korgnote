@@ -35,7 +35,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.link.OrgBacklink
+import com.korgnote.common.org.nextSibling
 import com.korgnote.common.org.orgElements
+import com.korgnote.common.org.previousSibling
 import com.korgnote.common.org.sliceOf
 import com.korgnote.common.org.subtreeEnd
 import com.korgnote.common.org.toOrgDocument
@@ -71,11 +73,18 @@ fun OrgDocumentView(
     onAddSubheading: ((elementIndex: Int) -> Unit)? = null,
     /** From the long-press menu, once confirmed: the heading with its body and sub-headings. */
     onDeleteSection: ((elementIndex: Int) -> Unit)? = null,
+    /** From the long-press menu: past the previous sibling (up) or the next one, subtree and all. */
+    onMoveSection: ((elementIndex: Int, up: Boolean) -> Unit)? = null,
+    /** From the long-press menu: the heading and its subtree one level shallower (-1) or deeper (1). */
+    onShiftSection: ((elementIndex: Int, delta: Int) -> Unit)? = null,
     /** Folded headings: each shows only its heading line, and its descendants render nothing. */
     foldedElements: Set<Int> = emptySet(),
     onToggleFold: ((elementIndex: Int) -> Unit)? = null,
     scrollToElementIndex: Int? = null,
     onScrolledToElement: () -> Unit = {},
+    /** An element that moved within the note: scrolled to only if it went off screen. */
+    revealElementIndex: Int? = null,
+    onRevealed: () -> Unit = {},
     /**
      * The file's TODO keywords: its own `#+TODO:`, or what the notes declare when it has none.
      * Each element is rendered from its own slice, which does not contain the declaration, so
@@ -172,6 +181,13 @@ fun OrgDocumentView(
                                 onAddHeadingBelow = onAddHeadingBelow?.let { add -> { add(index) } },
                                 onAddSubheading = onAddSubheading?.let { add -> { add(index) } },
                                 onDelete = onDeleteSection?.let { { confirmingDelete = index } },
+                                onMoveUp = onMoveSection?.takeIf { elements.previousSibling(index) != null }
+                                    ?.let { move -> { move(index, true) } },
+                                onMoveDown = onMoveSection?.takeIf { elements.nextSibling(index) != null }
+                                    ?.let { move -> { move(index, false) } },
+                                onPromote = onShiftSection?.takeIf { element.level > 1 }
+                                    ?.let { shift -> { shift(index, -1) } },
+                                onDemote = onShiftSection?.let { shift -> { shift(index, 1) } },
                             )
                         }
                         if (foldable && onToggleFold != null) {
@@ -227,6 +243,16 @@ fun OrgDocumentView(
         }
     }
 
+    LaunchedEffect(revealElementIndex, elements) {
+        val index = revealElementIndex ?: return@LaunchedEffect
+        if (index in elements.indices &&
+            listState.layoutInfo.visibleItemsInfo.none { it.index == index }
+        ) {
+            listState.scrollToItem(index)
+        }
+        onRevealed()
+    }
+
     // A lazy list only composes what is on screen, so an element added at the far end (the FAB)
     // has no editor to focus and nothing would bring it into view: go to it. An element already
     // visible — tapped, or added from its neighbour's menu — is left where the user sees it.
@@ -272,7 +298,11 @@ private fun BacklinksSection(backlinks: List<OrgBacklink>, onOpen: (OrgBacklink)
 
 /**
  * What a long-press offers. Adding a heading used to be a **+** on every element; it is rare next
- * to reading, so it lives here, out of sight, with room for more actions on one element later.
+ * to reading, so it lives here, out of sight, along with restructuring a heading's subtree.
+ *
+ * A null action is one that does not apply here. Moving and shifting stay listed, disabled, so the
+ * menu keeps its shape from one heading to the next; the preamble, which is not a heading, gets
+ * only what applies to it.
  */
 @Composable
 private fun ElementMenu(
@@ -282,7 +312,18 @@ private fun ElementMenu(
     onAddHeadingBelow: (() -> Unit)?,
     onAddSubheading: (() -> Unit)?,
     onDelete: (() -> Unit)?,
+    onMoveUp: (() -> Unit)?,
+    onMoveDown: (() -> Unit)?,
+    onPromote: (() -> Unit)?,
+    onDemote: (() -> Unit)?,
 ) {
+    @Composable
+    fun Item(label: String, action: (() -> Unit)?) = DropdownMenuItem(
+        text = { Text(label) },
+        enabled = action != null,
+        onClick = { onDismiss(); action?.invoke() },
+    )
+
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         if (onAddHeadingBelow != null) {
             DropdownMenuItem(
@@ -297,7 +338,15 @@ private fun ElementMenu(
                 onClick = { onDismiss(); onAddSubheading() },
             )
         }
+        if (!isPreamble) {
+            HorizontalDivider()
+            Item("Move up", onMoveUp)
+            Item("Move down", onMoveDown)
+            Item("Promote", onPromote)
+            Item("Demote", onDemote)
+        }
         if (onDelete != null && !isPreamble) {
+            HorizontalDivider()
             DropdownMenuItem(
                 text = { Text("Delete heading", color = MaterialTheme.colorScheme.error) },
                 onClick = { onDismiss(); onDelete() },
@@ -341,11 +390,11 @@ private fun DeleteSectionDialog(
 }
 
 /**
- * Editor for a single element.
+ * Editor for a single element — the only editing surface there is.
  *
- * Deliberately simpler than the whole-file editor: an element holds a heading and its own body, so
- * there is no need to scope highlighting to the viewport — the per-line cache already makes a
- * keystroke cost one line, and the text is small enough that laying it out is cheap.
+ * An element holds a heading and its own body, so highlighting is never scoped to a viewport: the
+ * per-line cache already makes a keystroke cost one line, and the text is small enough that laying
+ * it out is cheap.
  */
 @Composable
 private fun OrgElementEditor(

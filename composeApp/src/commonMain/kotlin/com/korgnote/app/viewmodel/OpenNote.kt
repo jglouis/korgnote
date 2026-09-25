@@ -22,10 +22,6 @@ class OpenNote {
     var content by mutableStateOf("")
         internal set
 
-    fun onContentChanged(newContent: String) {
-        content = newContent
-    }
-
     /**
      * Element to bring into view, set when a file is opened at a particular place — a calendar
      * entry, a search hit, a link. Consumed once, via [onScrolledToElement].
@@ -35,6 +31,22 @@ class OpenNote {
 
     fun onScrolledToElement() {
         scrollToElementIndex = null
+    }
+
+    /**
+     * Element to keep in sight after it moved within the note, set by a restructuring. Unlike
+     * [scrollToElementIndex] it scrolls only when the element went off screen. Consumed once, via
+     * [onRevealed].
+     */
+    var revealElementIndex: Int? by mutableStateOf(null)
+        private set
+
+    internal fun reveal(index: Int) {
+        revealElementIndex = index
+    }
+
+    fun onRevealed() {
+        revealElementIndex = null
     }
 
     /** The part of opening [path] that needs no text; a placeholder stands in when there is none. */

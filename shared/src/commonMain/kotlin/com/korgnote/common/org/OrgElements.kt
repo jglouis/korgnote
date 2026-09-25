@@ -195,3 +195,71 @@ fun String.withoutOrgSubtree(index: Int): String? {
     val end = elements[elements.subtreeEnd(index) - 1].endExclusive
     return removeRange(element.start, end)
 }
+
+/**
+ * The heading before [index] at the same level and under the same parent, or null when there is
+ * none — where `org-move-subtree-up` refuses too. Deeper headings on the way are its children.
+ */
+fun List<OrgElement>.previousSibling(index: Int): Int? {
+    val element = getOrNull(index) ?: return null
+    if (element.isPreamble) return null
+    for (i in index - 1 downTo 0) {
+        val candidate = this[i]
+        if (candidate.isPreamble || candidate.level < element.level) return null
+        if (candidate.level == element.level) return i
+    }
+    return null
+}
+
+/** The heading after [index]'s subtree at the same level, or null when its parent ends first. */
+fun List<OrgElement>.nextSibling(index: Int): Int? {
+    val element = getOrNull(index) ?: return null
+    if (element.isPreamble) return null
+    val next = subtreeEnd(index)
+    return next.takeIf { it < size && this[it].level == element.level }
+}
+
+/**
+ * The document with the subtree at [first] and the one at its next sibling [second] exchanged —
+ * `org-move-subtree-down` on [first], or `-up` on [second]. Null unless [second] is [first]'s next
+ * sibling.
+ *
+ * Only the two subtrees' text is touched. When the second one ends the document without a final
+ * newline, the swapped pair keeps that: the newline moves between them rather than being added.
+ */
+fun String.withOrgSubtreesSwapped(first: Int, second: Int): String? {
+    val elements = orgElements()
+    if (elements.nextSibling(first) != second) return null
+    val start = elements[first].start
+    val middle = elements[second].start
+    val end = elements[elements.subtreeEnd(second) - 1].endExclusive
+    val upper = substring(start, middle)
+    val lower = substring(middle, end)
+    val swapped = if (lower.endsWith("\n")) lower + upper else lower + "\n" + upper.removeSuffix("\n")
+    return replaceRange(start, end, swapped)
+}
+
+/**
+ * The document with the heading at [index] and every heading in its subtree [delta] levels deeper
+ * — `org-demote-subtree` for 1, `org-promote-subtree` for -1. Null for the preamble, or when the
+ * heading would go above level 1.
+ *
+ * Only the stars change. The headings are the elements' own, so a `*` line inside a block is left
+ * alone exactly when the splitter left it alone.
+ */
+fun String.withOrgSubtreeShifted(index: Int, delta: Int): String? {
+    val elements = orgElements()
+    val element = elements.getOrNull(index) ?: return null
+    if (element.isPreamble || element.level + delta < 1) return null
+    val text = this
+    return buildString {
+        var copied = 0
+        for (i in index until elements.subtreeEnd(index)) {
+            val heading = elements[i]
+            appendRange(text, copied, heading.start)
+            append("*".repeat((heading.level + delta).coerceAtLeast(1)))
+            copied = heading.start + heading.level
+        }
+        appendRange(text, copied, text.length)
+    }
+}

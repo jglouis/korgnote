@@ -5,11 +5,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import com.korgnote.common.org.nextSibling
 import com.korgnote.common.org.orgElements
+import com.korgnote.common.org.previousSibling
 import com.korgnote.common.org.replaceOrgElement
 import com.korgnote.common.org.sliceOf
 import com.korgnote.common.org.subtreeEnd
 import com.korgnote.common.org.withNewOrgElement
+import com.korgnote.common.org.withOrgSubtreeShifted
+import com.korgnote.common.org.withOrgSubtreesSwapped
 import com.korgnote.common.org.withoutOrgSubtree
 
 /**
@@ -191,15 +195,60 @@ class ElementEditor(
     /**
      * Deletes the heading at [index] with its body and every sub-heading, then saves.
      *
-     * Refused while an element is open in the editor: the draft's position would move under it.
-     * Returns whether anything was deleted.
+     * Refused while an element is open in the editor, as every restructuring is. Returns whether
+     * anything was deleted.
      */
-    suspend fun deleteSection(index: Int): Boolean {
+    suspend fun deleteSection(index: Int): Boolean = restructure { it.withoutOrgSubtree(index) }
+
+    /**
+     * Moves the heading at [index], with its subtree, above its previous sibling or below its next
+     * one — `org-move-subtree-up` and `-down` — then saves. Refused where there is no sibling that
+     * way: moving out of the parent is a different operation.
+     */
+    suspend fun moveSection(index: Int, up: Boolean): Boolean {
+        val elements = note.content.orgElements()
+        val first = if (up) elements.previousSibling(index) ?: return false else index
+        val second = if (up) index else elements.nextSibling(index) ?: return false
+        val firstSize = second - first
+        val secondSize = elements.subtreeEnd(second) - second
+        val moved = restructure(
+            newIndexOf = { i ->
+                when (i) {
+                    in first until second -> i + secondSize
+                    in second until second + secondSize -> i - firstSize
+                    else -> i
+                }
+            },
+        ) { it.withOrgSubtreesSwapped(first, second) }
+        if (moved) note.reveal(if (up) first else first + secondSize)
+        return moved
+    }
+
+    /** Makes the heading at [index] and its subtree one level shallower — `org-promote-subtree`. */
+    suspend fun promoteSection(index: Int): Boolean = shiftSection(index, -1)
+
+    /** Makes the heading at [index] and its subtree one level deeper — `org-demote-subtree`. */
+    suspend fun demoteSection(index: Int): Boolean = shiftSection(index, +1)
+
+    /** Elements keep their order when restarred, so every fold stays on its index. */
+    private suspend fun shiftSection(index: Int, delta: Int): Boolean =
+        restructure(newIndexOf = { it }) { it.withOrgSubtreeShifted(index, delta) }
+
+    /**
+     * Rewrites the whole note with [edit] and saves, unless it declines by returning null.
+     *
+     * Refused while an element is open in the editor: the draft's position would move under it.
+     * Folds are keyed by heading line, which a restructuring may change; [newIndexOf], when given,
+     * carries each fold to where its heading went instead.
+     */
+    private suspend fun restructure(newIndexOf: ((Int) -> Int)? = null, edit: (String) -> String?): Boolean {
         if (editingIndex != null) {
             showMessage("Save or discard the element you are editing first.")
             return false
         }
-        note.content = note.content.withoutOrgSubtree(index) ?: return false
+        val foldedBefore = folds.folded
+        note.content = edit(note.content) ?: return false
+        newIndexOf?.let { folds.replaceAll(foldedBefore.map(it).toSet()) }
         save()
         return true
     }

@@ -11,6 +11,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -26,7 +28,8 @@ import kotlin.test.assertTrue
 
 /**
  * Reading mode's gestures (T24): a tap edits, unless it lands on something that has a tap of its
- * own; a long-press offers the ways of adding a heading; a chevron folds a heading's subtree.
+ * own; a long-press offers the ways of adding, moving and restarring a heading; a chevron folds a
+ * heading's subtree.
  */
 @OptIn(ExperimentalTestApi::class)
 class ReadingModeInteractionTest {
@@ -86,6 +89,30 @@ class ReadingModeInteractionTest {
         assertEquals(listOf(1), below)
         assertEquals(listOf(1), sub)
         assertTrue(edited.isEmpty(), "a long-press opens the menu, not the editor")
+    }
+
+    @Test
+    fun aLongPressOffersOnlyTheMovesThatApply() = runComposeUiTest {
+        val moved = mutableListOf<Pair<Int, Boolean>>()
+        val shifted = mutableListOf<Pair<Int, Int>>()
+        setContent {
+            OrgDocumentView(
+                text = text,
+                onMoveSection = { index, up -> moved += index to up },
+                onShiftSection = { index, delta -> shifted += index to delta },
+            )
+        }
+
+        // Project is the first level-1 heading: it can only go down, or deeper.
+        onNodeWithText("Project").performTouchInput { longClick() }
+        onNodeWithText("Move up").assertIsNotEnabled()
+        onNodeWithText("Promote").assertIsNotEnabled()
+        onNodeWithText("Move down").assertIsEnabled().performClick()
+        onNodeWithText("Step body.").performTouchInput { longClick() }
+        onNodeWithText("Promote").assertIsEnabled().performClick()
+
+        assertEquals(listOf(0 to false), moved)
+        assertEquals(listOf(1 to -1), shifted)
     }
 
     @Test

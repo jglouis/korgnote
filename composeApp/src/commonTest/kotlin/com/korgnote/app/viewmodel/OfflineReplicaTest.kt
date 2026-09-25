@@ -69,7 +69,7 @@ class OfflineReplicaTest {
         online.server.load()
         repository.online = false
 
-        online.note.onContentChanged("* TODO Edited on a train\n")
+        online.note.content = "* TODO Edited on a train\n"
         online.saveCurrentFile()
 
         val store = DocumentStore(storage)
@@ -84,7 +84,7 @@ class OfflineReplicaTest {
         val before = viewModel()
         before.server.load()
         repository.online = false
-        before.note.onContentChanged("* TODO Written offline\n")
+        before.note.content = "* TODO Written offline\n"
         before.saveCurrentFile()
 
         val afterRestart = viewModel()
@@ -99,7 +99,7 @@ class OfflineReplicaTest {
         val vm = viewModel()
         vm.server.load()
         repository.online = false
-        vm.note.onContentChanged("* TODO Written offline\n")
+        vm.note.content = "* TODO Written offline\n"
         vm.saveCurrentFile()
 
         repository.online = true

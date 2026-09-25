@@ -4,15 +4,16 @@ Addresses G2, G3 and defect D6. Depends on the source-mapped model from
 [04-org-core.md](04-org-core.md).
 
 > **Status.** The performance work is done and the findings below are measurements, not plans.
-> Per-element editing ([09](09-element-editing.md)) has since become the primary editing surface and
-> removed document size as a concern; the whole-file editor described here remains as an escape
-> hatch. Search (T14) and completion (T13) are both built.
+> Per-element editing ([09](09-element-editing.md)) has since become the only editing surface and
+> removed document size as a concern: the whole-file editor this document was written for was
+> retired by T22, and with it viewport highlighting. The metrics constraint and the per-line cache
+> still apply to the element editor. Search (T14) and completion (T13) are both built.
 
 ## Where it hurt
 
 | Symptom | Cause | Status |
 |---|---|---|
-| Typing cost grows with document size | `OrgSyntaxHighlightTransformation.filter` re-highlighted the **entire** document on every keystroke | Fixed — per-line cache + viewport scoping |
+| Typing cost grows with document size | `OrgSyntaxHighlightTransformation.filter` re-highlighted the **entire** document on every keystroke | Fixed — per-line cache + viewport scoping; since T22, edited text is one element |
 | Redundant work per keystroke | `filter` ran 3× per keystroke, all on identical text | Fixed — memoised |
 | Opening a large file composes everything at once | `OrgText` rendered into a plain `Column` inside an outer `verticalScroll` | Fixed — a `LazyColumn` of elements; see [Reading mode at scale](#reading-mode-at-scale) |
 | Programmatic edits are awkward | The `String`-valued field gave no cursor control | Fixed for the element editor — it uses `TextFieldValue` |
@@ -130,8 +131,8 @@ Syntax highlighting therefore requires the classic `value`/`onValueChange` field
 `VisualTransformation`, and we accept its costs: the string round-trip per keystroke, and the
 constraint below.
 
-The editor uses `BasicTextField` rather than `OutlinedTextField` because only the former exposes
-`onTextLayout`, which is how the visible range for viewport highlighting is obtained. The Material
+The editor uses `BasicTextField` rather than `OutlinedTextField`; the whole-file editor needed its
+`onTextLayout` to find the visible range for viewport highlighting, and the element editor kept it. The Material
 look is preserved with `OutlinedTextFieldDefaults.DecorationBox` — pass it
 `VisualTransformation.None`, or it runs the highlighter a second time on every keystroke just to
 decide whether to show a placeholder.
@@ -160,8 +161,9 @@ Consequences to keep in mind:
 
 - Heading levels in the editor can only be distinguished by colour or background, not size or weight.
 - Any future editor decoration must pass the same test. `OrgEditorMetricsTest` enforces it.
-- Viewport scoping got *simpler* because of this: with nothing varying metrics, off-screen lines can
-  be left entirely unstyled without the document shifting as the window moves.
+- Viewport scoping got *simpler* because of this: with nothing varying metrics, off-screen lines could
+  be left entirely unstyled without the document shifting as the window moved. (Retired with the
+  whole-file editor in T22.)
 
 The only way to lift the constraint is to stop using a text field for display — render styled text
 and overlay a transparent field for input — which means owning caret placement, selection handles
@@ -175,6 +177,10 @@ layout, not the copy. Per-element editing ([09](09-element-editing.md)) removes 
 making the edited text small.
 
 ### Viewport highlighting
+
+**Retired by T22** along with the whole-file editor, the only surface large enough to need it; kept
+here as the record of how it worked. The element editor highlights all of its text, through the same
+per-line cache.
 
 Highlight what is on screen, not the whole document:
 
@@ -196,8 +202,8 @@ composition of the largest real file went from 234 ms to 38 ms ([09](09-element-
 
 The constraint that shaped it is worth keeping in mind for any screen like it: **a `LazyColumn`
 cannot live inside a `Modifier.verticalScroll` column**, which is how `App.kt` was structured. The
-screen now hands its scroll to whichever component owns it — reading mode, and the search results —
-and keeps it for the whole-file editor and everything else. Mapping a scroll offset across read and
+screen now hands its scroll to whichever component owns it — reading mode, the search results and
+the calendar — and keeps it for everything else. Mapping a scroll offset across read and
 edit never became necessary: per-element editing removed the transition between two full-document
 renderings.
 
@@ -205,7 +211,8 @@ renderings.
 
 With `org.edit` in place, the same operations are available from the reader (tap a checkbox,
 long-press a heading to cycle TODO, swipe to reschedule) and the editor (keyboard
-shortcuts). Both call `DocumentStore.apply(doc.toggleCheckbox(node))`; neither reformats
+shortcuts). What shipped for restructuring is the long-press menu's move, promote and demote
+([09](09-element-editing.md#the-surface)), which work on element ranges rather than through `org.edit`. Both call `DocumentStore.apply(doc.toggleCheckbox(node))`; neither reformats
 anything else.
 
 ## Completion (G3)
