@@ -20,16 +20,10 @@ RUN --mount=type=cache,target=/root/.gradle \
     ./gradlew --no-daemon :server:installDist :composeApp:wasmJsBrowserDistribution
 
 # --- Run: a JRE and the distribution, nothing else ---
-FROM eclipse-temurin:25-jre
-
-# Files the server creates in the mounted directory belong to this user. Match the host user that
-# owns the notes (`id -u`, `id -g`), either here at build time or with `--user` / compose `user:`.
-ARG UID=1000
-ARG GID=1000
-# The base image already has a user at 1000 (ubuntu); take its IDs over rather than fail on them.
-RUN userdel --remove ubuntu 2>/dev/null || true; \
-    groupadd --gid "$GID" korgnote && \
-    useradd --uid "$UID" --gid "$GID" --no-create-home --shell /usr/sbin/nologin korgnote
+# Distroless: the same Temurin 25 JRE without a shell or package manager, so far fewer packages for
+# CVEs to land in. Security fixes arrive by rebuilding on a newer base. For a shell to debug with,
+# swap in the :debug-nonroot tag (busybox).
+FROM gcr.io/distroless/java25-debian13:nonroot
 
 COPY --from=build /src/server/build/install/server /opt/korgnote
 # The browser client, served at / on the same origin as the API. KORGNOTE_DISABLE_WEB=1 at run time
@@ -38,14 +32,24 @@ COPY --from=build /src/composeApp/build/dist/wasmJs/productionExecutable /opt/ko
 
 # The container is exactly where a port gets published by accident, so it refuses to start without a
 # token, and a missing or unwritable /notes is fatal instead of falling back to the samples.
-# SERVER_OPTS only silences the JDK's warning about Netty loading its native transport.
 ENV NOTES_DIR=/notes \
     WASM_DIR=/opt/korgnote/web \
     KORGNOTE_PORT=8080 \
     KORGNOTE_REQUIRE_TOKEN=1 \
-    KORGNOTE_REQUIRE_NOTES_DIR=1 \
-    SERVER_OPTS=--enable-native-access=ALL-UNNAMED
+    KORGNOTE_REQUIRE_NOTES_DIR=1
 
-USER korgnote
+# Files the server creates in the mounted directory belong to this user. Match the host user that
+# owns the notes (`id -u`, `id -g`), either here at build time or with `--user` / compose `user:`.
+# A bare UID:GID needs no account in the image.
+ARG UID=1000
+ARG GID=1000
+USER ${UID}:${GID}
+# Ktor resolves the working directory at startup, and the base image's (/home/nonroot) is closed to
+# any UID but 65532.
+WORKDIR /opt/korgnote
 EXPOSE 8080
-ENTRYPOINT ["/opt/korgnote/bin/server"]
+# There is no /bin/sh for Gradle's bin/server script, so start the JVM directly with what that script
+# would pass: the development flag from server/build.gradle.kts, and native access for Netty's
+# transport (which only silences the JDK's warning).
+ENTRYPOINT ["java", "--enable-native-access=ALL-UNNAMED", "-Dio.ktor.development=false", \
+            "-cp", "/opt/korgnote/lib/*", "com.korgnote.server.ApplicationKt"]
