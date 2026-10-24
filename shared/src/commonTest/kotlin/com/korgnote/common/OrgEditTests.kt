@@ -161,6 +161,17 @@ class OrgEditTests {
         assertTrue(none.text.contains("* Parent"), none.text)
     }
 
+    @Test
+    fun wrappedCyclingGoesFromTheLastKeywordBackToTheFirst() {
+        val config = OrgTodoConfig(todo = setOf("TODO"), done = setOf("DONE"))
+
+        val done = doc.cycleTodo(section("Parent"), config, wrap = true)
+        assertTrue(done.text.contains("* DONE Parent"), done.text)
+
+        val todo = done.cycleTodo(done.allNodes().filterIsInstance<OrgSection>().first { it.title == "Parent" }, config, wrap = true)
+        assertTrue(todo.text.contains("* TODO Parent"), todo.text)
+    }
+
     // --- Tags ---
 
     @Test

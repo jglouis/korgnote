@@ -372,6 +372,29 @@ class ElementEditingTest {
     }
 
     @Test
+    fun tappingATodoKeywordMarksItDoneAndSavesIt() = runTest {
+        openFile()
+
+        viewModel.cycleTodoAt(initialText.indexOf("* TODO Second"), this)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(initialText.replace("* TODO Second", "* DONE Second"), viewModel.note.content)
+        assertEquals(viewModel.note.content, repository.saves.last().second)
+    }
+
+    @Test
+    fun tappingADoneKeywordGoesBackToTodoRatherThanClearingIt() = runTest {
+        openFile()
+        val heading = initialText.indexOf("* TODO First")
+
+        viewModel.cycleTodoAt(heading, this)
+        viewModel.cycleTodoAt(heading, this)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(initialText, viewModel.note.content)
+    }
+
+    @Test
     fun restructuringIsRefusedWhileAnElementIsBeingEdited() = runTest {
         openProject()
         viewModel.editor.beginEdit(3)

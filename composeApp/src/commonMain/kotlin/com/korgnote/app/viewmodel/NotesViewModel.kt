@@ -10,7 +10,9 @@ import com.korgnote.app.notifications.NotificationScheduler
 import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.common.fs.NotePaths
 import com.korgnote.common.org.OrgCheckboxItem
+import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.edit.cycleTodo
 import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.edit.toggleCheckbox
 import com.korgnote.common.org.toOrgDocument
@@ -240,6 +242,26 @@ class NotesViewModel(
 
         // Written locally in the coroutine, then pushed; a failure leaves the file dirty for the
         // next cycle rather than losing the toggle.
+        scope?.launch { server.push(writeFirst = { store.save(file, note.content) }) }
+    }
+
+    /**
+     * Moves the heading at [offsetInDocument] to its next TODO keyword, as [toggleCheckboxAt] ticks
+     * a checkbox: only the keyword changes, and the file is saved and pushed the same way.
+     *
+     * Past the last done keyword it wraps to the first, rather than clearing the keyword as Org's
+     * cycle does — the keyword is what was tapped, so clearing it would leave nothing to tap back.
+     */
+    fun cycleTodoAt(offsetInDocument: Int, scope: CoroutineScope? = null) {
+        val file = note.path ?: return
+        val document = note.content.toOrgDocument()
+        val heading = document.nodeAt<OrgSection>(offsetInDocument) ?: return
+        val updated = document.cycleTodo(heading, todoKeywords, wrap = true)
+        if (updated.text == document.text) return
+        note.content = updated.text
+        library.put(file, updated)
+        refreshDerivedViews()
+
         scope?.launch { server.push(writeFirst = { store.save(file, note.content) }) }
     }
 

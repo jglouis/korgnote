@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.isToggleable
@@ -65,6 +66,38 @@ class ReadingModeInteractionTest {
 
         assertEquals(listOf(text.indexOf("- [ ]")), toggled)
         assertTrue(edited.isEmpty(), "the checkbox's tap is its own")
+    }
+
+    /** The keyword is an inner target, like a link: a tap cycles it and edits nothing. */
+    @Test
+    fun aTapOnATodoKeywordCyclesItAndDoesNotEdit() = runComposeUiTest {
+        val todoText = "* Intro\n* TODO Write the report\nBody.\n"
+        val edited = mutableListOf<Int>()
+        val cycled = mutableListOf<Int>()
+        setContent {
+            OrgDocumentView(text = todoText, onEditElement = { edited += it }, onCycleTodo = { cycled += it })
+        }
+
+        onNodeWithText("TODO Write the report", useUnmergedTree = true).onChildren().onFirst().performClick()
+
+        assertEquals(listOf(todoText.indexOf("* TODO")), cycled)
+        assertTrue(edited.isEmpty(), "the keyword's tap is its own")
+    }
+
+    /** A capitalised first word is parsed as a keyword, but only declared keywords cycle. */
+    @Test
+    fun anUndeclaredCapitalisedWordIsNotTappable() = runComposeUiTest {
+        val edited = mutableListOf<Int>()
+        val cycled = mutableListOf<Int>()
+        setContent {
+            OrgDocumentView(text = "* API design\n", onEditElement = { edited += it }, onCycleTodo = { cycled += it })
+        }
+
+        onNodeWithText("API design", useUnmergedTree = true).onChildren().assertCountEquals(0)
+        onNodeWithText("API design").performClick()
+
+        assertTrue(cycled.isEmpty())
+        assertEquals(listOf(0), edited)
     }
 
     @Test

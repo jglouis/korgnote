@@ -39,12 +39,15 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -84,6 +87,8 @@ fun OrgText(
     // The item itself, not its position: a node carries the source range it was parsed from, while
     // an ordinal shifts whenever anything above it changes.
     onToggleCheckbox: ((item: OrgCheckboxItem) -> Unit)? = null,
+    // A tap on a heading's TODO keyword, which only a keyword [todoKeywords] knows is offered for.
+    onCycleTodo: ((heading: OrgSection) -> Unit)? = null,
     // Index into content.children (when content is an OrgDocument) to scroll into view, e.g. after
     // opening a file from a calendar entry. Consumed once via onScrolledToChildIndex.
     scrollToChildIndex: Int? = null,
@@ -107,7 +112,12 @@ fun OrgText(
                     modifier = Modifier.bringIntoViewRequester(requesters[idx]),
                     horizontalAlignment = Alignment.Start
                 ) {
-                    RenderNode(node = child, todoConfig = todoConfig, onToggleCheckbox = onToggleCheckbox)
+                    RenderNode(
+                        node = child,
+                        todoConfig = todoConfig,
+                        onToggleCheckbox = onToggleCheckbox,
+                        onCycleTodo = onCycleTodo,
+                    )
                 }
             }
             LaunchedEffect(scrollToChildIndex, requesters) {
@@ -122,6 +132,7 @@ fun OrgText(
                 node = content,
                 todoConfig = todoConfig,
                 onToggleCheckbox = onToggleCheckbox,
+                onCycleTodo = onCycleTodo,
             )
         }
     }
@@ -131,12 +142,14 @@ fun OrgText(
 private fun RenderNode(
     node: OrgNode,
     todoConfig: OrgTodoConfig,
-    onToggleCheckbox: ((OrgCheckboxItem) -> Unit)?
+    onToggleCheckbox: ((OrgCheckboxItem) -> Unit)?,
+    // Only documents and sections pass this on: nothing else can hold a heading.
+    onCycleTodo: ((OrgSection) -> Unit)? = null,
 ) {
     when (node) {
         is OrgDocument -> {
             Column(horizontalAlignment = Alignment.Start) {
-                node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox) }
+                node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox, onCycleTodo) }
             }
         }
 
@@ -144,8 +157,8 @@ private fun RenderNode(
             // A section owns its body and its sub-headings as children now, so rendering one renders
             // its whole subtree. The heading itself carries the level, so nothing here indents:
             // the visual result is the same flow of blocks the flat model produced.
-            OrgHeading(node, todoConfig)
-            node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox) }
+            OrgHeading(node, todoConfig, onCycleTodo)
+            node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox, onCycleTodo) }
         }
 
         // The grammar models these now, so they render from the node rather than by re-scanning
@@ -232,7 +245,7 @@ private fun RenderNode(
 }
 
 @Composable
-private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig) {
+private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onCycleTodo: ((OrgSection) -> Unit)?) {
     val typography = MaterialTheme.typography
     val base = when (node.level) {
         1 -> typography.titleLarge
@@ -248,7 +261,20 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig) {
         val heading = buildAnnotatedString {
             val todoColor = node.todo?.let { todoConfig.colorFor(it) }
             if (!node.todo.isNullOrEmpty()) {
-                withStyle(SpanStyle(color = todoColor ?: style.color)) { append(node.todo) }
+                val keywordStyle = SpanStyle(color = todoColor ?: style.color)
+                // A link rather than a Text of its own, so a long title still wraps under the
+                // keyword. Like any link it takes its own tap, so the element is not opened for
+                // editing. A capitalised first word the keywords do not know is left alone.
+                if (onCycleTodo != null && todoColor != null) {
+                    val cycle = LinkAnnotation.Clickable(
+                        tag = TODO_KEYWORD_TAG,
+                        styles = TextLinkStyles(style = keywordStyle),
+                        linkInteractionListener = { onCycleTodo(node) },
+                    )
+                    withLink(cycle) { append(node.todo) }
+                } else {
+                    withStyle(keywordStyle) { append(node.todo) }
+                }
                 append(' ')
             }
             var title = node.title
@@ -267,6 +293,9 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig) {
         }
     }
 }
+
+/** The link annotation on a heading's TODO keyword, which cycles it when tapped. */
+internal const val TODO_KEYWORD_TAG = "todo-keyword"
 
 @Composable
 private fun OrgTagChip(tag: String) {

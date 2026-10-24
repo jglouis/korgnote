@@ -84,15 +84,18 @@ fun OrgDocument.setTodo(heading: OrgSection, keyword: String?): OrgDocument {
 /**
  * Advances [heading] to the next TODO keyword: through the not-done keywords, then the done ones,
  * then back to no keyword at all — the cycle Org itself uses.
+ *
+ * With [wrap], the last keyword goes back to the first instead of to none. A tap on the keyword
+ * cycles it, and a heading left with no keyword would have nothing left to tap.
  */
-fun OrgDocument.cycleTodo(heading: OrgSection, config: OrgTodoConfig): OrgDocument {
+fun OrgDocument.cycleTodo(heading: OrgSection, config: OrgTodoConfig, wrap: Boolean = false): OrgDocument {
     // A set has no order to cycle through; the keywords are declared in sequence, so keep that.
     val sequence = (config.todo + config.done).toList()
     if (sequence.isEmpty()) return this
     val current = heading.todo?.takeIf { it.isNotEmpty() }
     val next = when (val index = sequence.indexOf(current)) {
         -1 -> sequence.first()
-        sequence.lastIndex -> null
+        sequence.lastIndex -> if (wrap) sequence.first() else null
         else -> sequence[index + 1]
     }
     return setTodo(heading, next)
