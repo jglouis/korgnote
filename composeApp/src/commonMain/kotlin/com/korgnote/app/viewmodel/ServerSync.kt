@@ -1,12 +1,17 @@
 package com.korgnote.app.viewmodel
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.korgnote.common.replica.SyncEngine
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -24,14 +29,32 @@ class ServerSync(
     private val showMessage: (String) -> Unit,
 ) {
     /**
+     * Why the server could not be reached on the last attempt, or null when it answered.
+     *
+     * Kept out of the message line on purpose: being offline is an ordinary state for this app, not
+     * an error about what the user just did, so it gets a quiet indicator rather than a sentence on
+     * top of the note.
+     */
+    var unreachable by mutableStateOf<String?>(null)
+        private set
+
+    /** True while a [retry] the user asked for is in flight. */
+    var retrying by mutableStateOf(false)
+        private set
+
+    /** Cuts the change stream's backoff short, so a retry that got through reconnects it at once. */
+    private val wake = Channel<Unit>(Channel.CONFLATED)
+
+    /**
      * Runs a sync cycle when the server can be reached, then shows whatever the replica holds.
      *
      * A network failure is not fatal: the replica *is* the content, so being offline costs
-     * freshness, not access.
+     * freshness, not access. It sets [unreachable] instead of a message.
      */
     suspend fun load() {
         try {
             val report = sync.sync()
+            unreachable = null
             if (report.conflicted.isNotEmpty()) {
                 val names = report.conflicted.joinToString(", ")
                 showMessage(
@@ -45,9 +68,24 @@ class ServerSync(
             // Rethrows if this job was cancelled, so cancellation stays cancellation instead of
             // being reported as a failure.
             currentCoroutineContext().ensureActive()
-            showMessage(friendlyErrorMessage(t))
+            unreachable = reason(t)
         }
         onReplicaChanged()
+    }
+
+    /**
+     * Syncs now, because the user asked to; on success the change stream reconnects at once
+     * instead of waiting out its backoff.
+     */
+    suspend fun retry() {
+        if (retrying) return
+        retrying = true
+        try {
+            load()
+        } finally {
+            retrying = false
+        }
+        if (unreachable == null) wake.trySend(Unit)
     }
 
     /** Guards against starting a second event stream on recomposition. */
@@ -78,17 +116,20 @@ class ServerSync(
                     // this the app silently stops seeing edits made elsewhere.
                     backoff = (backoff * 2).coerceAtMost(30.seconds)
                 }
-                delay(backoff)
+                // A retry that reached the server wakes this early, and the backoff starts over.
+                if (withTimeoutOrNull(backoff) { wake.receive() } != null) backoff = 1.seconds
                 // Catch up on whatever was missed while disconnected; the stream is only a hint.
                 // Not runCatching: it would swallow cancellation and keep the loop alive after the
                 // view model is gone.
                 try {
                     sync.sync()
+                    unreachable = null
                     onReplicaChanged()
                 } catch (catchUpFailed: Throwable) {
                     // Cancellation must still cancel; anything else just means still offline, and
                     // the next reconnection will try again.
                     currentCoroutineContext().ensureActive()
+                    unreachable = reason(catchUpFailed)
                     println("[DEBUG_LOG][ServerSync] Catch-up sync failed: ${catchUpFailed.message}")
                 }
             }
@@ -96,7 +137,8 @@ class ServerSync(
     }
 
     /**
-     * Pushes an edit that is already saved locally, saying so when the server cannot be reached.
+     * Pushes an edit that is already saved locally, marking the server [unreachable] when it
+     * cannot be reached.
      *
      * The local write cannot fail on a network problem, so an edit is never lost to one. If the
      * push fails the file simply stays dirty and the next sync carries it. [writeFirst] runs under
@@ -106,34 +148,35 @@ class ServerSync(
         try {
             writeFirst()
             sync.sync()
-            showMessage("")
+            unreachable = null
         } catch (t: Throwable) {
             // Rethrows if this job was cancelled, so cancellation stays cancellation
             // instead of being reported as a failure.
             currentCoroutineContext().ensureActive()
-            showMessage("Saved locally; could not reach the server: ${t.message}")
+            unreachable = reason(t)
             t.printStackTrace()
         }
     }
 
     /**
      * Pushes what just changed, if the server can be reached; offline, it waits for the next sync.
-     * Silent either way: a created, renamed or deleted note needs no message to say it was sent.
+     * No message either way: a created, renamed or deleted note needs none to say it was sent.
      */
     suspend fun pushQuietly() {
         try {
             sync.sync()
+            unreachable = null
             onReplicaChanged()
         } catch (t: Throwable) {
             currentCoroutineContext().ensureActive()
+            unreachable = reason(t)
             println("[DEBUG_LOG][ServerSync] Sync after a file change failed: ${t.message}")
         }
     }
 
-    private fun friendlyErrorMessage(t: Throwable): String {
+    private fun reason(t: Throwable): String {
         val msg = t.message ?: ""
         val simple = t::class.simpleName ?: "Error"
-        // Generic, user-friendly phrasing
         return "Cannot reach the server. Please check Settings and your connection. ($simple: $msg)"
     }
 }

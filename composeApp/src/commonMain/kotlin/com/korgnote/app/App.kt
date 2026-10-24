@@ -198,6 +198,11 @@ fun App() {
                                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                                     }
                                 }
+                                ServerStatusIcon(
+                                    unreachable = vm.server.unreachable,
+                                    retrying = vm.server.retrying,
+                                    onRetry = { scope.launch { vm.server.retry() } },
+                                )
                             }
                         )
                     },
@@ -294,7 +299,7 @@ fun App() {
                                     style = MaterialTheme.typography.titleLarge
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
-                                // Error banner if server unreachable
+                                // Why something could not be done; being offline shows in the top bar instead.
                                 if (vm.lastErrorMessage.isNotBlank()) {
                                     Text(vm.lastErrorMessage, color = MaterialTheme.colorScheme.error)
                                     Spacer(modifier = Modifier.height(8.dp))
@@ -383,7 +388,7 @@ fun App() {
 
                             BottomItem.SETTINGS -> {
                                 val settingsRepo = koinInject<SettingsRepository>()
-                                SettingsScreen(repo = settingsRepo, onSaved = { scope.launch { vm.server.load() } })
+                                SettingsScreen(repo = settingsRepo, onSaved = { scope.launch { vm.server.retry() } })
                             }
                         }
                     }

@@ -60,7 +60,7 @@ class OfflineReplicaTest {
         offline.server.load()
 
         assertEquals(serverText, offline.note.content)
-        assertTrue(offline.lastErrorMessage.isNotBlank(), "the user should be told it is stale")
+        assertTrue(offline.server.unreachable != null, "the user should be told it is stale")
     }
 
     @Test
