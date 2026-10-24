@@ -17,3 +17,5 @@ captures
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
 notes/
+# Local docker compose settings (holds KORGNOTE_TOKEN)
+.env

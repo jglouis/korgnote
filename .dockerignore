@@ -12,3 +12,5 @@ docs/
 local.properties
 *.iml
 .DS_Store
+# Holds the token for docker compose; it must not end up in the build context.
+.env
