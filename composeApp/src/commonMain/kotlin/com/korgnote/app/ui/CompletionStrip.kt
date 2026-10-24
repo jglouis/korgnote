@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyRow
@@ -48,6 +50,10 @@ enum class CompletionKey { ACCEPT, DISMISS, NEXT, PREVIOUS }
  * which is where these notes are mostly written. One presentation also means one thing to keep
  * working. The keyboard path (Tab to accept, arrows to move, Esc to dismiss) is handled by the
  * field itself, so a desktop user never has to reach for the chips.
+ *
+ * [actions] — discarding and saving the element — sit at the end of the strip for the same reason.
+ * As floating buttons they were drawn over the document, and the last element of a file, having
+ * nothing below it to scroll up with, stayed under them while it was being edited.
  */
 @Composable
 fun CompletionStrip(
@@ -55,6 +61,7 @@ fun CompletionStrip(
     selectedIndex: Int,
     onAccept: (CompletionItem) -> Unit,
     modifier: Modifier = Modifier,
+    actions: @Composable RowScope.() -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     // Keyboard selection can walk past the edge of the strip; keep the chosen chip in sight.
@@ -71,39 +78,43 @@ fun CompletionStrip(
         color = MaterialTheme.colorScheme.surfaceContainer,
         tonalElevation = 3.dp,
     ) {
-        if (items.isEmpty()) {
-            Box(contentAlignment = Alignment.CenterStart) {
-                Text(
-                    text = "Type * for keywords, : for tags, [[ for a link, < for a date",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.outline,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // The chips scroll in what the actions leave, so the actions never scroll away.
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                if (items.isEmpty()) {
+                    Text(
+                        text = "Type * for keywords, : for tags, [[ for a link, < for a date",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.outline,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                } else {
+                    LazyRow(
+                        state = listState,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                    ) {
+                        itemsIndexed(items) { index, item ->
+                            val selected = index == selectedIndex
+                            AssistChip(
+                                onClick = { onAccept(item) },
+                                label = { Text(item.label, style = MaterialTheme.typography.labelLarge) },
+                                colors = if (selected) {
+                                    AssistChipDefaults.assistChipColors(
+                                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                        labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    )
+                                } else {
+                                    AssistChipDefaults.assistChipColors()
+                                },
+                            )
+                        }
+                    }
+                }
             }
-            return@Surface
-        }
-        LazyRow(
-            state = listState,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-        ) {
-            itemsIndexed(items) { index, item ->
-                val selected = index == selectedIndex
-                AssistChip(
-                    onClick = { onAccept(item) },
-                    label = { Text(item.label, style = MaterialTheme.typography.labelLarge) },
-                    colors = if (selected) {
-                        AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                    } else {
-                        AssistChipDefaults.assistChipColors()
-                    },
-                )
-            }
+            actions()
         }
     }
 }

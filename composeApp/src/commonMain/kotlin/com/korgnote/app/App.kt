@@ -207,21 +207,9 @@ fun App() {
                         )
                     },
                     floatingActionButton = {
-                        // Saving an element is explicit: edits stay local until this is pressed.
-                        if (vm.editor.editingIndex != null) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                SmallFloatingActionButton(onClick = { vm.editor.cancel() }) {
-                                    Icon(Icons.Filled.Close, contentDescription = "Discard changes to this element")
-                                }
-                                // Most headings are added right after editing the one above.
-                                SmallFloatingActionButton(onClick = { scope.launch { vm.editor.commitAndAddBelow() } }) {
-                                    Icon(Icons.Filled.Add, contentDescription = "Save and add a heading below")
-                                }
-                                FloatingActionButton(onClick = { scope.launch { vm.editor.commit() } }) {
-                                    Icon(Icons.Filled.Save, contentDescription = "Save this element")
-                                }
-                            }
-                        } else if (
+                        // While editing, the element's own actions live on the completion strip.
+                        if (
+                            vm.editor.editingIndex == null &&
                             selectedScreen == BottomItem.HOME &&
                             vm.note.label != OpenNote.NO_FILE_LABEL
                         ) {
@@ -240,7 +228,22 @@ fun App() {
                                 items = vm.completion.suggestions,
                                 selectedIndex = vm.completion.selectedIndex,
                                 onAccept = { vm.completion.accept(it) },
-                            )
+                            ) {
+                                // Saving an element is explicit: edits stay local until this is pressed.
+                                IconButton(onClick = { vm.editor.cancel() }) {
+                                    Icon(Icons.Filled.Close, contentDescription = "Discard changes to this element")
+                                }
+                                // Most headings are added right after editing the one above.
+                                IconButton(onClick = { scope.launch { vm.editor.commitAndAddBelow() } }) {
+                                    Icon(Icons.Filled.Add, contentDescription = "Save and add a heading below")
+                                }
+                                FilledIconButton(
+                                    onClick = { scope.launch { vm.editor.commit() } },
+                                    modifier = Modifier.padding(end = 4.dp),
+                                ) {
+                                    Icon(Icons.Filled.Save, contentDescription = "Save this element")
+                                }
+                            }
                         } else NavigationBar {
                             BottomItem.entries.forEach { item ->
                                 NavigationBarItem(

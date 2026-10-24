@@ -116,6 +116,8 @@ fun OrgDocumentView(
     LazyColumn(
         modifier = modifier,
         state = listState,
+        // Room for the end of the file to scroll clear of the "add heading" button floating over it.
+        contentPadding = PaddingValues(bottom = 72.dp),
         horizontalAlignment = Alignment.Start,
     ) {
         // Every element gets an item, including a blank preamble or a folded-away heading that
