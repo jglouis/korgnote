@@ -17,19 +17,21 @@ import com.korgnote.app.notifications.ReminderTaps
 import com.korgnote.app.notifications.ReminderTarget
 
 class MainActivity : ComponentActivity() {
-    // The answer needs no handling: reminders are scheduled either way, and are shown once the
-    // permission is granted, here or later in the system settings.
-    private val askForNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    // The answers need no handling: reminders are scheduled either way and are shown once
+    // notifications are granted, and sync retries on its own once local network access is. Both can
+    // also be granted later in the system settings.
+    private val askForPermissions =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         openReminderFrom(intent)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            askForNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
+        val missing = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN) add(Manifest.permission.ACCESS_LOCAL_NETWORK)
+        }.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+        if (missing.isNotEmpty()) askForPermissions.launch(missing.toTypedArray())
 
         // Koin is started once in KorgNoteApplication; the Activity is recreated on rotation.
         setContent {
