@@ -6,6 +6,7 @@ import com.korgnote.common.org.complete.CompletionItem
 import com.korgnote.common.org.complete.applyTo
 import com.korgnote.common.org.complete.complete
 import com.korgnote.common.org.complete.restamp
+import com.korgnote.common.org.complete.shiftedEnd
 import com.korgnote.common.org.toOrgDocument
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
@@ -193,10 +194,35 @@ class OrgCompleteTests {
         assertEquals("<2026-12-24 Thu 09:30 .+1d>", restamp("<2026-09-23 Wed 10:00 .+1d>", date, LocalTime(9, 30)))
         assertEquals("<2026-12-24 Thu ++1w>", restamp("<2026-09-23 Wed 10:00 ++1w>", date, null))
         assertEquals("[2026-12-24 Thu]", restamp("[2026-09-23 Wed]", date, null))
-        // A range within the day keeps its length from the new start.
-        assertEquals("<2026-12-24 Thu 14:00-15:30>", restamp("<2026-09-23 Wed 10:00-11:30>", date, LocalTime(14, 0)))
         // Not a stamp: a new one.
         assertEquals("<2026-12-24 Thu 08:05>", restamp("fri", date, LocalTime(8, 5)))
+    }
+
+    @Test
+    fun restampWritesARangeWithinTheDay() {
+        val date = LocalDate(2026, 12, 24)
+        assertEquals(
+            "<2026-12-24 Thu 14:00-15:30 +1w>",
+            restamp("<2026-09-23 Wed 10:00 +1w>", date, LocalTime(14, 0), LocalTime(15, 30)),
+        )
+        // An end with no start, or not after it, is not a range.
+        assertEquals("<2026-12-24 Thu>", restamp("<2026-09-23 Wed 10:00-11:00>", date, null, LocalTime(11, 0)))
+        assertEquals("<2026-12-24 Thu 14:00>", restamp("<2026-09-23 Wed>", date, LocalTime(14, 0), LocalTime(13, 0)))
+    }
+
+    @Test
+    fun aMovedRangeKeepsItsLength() {
+        assertEquals(LocalTime(15, 30), shiftedEnd(LocalTime(10, 0), LocalTime(11, 30), LocalTime(14, 0)))
+        // Not a range, or one that would run into tomorrow: no end.
+        assertEquals(null, shiftedEnd(LocalTime(10, 0), null, LocalTime(14, 0)))
+        assertEquals(null, shiftedEnd(LocalTime(10, 0), LocalTime(12, 0), LocalTime(23, 0)))
+    }
+
+    @Test
+    fun aShortcutKeepsTheRangeOfTheStampItChanges() {
+        val fixture = "* Standup\nSCHEDULED: <2026-09-23 Wed 09:30-09:45>‸"
+        val tomorrow = completeAt(fixture).single { it.label.startsWith("tomorrow") }
+        assertEquals("* Standup\nSCHEDULED: <2026-09-24 Thu 09:30-09:45>‸", apply(fixture, tomorrow))
     }
 
     // --- Row 4: tags at the end of a heading --------------------------------------------------------

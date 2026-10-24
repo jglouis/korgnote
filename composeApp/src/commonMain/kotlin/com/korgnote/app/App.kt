@@ -270,7 +270,8 @@ fun App() {
                         OrgDatePickerDialog(
                             initialDate = stamp?.start ?: vm.completion.context.today,
                             initialTime = stamp?.startTime,
-                            onPick = { date, time -> vm.completion.onDatePicked(date, time) },
+                            initialEndTime = stamp?.endTime,
+                            onPick = { date, time, end -> vm.completion.onDatePicked(date, time, end) },
                             onDismiss = { vm.completion.dismissDatePicker() },
                         )
                     }

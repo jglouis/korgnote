@@ -135,14 +135,14 @@ class CompletionController(
     }
 
     /**
-     * Puts the date — and the time, when one was picked — where the suggestion would have gone. A
-     * stamp it replaces keeps the rest of what it said, such as a repeater.
+     * Puts the date — and the time, or the time range, when one was picked — where the suggestion
+     * would have gone. A stamp it replaces keeps the rest of what it said, such as a repeater.
      */
-    fun onDatePicked(date: LocalDate, time: LocalTime? = null) {
+    fun onDatePicked(date: LocalDate, time: LocalTime? = null, endTime: LocalTime? = null) {
         val item = pendingDatePicker ?: return
         pendingDatePicker = null
         val text = draft()?.text ?: return
-        apply(item.applyTo(text, restamp(text.replacedBy(item).orEmpty(), date, time)))
+        apply(item.applyTo(text, restamp(text.replacedBy(item).orEmpty(), date, time, endTime)))
     }
 
     /** The text [item] stands in for, or null when the draft no longer reaches that far. */

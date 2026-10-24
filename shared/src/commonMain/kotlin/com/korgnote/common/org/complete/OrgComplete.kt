@@ -229,10 +229,10 @@ private fun planningStampItems(line: String, lineStart: Int, cursor: Int, ctx: C
         .firstOrNull { column in it.range.first..it.range.last + 1 } ?: return null
     if (!BEFORE_PLANNING_STAMP.containsMatchIn(line.substring(0, stamp.range.first))) return null
     val replace = (lineStart + stamp.range.first)..(lineStart + stamp.range.last)
-    val time = parseOrgTimestamp(stamp.value)?.startTime
+    val old = parseOrgTimestamp(stamp.value)
 
     val dates = namedDates(ctx.today).map { (label, date) ->
-        val insert = restamp(stamp.value, date, time)
+        val insert = restamp(stamp.value, date, old?.startTime, old?.endTime)
         CompletionItem(label = "$label — $insert", insert = insert, replace = replace, kind = CompletionItem.Kind.DATE)
     }
     return listOf(datePicker(replace)) + dates
@@ -394,22 +394,19 @@ fun LocalDate.orgStamp(active: Boolean): String {
  * [stamp] moved to [date] at [time] — or with no time, when [time] is null — or a new active stamp
  * when [stamp] is not one, such as the half-typed text a picker suggestion stands in for.
  *
+ * [endTime] makes it a range within the day, `10:00-11:30`. It is written only after a start time,
+ * and only when it is later than that start: Org reads an end before its start as nothing useful.
+ *
  * What the picker does not ask about stays as written: the brackets, and the repeater and warning
- * of a recurring entry, which rescheduling must not quietly drop. An end time keeps its duration
- * from the new start, unless that would run past midnight, and goes when the start time does.
+ * of a recurring entry, which rescheduling must not quietly drop.
  */
-fun restamp(stamp: String, date: LocalDate, time: LocalTime?): String {
+fun restamp(stamp: String, date: LocalDate, time: LocalTime?, endTime: LocalTime? = null): String {
     val old = parseOrgTimestamp(stamp)
     val inner = buildString {
         append(date.orgDate())
         if (time != null) {
             append(' ').append(time.orgTime())
-            val oldStart = old?.startTime
-            val oldEnd = old?.endTime
-            if (oldStart != null && oldEnd != null) {
-                val end = time.toSecondOfDay() + (oldEnd.toSecondOfDay() - oldStart.toSecondOfDay())
-                if (end < SECONDS_PER_DAY) append('-').append(LocalTime.fromSecondOfDay(end).orgTime())
-            }
+            if (endTime != null && endTime > time) append('-').append(endTime.orgTime())
         }
         if (old != null) {
             stamp.substring(1, stamp.length - 1).split(' ', '\t')
@@ -418,6 +415,17 @@ fun restamp(stamp: String, date: LocalDate, time: LocalTime?): String {
         }
     }
     return if (old?.active == false) "[$inner]" else "<$inner>"
+}
+
+/**
+ * Where a range that ran [oldStart]–[oldEnd] ends once its start moves to [newStart]: the same
+ * length later, so moving a meeting does not change how long it is. Null when there was no range,
+ * or when the same length would run past midnight, which a range within one day cannot.
+ */
+fun shiftedEnd(oldStart: LocalTime?, oldEnd: LocalTime?, newStart: LocalTime): LocalTime? {
+    if (oldStart == null || oldEnd == null || oldEnd <= oldStart) return null
+    val end = newStart.toSecondOfDay() + (oldEnd.toSecondOfDay() - oldStart.toSecondOfDay())
+    return if (end < SECONDS_PER_DAY) LocalTime.fromSecondOfDay(end) else null
 }
 
 private fun LocalDate.orgDate(): String =

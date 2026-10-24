@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.complete.CompletionItem
+import com.korgnote.common.org.complete.shiftedEnd
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
@@ -135,7 +136,12 @@ fun CompletionStrip(
  *
  * The date comes first and is all most entries need, so OK there is the whole of it: it keeps the
  * time the stamp already had. The time is a second step, behind a button that shows the current
- * one; that step can also take the time away. Org writes times in 24-hour form, so the clock does too.
+ * one; that step can also take the time away. An end time, making it a range such as a meeting's
+ * `10:00-11:30`, is a third step behind the time, so a plain time costs no more taps than before.
+ * Org writes times in 24-hour form, so the clocks do too.
+ *
+ * Moving the start of a range moves its end with it, keeping its length; the end step is where the
+ * length itself changes.
  *
  * The picker hands back UTC midnight for the day that was tapped, so the conversion reads it in
  * UTC: reading it in the device's zone would land on the previous day for anyone west of Greenwich.
@@ -145,7 +151,8 @@ fun CompletionStrip(
 fun OrgDatePickerDialog(
     initialDate: LocalDate,
     initialTime: LocalTime?,
-    onPick: (LocalDate, LocalTime?) -> Unit,
+    initialEndTime: LocalTime?,
+    onPick: (date: LocalDate, time: LocalTime?, endTime: LocalTime?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val dateState = rememberDatePickerState(
@@ -157,45 +164,93 @@ fun OrgDatePickerDialog(
         initialMinute = initialTime?.minute ?: 0,
         is24Hour = true,
     )
-    var choosingTime by remember { mutableStateOf(false) }
+    var step by remember { mutableStateOf(PickerStep.DATE) }
     val pickedDate = { dateState.selectedDateMillis?.toUtcDate() ?: initialDate }
+    val pickedTime = { LocalTime(timeState.hour, timeState.minute) }
+    // The end as it stands for the start now on the clock: the written one, moved along with it.
+    val pickedEnd = { shiftedEnd(initialTime, initialEndTime, pickedTime()) }
 
-    if (!choosingTime) {
-        DatePickerDialog(
+    when (step) {
+        PickerStep.DATE -> DatePickerDialog(
             onDismissRequest = onDismiss,
-            confirmButton = { TextButton(onClick = { onPick(pickedDate(), initialTime) }) { Text("OK") } },
+            confirmButton = {
+                TextButton(onClick = { onPick(pickedDate(), initialTime, initialEndTime) }) { Text("OK") }
+            },
             dismissButton = {
                 Row {
                     TextButton(onClick = onDismiss) { Text("Cancel") }
-                    TextButton(onClick = { choosingTime = true }) {
-                        Text(initialTime?.let { "At ${it.hhmm()}" } ?: "Add time")
+                    TextButton(onClick = { step = PickerStep.TIME }) {
+                        Text(initialTime?.let { "At ${timeRangeLabel(it, initialEndTime)}" } ?: "Add time")
                     }
                 }
             },
         ) {
             DatePicker(state = dateState)
         }
-    } else {
-        AlertDialog(
+
+        PickerStep.TIME -> AlertDialog(
             onDismissRequest = onDismiss,
             title = { Text(pickedDate().toString()) },
             text = { TimePicker(state = timeState) },
             confirmButton = {
-                TextButton(onClick = { onPick(pickedDate(), LocalTime(timeState.hour, timeState.minute)) }) {
-                    Text("OK")
-                }
+                TextButton(onClick = { onPick(pickedDate(), pickedTime(), pickedEnd()) }) { Text("OK") }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { choosingTime = false }) { Text("Back") }
+                    TextButton(onClick = { step = PickerStep.DATE }) { Text("Back") }
                     if (initialTime != null) {
-                        TextButton(onClick = { onPick(pickedDate(), null) }) { Text("No time") }
+                        TextButton(onClick = { onPick(pickedDate(), null, null) }) { Text("No time") }
+                    }
+                    TextButton(onClick = { step = PickerStep.END }) {
+                        Text(pickedEnd()?.let { "Until ${it.hhmm()}" } ?: "Add end")
                     }
                 }
             },
         )
+
+        PickerStep.END -> {
+            val start = pickedTime()
+            val initialEnd = pickedEnd() ?: hourAfter(start)
+            // Remembered here rather than above, so that it opens on the end for the start just
+            // picked rather than the one the dialog opened with; a new range starts an hour long.
+            val endState = rememberTimePickerState(
+                initialHour = initialEnd.hour,
+                initialMinute = initialEnd.minute,
+                is24Hour = true,
+            )
+            val end = LocalTime(endState.hour, endState.minute)
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text("${pickedDate()}, ${start.hhmm()} until") },
+                text = { TimePicker(state = endState) },
+                confirmButton = {
+                    // An end before its start is not a range; Org would not read it as one.
+                    TextButton(enabled = end > start, onClick = { onPick(pickedDate(), start, end) }) {
+                        Text("OK")
+                    }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = { step = PickerStep.TIME }) { Text("Back") }
+                        if (pickedEnd() != null) {
+                            TextButton(onClick = { onPick(pickedDate(), start, null) }) { Text("No end") }
+                        }
+                    }
+                },
+            )
+        }
     }
 }
+
+private enum class PickerStep { DATE, TIME, END }
+
+/** `10:00`, or `10:00–11:30` for a range. */
+private fun timeRangeLabel(start: LocalTime, end: LocalTime?): String =
+    if (end == null) start.hhmm() else "${start.hhmm()}–${end.hhmm()}"
+
+/** An hour after [time], or the last minute of the day when that would be tomorrow. */
+private fun hourAfter(time: LocalTime): LocalTime =
+    if (time.hour < 23) LocalTime(time.hour + 1, time.minute) else LocalTime(23, 59)
 
 private fun currentHour(): Int = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
 

@@ -15,20 +15,22 @@ import kotlin.test.assertEquals
 @OptIn(ExperimentalTestApi::class)
 class DatePickerDialogTest {
     private val date = LocalDate(2026, 9, 23)
-    private val picked = mutableListOf<Pair<LocalDate, LocalTime?>>()
+    private val picked = mutableListOf<Triple<LocalDate, LocalTime?, LocalTime?>>()
 
-    private fun ComposeUiTest.show(time: LocalTime?) = setContent {
+    private fun ComposeUiTest.show(time: LocalTime?, endTime: LocalTime? = null) = setContent {
         MaterialTheme {
             OrgDatePickerDialog(
                 initialDate = date,
                 initialTime = time,
-                onPick = { d, t -> picked += d to t },
+                initialEndTime = endTime,
+                onPick = { d, t, e -> picked += Triple(d, t, e) },
                 onDismiss = {},
             )
         }
     }
 
-    private fun assertPicked(time: LocalTime?) = assertEquals(listOf(date to time), picked.toList())
+    private fun assertPicked(time: LocalTime?, endTime: LocalTime? = null) =
+        assertEquals(listOf(Triple(date, time, endTime)), picked.toList())
 
     @Test
     fun okOnTheDateKeepsTheTimeAlreadyWritten() = runComposeUiTest {
@@ -42,11 +44,12 @@ class DatePickerDialogTest {
 
     @Test
     fun theTimeStepCanTakeTheTimeAway() = runComposeUiTest {
-        show(LocalTime(10, 0))
+        show(LocalTime(10, 0), LocalTime(11, 30))
 
-        onNodeWithText("At 10:00").performClick()
+        onNodeWithText("At 10:00–11:30").performClick()
         onNodeWithText("No time").performClick()
 
+        // The end goes with the start: there is no range without one.
         assertPicked(null)
     }
 
@@ -71,5 +74,52 @@ class DatePickerDialogTest {
         onNodeWithText("OK").performClick()
 
         assertPicked(null)
+    }
+
+    // --- Ranges ---------------------------------------------------------------------------------
+
+    @Test
+    fun okOnTheDateKeepsTheRangeAlreadyWritten() = runComposeUiTest {
+        show(LocalTime(10, 0), LocalTime(11, 30))
+
+        onNodeWithText("OK").performClick()
+
+        assertPicked(LocalTime(10, 0), LocalTime(11, 30))
+    }
+
+    @Test
+    fun aTimeCanBeGivenAnEnd() = runComposeUiTest {
+        show(LocalTime(10, 0))
+
+        onNodeWithText("At 10:00").performClick()
+        onNodeWithText("Add end").performClick()
+        // Nothing to take away yet.
+        onNodeWithText("No end").assertDoesNotExist()
+        onNodeWithText("OK").performClick()
+
+        // A new range starts an hour long.
+        assertPicked(LocalTime(10, 0), LocalTime(11, 0))
+    }
+
+    @Test
+    fun theEndStepOpensOnTheEndWritten() = runComposeUiTest {
+        show(LocalTime(10, 0), LocalTime(11, 30))
+
+        onNodeWithText("At 10:00–11:30").performClick()
+        onNodeWithText("Until 11:30").performClick()
+        onNodeWithText("OK").performClick()
+
+        assertPicked(LocalTime(10, 0), LocalTime(11, 30))
+    }
+
+    @Test
+    fun theEndStepCanTakeTheEndAway() = runComposeUiTest {
+        show(LocalTime(10, 0), LocalTime(11, 30))
+
+        onNodeWithText("At 10:00–11:30").performClick()
+        onNodeWithText("Until 11:30").performClick()
+        onNodeWithText("No end").performClick()
+
+        assertPicked(LocalTime(10, 0))
     }
 }

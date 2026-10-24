@@ -177,6 +177,18 @@ class CompletionEditingTest {
     }
 
     @Test
+    fun thePickerCanWriteATimeRange() = runTest {
+        openAndEdit("* Design review\nSCHEDULED: <2026-09-23 Wed 10:00-11:00>")
+        viewModel.completion.accept(viewModel.completion.suggestions.first())
+        // The picker opens on the range as written.
+        assertEquals(LocalTime(11, 0), viewModel.completion.pickerStamp?.endTime)
+
+        viewModel.completion.onDatePicked(LocalDate(2026, 9, 24), LocalTime(14, 0), LocalTime(15, 30))
+
+        assertEquals("* Design review\nSCHEDULED: <2026-09-24 Thu 14:00-15:30>", viewModel.editor.draft)
+    }
+
+    @Test
     fun dismissingThePickerLeavesTheDraftAlone() = runTest {
         openAndEdit("* Buy milk\nDEADLINE: ")
         viewModel.completion.accept(viewModel.completion.suggestions.single { it.kind == CompletionItem.Kind.DATE_PICKER })
