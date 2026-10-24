@@ -129,6 +129,10 @@ export KORGNOTE_UID=$(id -u) KORGNOTE_GID=$(id -g)
 docker compose up --build
 ```
 
+`scripts/run-server-container.sh [NOTES_DIR]` does the same: it generates the token on the first
+run and keeps it, with the notes directory, in `.env` (not committed), so later runs need no
+argument. Extra arguments go to `docker compose up`, e.g. `-d` to run in the background.
+
 The image is stricter than a plain run: it refuses to start without a token, and a missing or
 unwritable `/notes` stops it rather than falling back to the samples, so a wrong volume path fails
 loudly. It runs as `KORGNOTE_UID:KORGNOTE_GID` so notes created from the app belong to you on the
