@@ -19,6 +19,7 @@ import com.korgnote.app.ui.*
 import com.korgnote.app.viewmodel.NotesViewModel
 import com.korgnote.app.viewmodel.OpenNote
 import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDate
 import org.koin.compose.koinInject
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.korgnote.app.notifications.ReminderTaps
@@ -56,6 +57,9 @@ fun App() {
         var creatingNote by remember { mutableStateOf(false) }
         var renamingNote by remember { mutableStateOf<String?>(null) }
         var deletingNote by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+        // The day a tapped SCHEDULED or DEADLINE date opens the calendar on; null for the calendar's
+        // own starting view, as when it is opened from the bottom bar.
+        var calendarDay by remember { mutableStateOf<LocalDate?>(null) }
         var noteDialogError by remember { mutableStateOf<String?>(null) }
 
         if (creatingNote) {
@@ -108,16 +112,23 @@ fun App() {
         }
 
         // A tapped link into the notes arrives here as a `korgnote-link:` URI, from a note, the
-        // calendar or search alike; anything else is the platform's to open, as before.
+        // calendar or search alike, and a tapped planning date as a `korgnote-calendar:` one;
+        // anything else is the platform's to open, as before.
         val platformUriHandler = LocalUriHandler.current
         val uriHandler = remember(platformUriHandler, vm) {
             object : UriHandler {
                 override fun openUri(uri: String) {
-                    if (uri.startsWith(NOTE_LINK_URI_PREFIX)) {
-                        vm.links.follow(uri.removePrefix(NOTE_LINK_URI_PREFIX))
-                        selectedScreen = BottomItem.HOME
-                    } else {
-                        platformUriHandler.openUri(uri)
+                    val day = calendarDayOf(uri)
+                    when {
+                        uri.startsWith(NOTE_LINK_URI_PREFIX) -> {
+                            vm.links.follow(uri.removePrefix(NOTE_LINK_URI_PREFIX))
+                            selectedScreen = BottomItem.HOME
+                        }
+                        day != null -> {
+                            calendarDay = day
+                            selectedScreen = BottomItem.CALENDAR
+                        }
+                        else -> platformUriHandler.openUri(uri)
                     }
                 }
             }
@@ -229,7 +240,10 @@ fun App() {
                             BottomItem.entries.forEach { item ->
                                 NavigationBarItem(
                                     selected = selectedScreen == item,
-                                    onClick = { selectedScreen = item },
+                                    onClick = {
+                                        if (item == BottomItem.CALENDAR) calendarDay = null
+                                        selectedScreen = item
+                                    },
                                     icon = {
                                         Icon(
                                             item.getIconRes(),
@@ -350,10 +364,12 @@ fun App() {
                                 )
                             }
 
-                            BottomItem.CALENDAR -> {
+                            BottomItem.CALENDAR -> key(calendarDay) {
                                 CalendarScreen(
                                     modifier = Modifier.fillMaxSize(),
                                     agenda = vm.agenda.index,
+                                    initialMode = calendarDay?.let { CalendarMode.Day },
+                                    initialAnchorDate = calendarDay,
                                     onOpenEntry = { entry ->
                                         // The heading is resolved by the view model once the file's text
                                         // has loaded: that text arrives asynchronously, so working it out

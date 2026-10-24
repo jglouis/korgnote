@@ -7,9 +7,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class OrgSyntaxHighlightingTest {
@@ -211,6 +213,36 @@ class OrgSyntaxHighlightingTest {
         val src = ":PROPERTIES:\n:LOCATION: 1600 Amphitheatre Pkwy\n:END:"
         val out = buildOrgHighlightedString(src, heading)
         assertTrue(out.getLinkAnnotations(0, out.length).isEmpty())
+    }
+
+    @Test
+    fun scheduledAndDeadlineDatesLinkToTheirCalendarDayInViewMode() {
+        val src = "SCHEDULED: <2026-09-20 Sun 10:00> DEADLINE: <2026-09-30 Wed -2d>"
+        val out = buildOrgHighlightedString(src, heading, viewMode = true)
+        assertEquals(src, out.text)
+        val links = out.getLinkAnnotations(0, out.length).map { (it.item as LinkAnnotation.Url).url to out.text.substring(it.start, it.end) }
+        assertEquals(
+            listOf(
+                calendarDayUri(LocalDate(2026, 9, 20)) to "<2026-09-20 Sun 10:00>",
+                calendarDayUri(LocalDate(2026, 9, 30)) to "<2026-09-30 Wed -2d>",
+            ),
+            links,
+        )
+        assertEquals(LocalDate(2026, 9, 20), calendarDayOf(links.first().first))
+    }
+
+    @Test
+    fun planningDatesAreNotLinkedInEditModeNorForClosed() {
+        assertTrue(buildOrgHighlightedString("SCHEDULED: <2026-09-20 Sun>", heading).getLinkAnnotations(0, 27).isEmpty())
+        val closed = buildOrgHighlightedString("CLOSED: [2026-09-20 Sun 10:00]", heading, viewMode = true)
+        assertTrue(closed.getLinkAnnotations(0, closed.length).isEmpty())
+    }
+
+    @Test
+    fun onlyCalendarUrisNameACalendarDay() {
+        assertNull(calendarDayOf("https://example.com"))
+        assertNull(calendarDayOf(NOTE_LINK_URI_PREFIX + "file:notes.org"))
+        assertNull(calendarDayOf(CALENDAR_DAY_URI_PREFIX + "2026-02-30"))
     }
 
     @Test

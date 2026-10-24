@@ -28,6 +28,7 @@ import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.parseTodoConfigFrom
 import com.korgnote.common.org.todoKeywordsOf
 import io.ktor.http.encodeURLQueryComponent
+import kotlinx.datetime.LocalDate
 
 /**
  * Colors used by both reading mode ([OrgText]) and editing mode ([OrgSyntaxHighlightTransformation])
@@ -500,14 +501,41 @@ private fun AnnotatedString.Builder.appendHeading(
 private fun AnnotatedString.Builder.appendPlanning(line: String, viewMode: Boolean) {
     withStyle(SpanStyle(color = OrgColors.planning)) {
         var pos = 0
+        var keyword: String? = null
         for (m in OrgSyntax.planningKeyword.findAll(line)) {
-            appendInline(line.substring(pos, m.range.first), viewMode)
+            appendPlanningValue(line.substring(pos, m.range.first), keyword, viewMode)
             withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(m.value) }
+            keyword = m.groupValues[1]
             pos = m.range.last + 1
         }
-        appendInline(line.substring(pos), viewMode)
+        appendPlanningValue(line.substring(pos), keyword, viewMode)
     }
 }
+
+/** Planning keywords whose date reading mode links to that day in the calendar. */
+private val calendarLinkedPlanningKeywords = setOf("SCHEDULED", "DEADLINE")
+
+/**
+ * The text after a planning [keyword]. In reading mode a `SCHEDULED` or `DEADLINE` timestamp
+ * becomes a link to its day in the calendar, the way a `LOCATION` property links to a map.
+ */
+private fun AnnotatedString.Builder.appendPlanningValue(text: String, keyword: String?, viewMode: Boolean) {
+    val stamp = OrgSyntax.timestamp.find(text)
+    val day = stamp?.let { dateOfTimestamp(it.value) }
+    if (!viewMode || keyword !in calendarLinkedPlanningKeywords || stamp == null || day == null) {
+        appendInline(text, viewMode)
+        return
+    }
+    appendInline(text.substring(0, stamp.range.first), viewMode)
+    withLink(LinkAnnotation.Url(calendarDayUri(day), TextLinkStyles(style = linkStyle))) { append(stamp.value) }
+    appendInline(text.substring(stamp.range.last + 1), viewMode)
+}
+
+private val timestampDay = Regex("\\d{4}-\\d{2}-\\d{2}")
+
+/** The day an Org timestamp falls on, or null if its date is not a real one (`<2026-02-30>`). */
+private fun dateOfTimestamp(timestamp: String): LocalDate? =
+    timestampDay.find(timestamp)?.let { runCatching { LocalDate.parse(it.value) }.getOrNull() }
 
 private fun AnnotatedString.Builder.appendTableLine(line: String, viewMode: Boolean) {
     withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) {
@@ -656,6 +684,21 @@ private fun AnnotatedString.Builder.appendLink(m: MatchResult, viewMode: Boolean
  * callback through every builder that draws inline text.
  */
 const val NOTE_LINK_URI_PREFIX = "korgnote-link:"
+
+/**
+ * Marks a link to a day in the app's own calendar, from a `SCHEDULED` or `DEADLINE` date. Like
+ * [NOTE_LINK_URI_PREFIX], it is the app's [androidx.compose.ui.platform.UriHandler] that opens it.
+ */
+const val CALENDAR_DAY_URI_PREFIX = "korgnote-calendar:"
+
+/** The URI of [day] in the calendar. */
+fun calendarDayUri(day: LocalDate): String = CALENDAR_DAY_URI_PREFIX + day
+
+/** The day a [calendarDayUri] points at, or null if [uri] is not one. */
+fun calendarDayOf(uri: String): LocalDate? =
+    if (uri.startsWith(CALENDAR_DAY_URI_PREFIX)) {
+        runCatching { LocalDate.parse(uri.removePrefix(CALENDAR_DAY_URI_PREFIX)) }.getOrNull()
+    } else null
 
 private fun isExternalUrl(target: String) =
     target.startsWith("http://") || target.startsWith("https://") || target.startsWith("mailto:") ||
