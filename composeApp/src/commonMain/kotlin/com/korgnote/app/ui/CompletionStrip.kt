@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.DatePicker
@@ -20,17 +21,26 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.complete.CompletionItem
+import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
 
 /** What a hardware keyboard can ask of the suggestions. */
@@ -120,7 +130,12 @@ fun CompletionStrip(
 }
 
 /**
- * The date picker behind the "Pick a date…" suggestion, for the dates the shortcuts do not cover.
+ * The date and time picker behind the "Pick date & time…" suggestion, for the dates the shortcuts do
+ * not cover — and for changing a stamp already written, which it opens on.
+ *
+ * The date comes first and is all most entries need, so OK there is the whole of it: it keeps the
+ * time the stamp already had. The time is a second step, behind a button that shows the current
+ * one; that step can also take the time away. Org writes times in 24-hour form, so the clock does too.
  *
  * The picker hands back UTC midnight for the day that was tapped, so the conversion reads it in
  * UTC: reading it in the device's zone would land on the previous day for anyone west of Greenwich.
@@ -128,26 +143,61 @@ fun CompletionStrip(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrgDatePickerDialog(
-    initial: LocalDate,
-    onPick: (LocalDate) -> Unit,
+    initialDate: LocalDate,
+    initialTime: LocalTime?,
+    onPick: (LocalDate, LocalTime?) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val state = rememberDatePickerState()
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val millis = state.selectedDateMillis
-                    onPick(if (millis == null) initial else millis.toUtcDate())
+    val dateState = rememberDatePickerState(
+        initialSelectedDateMillis = initialDate.atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds(),
+    )
+    // A new time starts on the coming hour, the likeliest one for something planned today.
+    val timeState = rememberTimePickerState(
+        initialHour = initialTime?.hour ?: ((currentHour() + 1) % 24),
+        initialMinute = initialTime?.minute ?: 0,
+        is24Hour = true,
+    )
+    var choosingTime by remember { mutableStateOf(false) }
+    val pickedDate = { dateState.selectedDateMillis?.toUtcDate() ?: initialDate }
+
+    if (!choosingTime) {
+        DatePickerDialog(
+            onDismissRequest = onDismiss,
+            confirmButton = { TextButton(onClick = { onPick(pickedDate(), initialTime) }) { Text("OK") } },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = { choosingTime = true }) {
+                        Text(initialTime?.let { "At ${it.hhmm()}" } ?: "Add time")
+                    }
                 }
-            ) { Text("OK") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    ) {
-        DatePicker(state = state)
+            },
+        ) {
+            DatePicker(state = dateState)
+        }
+    } else {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(pickedDate().toString()) },
+            text = { TimePicker(state = timeState) },
+            confirmButton = {
+                TextButton(onClick = { onPick(pickedDate(), LocalTime(timeState.hour, timeState.minute)) }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { choosingTime = false }) { Text("Back") }
+                    if (initialTime != null) {
+                        TextButton(onClick = { onPick(pickedDate(), null) }) { Text("No time") }
+                    }
+                }
+            },
+        )
     }
 }
+
+private fun currentHour(): Int = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
 
 private fun Long.toUtcDate(): LocalDate =
     Instant.fromEpochMilliseconds(this).toLocalDateTime(TimeZone.UTC).date

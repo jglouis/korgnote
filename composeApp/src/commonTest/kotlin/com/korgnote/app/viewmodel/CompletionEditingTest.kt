@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -157,6 +158,22 @@ class CompletionEditingTest {
 
         assertEquals("* Buy milk\nSCHEDULED: <2026-12-24 Thu>", viewModel.editor.draft)
         assertNull(viewModel.completion.pendingDatePicker)
+    }
+
+    @Test
+    fun thePickerChangesTheStampUnderTheCaret() = runTest {
+        openAndEdit("* Buy milk\nSCHEDULED: <2026-09-23 Wed 10:00 +1w>")
+        val picker = viewModel.completion.suggestions.first()
+        assertEquals(CompletionItem.Kind.DATE_PICKER, picker.kind)
+
+        viewModel.completion.accept(picker)
+        // The picker opens on what is written.
+        assertEquals(LocalDate(2026, 9, 23), viewModel.completion.pickerStamp?.start)
+        assertEquals(LocalTime(10, 0), viewModel.completion.pickerStamp?.startTime)
+
+        viewModel.completion.onDatePicked(LocalDate(2026, 12, 24), LocalTime(18, 45))
+
+        assertEquals("* Buy milk\nSCHEDULED: <2026-12-24 Thu 18:45 +1w>", viewModel.editor.draft)
     }
 
     @Test

@@ -4,10 +4,12 @@ import com.korgnote.common.org.OrgBlock
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.agenda.parseOrgTimestamp
 import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.link.relativeNotePath
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.plus
 import kotlinx.datetime.DatePeriod
 
@@ -62,7 +64,10 @@ data class CompletionItem(
         TODO_KEYWORD,
         PLANNING,
         DATE,
-        /** Insert nothing; the UI opens a date picker and inserts what comes back. */
+        /**
+         * Insert nothing; the UI opens a date and time picker and inserts what comes back. When
+         * [replace] covers a stamp already written, the picker starts from it.
+         */
         DATE_PICKER,
         TAG,
         KEYWORD,
@@ -125,6 +130,7 @@ fun complete(doc: OrgDocument, cursor: Int, ctx: CompletionContext): List<Comple
 
     return linkItems(prefix, lineStart, cursor, ctx)
         ?: templateItems(prefix, lineStart, cursor)
+        ?: planningStampItems(line, lineStart, cursor, ctx)
         ?: timestampItems(prefix, cursor, ctx)
         ?: dateItems(prefix, cursor, ctx)
         ?: planningItems(prefix, previousLine, lineStart, cursor, ctx)
@@ -208,24 +214,41 @@ private fun timestampItems(prefix: String, cursor: Int, ctx: CompletionContext):
     )
 }
 
-/** After `SCHEDULED:` or `DEADLINE:`, a date — the ones actually used, plus a picker. */
+/**
+ * The caret on a stamp already written after `SCHEDULED:` or `DEADLINE:` — anywhere in it, or just
+ * after it, which is where accepting a planning line leaves the caret.
+ *
+ * The picker comes first, since changing a written date is what it is for; the usual dates follow.
+ * Each replaces the whole stamp but keeps what it does not ask about — the time, a repeater — so
+ * moving a weekly entry to tomorrow does not turn it into a one-off.
+ */
+private fun planningStampItems(line: String, lineStart: Int, cursor: Int, ctx: CompletionContext): List<CompletionItem>? {
+    val column = cursor - lineStart
+    val stamp = OrgSyntax.timestamp.findAll(line)
+        .firstOrNull { column in it.range.first..it.range.last + 1 } ?: return null
+    if (!BEFORE_PLANNING_STAMP.containsMatchIn(line.substring(0, stamp.range.first))) return null
+    val replace = (lineStart + stamp.range.first)..(lineStart + stamp.range.last)
+    val time = parseOrgTimestamp(stamp.value)?.startTime
+
+    val dates = namedDates(ctx.today).map { (label, date) ->
+        val insert = restamp(stamp.value, date, time)
+        CompletionItem(label = "$label — $insert", insert = insert, replace = replace, kind = CompletionItem.Kind.DATE)
+    }
+    return listOf(datePicker(replace)) + dates
+}
+
+/**
+ * After `SCHEDULED:` or `DEADLINE:`, a date — the ones actually used, plus a picker.
+ *
+ * With nothing typed yet the picker leads: on a phone the strip shows three or four chips, and
+ * behind ten dates it would never be seen. A typed name is narrowing the dates, so they lead then.
+ */
 private fun dateItems(prefix: String, cursor: Int, ctx: CompletionContext): List<CompletionItem>? {
     val match = AFTER_PLANNING.find(prefix) ?: return null
     val typed = match.groupValues[2]
     val replace = (cursor - typed.length) until cursor
 
-    val named = buildList {
-        add("today" to ctx.today)
-        add("tomorrow" to ctx.today.plus(DatePeriod(days = 1)))
-        add("+1w" to ctx.today.plus(DatePeriod(days = 7)))
-        // The next occurrence of each weekday, so "fri" lands on the coming Friday.
-        for (ahead in 1..7) {
-            val date = ctx.today.plus(DatePeriod(days = ahead))
-            add(date.dayOfWeek.fullName() to date)
-        }
-    }
-
-    val dates = named
+    val dates = namedDates(ctx.today)
         .filter { (label, _) -> typed.isEmpty() || label.startsWith(typed, ignoreCase = true) }
         .map { (label, date) ->
             CompletionItem(
@@ -235,14 +258,28 @@ private fun dateItems(prefix: String, cursor: Int, ctx: CompletionContext): List
                 kind = CompletionItem.Kind.DATE,
             )
         }
-    val picker = CompletionItem(
-        label = "Pick a date…",
-        insert = "",
-        replace = replace,
-        kind = CompletionItem.Kind.DATE_PICKER,
-    )
-    return dates + picker
+    val picker = datePicker(replace)
+    return if (typed.isEmpty()) listOf(picker) + dates else dates + picker
 }
+
+/** The dates worth a shortcut, by the name they are typed as. */
+private fun namedDates(today: LocalDate): List<Pair<String, LocalDate>> = buildList {
+    add("today" to today)
+    add("tomorrow" to today.plus(DatePeriod(days = 1)))
+    add("+1w" to today.plus(DatePeriod(days = 7)))
+    // The next occurrence of each weekday, so "fri" lands on the coming Friday.
+    for (ahead in 1..7) {
+        val date = today.plus(DatePeriod(days = ahead))
+        add(date.dayOfWeek.fullName() to date)
+    }
+}
+
+private fun datePicker(replace: IntRange) = CompletionItem(
+    label = DATE_PICKER_LABEL,
+    insert = "",
+    replace = replace,
+    kind = CompletionItem.Kind.DATE_PICKER,
+)
 
 /** `SCHE…` or `DEAD…` on the line under a heading: the planning line, with today already in it. */
 private fun planningItems(
@@ -348,9 +385,46 @@ private fun keywordItems(prefix: String, lineStart: Int, cursor: Int): List<Comp
 
 /** `<2026-09-22 Tue>` when active, `[2026-09-22 Tue]` when not. */
 fun LocalDate.orgStamp(active: Boolean): String {
-    val stamp = "${pad(year, 4)}-${pad(month.ordinal + 1, 2)}-${pad(day, 2)} ${dayOfWeek.shortName()}"
+    val stamp = orgDate()
     return if (active) "<$stamp>" else "[$stamp]"
 }
+
+/**
+ * [stamp] moved to [date] at [time] — or with no time, when [time] is null — or a new active stamp
+ * when [stamp] is not one, such as the half-typed text a picker suggestion stands in for.
+ *
+ * What the picker does not ask about stays as written: the brackets, and the repeater and warning
+ * of a recurring entry, which rescheduling must not quietly drop. An end time keeps its duration
+ * from the new start, unless that would run past midnight, and goes when the start time does.
+ */
+fun restamp(stamp: String, date: LocalDate, time: LocalTime?): String {
+    val old = parseOrgTimestamp(stamp)
+    val inner = buildString {
+        append(date.orgDate())
+        if (time != null) {
+            append(' ').append(time.orgTime())
+            val oldStart = old?.startTime
+            val oldEnd = old?.endTime
+            if (oldStart != null && oldEnd != null) {
+                val end = time.toSecondOfDay() + (oldEnd.toSecondOfDay() - oldStart.toSecondOfDay())
+                if (end < SECONDS_PER_DAY) append('-').append(LocalTime.fromSecondOfDay(end).orgTime())
+            }
+        }
+        if (old != null) {
+            stamp.substring(1, stamp.length - 1).split(' ', '\t')
+                .filter { STAMP_REPEATER_OR_DELAY.matches(it) }
+                .forEach { append(' ').append(it) }
+        }
+    }
+    return if (old?.active == false) "[$inner]" else "<$inner>"
+}
+
+private fun LocalDate.orgDate(): String =
+    "${pad(year, 4)}-${pad(month.ordinal + 1, 2)}-${pad(day, 2)} ${dayOfWeek.shortName()}"
+
+private fun LocalTime.orgTime(): String = "${pad(hour, 2)}:${pad(minute, 2)}"
+
+private const val SECONDS_PER_DAY = 24 * 60 * 60
 
 private fun pad(value: Int, width: Int) = value.toString().padStart(width, '0')
 
@@ -389,9 +463,13 @@ private fun previousLineOf(text: String, lineStart: Int): String {
 private val TEMPLATE = Regex("^<([sqeSQE])$")
 private val TEMPLATES = mapOf("s" to "SRC", "q" to "QUOTE", "e" to "EXAMPLE")
 private val AFTER_PLANNING = Regex("(SCHEDULED|DEADLINE):\\s*(\\S*)$", RegexOption.IGNORE_CASE)
+private val BEFORE_PLANNING_STAMP = Regex("(SCHEDULED|DEADLINE):\\s*$", RegexOption.IGNORE_CASE)
+private val STAMP_REPEATER_OR_DELAY = Regex("(\\+\\+|\\.\\+|\\+|--|-)\\d+[hdwmy]")
 private val TAG_PREFIX = Regex(":([\\p{L}\\p{N}_@#%]*)$")
 private val HEADING_FIRST_WORD = Regex("^(\\*+)\\s+(\\S*)$")
 private val KEYWORD_PREFIX = Regex("^#\\+([A-Za-z_]*)$")
+
+private const val DATE_PICKER_LABEL = "Pick date & time…"
 
 /** The keywords these notes actually use, in the order they are worth offering. */
 private val KEYWORDS = listOf(

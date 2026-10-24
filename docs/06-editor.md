@@ -250,7 +250,8 @@ Triggers, all derived from `doc.nodeAt(cursor)` plus the current line prefix:
 |---|---|
 | `* ` / `** ` at heading start | TODO keywords from `#+TODO:` (`TODO`, `NEXT`, `WAITING`, `DONE`, …) |
 | `SCHE…`, `DEAD…` on the line after a heading | `SCHEDULED: <today>`, `DEADLINE: <today>` |
-| after `SCHEDULED:`/`DEADLINE:` | date snippets — today, tomorrow, `+1w`, weekday names — and a date-picker entry |
+| after `SCHEDULED:`/`DEADLINE:` | a date-and-time picker entry, and date snippets — today, tomorrow, `+1w`, weekday names |
+| caret on a `SCHEDULED:`/`DEADLINE:` stamp already written | the picker, opened on that stamp, then the same snippets; all replace the whole stamp and keep its repeater and warning |
 | `:` at end of a heading | tags used elsewhere in the corpus, most frequent first |
 | `#+` at line start | `TITLE`, `FILETAGS`, `TODO`, `STARTUP`, `BEGIN_SRC`, … |
 | `[[` | file paths, then headings in the current document |

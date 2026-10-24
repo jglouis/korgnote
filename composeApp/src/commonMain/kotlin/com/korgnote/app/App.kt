@@ -266,9 +266,11 @@ fun App() {
                     }
                 ) { paddingValues ->
                     vm.completion.pendingDatePicker?.let {
+                        val stamp = vm.completion.pickerStamp
                         OrgDatePickerDialog(
-                            initial = vm.completion.context.today,
-                            onPick = { date -> vm.completion.onDatePicked(date) },
+                            initialDate = stamp?.start ?: vm.completion.context.today,
+                            initialTime = stamp?.startTime,
+                            onPick = { date, time -> vm.completion.onDatePicked(date, time) },
                             onDismiss = { vm.completion.dismissDatePicker() },
                         )
                     }

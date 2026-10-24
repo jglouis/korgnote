@@ -5,8 +5,10 @@ import com.korgnote.common.org.complete.CompletionContext
 import com.korgnote.common.org.complete.CompletionItem
 import com.korgnote.common.org.complete.applyTo
 import com.korgnote.common.org.complete.complete
+import com.korgnote.common.org.complete.restamp
 import com.korgnote.common.org.toOrgDocument
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -118,17 +120,18 @@ class OrgCompleteTests {
     @Test
     fun offersDatesAfterAPlanningKeyword() {
         val labels = completeAt("* Buy milk\nSCHEDULED: ‸").map { it.label }
-        assertTrue(labels.first().startsWith("today — <2026-09-23 Wed>"), labels.first())
+        // The picker leads: behind ten dates, a phone's strip would never show it.
+        assertEquals("Pick date & time…", labels.first())
+        assertTrue(labels[1].startsWith("today — <2026-09-23 Wed>"), labels[1])
         assertTrue(labels.any { it.startsWith("tomorrow — <2026-09-24 Thu>") })
         assertTrue(labels.any { it.startsWith("+1w — <2026-09-30 Wed>") })
         assertTrue(labels.any { it.startsWith("Friday — <2026-09-25 Fri>") })
-        assertEquals("Pick a date…", labels.last())
     }
 
     @Test
     fun aTypedWeekdayNarrowsTheDates() {
         val items = completeAt("* Buy milk\nSCHEDULED: fri‸")
-        assertContentEquals(listOf("Friday — <2026-09-25 Fri>", "Pick a date…"), items.map { it.label })
+        assertContentEquals(listOf("Friday — <2026-09-25 Fri>", "Pick date & time…"), items.map { it.label })
         // And it replaces what was typed rather than appending to it.
         assertEquals(
             "* Buy milk\nSCHEDULED: <2026-09-25 Fri>‸",
@@ -144,6 +147,56 @@ class OrgCompleteTests {
         val result = picker.applyTo("* Buy milk\nDEADLINE: ", "<2026-12-24 Thu>")
         assertEquals("* Buy milk\nDEADLINE: <2026-12-24 Thu>", result.text)
         assertEquals(result.text.length, result.caret)
+    }
+
+    // --- Row 3b: a planning stamp already written -------------------------------------------------
+
+    @Test
+    fun acceptingAPlanningLineLeavesThePickerOnOffer() {
+        // Where the planning completion leaves the caret: after the stamp it wrote.
+        val items = completeAt("* Buy milk\nSCHEDULED: <2026-09-23 Wed>‸")
+        val picker = items.first()
+        assertEquals(CompletionItem.Kind.DATE_PICKER, picker.kind)
+        // It stands in for the whole stamp, so what the picker returns replaces it.
+        val result = picker.applyTo("* Buy milk\nSCHEDULED: <2026-09-23 Wed>", "<2026-12-24 Thu 10:00>")
+        assertEquals("* Buy milk\nSCHEDULED: <2026-12-24 Thu 10:00>", result.text)
+    }
+
+    @Test
+    fun theCaretInsideAStampOffersToChangeAllOfIt() {
+        val items = completeAt("* Buy milk\nDEADLINE: <2026-09-2‸3 Wed 10:00 +1w -2d>")
+        assertEquals(CompletionItem.Kind.DATE_PICKER, items.first().kind)
+        // A shortcut moves the date but keeps the time, the repeater and the warning.
+        val tomorrow = items.single { it.label.startsWith("tomorrow") }
+        assertEquals(
+            "* Buy milk\nDEADLINE: <2026-09-24 Thu 10:00 +1w -2d>‸",
+            apply("* Buy milk\nDEADLINE: <2026-09-2‸3 Wed 10:00 +1w -2d>", tomorrow),
+        )
+    }
+
+    @Test
+    fun theStampUnderTheCaretIsTheOneChanged() {
+        val fixture = "* Buy milk\nSCHEDULED: <2026-09-23 Wed> DEADLINE: <2026-09-30 Wed>‸"
+        val today = completeAt(fixture).single { it.label.startsWith("today") }
+        assertEquals("* Buy milk\nSCHEDULED: <2026-09-23 Wed> DEADLINE: <2026-09-23 Wed>‸", apply(fixture, today))
+    }
+
+    @Test
+    fun aStampOutsideAPlanningLineIsLeftAlone() {
+        assertTrue(completeAt("* Buy milk\nCall the shop <2026-09-23 Wed>‸").isEmpty())
+        assertTrue(completeAt("* DONE Buy milk\nCLOSED: [2026-09-23 Wed 10:00]‸").isEmpty())
+    }
+
+    @Test
+    fun restampKeepsWhatThePickerDoesNotAskAbout() {
+        val date = LocalDate(2026, 12, 24)
+        assertEquals("<2026-12-24 Thu 09:30 .+1d>", restamp("<2026-09-23 Wed 10:00 .+1d>", date, LocalTime(9, 30)))
+        assertEquals("<2026-12-24 Thu ++1w>", restamp("<2026-09-23 Wed 10:00 ++1w>", date, null))
+        assertEquals("[2026-12-24 Thu]", restamp("[2026-09-23 Wed]", date, null))
+        // A range within the day keeps its length from the new start.
+        assertEquals("<2026-12-24 Thu 14:00-15:30>", restamp("<2026-09-23 Wed 10:00-11:30>", date, LocalTime(14, 0)))
+        // Not a stamp: a new one.
+        assertEquals("<2026-12-24 Thu 08:05>", restamp("fri", date, LocalTime(8, 5)))
     }
 
     // --- Row 4: tags at the end of a heading --------------------------------------------------------

@@ -8,16 +8,19 @@ import androidx.compose.ui.text.input.TextFieldValue
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.agenda.OrgTimestamp
+import com.korgnote.common.org.agenda.parseOrgTimestamp
 import com.korgnote.common.org.complete.CompletionContext
 import com.korgnote.common.org.complete.CompletionItem
 import com.korgnote.common.org.complete.CompletionResult
 import com.korgnote.common.org.complete.applyTo
 import com.korgnote.common.org.complete.complete
-import com.korgnote.common.org.complete.orgStamp
+import com.korgnote.common.org.complete.restamp
 import com.korgnote.common.org.edit.allNodes
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.org.todoKeywordsOf
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 
 /**
  * Completion in the element editor (T13): what the strip offers for the draft, and accepting it.
@@ -60,6 +63,13 @@ class CompletionController(
     /** The item waiting on a date picker, or null when none is open. */
     var pendingDatePicker: CompletionItem? by mutableStateOf(null)
         private set
+
+    /**
+     * The stamp the open picker is changing, or null when it is writing a new one: what the picker
+     * starts from, so that moving a date does not begin with finding it again.
+     */
+    val pickerStamp: OrgTimestamp?
+        get() = pendingDatePicker?.let { item -> draft()?.text?.replacedBy(item) }?.let(::parseOrgTimestamp)
 
     /** Esc silences the suggestions for the current text; typing brings them back. */
     private var dismissed = false
@@ -124,13 +134,20 @@ class CompletionController(
         suggestions = emptyList()
     }
 
-    /** Puts the date the picker came back with where its suggestion would have gone. */
-    fun onDatePicked(date: LocalDate) {
+    /**
+     * Puts the date — and the time, when one was picked — where the suggestion would have gone. A
+     * stamp it replaces keeps the rest of what it said, such as a repeater.
+     */
+    fun onDatePicked(date: LocalDate, time: LocalTime? = null) {
         val item = pendingDatePicker ?: return
         pendingDatePicker = null
         val text = draft()?.text ?: return
-        apply(item.applyTo(text, date.orgStamp(active = true)))
+        apply(item.applyTo(text, restamp(text.replacedBy(item).orEmpty(), date, time)))
     }
+
+    /** The text [item] stands in for, or null when the draft no longer reaches that far. */
+    private fun String.replacedBy(item: CompletionItem): String? =
+        if (item.replace.last < length) substring(item.replace) else null
 
     fun dismissDatePicker() {
         pendingDatePicker = null
