@@ -2,12 +2,15 @@ package com.korgnote.common.org.edit
 
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgDocument
+import com.korgnote.common.org.OrgDrawer
 import com.korgnote.common.org.OrgNode
 import com.korgnote.common.org.OrgPlanning
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.complete.orgStamp
 import com.korgnote.common.org.toOrgDocument
+import kotlinx.datetime.LocalDateTime
 
 /**
  * Structural edits, each of which is a text replacement over a range.
@@ -84,22 +87,84 @@ fun OrgDocument.setTodo(heading: OrgSection, keyword: String?): OrgDocument {
 /**
  * Advances [heading] to the next TODO keyword: through the not-done keywords, then the done ones,
  * then back to no keyword at all — the cycle Org itself uses.
- *
- * With [wrap], the last keyword goes back to the first instead of to none. A tap on the keyword
- * cycles it, and a heading left with no keyword would have nothing left to tap.
  */
-fun OrgDocument.cycleTodo(heading: OrgSection, config: OrgTodoConfig, wrap: Boolean = false): OrgDocument {
+fun OrgDocument.cycleTodo(heading: OrgSection, config: OrgTodoConfig): OrgDocument {
     // A set has no order to cycle through; the keywords are declared in sequence, so keep that.
     val sequence = (config.todo + config.done).toList()
     if (sequence.isEmpty()) return this
     val current = heading.todo?.takeIf { it.isNotEmpty() }
     val next = when (val index = sequence.indexOf(current)) {
         -1 -> sequence.first()
-        sequence.lastIndex -> if (wrap) sequence.first() else null
+        sequence.lastIndex -> null
         else -> sequence[index + 1]
     }
     return setTodo(heading, next)
 }
+
+/**
+ * Sets [heading]'s keyword as Org's `C-c C-t` does with state logging on: the keyword changes, and
+ * a note stamped [at] records the change under the heading.
+ *
+ * The note is Org's own, `- State "DONE"       from "TODO"       [2026-10-24 Sat 14:30]`, so Emacs
+ * reads it back as a state change. It goes where Org puts it — after the planning line and the
+ * property drawer, newest first — and into the heading's `:LOGBOOK:` when it has one there, or when
+ * the file asks for one with `#+STARTUP: logdrawer`.
+ *
+ * Clearing the keyword records nothing: there is no state left to log, and Org logs none either.
+ */
+fun OrgDocument.changeTodoState(heading: OrgSection, keyword: String?, at: LocalDateTime): OrgDocument {
+    val previous = heading.todo?.takeIf { it.isNotEmpty() }
+    if (previous == keyword) return this
+    val changed = setTodo(heading, keyword)
+    if (keyword == null || changed === this) return changed
+    // The keyword moved what follows it, so the heading is found again rather than reused. It
+    // still starts where it did, and no section nested in it starts on its line.
+    val updated = changed.nodeAt<OrgSection>(heading.range.first) ?: return changed
+
+    fun quoted(state: String?) = (state?.let { "\"$it\"" } ?: "").padEnd(12)
+    val note = "- State ${quoted(keyword)} from ${quoted(previous)} ${at.orgStamp(active = false)}"
+    return changed.insertLogNote(updated, note)
+}
+
+/** Puts [note] at the top of [heading]'s log; see [changeTodoState] for where that is. */
+private fun OrgDocument.insertLogNote(heading: OrgSection, note: String): OrgDocument {
+    val parts = headingPartsOf(heading) ?: return this
+    var insertAt = parts.lineEnd + 1
+    var logbook: OrgDrawer? = null
+    // Only what sits directly under the heading, in order: a planning line further down is body.
+    for (child in heading.children) {
+        if (child.range.isEmpty() || child.range.first != insertAt) break
+        if (child is OrgPlanning || (child is OrgDrawer && child.name.equals("PROPERTIES", ignoreCase = true))) {
+            insertAt = child.range.last + 1
+            continue
+        }
+        if (child is OrgDrawer && child.name.equals("LOGBOOK", ignoreCase = true) && !child.unterminated) {
+            logbook = child
+        }
+        break
+    }
+
+    val entry = when {
+        // Newest first, so straight after the drawer's opening line.
+        logbook != null -> {
+            insertAt = text.indexOf('\n', logbook.range.first) + 1
+            "$note\n"
+        }
+        logsIntoDrawer() -> ":LOGBOOK:\n$note\n:END:\n"
+        else -> "$note\n"
+    }
+    // The heading, or its planning line, may be the file's last line, with no newline after it.
+    if (insertAt >= text.length && !text.endsWith('\n')) return replace(text.length until text.length, "\n$entry")
+    return replace(insertAt until insertAt, entry)
+}
+
+private val STARTUP = Regex("^#\\+STARTUP:(.*)", RegexOption.IGNORE_CASE)
+
+/** Whether the file sets `#+STARTUP: logdrawer`, Org's per-file `org-log-into-drawer`. */
+private fun OrgDocument.logsIntoDrawer(): Boolean =
+    metadata.mapNotNull { STARTUP.find(it.trim())?.groupValues?.get(1) }
+        .flatMap { it.trim().split(Regex("\\s+")) }
+        .any { it.equals("logdrawer", ignoreCase = true) }
 
 /** Replaces [heading]'s tags, or removes them when [tags] is empty. */
 fun OrgDocument.setTags(heading: OrgSection, tags: List<String>): OrgDocument {

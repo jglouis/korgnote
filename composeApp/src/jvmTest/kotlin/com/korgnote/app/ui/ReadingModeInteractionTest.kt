@@ -1,6 +1,7 @@
 package com.korgnote.app.ui
 
 import androidx.compose.ui.test.onChildren
+import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.link.OrgBacklink
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.platform.LocalUriHandler
@@ -68,35 +69,58 @@ class ReadingModeInteractionTest {
         assertTrue(edited.isEmpty(), "the checkbox's tap is its own")
     }
 
-    /** The keyword is an inner target, like a link: a tap cycles it and edits nothing. */
+    /** The keyword is an inner target, like a link: a tap offers the keywords and edits nothing. */
     @Test
-    fun aTapOnATodoKeywordCyclesItAndDoesNotEdit() = runComposeUiTest {
+    fun aTapOnATodoKeywordOffersTheKeywordsAndDoesNotEdit() = runComposeUiTest {
         val todoText = "* Intro\n* TODO Write the report\nBody.\n"
         val edited = mutableListOf<Int>()
-        val cycled = mutableListOf<Int>()
+        val picked = mutableListOf<Pair<Int, String?>>()
         setContent {
-            OrgDocumentView(text = todoText, onEditElement = { edited += it }, onCycleTodo = { cycled += it })
+            OrgDocumentView(
+                text = todoText,
+                onEditElement = { edited += it },
+                onSetTodo = { offset, keyword -> picked += offset to keyword },
+                todoKeywords = OrgTodoConfig(todo = linkedSetOf("TODO", "NEXT", "WAITING"), done = linkedSetOf("DONE", "CANCELLED")),
+            )
         }
 
         onNodeWithText("TODO Write the report", useUnmergedTree = true).onChildren().onFirst().performClick()
 
-        assertEquals(listOf(todoText.indexOf("* TODO")), cycled)
+        assertTrue(picked.isEmpty(), "a tap opens the choice rather than making one")
         assertTrue(edited.isEmpty(), "the keyword's tap is its own")
+        listOf("NEXT", "WAITING", "DONE", "CANCELLED", "No keyword").forEach { onNodeWithText(it).assertExists() }
+
+        onNodeWithText("WAITING").performClick()
+
+        assertEquals(listOf<Pair<Int, String?>>(todoText.indexOf("* TODO") to "WAITING"), picked)
+        onNodeWithText("CANCELLED").assertDoesNotExist()
     }
 
-    /** A capitalised first word is parsed as a keyword, but only declared keywords cycle. */
+    @Test
+    fun noKeywordClearsIt() = runComposeUiTest {
+        val todoText = "* TODO Write the report\n"
+        val picked = mutableListOf<Pair<Int, String?>>()
+        setContent { OrgDocumentView(text = todoText, onSetTodo = { offset, keyword -> picked += offset to keyword }) }
+
+        onNodeWithText("TODO Write the report", useUnmergedTree = true).onChildren().onFirst().performClick()
+        onNodeWithText("No keyword").performClick()
+
+        assertEquals(listOf<Pair<Int, String?>>(0 to null), picked)
+    }
+
+    /** A capitalised first word is parsed as a keyword, but only declared keywords are tappable. */
     @Test
     fun anUndeclaredCapitalisedWordIsNotTappable() = runComposeUiTest {
         val edited = mutableListOf<Int>()
-        val cycled = mutableListOf<Int>()
+        val picked = mutableListOf<Int>()
         setContent {
-            OrgDocumentView(text = "* API design\n", onEditElement = { edited += it }, onCycleTodo = { cycled += it })
+            OrgDocumentView(text = "* API design\n", onEditElement = { edited += it }, onSetTodo = { offset, _ -> picked += offset })
         }
 
         onNodeWithText("API design", useUnmergedTree = true).onChildren().assertCountEquals(0)
         onNodeWithText("API design").performClick()
 
-        assertTrue(cycled.isEmpty())
+        assertTrue(picked.isEmpty())
         assertEquals(listOf(0), edited)
     }
 

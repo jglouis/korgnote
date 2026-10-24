@@ -9,6 +9,7 @@ import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.link.relativeNotePath
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.plus
 import kotlinx.datetime.DatePeriod
@@ -425,6 +426,12 @@ private fun LocalDate.orgDate(): String =
 private fun LocalTime.orgTime(): String = "${pad(hour, 2)}:${pad(minute, 2)}"
 
 private const val SECONDS_PER_DAY = 24 * 60 * 60
+
+/** `[2026-09-22 Tue 14:05]`: the date as [orgStamp] writes it, with the time of day. */
+fun LocalDateTime.orgStamp(active: Boolean): String {
+    val stamp = "${date.orgDate()} ${time.orgTime()}"
+    return if (active) "<$stamp>" else "[$stamp]"
+}
 
 private fun pad(value: Int, width: Int) = value.toString().padStart(width, '0')
 

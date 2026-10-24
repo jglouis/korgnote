@@ -18,9 +18,12 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -87,8 +90,9 @@ fun OrgText(
     // The item itself, not its position: a node carries the source range it was parsed from, while
     // an ordinal shifts whenever anything above it changes.
     onToggleCheckbox: ((item: OrgCheckboxItem) -> Unit)? = null,
-    // A tap on a heading's TODO keyword, which only a keyword [todoKeywords] knows is offered for.
-    onCycleTodo: ((heading: OrgSection) -> Unit)? = null,
+    // A keyword picked for a heading, or null to clear it. A tap on the heading's TODO keyword offers
+    // the choice, and only on a keyword [todoKeywords] knows.
+    onSetTodo: ((heading: OrgSection, keyword: String?) -> Unit)? = null,
     // Index into content.children (when content is an OrgDocument) to scroll into view, e.g. after
     // opening a file from a calendar entry. Consumed once via onScrolledToChildIndex.
     scrollToChildIndex: Int? = null,
@@ -116,7 +120,7 @@ fun OrgText(
                         node = child,
                         todoConfig = todoConfig,
                         onToggleCheckbox = onToggleCheckbox,
-                        onCycleTodo = onCycleTodo,
+                        onSetTodo = onSetTodo,
                     )
                 }
             }
@@ -132,7 +136,7 @@ fun OrgText(
                 node = content,
                 todoConfig = todoConfig,
                 onToggleCheckbox = onToggleCheckbox,
-                onCycleTodo = onCycleTodo,
+                onSetTodo = onSetTodo,
             )
         }
     }
@@ -144,12 +148,12 @@ private fun RenderNode(
     todoConfig: OrgTodoConfig,
     onToggleCheckbox: ((OrgCheckboxItem) -> Unit)?,
     // Only documents and sections pass this on: nothing else can hold a heading.
-    onCycleTodo: ((OrgSection) -> Unit)? = null,
+    onSetTodo: ((OrgSection, String?) -> Unit)? = null,
 ) {
     when (node) {
         is OrgDocument -> {
             Column(horizontalAlignment = Alignment.Start) {
-                node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox, onCycleTodo) }
+                node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox, onSetTodo) }
             }
         }
 
@@ -157,8 +161,8 @@ private fun RenderNode(
             // A section owns its body and its sub-headings as children now, so rendering one renders
             // its whole subtree. The heading itself carries the level, so nothing here indents:
             // the visual result is the same flow of blocks the flat model produced.
-            OrgHeading(node, todoConfig, onCycleTodo)
-            node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox, onCycleTodo) }
+            OrgHeading(node, todoConfig, onSetTodo)
+            node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox, onSetTodo) }
         }
 
         // The grammar models these now, so they render from the node rather than by re-scanning
@@ -245,7 +249,7 @@ private fun RenderNode(
 }
 
 @Composable
-private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onCycleTodo: ((OrgSection) -> Unit)?) {
+private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: ((OrgSection, String?) -> Unit)?) {
     val typography = MaterialTheme.typography
     val base = when (node.level) {
         1 -> typography.titleLarge
@@ -254,47 +258,93 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onCycleTodo:
         else -> typography.bodyLarge
     }
     val style = base.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(top = if (node.level == 1) 12.dp else 6.dp, bottom = 2.dp)
-    ) {
-        val heading = buildAnnotatedString {
-            val todoColor = node.todo?.let { todoConfig.colorFor(it) }
-            if (!node.todo.isNullOrEmpty()) {
-                val keywordStyle = SpanStyle(color = todoColor ?: style.color)
-                // A link rather than a Text of its own, so a long title still wraps under the
-                // keyword. Like any link it takes its own tap, so the element is not opened for
-                // editing. A capitalised first word the keywords do not know is left alone.
-                if (onCycleTodo != null && todoColor != null) {
-                    val cycle = LinkAnnotation.Clickable(
-                        tag = TODO_KEYWORD_TAG,
-                        styles = TextLinkStyles(style = keywordStyle),
-                        linkInteractionListener = { onCycleTodo(node) },
-                    )
-                    withLink(cycle) { append(node.todo) }
-                } else {
-                    withStyle(keywordStyle) { append(node.todo) }
+    var picking by remember { mutableStateOf(false) }
+    // A Box so the keyword menu opens from the heading, whose first word the keyword is.
+    Box {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(top = if (node.level == 1) 12.dp else 6.dp, bottom = 2.dp)
+        ) {
+            val heading = buildAnnotatedString {
+                val todoColor = node.todo?.let { todoConfig.colorFor(it) }
+                if (!node.todo.isNullOrEmpty()) {
+                    val keywordStyle = SpanStyle(color = todoColor ?: style.color)
+                    // A link rather than a Text of its own, so a long title still wraps under the
+                    // keyword. Like any link it takes its own tap, so the element is not opened for
+                    // editing. A capitalised first word the keywords do not know is left alone.
+                    if (onSetTodo != null && todoColor != null) {
+                        val pick = LinkAnnotation.Clickable(
+                            tag = TODO_KEYWORD_TAG,
+                            styles = TextLinkStyles(style = keywordStyle),
+                            linkInteractionListener = { picking = true },
+                        )
+                        withLink(pick) { append(node.todo) }
+                    } else {
+                        withStyle(keywordStyle) { append(node.todo) }
+                    }
+                    append(' ')
                 }
-                append(' ')
+                var title = node.title
+                OrgSyntax.priority.find(title)?.let { prio ->
+                    withStyle(SpanStyle(color = OrgColors.priority)) { append(prio.value) }
+                    title = title.substring(prio.value.length)
+                }
+                appendOrgInline(title, viewMode = true)
             }
-            var title = node.title
-            OrgSyntax.priority.find(title)?.let { prio ->
-                withStyle(SpanStyle(color = OrgColors.priority)) { append(prio.value) }
-                title = title.substring(prio.value.length)
+            Text(text = heading, style = style, modifier = Modifier.weight(1f, fill = false))
+            if (node.tags.isNotEmpty()) {
+                Spacer(Modifier.width(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    node.tags.forEach { tag -> OrgTagChip(tag) }
+                }
             }
-            appendOrgInline(title, viewMode = true)
         }
-        Text(text = heading, style = style, modifier = Modifier.weight(1f, fill = false))
-        if (node.tags.isNotEmpty()) {
-            Spacer(Modifier.width(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                node.tags.forEach { tag -> OrgTagChip(tag) }
-            }
+        if (onSetTodo != null) {
+            TodoKeywordMenu(
+                expanded = picking,
+                current = node.todo,
+                todoConfig = todoConfig,
+                onPick = { keyword ->
+                    picking = false
+                    if (keyword != node.todo) onSetTodo(node, keyword)
+                },
+                onDismiss = { picking = false },
+            )
         }
     }
 }
 
-/** The link annotation on a heading's TODO keyword, which cycles it when tapped. */
+/**
+ * The keywords a heading can move to, in the order the file declares them: the not-done ones, then
+ * the done ones, then none at all. The current one is checked, and picking it changes nothing.
+ */
+@Composable
+private fun TodoKeywordMenu(
+    expanded: Boolean,
+    current: String?,
+    todoConfig: OrgTodoConfig,
+    onPick: (keyword: String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    @Composable
+    fun Item(keyword: String) = DropdownMenuItem(
+        text = { Text(keyword, color = todoConfig.colorFor(keyword) ?: Color.Unspecified, fontWeight = FontWeight.Bold) },
+        trailingIcon = if (keyword == current) {
+            { Icon(Icons.Filled.Check, contentDescription = "Current keyword") }
+        } else null,
+        onClick = { onPick(keyword) },
+    )
+
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        todoConfig.todo.forEach { Item(it) }
+        if (todoConfig.todo.isNotEmpty() && todoConfig.done.isNotEmpty()) HorizontalDivider()
+        todoConfig.done.forEach { Item(it) }
+        HorizontalDivider()
+        DropdownMenuItem(text = { Text("No keyword") }, onClick = { onPick(null) })
+    }
+}
+
+/** The link annotation on a heading's TODO keyword, which offers the other keywords when tapped. */
 internal const val TODO_KEYWORD_TAG = "todo-keyword"
 
 @Composable

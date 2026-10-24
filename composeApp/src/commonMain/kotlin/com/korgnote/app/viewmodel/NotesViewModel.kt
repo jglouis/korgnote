@@ -12,7 +12,7 @@ import com.korgnote.common.fs.NotePaths
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTodoConfig
-import com.korgnote.common.org.edit.cycleTodo
+import com.korgnote.common.org.edit.changeTodoState
 import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.edit.toggleCheckbox
 import com.korgnote.common.org.toOrgDocument
@@ -56,8 +56,11 @@ class NotesViewModel(
     notifications: NotificationScheduler = NoopNotificationScheduler,
     /** Read each time reminders are planned, so a change in Settings applies on the next plan. */
     reminderSettings: () -> ReminderSettings = { ReminderSettings() },
-    /** The wall-clock time reminders are planned from; a parameter for the same reason as [today]. */
-    now: () -> LocalDateTime = {
+    /**
+     * The wall-clock time reminders are planned from and state changes are stamped with; a parameter
+     * for the same reason as [today].
+     */
+    private val now: () -> LocalDateTime = {
         Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
     },
     /** Where [createNote] puts a note; read each time, so a change in Settings applies at once. */
@@ -246,17 +249,16 @@ class NotesViewModel(
     }
 
     /**
-     * Moves the heading at [offsetInDocument] to its next TODO keyword, as [toggleCheckboxAt] ticks
-     * a checkbox: only the keyword changes, and the file is saved and pushed the same way.
+     * Sets the keyword of the heading at [offsetInDocument], or clears it when [keyword] is null, as
+     * [toggleCheckboxAt] ticks a checkbox: the file is saved and pushed the same way.
      *
-     * Past the last done keyword it wraps to the first, rather than clearing the keyword as Org's
-     * cycle does — the keyword is what was tapped, so clearing it would leave nothing to tap back.
+     * The change is logged under the heading with the time it was made, as Org logs a state change.
      */
-    fun cycleTodoAt(offsetInDocument: Int, scope: CoroutineScope? = null) {
+    fun setTodoAt(offsetInDocument: Int, keyword: String?, scope: CoroutineScope? = null) {
         val file = note.path ?: return
         val document = note.content.toOrgDocument()
         val heading = document.nodeAt<OrgSection>(offsetInDocument) ?: return
-        val updated = document.cycleTodo(heading, todoKeywords, wrap = true)
+        val updated = document.changeTodoState(heading, keyword, now())
         if (updated.text == document.text) return
         note.content = updated.text
         library.put(file, updated)

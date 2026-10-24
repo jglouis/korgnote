@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.datetime.LocalDateTime
 import kotlin.test.*
 
 /**
@@ -38,7 +39,7 @@ class ElementEditingTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         repository = FakeSyncApi(mutableMapOf(path to initialText))
         val store = DocumentStore(InMemoryReplicaStorage())
-        viewModel = NotesViewModel(SyncEngine(store, repository), store)
+        viewModel = NotesViewModel(SyncEngine(store, repository), store, now = { LocalDateTime(2026, 10, 24, 14, 5) })
     }
 
     @AfterTest
@@ -372,26 +373,31 @@ class ElementEditingTest {
     }
 
     @Test
-    fun tappingATodoKeywordMarksItDoneAndSavesIt() = runTest {
+    fun pickingAKeywordSetsItLogsTheChangeAndSavesIt() = runTest {
         openFile()
 
-        viewModel.cycleTodoAt(initialText.indexOf("* TODO Second"), this)
+        viewModel.setTodoAt(initialText.indexOf("* TODO Second"), "DONE", this)
         testScheduler.advanceUntilIdle()
 
-        assertEquals(initialText.replace("* TODO Second", "* DONE Second"), viewModel.note.content)
+        assertEquals(
+            initialText.replace(
+                "* TODO Second task\n",
+                "* DONE Second task\n- State \"DONE\"       from \"TODO\"       [2026-10-24 Sat 14:05]\n",
+            ),
+            viewModel.note.content,
+        )
         assertEquals(viewModel.note.content, repository.saves.last().second)
     }
 
     @Test
-    fun tappingADoneKeywordGoesBackToTodoRatherThanClearingIt() = runTest {
+    fun pickingTheCurrentKeywordChangesNothing() = runTest {
         openFile()
-        val heading = initialText.indexOf("* TODO First")
 
-        viewModel.cycleTodoAt(heading, this)
-        viewModel.cycleTodoAt(heading, this)
+        viewModel.setTodoAt(initialText.indexOf("* TODO First"), "TODO", this)
         testScheduler.advanceUntilIdle()
 
         assertEquals(initialText, viewModel.note.content)
+        assertTrue(repository.saves.isEmpty(), "nothing changed, so nothing is saved")
     }
 
     @Test

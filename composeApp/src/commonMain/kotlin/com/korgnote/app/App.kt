@@ -352,7 +352,7 @@ fun App() {
                                         revealElementIndex = vm.note.revealElementIndex,
                                         onRevealed = { vm.note.onRevealed() },
                                         onToggleCheckbox = { offset -> vm.toggleCheckboxAt(offset, scope) },
-                                        onCycleTodo = { offset -> vm.cycleTodoAt(offset, scope) },
+                                        onSetTodo = { offset, keyword -> vm.setTodoAt(offset, keyword, scope) },
                                         backlinks = vm.links.backlinks,
                                         onOpenBacklink = { vm.links.openBacklink(it) },
                                         onFirstVisibleElement = { vm.links.onReadingPositionChanged(it) },

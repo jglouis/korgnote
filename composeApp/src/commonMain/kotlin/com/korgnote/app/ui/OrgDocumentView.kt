@@ -57,8 +57,8 @@ fun OrgDocumentView(
     modifier: Modifier = Modifier,
     // The offset of the tapped checkbox in [text]; the view model finds the node there.
     onToggleCheckbox: ((offsetInDocument: Int) -> Unit)? = null,
-    /** A tap on a heading's TODO keyword: the offset of that heading in [text]. */
-    onCycleTodo: ((offsetInDocument: Int) -> Unit)? = null,
+    /** A keyword picked from a heading's TODO keyword, or null to clear it, with that heading's offset in [text]. */
+    onSetTodo: ((offsetInDocument: Int, keyword: String?) -> Unit)? = null,
     editingElementIndex: Int? = null,
     elementDraftValue: TextFieldValue = TextFieldValue(""),
     onElementDraftChange: (TextFieldValue) -> Unit = {},
@@ -177,8 +177,8 @@ fun OrgDocumentView(
                                 onToggleCheckbox = onToggleCheckbox?.let { toggle ->
                                     { item -> toggle(element.start + item.range.first) }
                                 },
-                                onCycleTodo = onCycleTodo?.let { cycle ->
-                                    { heading -> cycle(element.start + heading.range.first) }
+                                onSetTodo = onSetTodo?.let { set ->
+                                    { heading, keyword -> set(element.start + heading.range.first, keyword) }
                                 },
                             )
                             ElementMenu(

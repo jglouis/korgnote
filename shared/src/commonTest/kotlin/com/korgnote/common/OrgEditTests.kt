@@ -1,10 +1,12 @@
 package com.korgnote.common
 
 import com.korgnote.common.org.OrgCheckboxItem
+import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.edit.PlanningKind
 import com.korgnote.common.org.edit.allNodes
+import com.korgnote.common.org.edit.changeTodoState
 import com.korgnote.common.org.edit.cycleTodo
 import com.korgnote.common.org.edit.demote
 import com.korgnote.common.org.edit.promote
@@ -14,6 +16,7 @@ import com.korgnote.common.org.edit.setTags
 import com.korgnote.common.org.edit.setTodo
 import com.korgnote.common.org.edit.toggleCheckbox
 import com.korgnote.common.org.toOrgDocument
+import kotlinx.datetime.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -161,15 +164,112 @@ class OrgEditTests {
         assertTrue(none.text.contains("* Parent"), none.text)
     }
 
+    // --- State changes, logged ---
+
+    private val afternoon = LocalDateTime(2026, 10, 24, 14, 5)
+
+    private fun OrgDocument.heading(title: String) =
+        allNodes().filterIsInstance<OrgSection>().first { it.title == title }
+
+    /** Org's own note, word for word, so Emacs reads it back; after the planning line, as Org puts it. */
     @Test
-    fun wrappedCyclingGoesFromTheLastKeywordBackToTheFirst() {
-        val config = OrgTodoConfig(todo = setOf("TODO"), done = setOf("DONE"))
+    fun aStateChangeIsLoggedUnderThePlanningLine() {
+        val result = doc.changeTodoState(section("Parent"), "DONE", afternoon).text
 
-        val done = doc.cycleTodo(section("Parent"), config, wrap = true)
-        assertTrue(done.text.contains("* DONE Parent"), done.text)
+        assertTrue(
+            result.contains(
+                "* DONE Parent                       :work:\n" +
+                    "SCHEDULED: <2026-09-21 Mon>\n" +
+                    "- State \"DONE\"       from \"TODO\"       [2026-10-24 Sat 14:05]\n" +
+                    "Body with   deliberate   spacing.\n"
+            ),
+            result,
+        )
+    }
 
-        val todo = done.cycleTodo(done.allNodes().filterIsInstance<OrgSection>().first { it.title == "Parent" }, config, wrap = true)
-        assertTrue(todo.text.contains("* TODO Parent"), todo.text)
+    @Test
+    fun aHeadingWithoutAKeywordIsLoggedAsFromNothing() {
+        val result = doc.changeTodoState(section("Another"), "TODO", afternoon).text
+
+        assertTrue(
+            result.endsWith("* TODO Another\n- State \"TODO\"       from              [2026-10-24 Sat 14:05]\nTail.\n"),
+            result,
+        )
+    }
+
+    /** Newest first, as Org keeps them. */
+    @Test
+    fun aSecondChangeGoesAboveTheFirst() {
+        val done = doc.changeTodoState(section("Parent"), "DONE", afternoon)
+        val reopened = done.changeTodoState(done.heading("Parent"), "TODO", LocalDateTime(2026, 10, 25, 9, 0)).text
+
+        assertTrue(
+            reopened.contains(
+                "SCHEDULED: <2026-09-21 Mon>\n" +
+                    "- State \"TODO\"       from \"DONE\"       [2026-10-25 Sun 09:00]\n" +
+                    "- State \"DONE\"       from \"TODO\"       [2026-10-24 Sat 14:05]\n"
+            ),
+            reopened,
+        )
+    }
+
+    @Test
+    fun theNoteGoesBelowThePropertyDrawer() {
+        val d = "* TODO Task\n:PROPERTIES:\n:ID: abc\n:END:\nBody.\n".toOrgDocument()
+
+        val result = d.changeTodoState(d.heading("Task"), "DONE", afternoon).text
+
+        assertEquals(
+            "* DONE Task\n:PROPERTIES:\n:ID: abc\n:END:\n" +
+                "- State \"DONE\"       from \"TODO\"       [2026-10-24 Sat 14:05]\nBody.\n",
+            result,
+        )
+    }
+
+    @Test
+    fun anExistingLogbookTakesTheNote() {
+        val d = ("* TODO Task\nSCHEDULED: <2026-09-21 Mon>\n:LOGBOOK:\n" +
+            "- State \"TODO\"       from              [2026-10-01 Thu 08:00]\n:END:\nBody.\n").toOrgDocument()
+
+        val result = d.changeTodoState(d.heading("Task"), "DONE", afternoon).text
+
+        assertEquals(
+            "* DONE Task\nSCHEDULED: <2026-09-21 Mon>\n:LOGBOOK:\n" +
+                "- State \"DONE\"       from \"TODO\"       [2026-10-24 Sat 14:05]\n" +
+                "- State \"TODO\"       from              [2026-10-01 Thu 08:00]\n:END:\nBody.\n",
+            result,
+        )
+    }
+
+    @Test
+    fun logdrawerStartsALogbook() {
+        val d = "#+STARTUP: overview logdrawer\n* TODO Task\nBody.\n".toOrgDocument()
+
+        val result = d.changeTodoState(d.heading("Task"), "DONE", afternoon).text
+
+        assertEquals(
+            "#+STARTUP: overview logdrawer\n* DONE Task\n:LOGBOOK:\n" +
+                "- State \"DONE\"       from \"TODO\"       [2026-10-24 Sat 14:05]\n:END:\nBody.\n",
+            result,
+        )
+    }
+
+    /** The heading may be the last line of a file that does not end in a newline. */
+    @Test
+    fun aHeadingOnTheLastLineStillGetsItsNoteOnALineOfItsOwn() {
+        val d = "* TODO Task".toOrgDocument()
+
+        val result = d.changeTodoState(d.heading("Task"), "DONE", afternoon).text
+
+        assertEquals("* DONE Task\n- State \"DONE\"       from \"TODO\"       [2026-10-24 Sat 14:05]\n", result)
+    }
+
+    @Test
+    fun clearingOrKeepingTheKeywordLogsNothing() {
+        val cleared = doc.changeTodoState(section("Parent"), null, afternoon).text
+        assertOnlyLineChanged(cleared, "* TODO Parent                       :work:", "* Parent                       :work:")
+
+        assertEquals(document, doc.changeTodoState(section("Parent"), "TODO", afternoon).text)
     }
 
     // --- Tags ---
