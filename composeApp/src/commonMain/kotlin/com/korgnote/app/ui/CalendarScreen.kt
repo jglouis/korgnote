@@ -306,17 +306,17 @@ private fun CalendarHeader(
                 actions()
             }
         } else {
+            // The toggle sits up with the navigation, so that the modes have the second row to
+            // themselves and fit a phone held upright.
             Column {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     period(Modifier.weight(1f))
+                    doneToggle()
                     navigation()
                     actions()
                 }
                 Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    modes(Modifier.weight(1f))
-                    doneToggle()
-                }
+                modes(Modifier.fillMaxWidth())
             }
         }
     }

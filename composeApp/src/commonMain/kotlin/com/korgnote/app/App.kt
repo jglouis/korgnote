@@ -245,12 +245,12 @@ fun App() {
                 // go down the side instead of taking a band off the bottom.
                 val window = LocalWindowInfo.current.containerSize
                 val wide = with(LocalDensity.current) { window.width.toDp() } >= 600.dp
-                // Too short for a bar above the calendar's own header: the calendar says what it shows,
-                // and the rail which tab it is.
                 val short = with(LocalDensity.current) { window.height.toDp() } < 480.dp
-                val calendarOwnsTop = selectedScreen == BottomItem.CALENDAR && short
-                // Editing there, the keyboard takes half of that height: the element gets what is left,
-                // with no bar above it and no rail squeezed beside it.
+                // No bar above the calendar's own header, which says what it shows; the navigation
+                // says which tab it is.
+                val calendarOwnsTop = selectedScreen == BottomItem.CALENDAR
+                // Editing on a screen that short, the keyboard takes half its height: the element gets
+                // what is left, with no bar above it and no rail squeezed beside it.
                 val editingShort = short && vm.editor.editingIndex != null
                 // Even the status bar: its height is another line of the element.
                 HideStatusBar(editingShort)

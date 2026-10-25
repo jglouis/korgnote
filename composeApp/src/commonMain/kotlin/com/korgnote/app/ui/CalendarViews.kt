@@ -47,6 +47,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.korgnote.common.org.agenda.AgendaIndex
@@ -162,15 +163,18 @@ fun AgendaListView(
                     )
                 }
             }
+            // Room for a time only on a day that has one: a column of nothing but icons would push
+            // every title a third of the way across.
+            val leading = if (section.occurrences.any { it.timeLabel() != null }) 88.dp else 24.dp
             items(section.occurrences, key = { "${section.date}-${it.entry.file}-${it.entry.stamp.range.first}-${it.date}" }) {
-                AgendaRow(it, today, onOpen = { onOpen(it) })
+                AgendaRow(it, today, leading, onOpen = { onOpen(it) })
             }
         }
     }
 }
 
 @Composable
-private fun AgendaRow(occurrence: AgendaOccurrence, today: LocalDate, onOpen: () -> Unit) {
+private fun AgendaRow(occurrence: AgendaOccurrence, today: LocalDate, leading: Dp, onOpen: () -> Unit) {
     val accent = occurrence.entry.kind.accent()
     Row(
         modifier = Modifier
@@ -182,7 +186,7 @@ private fun AgendaRow(occurrence: AgendaOccurrence, today: LocalDate, onOpen: ()
     ) {
         Box(Modifier.width(3.dp).height(36.dp).background(accent, RoundedCornerShape(2.dp)))
         Spacer(Modifier.width(8.dp))
-        Box(Modifier.width(88.dp)) {
+        Box(Modifier.width(leading)) {
             val time = occurrence.timeLabel()
             if (time != null) {
                 Text(time, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
