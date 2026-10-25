@@ -241,6 +241,8 @@ fun App() {
                 // Editing there, the keyboard takes half of that height: the element gets what is left,
                 // with no bar above it and no rail squeezed beside it.
                 val editingShort = short && vm.editor.editingIndex != null
+                // Even the status bar: its height is another line of the element.
+                HideStatusBar(editingShort)
                 val rail = wide && !editingShort
                 // Shown only when something is wrong, so they go wherever the top bar's actions go.
                 val statusIcons = @Composable {
