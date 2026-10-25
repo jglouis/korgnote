@@ -12,6 +12,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,6 +37,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,6 +78,7 @@ fun CalendarScreen(
     initialMode: CalendarMode? = null,
     initialAnchorDate: LocalDate? = null,
     now: LocalDateTime? = null,
+    headerActions: @Composable () -> Unit = {},
 ) {
     val clock by produceState(now ?: currentDateTime(), now) {
         if (now != null) return@produceState
@@ -84,10 +88,12 @@ fun CalendarScreen(
         }
     }
     val today = clock.date
-    var anchorDate by remember { mutableStateOf(initialAnchorDate ?: today) }
-    var mode by remember { mutableStateOf(initialMode ?: CalendarMode.Agenda) }
+    // Saved, as is the tab: turning the phone recreates the activity, and turning it to see more of
+    // the calendar should not lose the place in it.
+    var anchorDate by rememberSaveable(stateSaver = LocalDateSaver) { mutableStateOf(initialAnchorDate ?: today) }
+    var mode by rememberSaveable { mutableStateOf(initialMode ?: CalendarMode.Agenda) }
     // Finished entries are history, and a year of them buries what is still to do.
-    var showDone by remember { mutableStateOf(false) }
+    var showDone by rememberSaveable { mutableStateOf(false) }
     var slideDirection by remember { mutableStateOf(0) } // -1 for left (next), +1 for right (prev)
 
     fun show(newMode: CalendarMode, date: LocalDate = anchorDate) {
@@ -97,75 +103,17 @@ fun CalendarScreen(
     }
 
     Column(modifier = modifier.background(MaterialTheme.colorScheme.surface).padding(8.dp)) {
-        // Header with the period shown and navigation
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                Icon(Icons.Filled.CalendarMonth, contentDescription = null)
-                Text(
-                    text = mode.title(anchorDate),
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "Today",
-                    modifier = Modifier
-                        .padding(end = 8.dp)
-                        .clickable { slideDirection = 0; anchorDate = today },
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Icon(
-                    Icons.Filled.ChevronLeft,
-                    contentDescription = "Previous",
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clickable { slideDirection = 1; anchorDate = mode.prev(anchorDate) }
-                )
-                Icon(
-                    Icons.Filled.ChevronRight,
-                    contentDescription = "Next",
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clickable { slideDirection = -1; anchorDate = mode.next(anchorDate) }
-                )
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        // Mode switcher, and whether done entries are shown
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-          Row(
-            modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-          ) {
-            for (m in CalendarMode.entries) {
-                FilterChip(
-                    selected = mode == m,
-                    onClick = { show(m) },
-                    label = { Text(m.name) }
-                )
-            }
-          }
-          IconButton(onClick = { showDone = !showDone }) {
-              Icon(
-                  if (showDone) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                  contentDescription = if (showDone) "Hide done" else "Show done",
-                  tint = MaterialTheme.colorScheme.onSurfaceVariant,
-              )
-          }
-        }
+        CalendarHeader(
+            title = mode.title(anchorDate),
+            mode = mode,
+            showDone = showDone,
+            onToday = { slideDirection = 0; anchorDate = today },
+            onPrevious = { slideDirection = 1; anchorDate = mode.prev(anchorDate) },
+            onNext = { slideDirection = -1; anchorDate = mode.next(anchorDate) },
+            onMode = { show(it) },
+            onToggleDone = { showDone = !showDone },
+            actions = headerActions,
+        )
 
         Spacer(Modifier.height(8.dp))
 
@@ -271,6 +219,112 @@ fun CalendarScreen(
         }
     }
 }
+
+/**
+ * The period shown and the way through it, the mode switcher, and whether done entries show. Two
+ * rows on a phone held upright; one where the width allows, as on a phone on its side, where height
+ * is what the calendar is short of. [actions] end the first row.
+ */
+@Composable
+private fun CalendarHeader(
+    title: String,
+    mode: CalendarMode,
+    showDone: Boolean,
+    onToday: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onMode: (CalendarMode) -> Unit,
+    onToggleDone: () -> Unit,
+    actions: @Composable () -> Unit,
+) {
+    val period: @Composable (Modifier) -> Unit = { modifier ->
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
+            Icon(Icons.Filled.CalendarMonth, contentDescription = null)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 8.dp)
+            )
+        }
+    }
+    val navigation = @Composable {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Today",
+                modifier = Modifier
+                    .padding(end = 8.dp)
+                    .clickable(onClick = onToday),
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
+            )
+            Icon(
+                Icons.Filled.ChevronLeft,
+                contentDescription = "Previous",
+                modifier = Modifier
+                    .size(28.dp)
+                    .clickable(onClick = onPrevious)
+            )
+            Icon(
+                Icons.Filled.ChevronRight,
+                contentDescription = "Next",
+                modifier = Modifier
+                    .size(28.dp)
+                    .clickable(onClick = onNext)
+            )
+        }
+    }
+    val modes: @Composable (Modifier) -> Unit = { modifier ->
+        Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (m in CalendarMode.entries) {
+                FilterChip(
+                    selected = mode == m,
+                    onClick = { onMode(m) },
+                    label = { Text(m.name) }
+                )
+            }
+        }
+    }
+    val doneToggle = @Composable {
+        IconButton(onClick = onToggleDone) {
+            Icon(
+                if (showDone) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                contentDescription = if (showDone) "Hide done" else "Show done",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (maxWidth >= 600.dp) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                period(Modifier.weight(1f))
+                modes(Modifier.padding(horizontal = 8.dp))
+                doneToggle()
+                navigation()
+                actions()
+            }
+        } else {
+            Column {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    period(Modifier.weight(1f))
+                    navigation()
+                    actions()
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    modes(Modifier.weight(1f))
+                    doneToggle()
+                }
+            }
+        }
+    }
+}
+
+/** A date kept across the activity being recreated: what is saved is its text. */
+internal val LocalDateSaver = Saver<LocalDate, String>(save = { it.toString() }, restore = { LocalDate.parse(it) })
+internal val OptionalLocalDateSaver = Saver<LocalDate?, String>(save = { it?.toString() }, restore = { LocalDate.parse(it) })
 
 private fun currentDateTime(): LocalDateTime = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
 

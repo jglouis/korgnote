@@ -476,28 +476,39 @@ fun MonthView(
             }
         }
         Spacer(Modifier.height(4.dp))
-        for (row in 0 until 6) {
-            Row(Modifier.fillMaxWidth().weight(1f)) {
-                for (col in 0 until 7) {
-                    val date = start.plus(row * 7 + col, DateTimeUnit.DAY)
-                    val shown = agenda.monthDay(date, showDone).sortedWith(chipOrder)
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .padding(vertical = 1.dp)
-                            .clickable { onDayClick(date) }
-                            .testTag("monthDay-$date"),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        DayNumber(date, isToday = date == today, dim = date.month != anchorDate.month)
-                        val fits = if (shown.size > 3) 2 else 3
-                        shown.take(fits).forEach {
-                            Spacer(Modifier.height(1.dp))
-                            EventChip(it, today, onOpen = { onDayClick(date) }, compact = true, firstShown = col == 0)
-                        }
-                        if (shown.size > fits) {
-                            Text("+${shown.size - fits}", fontSize = 9.sp, color = MaterialTheme.colorScheme.outline)
+        // The six weeks share the height, but a week too short to show an entry under its day
+        // numbers is no use, as on a phone on its side: there the month scrolls instead.
+        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+            val rowHeight = maxOf(maxHeight / 6, MONTH_ROW_MIN_HEIGHT)
+            // A compact chip or the "+n" line under the day number, with the gap above it.
+            val line = with(LocalDensity.current) { 11.sp.toDp() } + 1.dp
+            val lines = ((rowHeight - 26.dp) / line).toInt().coerceIn(1, 3)
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                for (row in 0 until 6) {
+                    Row(Modifier.fillMaxWidth().height(rowHeight)) {
+                        for (col in 0 until 7) {
+                            val date = start.plus(row * 7 + col, DateTimeUnit.DAY)
+                            val shown = agenda.monthDay(date, showDone).sortedWith(chipOrder)
+                            Column(
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .padding(vertical = 1.dp)
+                                    .clickable { onDayClick(date) }
+                                    .testTag("monthDay-$date"),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                DayNumber(date, isToday = date == today, dim = date.month != anchorDate.month)
+                                // The count of the rest takes a line too, unless there are none.
+                                val fits = if (shown.size > lines) lines - 1 else lines
+                                shown.take(fits).forEach {
+                                    Spacer(Modifier.height(1.dp))
+                                    EventChip(it, today, onOpen = { onDayClick(date) }, compact = true, firstShown = col == 0)
+                                }
+                                if (shown.size > fits) {
+                                    Text("+${shown.size - fits}", fontSize = 9.sp, lineHeight = 11.sp, color = MaterialTheme.colorScheme.outline)
+                                }
+                            }
                         }
                     }
                 }
@@ -505,3 +516,5 @@ fun MonthView(
         }
     }
 }
+
+private val MONTH_ROW_MIN_HEIGHT = 52.dp

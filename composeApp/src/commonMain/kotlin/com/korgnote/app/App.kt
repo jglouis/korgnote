@@ -40,7 +40,7 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun App() {
     MaterialTheme {
-        var selectedScreen by remember { mutableStateOf(BottomItem.HOME) }
+        var selectedScreen by rememberSaveable { mutableStateOf(BottomItem.HOME) }
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val scope = rememberCoroutineScope()
         val vm = koinViewModel<NotesViewModel>()
@@ -70,7 +70,7 @@ fun App() {
         var deletingNote by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
         // The day a tapped SCHEDULED or DEADLINE date opens the calendar on; null for the calendar's
         // own starting view, as when it is opened from the bottom bar.
-        var calendarDay by remember { mutableStateOf<LocalDate?>(null) }
+        var calendarDay by rememberSaveable(stateSaver = OptionalLocalDateSaver) { mutableStateOf<LocalDate?>(null) }
         var noteDialogError by remember { mutableStateOf<String?>(null) }
         // The conflict copy being compared with its note.
         var comparingCopy by remember { mutableStateOf<String?>(null) }
@@ -232,7 +232,24 @@ fun App() {
             ) {
                 // A phone on its side, or a tablet: the screen is short for its width, so the tabs
                 // go down the side instead of taking a band off the bottom.
-                val wide = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() } >= 600.dp
+                val window = LocalWindowInfo.current.containerSize
+                val wide = with(LocalDensity.current) { window.width.toDp() } >= 600.dp
+                // Too short for a bar above the calendar's own header: the calendar says what it shows,
+                // and the rail which tab it is.
+                val calendarOwnsTop = selectedScreen == BottomItem.CALENDAR &&
+                    with(LocalDensity.current) { window.height.toDp() } < 480.dp
+                // Shown only when something is wrong, so they go wherever the top bar's actions go.
+                val statusIcons = @Composable {
+                    ConflictStatusIcon(vm.library.conflicts) { path ->
+                        vm.onFileSelected(path)
+                        selectedScreen = BottomItem.HOME
+                    }
+                    ServerStatusIcon(
+                        unreachable = vm.server.unreachable,
+                        retrying = vm.server.retrying,
+                        onRetry = { scope.launch { vm.server.retry() } },
+                    )
+                }
                 // Edge to edge, the cutout and the three-button bar sit on a side in landscape; the
                 // rail keeps the start one clear and the screen beside it the rest.
                 val safeInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
@@ -265,7 +282,7 @@ fun App() {
                             ScaffoldDefaults.contentWindowInsets
                         },
                         topBar = {
-                            TopAppBar(
+                            if (!calendarOwnsTop) TopAppBar(
                                 // Reading, the note is what the screen is about: the tab it is on
                                 // already shows in the navigation.
                                 title = {
@@ -295,15 +312,7 @@ fun App() {
                                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                                         }
                                     }
-                                    ConflictStatusIcon(vm.library.conflicts) { path ->
-                                        vm.onFileSelected(path)
-                                        selectedScreen = BottomItem.HOME
-                                    }
-                                    ServerStatusIcon(
-                                        unreachable = vm.server.unreachable,
-                                        retrying = vm.server.retrying,
-                                        onRetry = { scope.launch { vm.server.retry() } },
-                                    )
+                                    statusIcons()
                                 }
                             )
                         },
@@ -421,7 +430,8 @@ fun App() {
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(paddingValues)
-                                .padding(16.dp)
+                                // The calendar pads itself; above and below, height is what it is short of.
+                                .padding(if (calendarOwnsTop) PaddingValues(horizontal = 8.dp) else PaddingValues(16.dp))
                                 .then(
                                     if (ownsItsScroll) Modifier else Modifier.verticalScroll(screenScrollState)
                                 ),
@@ -522,7 +532,8 @@ fun App() {
                                             // here would search the previously open file.
                                             vm.agenda.openEntry(entry)
                                             selectedScreen = BottomItem.HOME
-                                        }
+                                        },
+                                        headerActions = { if (calendarOwnsTop) statusIcons() },
                                     )
                                 }
 
