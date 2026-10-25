@@ -14,6 +14,7 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
+import com.korgnote.common.org.link.fileLinkPath
 import com.korgnote.common.org.link.isNoteLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
@@ -677,6 +678,10 @@ private fun AnnotatedString.Builder.appendLink(m: MatchResult, viewMode: Boolean
             withLink(LinkAnnotation.Url(NOTE_LINK_URI_PREFIX + target, TextLinkStyles(style = linkStyle))) {
                 append(label)
             }
+        } else if (fileLinkPath(target) != null) {
+            withLink(LinkAnnotation.Url(FILE_LINK_URI_PREFIX + target, TextLinkStyles(style = linkStyle))) {
+                append(label)
+            }
         } else {
             appendUrl(target, label, viewMode = true)
         }
@@ -698,6 +703,12 @@ private fun AnnotatedString.Builder.appendLink(m: MatchResult, viewMode: Boolean
  * callback through every builder that draws inline text.
  */
 const val NOTE_LINK_URI_PREFIX = "korgnote-link:"
+
+/**
+ * Marks a link to a file outside the notes, such as `file:~/Sync/invoice.pdf`. The app opens it, as
+ * [NOTE_LINK_URI_PREFIX] links, because the path may first need mapping to where the file is here.
+ */
+const val FILE_LINK_URI_PREFIX = "korgnote-file:"
 
 /**
  * Marks a link to a day in the app's own calendar, from a `SCHEDULED` or `DEADLINE` date. Like

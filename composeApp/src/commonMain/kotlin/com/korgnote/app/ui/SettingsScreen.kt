@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.SettingsRepository
+import com.korgnote.app.files.FileLinkMapping
 import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.common.fs.NotePaths
 import androidx.compose.foundation.layout.Row
@@ -35,6 +36,7 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
     var digestOn by remember { mutableStateOf(false) }
     var digestText by remember { mutableStateOf("") }
     var newNotesFolder by remember { mutableStateOf("") }
+    var fileLinks by remember { mutableStateOf(emptyList<FileLinkMapping>()) }
 
     LaunchedEffect(Unit) {
         host = repo.getServerHost()
@@ -46,6 +48,7 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
         digestOn = reminders.digestEnabled
         digestText = reminders.digestTime.hhmm()
         newNotesFolder = repo.getNewNotesFolder()
+        fileLinks = repo.getFileLinkMappings()
     }
 
     Column {
@@ -117,6 +120,9 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
             singleLine = true,
         )
 
+        Spacer(Modifier.height(24.dp))
+        FileLinkSettings(fileLinks) { fileLinks = it }
+
         if (error != null) {
             Spacer(Modifier.height(8.dp))
             Text(error!!)
@@ -144,6 +150,10 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
                 error = "Please enter a folder inside the notes, like inbox or notes/inbox."
                 return@Button
             }
+            fileLinkMappingsError(fileLinks)?.let {
+                error = it
+                return@Button
+            }
             error = null
             scope.launch {
                 saving = true
@@ -161,6 +171,9 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
                         ),
                     )
                     repo.setNewNotesFolder(folder)
+                    repo.setFileLinkMappings(
+                        fileLinks.filter { it.from.isNotBlank() }.map { FileLinkMapping(it.from.trim(), it.to.trim()) },
+                    )
                     saved = true
                     onSaved?.invoke()
                 } finally {

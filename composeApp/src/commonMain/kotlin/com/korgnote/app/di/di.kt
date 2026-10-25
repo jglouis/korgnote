@@ -2,6 +2,8 @@ package com.korgnote.app.di
 
 import com.korgnote.app.data.KtorSyncApi
 import com.korgnote.app.data.SettingsRepository
+import com.korgnote.app.files.FileOpener
+import com.korgnote.app.files.NoFileOpener
 import com.korgnote.app.notifications.NoopNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
 import com.korgnote.app.viewmodel.NotesViewModel
@@ -37,7 +39,8 @@ val appModule = module {
     single { DocumentStore(get()) }
 
     // ViewModel reads and writes the replica; the repository only refreshes it. Reminders go to
-    // the platform's scheduler where there is one (Android, iOS) and nowhere otherwise.
+    // the platform's scheduler where there is one (Android, iOS) and nowhere otherwise; linked
+    // files, likewise, open where the platform can open them (Android, desktop).
     viewModel {
         val settings = get<SettingsRepository>()
         NotesViewModel(
@@ -48,6 +51,8 @@ val appModule = module {
             newNotesFolder = settings::getNewNotesFolder,
             pinnedNotes = settings::getPinnedNotes,
             savePinnedNotes = settings::setPinnedNotes,
+            fileLinkMappings = settings::getFileLinkMappings,
+            fileOpener = getOrNull<FileOpener>() ?: NoFileOpener,
         )
     }
 }

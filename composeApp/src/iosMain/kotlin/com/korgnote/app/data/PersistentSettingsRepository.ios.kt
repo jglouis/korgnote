@@ -1,5 +1,8 @@
 package com.korgnote.app.data
 
+import com.korgnote.app.files.FileLinkMapping
+import com.korgnote.app.files.decodeFileLinkMappings
+import com.korgnote.app.files.encodeFileLinkMappings
 import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.common.SERVER_PORT
 import kotlinx.coroutines.flow.Flow
@@ -54,6 +57,13 @@ class PersistentSettingsRepository : SettingsRepository {
         defaults.setObject(encodePinnedNotes(paths), forKey = KEY_PINNED_NOTES)
     }
 
+    override fun getFileLinkMappings(): List<FileLinkMapping> =
+        decodeFileLinkMappings(defaults.stringForKey(KEY_FILE_LINK_MAPPINGS))
+
+    override fun setFileLinkMappings(mappings: List<FileLinkMapping>) {
+        defaults.setObject(encodeFileLinkMappings(mappings), forKey = KEY_FILE_LINK_MAPPINGS)
+    }
+
     private fun loadHost(): String {
         val def = defaultServerBaseUrl().removePrefix("http://").removePrefix("https://").substringBefore(":")
         val value = defaults.stringForKey(KEY_HOST)
@@ -76,5 +86,6 @@ class PersistentSettingsRepository : SettingsRepository {
         private const val KEY_REMINDERS = "reminders"
         private const val KEY_NEW_NOTES_FOLDER = "new_notes_folder"
         private const val KEY_PINNED_NOTES = "pinned_notes"
+        private const val KEY_FILE_LINK_MAPPINGS = "file_link_mappings"
     }
 }

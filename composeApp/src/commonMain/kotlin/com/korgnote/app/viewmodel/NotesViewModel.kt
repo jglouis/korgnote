@@ -5,6 +5,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.korgnote.app.files.FileLinkMapping
+import com.korgnote.app.files.FileOpener
+import com.korgnote.app.files.NoFileOpener
 import com.korgnote.app.notifications.NoopNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
 import com.korgnote.app.notifications.ReminderSettings
@@ -34,7 +37,7 @@ import kotlin.time.Clock
  * The app's notes, and everything shown about them.
  *
  * Each concern is its own state holder — [library], [note], [folds], [pins], [editor],
- * [completion], [search], [links], [agenda], [server] — and the UI talks to them directly. What stays here is what
+ * [completion], [search], [links], [files], [agenda], [server] — and the UI talks to them directly. What stays here is what
  * crosses them: opening a note, which every one of them follows; rebuilding what is derived from the
  * notes when they change; and the operations that change the notes as files — saving, creating,
  * renaming, deleting, and settling a conflict between a note and its copy.
@@ -71,6 +74,9 @@ class NotesViewModel(
     /** The notes pinned on this device, read once; and where a change to them is kept. */
     pinnedNotes: () -> List<String> = { emptyList() },
     savePinnedNotes: (List<String>) -> Unit = {},
+    /** Where linked folders are on this device, read on each tap; and what opens a linked file. */
+    fileLinkMappings: () -> List<FileLinkMapping> = { emptyList() },
+    fileOpener: FileOpener = NoFileOpener,
 ) : ViewModel() {
 
     /** The one message line: why something could not be done, or what was done instead. */
@@ -111,6 +117,8 @@ class NotesViewModel(
         showMessage = ::showMessage,
         beforeGoingBack = { editor.cancel() },
     )
+
+    val files: FileLinks = FileLinks(viewModelScope, fileLinkMappings, fileOpener, showMessage = ::showMessage)
 
     val completion: CompletionController = CompletionController(
         library,

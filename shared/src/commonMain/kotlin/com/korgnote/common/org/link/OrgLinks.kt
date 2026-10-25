@@ -284,6 +284,24 @@ fun isNoteLink(target: String): Boolean {
 }
 
 /**
+ * The file [target] links to when that is a file elsewhere on the machine rather than a note: a
+ * `file:` link to a PDF or an image, or a bare `~/…` or `/…` path to one. Its `::search`, which only
+ * Emacs can follow inside such a file, is dropped. Null for anything else — notes, web links, and
+ * paths relative to the note, which name files kept beside the notes, where only notes are synced.
+ */
+fun fileLinkPath(target: String): String? {
+    if (isNoteLink(target)) return null
+    val t = target.trim()
+    val scheme = Regex("^([A-Za-z][A-Za-z0-9+-]*):(?!\\s)").find(t)?.groupValues?.get(1)?.lowercase()
+    val path = when (scheme) {
+        "file", "file+sys", "file+emacs" -> t.substringAfter(':')
+        null -> t
+        else -> return null
+    }.substringBefore("::").trim()
+    return path.takeIf { it.startsWith("/") || it.startsWith("~") }
+}
+
+/**
  * [target] relative to [from]'s folder, as a `file:` link written in [from] must be for Org to
  * find it: `notes/b.org` from `daily/a.org` is `../notes/b.org`.
  */

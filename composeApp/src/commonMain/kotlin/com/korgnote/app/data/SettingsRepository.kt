@@ -1,5 +1,6 @@
 package com.korgnote.app.data
 
+import com.korgnote.app.files.FileLinkMapping
 import com.korgnote.app.notifications.ReminderSettings
 import kotlinx.coroutines.flow.Flow
 
@@ -45,6 +46,14 @@ interface SettingsRepository {
     fun getPinnedNotes(): List<String>
 
     fun setPinnedNotes(paths: List<String>)
+
+    /**
+     * Where the folders file links name are on this device, as [FileLinkMapping]s. Kept per device,
+     * like the pins: `~/Sync` is one place on the laptop the notes were written on, another on a phone.
+     */
+    fun getFileLinkMappings(): List<FileLinkMapping>
+
+    fun setFileLinkMappings(mappings: List<FileLinkMapping>)
 }
 
 /** Pinned notes as one stored string, a path per line: a note path never holds a line break. */

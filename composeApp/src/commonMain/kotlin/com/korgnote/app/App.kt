@@ -142,8 +142,9 @@ fun App() {
         }
 
         // A tapped link into the notes arrives here as a `korgnote-link:` URI, from a note, the
-        // calendar or search alike, and a tapped planning date as a `korgnote-calendar:` one;
-        // anything else is the platform's to open, as before.
+        // calendar or search alike, a link to a file outside them as a `korgnote-file:` one, and a
+        // tapped planning date as a `korgnote-calendar:` one; anything else is the platform's to
+        // open, as before.
         val platformUriHandler = LocalUriHandler.current
         val uriHandler = remember(platformUriHandler, vm) {
             object : UriHandler {
@@ -154,6 +155,7 @@ fun App() {
                             vm.links.follow(uri.removePrefix(NOTE_LINK_URI_PREFIX))
                             selectedScreen = BottomItem.HOME
                         }
+                        uri.startsWith(FILE_LINK_URI_PREFIX) -> vm.files.open(uri.removePrefix(FILE_LINK_URI_PREFIX))
                         day != null -> {
                             calendarDay = day
                             selectedScreen = BottomItem.CALENDAR

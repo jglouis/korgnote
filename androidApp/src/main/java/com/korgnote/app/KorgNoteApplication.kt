@@ -4,6 +4,8 @@ import android.app.Application
 import com.korgnote.app.data.PersistentSettingsRepository
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.di.androidReplica
+import com.korgnote.app.files.AndroidFileOpener
+import com.korgnote.app.files.FileOpener
 import com.korgnote.app.di.initKoin
 import com.korgnote.app.notifications.AndroidNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
@@ -18,6 +20,7 @@ class KorgNoteApplication : Application() {
             single<SettingsRepository> { PersistentSettingsRepository(this@KorgNoteApplication) }
             androidReplica(this@KorgNoteApplication)
             single<NotificationScheduler> { AndroidNotificationScheduler(this@KorgNoteApplication) }
+            single<FileOpener> { AndroidFileOpener(this@KorgNoteApplication) }
         }
         initKoin(extraModules = listOf(androidModule))
     }

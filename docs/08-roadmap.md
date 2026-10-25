@@ -55,6 +55,7 @@ Updated 2026-09-25.
 | ✅ | T23 Server container | Done — `Dockerfile` + `docker-compose.yml`; refuses to start without a token or a writable `/notes` |
 | ✅ | T24 Reading-mode affordances | Done — tap to edit, long-press menu, one fold chevron per heading; [09](09-element-editing.md#the-surface) |
 | ✅ | T25 Pinned notes | Done — pin from a note's long-press menu; pins sit above the file tree and the first opens at launch |
+| ✅ | T26 Linked files | Done — `[[file:~/Sync/x.pdf]]` opens in the device's app for it; Settings maps `~/Sync` to where it is on a phone |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -951,6 +952,25 @@ or not yet synced — is hidden rather than dropped, and returns with the note.
 **Verified** `PinnedNotesTest` (view model: saving, order, launch, rename, delete, missing notes,
 labels) and two cases in `NoteLifecycleUiTest` (the menu item, the pinned rows).
 **Not included** Reordering pins, and pinning a heading rather than a note.
+
+### T26 · Linked files — ✅ **done**
+**Why** The notes link to files kept beside them in a synced folder — `[[file:~/Sync/invoice.pdf]]`
+— which Emacs opens in the system's viewer. Reading mode drew them as dead text. The folder is
+synced to the phone too, but somewhere else, so the path as written means nothing there.
+**Landed** In reading mode a `file:` link to anything but a note, or a bare `~/…` or `/…` path to
+one, is tappable and opens in the app the device picks for the file; its `::search` is dropped.
+Settings has a *File links* section: each row pairs a folder as the links write it (`~/Sync`) with
+where that folder is on this device. The longest covering folder wins, matched folder by folder.
+**Per platform** Android cannot read shared storage by path, so there the folder is chosen in the
+system's folder picker, which grants read access to it for good; the file is found under it by
+name and handed to the viewer as a content URI. An unmapped path says which setting to add.
+Desktop takes a typed path, and opens an unmapped one as written, `~` being the home here too.
+iOS and the web say that files cannot be opened from links. Mappings are per device, in settings.
+**Verified** `FileLinksTest` (mapping, longest match, whole folders, messages, storage, settings
+validation), the link annotations in `OrgSyntaxHighlightingTest`, `fileLinkPath` in `OrgLinksTest`.
+The Android picker and viewer hand-off have no automated test.
+**Not included** Links relative to the note (`./photo.jpeg`), which name files beside the notes
+where only notes are synced; `.org` files outside the notes; iOS.
 
 ---
 

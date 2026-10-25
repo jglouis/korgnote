@@ -1,5 +1,6 @@
 package com.korgnote.app.data
 
+import com.korgnote.app.files.FileLinkMapping
 import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.common.SERVER_PORT
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,5 +54,11 @@ class InMemorySettingsRepository(
     override fun getPinnedNotes(): List<String> = pinnedNotes
     override fun setPinnedNotes(paths: List<String>) {
         pinnedNotes = paths
+    }
+
+    private var fileLinkMappings = emptyList<FileLinkMapping>()
+    override fun getFileLinkMappings(): List<FileLinkMapping> = fileLinkMappings
+    override fun setFileLinkMappings(mappings: List<FileLinkMapping>) {
+        fileLinkMappings = mappings
     }
 }

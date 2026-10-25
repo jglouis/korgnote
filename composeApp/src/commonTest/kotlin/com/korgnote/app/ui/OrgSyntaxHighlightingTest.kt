@@ -130,8 +130,18 @@ class OrgSyntaxHighlightingTest {
 
     @Test
     fun linksThatAreNotNotesAreNotFollowable() {
-        val out = buildOrgInlineString("press [[kbd:C-c C-c]] or open [[file:~/Sync/invoice.pdf][the invoice]]")
+        val out = buildOrgInlineString("press [[kbd:C-c C-c]] or see [[./linus.jpeg]]")
         assertEquals(emptyList(), out.getLinkAnnotations(0, out.length))
+    }
+
+    @Test
+    fun linksToFilesOutsideTheNotesAreOpenedByTheApp() {
+        val out = buildOrgInlineString("open [[file:~/Sync/invoice.pdf][the invoice]]")
+        assertEquals("open the invoice", out.text)
+        assertEquals(
+            listOf("${FILE_LINK_URI_PREFIX}file:~/Sync/invoice.pdf"),
+            out.getLinkAnnotations(0, out.length).map { (it.item as LinkAnnotation.Url).url },
+        )
     }
 
     @Test

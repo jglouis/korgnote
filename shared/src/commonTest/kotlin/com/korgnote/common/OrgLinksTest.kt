@@ -7,6 +7,7 @@ import com.korgnote.common.org.link.OrgLinkResolution.External
 import com.korgnote.common.org.link.OrgLinkResolution.NotANote
 import com.korgnote.common.org.link.OrgLinkResolution.NotFound
 import com.korgnote.common.org.link.OrgLinkResolution.Note
+import com.korgnote.common.org.link.fileLinkPath
 import com.korgnote.common.org.link.isNoteLink
 import com.korgnote.common.org.link.relativeNotePath
 import com.korgnote.common.org.OrgSyntax
@@ -183,6 +184,17 @@ class OrgLinksTest {
         }
         for (link in listOf("https://example.com", "mailto:a@b", "file:~/Sync/x.pdf", "kbd:C-c", "./linus.jpeg", "Mu4e:msgid:x")) {
             assertEquals(false, isNoteLink(link), link)
+        }
+    }
+
+    @Test
+    fun aLinkToAFileOutsideTheNotesNamesItsPath() {
+        assertEquals("~/Sync/x.pdf", fileLinkPath("file:~/Sync/x.pdf"))
+        assertEquals("/home/me/Sync/x.pdf", fileLinkPath("file+sys:/home/me/Sync/x.pdf::12"))
+        assertEquals("~/Sync/photo.jpeg", fileLinkPath(" ~/Sync/photo.jpeg "))
+        // Notes, web links and files beside the notes are not files this way.
+        for (link in listOf("file:~/org-roam/a.org", "~/a.org", "https://example.com", "./linus.jpeg", "file:x.pdf", "kbd:C-c", "Plain")) {
+            assertNull(fileLinkPath(link), link)
         }
     }
 }
