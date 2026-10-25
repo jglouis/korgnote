@@ -68,7 +68,7 @@ fun ConflictStatusIcon(conflicts: Map<String, List<String>>, onOpen: (path: Stri
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
             )
-            for ((path, copies) in conflicts.toSortedMap()) {
+            for ((path, copies) in conflicts.entries.sortedBy { it.key }) {
                 DropdownMenuItem(
                     text = { Text(if (copies.size == 1) path else "$path (${copies.size} versions)") },
                     onClick = { open = false; onOpen(path) },
