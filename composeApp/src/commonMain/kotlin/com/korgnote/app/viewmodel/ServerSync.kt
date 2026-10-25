@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.korgnote.common.replica.SyncEngine
+import com.korgnote.common.replica.SyncReport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
@@ -55,15 +56,7 @@ class ServerSync(
         try {
             val report = sync.sync()
             unreachable = null
-            if (report.conflicted.isNotEmpty()) {
-                val names = report.conflicted.joinToString(", ")
-                showMessage(
-                    "$names also changed on the server. The server's version is kept; yours is " +
-                        "saved beside it as a .sync-conflict- copy."
-                )
-            } else {
-                showMessage("")
-            }
+            if (!reportConflicts(report)) showMessage("")
         } catch (t: Throwable) {
             // Rethrows if this job was cancelled, so cancellation stays cancellation instead of
             // being reported as a failure.
@@ -122,7 +115,7 @@ class ServerSync(
                 // Not runCatching: it would swallow cancellation and keep the loop alive after the
                 // view model is gone.
                 try {
-                    sync.sync()
+                    reportConflicts(sync.sync())
                     unreachable = null
                     onReplicaChanged()
                 } catch (catchUpFailed: Throwable) {
@@ -147,8 +140,14 @@ class ServerSync(
     suspend fun push(writeFirst: suspend () -> Unit = {}) {
         try {
             writeFirst()
-            sync.sync()
+            val report = sync.sync()
             unreachable = null
+            // A merge or a conflict changed the note under the screen. Left showing the old text,
+            // the next save would write it back over what the server added.
+            if (report.replicaMoved) {
+                reportConflicts(report)
+                onReplicaChanged()
+            }
         } catch (t: Throwable) {
             // Rethrows if this job was cancelled, so cancellation stays cancellation
             // instead of being reported as a failure.
@@ -164,7 +163,7 @@ class ServerSync(
      */
     suspend fun pushQuietly() {
         try {
-            sync.sync()
+            reportConflicts(sync.sync())
             unreachable = null
             onReplicaChanged()
         } catch (t: Throwable) {
@@ -172,6 +171,20 @@ class ServerSync(
             unreachable = reason(t)
             println("[DEBUG_LOG][ServerSync] Sync after a file change failed: ${t.message}")
         }
+    }
+
+    /**
+     * Says which notes just took the server's version, since the text on screen changes under the
+     * reader. True when there was something to say.
+     */
+    private fun reportConflicts(report: SyncReport): Boolean {
+        if (report.conflicted.isEmpty()) return false
+        val names = report.conflicted.joinToString(", ")
+        showMessage(
+            "$names also changed on the server. The server's version is kept; yours is " +
+                "saved beside it as a .sync-conflict- copy."
+        )
+        return true
     }
 
     private fun reason(t: Throwable): String {
