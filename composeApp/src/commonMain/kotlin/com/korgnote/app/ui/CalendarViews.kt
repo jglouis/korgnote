@@ -201,13 +201,7 @@ private fun AgendaRow(occurrence: AgendaOccurrence, today: LocalDate, onOpen: ()
                 overflow = TextOverflow.Ellipsis,
             )
             if (occurrence.entry.tags.isNotEmpty()) {
-                Text(
-                    occurrence.entry.tags.joinToString(" ") { ":$it:" },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                TagChips(occurrence.entry.tags, Modifier.padding(top = 2.dp), maxLines = 1)
             }
         }
     }

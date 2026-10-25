@@ -7,6 +7,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -346,6 +347,23 @@ private fun TodoKeywordMenu(
 
 /** The link annotation on a heading's TODO keyword, which offers the other keywords when tapped. */
 internal const val TODO_KEYWORD_TAG = "todo-keyword"
+
+/**
+ * A heading's tags as chips, the way the reading view shows them, for the places that list
+ * headings out of their document: the agenda, search results. They wrap onto as many lines as
+ * [maxLines] allows, and whatever does not fit is left out.
+ */
+@Composable
+fun TagChips(tags: List<String>, modifier: Modifier = Modifier, maxLines: Int = Int.MAX_VALUE) {
+    FlowRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        maxLines = maxLines,
+    ) {
+        tags.forEach { OrgTagChip(it) }
+    }
+}
 
 @Composable
 private fun OrgTagChip(tag: String) {

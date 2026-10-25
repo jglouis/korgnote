@@ -119,13 +119,7 @@ private fun Result(hit: SearchHit, onOpen: () -> Unit) {
                 maxLines = 2,
             )
         }
-        if (hit.tags.isNotEmpty()) {
-            Text(
-                text = hit.tags.joinToString(":", prefix = ":", postfix = ":"),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline,
-            )
-        }
+        if (hit.tags.isNotEmpty()) TagChips(hit.tags)
     }
 }
 

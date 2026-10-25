@@ -33,7 +33,7 @@ class CalendarScreenTest {
     private val agenda = AgendaIndex.of(
         mapOf(
             "work.org" to """
-                * Design review <2026-09-23 Wed 10:00-11:30>
+                * Design review <2026-09-23 Wed 10:00-11:30> :work:design:
                 * Lunch with Sam <2026-09-23 Wed 12:30-13:30>
                 * TODO Submit the grant proposal
                 DEADLINE: <2026-09-23 Wed>
@@ -76,6 +76,14 @@ class CalendarScreenTest {
 
         onNodeWithText("Lunch with Sam").performClick()
         assertEquals(listOf("Lunch with Sam"), opened.map { it.title })
+    }
+
+    @Test
+    fun theAgendaListShowsTagsAsChips() = runComposeUiTest {
+        show(CalendarMode.Agenda)
+        onNodeWithText("work").assertExists()
+        onNodeWithText("design").assertExists()
+        onAllNodesWithText(":work:", substring = true).assertCountEquals(0)
     }
 
     @Test
