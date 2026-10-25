@@ -2,7 +2,7 @@ package com.korgnote.app
 
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeViewport
-import com.korgnote.app.data.InMemorySettingsRepository
+import com.korgnote.app.data.PersistentSettingsRepository
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.di.initKoin
 import kotlinx.browser.document
@@ -13,7 +13,7 @@ import com.korgnote.common.replica.ReplicaStorage
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
     val webModule = module {
-        single<SettingsRepository> { InMemorySettingsRepository() }
+        single<SettingsRepository> { PersistentSettingsRepository() }
         single<ReplicaStorage> { InMemoryReplicaStorage() }
     }
     initKoin(extraModules = listOf(webModule))

@@ -371,7 +371,8 @@ more (D2, D3).
 
 ### T10b · Web client on the same engine — 🟡 **mostly wired by T10**
 **Already true** The wasm target builds and runs on the shared stack: `InMemoryReplicaStorage`,
-`InMemorySettingsRepository`, the same `SyncEngine` and ViewModel as the native clients, and a
+settings in `localStorage` (token, pins, new-notes folder, file-link folders — so a reload does not
+ask for the token again), the same `SyncEngine` and ViewModel as the native clients, and a
 same-origin base URL from `window.location.origin`, so no host or port is configured on web.
 **Still to do** Cold start through `GET /api/v1/bundle` — the server serves it, but `SyncApi` has
 no `bundle()` yet, so every client still walks the manifest and fetches file by file; debounced
