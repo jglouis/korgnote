@@ -76,6 +76,7 @@ import com.korgnote.common.org.OrgTableRow
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.isNumeric
 import com.korgnote.common.org.parseOrgTable
+import com.korgnote.common.org.srcLanguageOf
 import com.korgnote.common.org.toOrgString
 
 
@@ -168,7 +169,7 @@ private fun RenderNode(
 
         // The grammar models these now, so they render from the node rather than by re-scanning
         // text. The views themselves are the ones OrgBody already used.
-        is OrgBlock -> OrgBlockView(node.type, node.parameters, node.body.trimEnd('\n').split('\n'))
+        is OrgBlock -> OrgBlockView(node.type.lowercase(), node.parameters, node.body.trimEnd('\n').split('\n'))
 
         is OrgDrawer -> OrgDrawerView(node.name, node.lines)
 
@@ -484,7 +485,7 @@ private fun OrgBlockView(type: String, params: String, lines: List<String>) {
             )
             when (type) {
                 in OrgSyntax.monospaceBlocks -> Text(
-                    text = body,
+                    text = buildSrcBlockString(body, if (type == "src") srcLanguageOf(params) else null),
                     style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                     softWrap = false,
                     modifier = Modifier.horizontalScroll(rememberScrollState())

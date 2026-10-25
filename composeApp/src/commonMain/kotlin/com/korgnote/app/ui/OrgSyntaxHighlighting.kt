@@ -27,6 +27,7 @@ import com.korgnote.common.org.orgSpansForLine
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.parseTodoConfigFrom
+import com.korgnote.common.org.srcBlockSpans
 import com.korgnote.common.org.todoKeywordsOf
 import io.ktor.http.encodeURLQueryComponent
 import kotlinx.datetime.LocalDate
@@ -60,6 +61,17 @@ object OrgColors {
     val tableRule = Color(0xFFB0BEC5)
     val footnote = Color(0xFF6A1B9A)
     val horizontalRule = Color(0xFFB0BEC5)
+
+    // Src block tokens, after GitHub's light theme
+    val codeKeyword = Color(0xFFCF222E)
+    val codeType = Color(0xFF00796B)
+    val codeBuiltin = Color(0xFF0550AE)
+    val codeFunction = Color(0xFF8250DF)
+    val codeVariable = Color(0xFF953800)
+    val codeConstant = Color(0xFF0550AE)
+    val codeString = Color(0xFF0A3069)
+    val codeComment = Color(0xFF6E7781)
+    val codeTag = Color(0xFF116329)
 }
 
 /** TODO keywords used when nothing better is known: Org's own. */
@@ -146,6 +158,19 @@ fun buildOrgHighlightedString(
             append('\n')
             lineStart = newline + 1
         }
+    }
+}
+
+/**
+ * The body of a src block in [language], coloured token by token; plain when the language is null or
+ * not one that is highlighted. The text is [body] unchanged.
+ */
+fun buildSrcBlockString(body: String, language: String?): AnnotatedString = buildAnnotatedString {
+    append(body)
+    if (language == null) return@buildAnnotatedString
+    for (span in srcBlockSpans(body, language)) {
+        val style = codeSpanStyle(span.kind) ?: continue
+        addStyle(style, span.range.first, span.range.last + 1)
     }
 }
 
@@ -385,6 +410,24 @@ private fun spanStyleFor(
     OrgSpanKind.StrikeThrough -> SpanStyle(textDecoration = TextDecoration.LineThrough)
     OrgSpanKind.Verbatim -> SpanStyle(color = OrgColors.verbatim, fontFamily = FontFamily.Monospace)
     OrgSpanKind.Code -> SpanStyle(color = OrgColors.code, fontFamily = FontFamily.Monospace)
+    OrgSpanKind.CodeKeyword, OrgSpanKind.CodeType, OrgSpanKind.CodeBuiltin, OrgSpanKind.CodeFunction,
+    OrgSpanKind.CodeVariable, OrgSpanKind.CodeConstant, OrgSpanKind.CodeNumber, OrgSpanKind.CodeString,
+    OrgSpanKind.CodeComment, OrgSpanKind.CodeKey, OrgSpanKind.CodeTag, OrgSpanKind.CodeMeta,
+    -> codeSpanStyle(span.kind)
+}
+
+/** The colour of a token inside a src block, or null for a kind that is not one. */
+private fun codeSpanStyle(kind: OrgSpanKind): SpanStyle? = when (kind) {
+    OrgSpanKind.CodeKeyword -> SpanStyle(color = OrgColors.codeKeyword)
+    OrgSpanKind.CodeType -> SpanStyle(color = OrgColors.codeType)
+    OrgSpanKind.CodeBuiltin -> SpanStyle(color = OrgColors.codeBuiltin)
+    OrgSpanKind.CodeFunction, OrgSpanKind.CodeMeta -> SpanStyle(color = OrgColors.codeFunction)
+    OrgSpanKind.CodeVariable -> SpanStyle(color = OrgColors.codeVariable)
+    OrgSpanKind.CodeConstant, OrgSpanKind.CodeNumber -> SpanStyle(color = OrgColors.codeConstant)
+    OrgSpanKind.CodeString -> SpanStyle(color = OrgColors.codeString)
+    OrgSpanKind.CodeComment -> SpanStyle(color = OrgColors.codeComment, fontStyle = FontStyle.Italic)
+    OrgSpanKind.CodeKey, OrgSpanKind.CodeTag -> SpanStyle(color = OrgColors.codeTag)
+    else -> null
 }
 
 private fun AnnotatedString.Builder.appendBlockBody(line: String, blockType: String) {

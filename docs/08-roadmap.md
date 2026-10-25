@@ -973,6 +973,29 @@ The Android picker and viewer hand-off have no automated test.
 **Not included** Links relative to the note (`./photo.jpeg`), which name files beside the notes
 where only notes are synced; `.org` files outside the notes; iOS.
 
+### T27 · Highlighting src blocks — ✅ **done**
+**Why** Code blocks are a large part of the notes — mostly shell and Emacs Lisp, then Java — and
+were drawn as one grey monospace run.
+**Landed** `OrgSrcLexer.kt` in `shared/` lexes the body of a `#+BEGIN_SRC` block by the language it
+names into `Code*` span kinds: keywords, strings, comments, numbers, constants, the command of a
+shell line, the name a Lisp definition introduces, config keys, markup tags. Four families of hand-
+written lexers — shell (and Dockerfile), Lisp (Doom's macros included), C-like (Java, Kotlin, C,
+C++, C#, JavaScript/TypeScript, Go, Rust, Zig, Lua, Python, SQL, JSON), configuration (INI/conf,
+TOML, YAML) — plus XML/HTML. Unknown languages stay plain monospace. Editing gets the spans through
+`orgSpansForLine`; reading mode's `OrgBlockView` through `srcBlockSpans`, so both agree.
+**Why no library** It has to run on wasm and iOS, one line at a time for the editor's per-line
+cache, and the multiplatform highlighters have no Lisp. A string, comment or heredoc left open at the
+end of a line is carried in `OrgLineState.codeState`, so the cache's "same incoming state" check
+still holds. Token spans absorb the whitespace beside them, as heading pieces do, so no style run
+holds only whitespace (`OrgWhitespaceRunTest`).
+**Verified** `OrgSrcLexerTests` (each family, multi-line state, state with and without classifying,
+whitespace runs, bounds) on JVM, wasm and the iOS simulator; two cases in `OrgWhitespaceRunTest`.
+Run once over the 371 real notes: no out-of-range span.
+**Not included** Lisp function calls (as in Emacs, only special forms, macros and defined names are
+coloured — a call cannot be told from a `let` binding without more than one line of context),
+variables inside unquoted heredocs, YAML block scalars, nested languages (`<script>` in HTML).
+Colours are for the light theme, which is the only one the app has.
+
 ---
 
 ## Sequencing notes

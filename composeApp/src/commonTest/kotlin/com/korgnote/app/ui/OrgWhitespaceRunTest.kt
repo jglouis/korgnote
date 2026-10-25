@@ -90,6 +90,30 @@ class OrgWhitespaceRunTest {
     }
 
     @Test
+    fun srcBlockLinesHaveNoWhitespaceOnlyRuns() {
+        val text = "#+BEGIN_SRC bash\n  if [ -n \"\$A \$B\" ];  then  echo   \$X  # c\nfi\n#+END_SRC\n" +
+            "#+BEGIN_SRC emacs-lisp\n  (defun  f  (x)  \"s\"  'q  :k)  ; c\n#+END_SRC"
+        val body = text.lines().filter { !it.startsWith("#+") }
+        for (line in body) {
+            val runs = highlighted(text).whitespaceOnlyRunsOnLine(text.indexOf(line), line.length)
+            assertTrue(runs.isEmpty(), "whitespace-only run(s) $runs in: \"$line\"")
+        }
+    }
+
+    @Test
+    fun aSrcBlockInReadingModeKeepsItsTextAndGetsColours() {
+        val body = "echo \"\$HOME\" # where\nls -la"
+        val styled = buildSrcBlockString(body, "bash")
+        assertEquals(body, styled.text)
+        assertTrue(styled.spanStyles.any { it.item.color == OrgColors.codeBuiltin })
+        assertTrue(styled.spanStyles.any { it.item.color == OrgColors.codeComment })
+        assertTrue(buildSrcBlockString(body, null).spanStyles.isEmpty())
+    }
+
+    private fun AnnotatedString.whitespaceOnlyRunsOnLine(start: Int, length: Int): List<String> =
+        subSequence(start, start + length).whitespaceOnlyRuns()
+
+    @Test
     fun movingWhitespaceLeavesTheTextUntouched() {
         // The whole point is that only span boundaries moved, never a character.
         val lines = listOf(

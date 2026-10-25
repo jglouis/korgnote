@@ -19,6 +19,16 @@ enum class OrgSpanKind {
     LinkMarkup, LinkTarget, LinkDescription, Url,
     Bold, Italic, Underline, StrikeThrough, Verbatim, Code,
 
+    // Inside a src block in a language with a lexer, on top of BlockBodyMonospace (see OrgSrcLexer.kt)
+    CodeKeyword, CodeType, CodeBuiltin, CodeFunction, CodeVariable, CodeConstant, CodeNumber,
+    CodeString, CodeComment,
+    /** A configuration key, an object key or a markup attribute. */
+    CodeKey,
+    /** A markup tag or a configuration section header. */
+    CodeTag,
+    /** An annotation, a decorator, a preprocessor directive or a document marker. */
+    CodeMeta,
+
     /** Markup characters that reading mode hides — emphasis markers and link brackets. */
     Markup,
 }
@@ -79,20 +89,32 @@ class OrgLineState {
     /** Whether the scan is inside a drawer. */
     var inDrawer: Boolean = false
 
-    fun copy(): OrgLineState = OrgLineState().also { it.blockType = blockType; it.inDrawer = inDrawer }
+    /** The language of the src block currently open, when it is one that is highlighted. */
+    var srcLanguage: String? = null
+
+    /** Where that language's lexer stopped — inside a string, a comment or a heredoc — or null. */
+    var codeState: String? = null
+
+    fun copy(): OrgLineState = OrgLineState().also { it.restoreFrom(this) }
 
     /** Resets this state to [other], so a cached line can be resumed from its recorded start. */
     fun restoreFrom(other: OrgLineState) {
         blockType = other.blockType
         inDrawer = other.inDrawer
+        srcLanguage = other.srcLanguage
+        codeState = other.codeState
     }
 
     override fun equals(other: Any?) =
-        other is OrgLineState && other.blockType == blockType && other.inDrawer == inDrawer
+        other is OrgLineState && other.blockType == blockType && other.inDrawer == inDrawer &&
+            other.srcLanguage == srcLanguage && other.codeState == codeState
 
-    override fun hashCode() = 31 * (blockType?.hashCode() ?: 0) + inDrawer.hashCode()
+    override fun hashCode() =
+        ((31 * (blockType?.hashCode() ?: 0) + inDrawer.hashCode()) * 31 + (srcLanguage?.hashCode() ?: 0)) * 31 +
+            (codeState?.hashCode() ?: 0)
 
-    override fun toString() = "OrgLineState(blockType=$blockType, inDrawer=$inDrawer)"
+    override fun toString() =
+        "OrgLineState(blockType=$blockType, inDrawer=$inDrawer, srcLanguage=$srcLanguage, codeState=$codeState)"
 }
 
 /**
@@ -122,6 +144,8 @@ private fun scanLine(
         if (OrgSyntax.blockEnd.containsMatchIn(line)) {
             add(lineRange(), OrgSpanKind.BlockDelimiter)
             state.blockType = null
+            state.srcLanguage = null
+            state.codeState = null
         } else {
             // Which flavour of block this is remains grammar; only the colours are the client's.
             val kind = when (state.blockType) {
@@ -130,6 +154,10 @@ private fun scanLine(
                 else -> OrgSpanKind.BlockBody
             }
             add(lineRange(), kind)
+            state.srcLanguage?.let { language ->
+                val code = if (sink != null) { range: IntRange, k: OrgSpanKind -> add(range, k) } else null
+                state.codeState = lexSrcLine(line, offset, language, state.codeState, code)
+            }
         }
         return
     }
@@ -145,7 +173,11 @@ private fun scanLine(
 
         OrgSyntax.blockBegin.containsMatchIn(line) -> {
             add(lineRange(), OrgSpanKind.BlockDelimiter)
-            state.blockType = OrgSyntax.blockBegin.find(line)!!.groupValues[1].lowercase()
+            val begin = OrgSyntax.blockBegin.find(line)!!
+            state.blockType = begin.groupValues[1].lowercase()
+            state.srcLanguage = srcLanguageOf(begin.groupValues[2])
+                ?.takeIf { state.blockType == "src" && isHighlightedSrcLanguage(it) }
+            state.codeState = null
         }
 
         OrgSyntax.blockEnd.containsMatchIn(line) -> add(lineRange(), OrgSpanKind.BlockDelimiter)
