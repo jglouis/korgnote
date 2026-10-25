@@ -234,15 +234,32 @@ fun TimeGridView(
     val byDate = remember(agenda, dates, today, showDone) { dates.associateWith { agenda.shownOn(it, today, showDone) } }
     Column(modifier.fillMaxSize()) {
         if (dates.size > 1) {
-            Row(Modifier.fillMaxWidth()) {
-                Spacer(Modifier.width(GUTTER_WIDTH))
-                for (date in dates) {
-                    Column(
-                        Modifier.weight(1f).clickable { onDayClick(date) }.padding(vertical = 4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(date.shortWeekday, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                        DayNumber(date, isToday = date == today)
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                // Where the columns are wide enough, as on a phone on its side, the weekday goes
+                // beside the date: there the height is better spent on the hours.
+                val inline = (maxWidth - GUTTER_WIDTH) / dates.size >= 72.dp
+                Row(Modifier.fillMaxWidth()) {
+                    Spacer(Modifier.width(GUTTER_WIDTH))
+                    for (date in dates) {
+                        val modifier = Modifier.weight(1f).clickable { onDayClick(date) }.padding(vertical = 4.dp)
+                        val weekday = @Composable {
+                            Text(date.shortWeekday, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                        }
+                        if (inline) {
+                            Row(
+                                modifier,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                weekday()
+                                DayNumber(date, isToday = date == today)
+                            }
+                        } else {
+                            Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+                                weekday()
+                                DayNumber(date, isToday = date == today)
+                            }
+                        }
                     }
                 }
             }
