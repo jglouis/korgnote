@@ -272,6 +272,132 @@ class OrgEditTests {
         assertEquals(document, doc.changeTodoState(section("Parent"), "TODO", afternoon).text)
     }
 
+    // --- Repeated tasks ---
+
+    private fun done(text: String, at: LocalDateTime = afternoon, keyword: String = "DONE"): String {
+        val d = text.toOrgDocument()
+        return d.changeTodoState(d.allNodes().filterIsInstance<OrgSection>().first(), keyword, at).text
+    }
+
+    /** What Emacs leaves after `C-c C-t d` on a repeating entry, with its default settings. */
+    @Test
+    fun aRepeatingEntryMarkedDoneMovesOnAndOpensAgain() {
+        val result = done("* TODO Water the plants\nSCHEDULED: <2026-10-24 Sat +1w>\nBody.\n")
+
+        assertEquals(
+            "* TODO Water the plants\nSCHEDULED: <2026-10-31 Sat +1w>\n" +
+                ":PROPERTIES:\n:LAST_REPEAT: [2026-10-24 Sat 14:05]\n:END:\n" +
+                "- State \"DONE\"       from \"TODO\"       [2026-10-24 Sat 14:05]\nBody.\n",
+            result,
+        )
+    }
+
+    /** `+1w` moves once, even when that is still in the past. */
+    @Test
+    fun aPlainRepeaterMovesOneInterval() {
+        val result = done("* TODO Report\nDEADLINE: <2026-09-01 Tue 09:00 +1w -2d>\n")
+        assertTrue(result.contains("DEADLINE: <2026-09-08 Tue 09:00 +1w -2d>\n"), result)
+    }
+
+    /** `++1w` moves whole weeks until it is in the future, keeping the weekday. */
+    @Test
+    fun aCatchUpRepeaterMovesPastToday() {
+        assertTrue(done("* TODO Call Mum\nSCHEDULED: <2026-10-04 Sun ++1w>\n").contains("<2026-10-25 Sun ++1w>"))
+        // Due today is not past today.
+        assertTrue(done("* TODO Call Mum\nSCHEDULED: <2026-10-17 Sat ++1w>\n").contains("<2026-10-31 Sat ++1w>"))
+    }
+
+    /** `.+1m` restarts from the day it was done, whenever it was due. */
+    @Test
+    fun aRestartRepeaterMovesFromToday() {
+        val result = done("* TODO Haircut\nSCHEDULED: <2026-08-02 Sun 10:30-11:00 .+1m>\n")
+        assertTrue(result.contains("SCHEDULED: <2026-11-24 Tue 10:30-11:00 .+1m>\n"), result)
+    }
+
+    @Test
+    fun hourlyRepeatersCountFromTheTime() {
+        assertTrue(done("* TODO Stretch\n<2026-10-24 Sat 23:00 +2h>\n").contains("<2026-10-25 Sun 01:00 +2h>"))
+        assertTrue(done("* TODO Stretch\n<2026-10-24 Sat 08:00 ++3h>\n").contains("<2026-10-24 Sat 17:00 ++3h>"))
+        assertTrue(done("* TODO Stretch\n<2026-10-24 Sat 08:00 .+1h>\n").contains("<2026-10-24 Sat 15:05 .+1h>"))
+    }
+
+    /** A month on from the 31st is the last day of a shorter month. */
+    @Test
+    fun aMonthlyRepeaterKeepsToTheMonth() {
+        assertTrue(done("* TODO Rent\nDEADLINE: <2027-01-31 Sun +1m>\n").contains("<2027-02-28 Sun +1m>"))
+    }
+
+    /** Every repeating active stamp in the entry moves; inactive ones, other entries and children do not. */
+    @Test
+    fun onlyTheEntrysOwnActiveRepeatersMove() {
+        val result = done(
+            "* TODO Gym\nSCHEDULED: <2026-10-24 Sat +1d> DEADLINE: <2026-10-30 Fri>\n" +
+                "Also <2026-10-20 Tue +1w>, noted [2026-10-20 Tue +1w].\n" +
+                "** TODO Child\nSCHEDULED: <2026-10-24 Sat +1d>\n",
+        )
+
+        assertEquals(
+            "* TODO Gym\nSCHEDULED: <2026-10-25 Sun +1d> DEADLINE: <2026-10-30 Fri>\n" +
+                ":PROPERTIES:\n:LAST_REPEAT: [2026-10-24 Sat 14:05]\n:END:\n" +
+                "- State \"DONE\"       from \"TODO\"       [2026-10-24 Sat 14:05]\n" +
+                "Also <2026-10-27 Tue +1w>, noted [2026-10-20 Tue +1w].\n" +
+                "** TODO Child\nSCHEDULED: <2026-10-24 Sat +1d>\n",
+            result,
+        )
+    }
+
+    /** An existing drawer takes the property, replacing a previous one; the logbook stays below it. */
+    @Test
+    fun anExistingDrawerKeepsItsLastRepeat() {
+        val header = "#+STARTUP: logdrawer\n#+TODO: TODO NEXT | DONE\n"
+        val result = done(
+            "$header* NEXT Task\nSCHEDULED: <2026-10-24 Sat +1d>\n" +
+                ":PROPERTIES:\n:ID: abc\n:LAST_REPEAT: [2026-10-23 Fri 09:00]\n:END:\n" +
+                ":LOGBOOK:\n- State \"DONE\"       from \"NEXT\"       [2026-10-23 Fri 09:00]\n:END:\n",
+        )
+
+        assertEquals(
+            "$header* TODO Task\nSCHEDULED: <2026-10-25 Sun +1d>\n" +
+                ":PROPERTIES:\n:ID: abc\n:LAST_REPEAT: [2026-10-24 Sat 14:05]\n:END:\n" +
+                ":LOGBOOK:\n- State \"DONE\"       from \"NEXT\"       [2026-10-24 Sat 14:05]\n" +
+                "- State \"DONE\"       from \"NEXT\"       [2026-10-23 Fri 09:00]\n:END:\n",
+            result,
+        )
+    }
+
+    /** The first keyword of the done state's own sequence, unless the entry names another. */
+    @Test
+    fun theEntryReopensInTheRightState() {
+        val sequences = "#+TODO: TODO NEXT | DONE\n#+TODO: BUY | BOUGHT\n"
+        assertTrue(done("$sequences* NEXT Milk\n<2026-10-24 Sat +1w>\n", keyword = "BOUGHT").contains("* BUY Milk"))
+        assertTrue(done("$sequences* NEXT Run\n<2026-10-24 Sat +1w>\n").contains("* TODO Run"))
+        assertTrue(
+            done("$sequences* TODO Run\n:PROPERTIES:\n:REPEAT_TO_STATE: NEXT\n:END:\n<2026-10-24 Sat +1w>\n")
+                .contains("* NEXT Run"),
+        )
+    }
+
+    /** Without a repeater, from a done state, or with a zero repeater, it is an ordinary state change. */
+    @Test
+    fun onlyCompletingARepeatingEntryRepeats() {
+        assertTrue(done("* TODO Once\nSCHEDULED: <2026-10-24 Sat>\n").startsWith("* DONE Once\n"))
+        assertTrue(done("* TODO Never\nSCHEDULED: <2026-10-24 Sat +0d>\n").startsWith("* DONE Never\n"))
+        assertTrue(done("* TODO Hourly\nSCHEDULED: <2026-10-24 Sat +1h>\n").startsWith("* DONE Hourly\n"))
+        assertTrue(done("* TODO Later\nSCHEDULED: <2026-10-24 Sat +1d>\n", keyword = "NEXT").startsWith("* NEXT Later\n"))
+        val doneAlready = "#+TODO: TODO | DONE CANCELLED\n* DONE Gone\nSCHEDULED: <2026-10-24 Sat +1d>\n"
+        assertTrue(done(doneAlready, keyword = "CANCELLED").contains("* CANCELLED Gone\nSCHEDULED: <2026-10-24 Sat +1d>\n"))
+    }
+
+    /** The last line of the file may be the planning line, with no newline after it. */
+    @Test
+    fun aRepeatAtTheEndOfTheFileStaysOnItsOwnLines() {
+        assertEquals(
+            "* TODO Task\nSCHEDULED: <2026-10-25 Sun +1d>\n:PROPERTIES:\n:LAST_REPEAT: [2026-10-24 Sat 14:05]\n:END:\n" +
+                "- State \"DONE\"       from \"TODO\"       [2026-10-24 Sat 14:05]\n",
+            done("* TODO Task\nSCHEDULED: <2026-10-24 Sat +1d>"),
+        )
+    }
+
     // --- Tags ---
 
     @Test

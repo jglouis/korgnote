@@ -88,6 +88,7 @@ on: every rendered element knows the range it came from.
 | *Promote* / *Demote* | Adds or removes a star on every heading in the subtree (`org-promote-subtree`/`org-demote-subtree`), and saves. *Promote* is disabled at level 1 |
 | Tap a link into the notes | Opens its target — see [08 T21](08-roadmap.md#t21--following-links-between-notes---done); the back arrow returns |
 | *Linked from* at the end | Every link elsewhere that leads to this note; tapping one opens it at the link |
+| Tap a heading's TODO keyword | A menu of the file's keywords; picking one changes it, logs the change under the heading, and saves. Marking a repeating entry done repeats it — see [Repeated tasks](#repeated-tasks) |
 | Chevron on a heading | Folds or unfolds the heading's subtree — see [Folding](#folding) |
 | **+** FAB in reading mode | Appends a heading at the end of the file, and opens it |
 | Save FAB | Splices the draft back and saves |
@@ -159,6 +160,28 @@ folded heading's own line forgets its fold. Covered by `FoldingTest`.
 
 Not included: fold-all or unfold-all, folds that survive a restart, and `#+STARTUP: overview` or
 `VISIBILITY`. Add them if using the app shows that they are needed.
+
+### Repeated tasks
+
+Picking a done keyword from the keyword menu, for an entry that is not done yet and has a repeating
+active stamp, does what Org's `org-auto-repeat-maybe` does with its default settings
+([manual](https://orgmode.org/manual/Repeated-tasks.html)), all in `changeTodoState`:
+
+- **Every repeating active stamp in the entry moves** — the planning line, the heading line and the
+  body, up to the next heading, but not inactive stamps or child headings. `+1w` moves one interval;
+  `++1w` moves whole intervals until it is past today (past now, for `h`); `.+1d` moves one interval
+  from today (from now, for `h`). The time, a `10:00-11:30` range, the repeater and the warning
+  are kept.
+- **The keyword goes back** to the first keyword of the `#+TODO:` sequence the done keyword is in,
+  or to the entry's `REPEAT_TO_STATE` property when that names a keyword.
+- **The completion is recorded** as Emacs records it: `:LAST_REPEAT: [stamp]` in the property drawer
+  (created when there is none), and the usual `- State "DONE" from "TODO"` note.
+
+Only the menu repeats. Typing `DONE` into a heading in the editor is a text edit and is left as
+typed, as in Org. A `+0d` repeater, or `+1h` on a stamp without a time, does not repeat, and the
+change is an ordinary one. A month on from the 31st lands on the month's last day; Emacs spills
+into the next month instead. Covered by the *Repeated tasks* tests in `OrgEditTests` and by
+`ElementEditingTest`.
 
 ## Consequences
 

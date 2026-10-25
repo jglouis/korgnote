@@ -8,9 +8,21 @@ import com.korgnote.common.org.OrgPlanning
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.agenda.OrgTimeUnit
+import com.korgnote.common.org.agenda.OrgTimestamp
+import com.korgnote.common.org.agenda.RepeatKind
+import com.korgnote.common.org.agenda.parseOrgTimestamp
+import com.korgnote.common.org.complete.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.complete.orgStamp
+import com.korgnote.common.org.complete.restamp
+import com.korgnote.common.org.complete.shiftedEnd
+import com.korgnote.common.org.parseTodoConfigFrom
 import com.korgnote.common.org.toOrgDocument
+import com.korgnote.common.org.todoKeywordsOf
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.plus
 
 /**
  * Structural edits, each of which is a text replacement over a range.
@@ -111,19 +123,144 @@ fun OrgDocument.cycleTodo(heading: OrgSection, config: OrgTodoConfig): OrgDocume
  * the file asks for one with `#+STARTUP: logdrawer`.
  *
  * Clearing the keyword records nothing: there is no state left to log, and Org logs none either.
+ *
+ * Marking a repeating entry done — moving it into one of [keywords]' done states from one that is
+ * not — repeats it instead; see [repeat].
  */
-fun OrgDocument.changeTodoState(heading: OrgSection, keyword: String?, at: LocalDateTime): OrgDocument {
+fun OrgDocument.changeTodoState(
+    heading: OrgSection,
+    keyword: String?,
+    at: LocalDateTime,
+    keywords: OrgTodoConfig = todoKeywordsOf(text, DEFAULT_TODO_KEYWORDS),
+): OrgDocument {
     val previous = heading.todo?.takeIf { it.isNotEmpty() }
     if (previous == keyword) return this
+    if (keyword == null) return setTodo(heading, null)
+    val note = stateNote(keyword, previous, at)
+    if (keyword in keywords.done && previous !in keywords.done) {
+        val stamps = repeatingStampsOf(heading)
+        if (stamps.isNotEmpty()) return repeat(heading, keyword, stamps, note, at, keywords)
+    }
     val changed = setTodo(heading, keyword)
-    if (keyword == null || changed === this) return changed
+    if (changed === this) return changed
     // The keyword moved what follows it, so the heading is found again rather than reused. It
     // still starts where it did, and no section nested in it starts on its line.
     val updated = changed.nodeAt<OrgSection>(heading.range.first) ?: return changed
-
-    fun quoted(state: String?) = (state?.let { "\"$it\"" } ?: "").padEnd(12)
-    val note = "- State ${quoted(keyword)} from ${quoted(previous)} ${at.orgStamp(active = false)}"
     return changed.insertLogNote(updated, note)
+}
+
+private fun stateNote(keyword: String, previous: String?, at: LocalDateTime): String {
+    fun quoted(state: String?) = (state?.let { "\"$it\"" } ?: "").padEnd(12)
+    return "- State ${quoted(keyword)} from ${quoted(previous)} ${at.orgStamp(active = false)}"
+}
+
+/**
+ * Org's repeated task (`org-auto-repeat-maybe`): rather than staying [done], the entry goes back to
+ * the first keyword of its sequence — or its `REPEAT_TO_STATE` — and each of its repeating [stamps]
+ * moves on to its next occurrence. What remains of the completion is a record: `LAST_REPEAT` in
+ * the property drawer and the [note] saying it was done, both as Org writes them by default.
+ */
+private fun OrgDocument.repeat(
+    heading: OrgSection,
+    done: String,
+    stamps: List<OrgTimestamp>,
+    note: String,
+    at: LocalDateTime,
+    keywords: OrgTodoConfig,
+): OrgDocument {
+    val start = heading.range.first
+    val resetTo = repeatStateOf(heading, done, keywords)
+    // From the last stamp up, so each replacement leaves the ranges above it where they were.
+    val shifted = stamps.asReversed().fold(this) { doc, stamp ->
+        doc.replace(stamp.range, nextOccurrence(text.substring(stamp.range), stamp, at))
+    }
+    // Every edit below moves what follows the heading, never its start, so it is found again there.
+    val reset = shifted.nodeAt<OrgSection>(start)?.let { shifted.setTodo(it, resetTo) } ?: return shifted
+    val stamped = reset.nodeAt<OrgSection>(start)
+        ?.let { reset.setProperty(it, "LAST_REPEAT", at.orgStamp(active = false)) } ?: return reset
+    return stamped.nodeAt<OrgSection>(start)?.let { stamped.insertLogNote(it, note) } ?: stamped
+}
+
+/**
+ * The active stamps in [heading]'s own entry — its line up to the next heading — whose repeater
+ * moves them. That is where Org looks: the planning line, and also the heading and its body.
+ *
+ * Each half of a `<a>--<b>` range is a stamp of its own here, as Org shifts each. An hourly
+ * repeater on a stamp without a time cannot move, and Org refuses it too.
+ */
+private fun OrgDocument.repeatingStampsOf(heading: OrgSection): List<OrgTimestamp> {
+    if (heading.range.isEmpty()) return emptyList()
+    val start = heading.range.first
+    val end = heading.children.firstOrNull { it is OrgSection && !it.range.isEmpty() }?.range?.first
+        ?: (heading.range.last + 1)
+    return OrgSyntax.timestamp.findAll(text.substring(start, end)).mapNotNull { match ->
+        val stamp = parseOrgTimestamp(match.value) ?: return@mapNotNull null
+        val every = stamp.repeater?.every ?: return@mapNotNull null
+        if (!stamp.active || every.amount <= 0) return@mapNotNull null
+        if (every.unit == OrgTimeUnit.HOUR && stamp.startTime == null) return@mapNotNull null
+        stamp.copy(range = (start + match.range.first)..(start + match.range.last))
+    }.toList()
+}
+
+/**
+ * [source], the text of [stamp], moved to its next occurrence once its entry is done at [now]:
+ *
+ * - `+1w` moves one interval, wherever that lands.
+ * - `++1w` moves whole intervals until it is past today — or past now, for hours.
+ * - `.+1d` moves one interval from today, keeping its time of day — or from now, for hours.
+ *
+ * A month or a year on keeps the day of the month where that exists, and otherwise takes the
+ * month's last day; Emacs would spill into the next month instead.
+ */
+internal fun nextOccurrence(source: String, stamp: OrgTimestamp, now: LocalDateTime): String {
+    val repeater = stamp.repeater ?: return source
+    val every = repeater.every
+    val hourly = every.unit == OrgTimeUnit.HOUR
+    fun LocalDateTime.next(): LocalDateTime = when (every.unit) {
+        OrgTimeUnit.HOUR -> {
+            val minutes = time.hour * 60 + time.minute + every.amount * 60
+            LocalDateTime(
+                date.plus(minutes.floorDiv(MINUTES_PER_DAY), DateTimeUnit.DAY),
+                LocalTime.fromSecondOfDay(minutes.mod(MINUTES_PER_DAY) * 60),
+            )
+        }
+        OrgTimeUnit.DAY -> LocalDateTime(date.plus(every.amount, DateTimeUnit.DAY), time)
+        OrgTimeUnit.WEEK -> LocalDateTime(date.plus(every.amount, DateTimeUnit.WEEK), time)
+        OrgTimeUnit.MONTH -> LocalDateTime(date.plus(every.amount, DateTimeUnit.MONTH), time)
+        OrgTimeUnit.YEAR -> LocalDateTime(date.plus(every.amount, DateTimeUnit.YEAR), time)
+    }
+
+    val written = LocalDateTime(stamp.start, stamp.startTime ?: LocalTime(0, 0))
+    val next = when (repeater.kind) {
+        RepeatKind.Cumulate -> written.next()
+        RepeatKind.CatchUp -> {
+            var next = written.next()
+            while (if (hourly) next <= now else next.date <= now.date) next = next.next()
+            next
+        }
+        RepeatKind.Restart ->
+            if (hourly) LocalDateTime(now.date, LocalTime(now.hour, now.minute)).next()
+            else LocalDateTime(now.date, written.time).next()
+    }
+    val startTime = stamp.startTime?.let { next.time }
+    val endTime = startTime?.let { shiftedEnd(stamp.startTime, stamp.endTime, it) }
+    return restamp(source, next.date, startTime, endTime)
+}
+
+private const val MINUTES_PER_DAY = 24 * 60
+
+/**
+ * The keyword a repeating entry marked [done] goes back to: its own `REPEAT_TO_STATE` when that is
+ * a keyword, or else the first keyword of the `#+TODO:` sequence [done] is declared in — `TODO`
+ * for `#+TODO: TODO NEXT | DONE` — as Org does unless told otherwise.
+ */
+private fun OrgDocument.repeatStateOf(heading: OrgSection, done: String, keywords: OrgTodoConfig): String {
+    val declared = heading.children.filterIsInstance<OrgDrawer>()
+        .firstOrNull { it.name.equals("PROPERTIES", ignoreCase = true) }
+        ?.properties?.firstOrNull { it.first.equals("REPEAT_TO_STATE", ignoreCase = true) }?.second?.trim()
+    if (declared != null && (declared in keywords.todo || declared in keywords.done)) return declared
+    val sequence = metadata.map { parseTodoConfigFrom(listOf(it)) }.firstOrNull { done in it.done }
+    return sequence?.let { (it.todo + it.done).first() } ?: keywords.todo.firstOrNull() ?: done
 }
 
 /** Puts [note] at the top of [heading]'s log; see [changeTodoState] for where that is. */
@@ -153,9 +290,50 @@ private fun OrgDocument.insertLogNote(heading: OrgSection, note: String): OrgDoc
         logsIntoDrawer() -> ":LOGBOOK:\n$note\n:END:\n"
         else -> "$note\n"
     }
-    // The heading, or its planning line, may be the file's last line, with no newline after it.
-    if (insertAt >= text.length && !text.endsWith('\n')) return replace(text.length until text.length, "\n$entry")
-    return replace(insertAt until insertAt, entry)
+    return insertLines(insertAt, entry)
+}
+
+/**
+ * Sets [key] to [value] in [heading]'s property drawer, as `org-entry-put` does: in place when the
+ * drawer has the key, else as its last line, and in a new drawer — under the heading and its
+ * planning line — when there is none.
+ */
+fun OrgDocument.setProperty(heading: OrgSection, key: String, value: String): OrgDocument {
+    val parts = headingPartsOf(heading) ?: return this
+    var insertAt = parts.lineEnd + 1
+    var drawer: OrgDrawer? = null
+    for (child in heading.children) {
+        if (child.range.isEmpty() || child.range.first != insertAt) break
+        if (child is OrgPlanning) {
+            insertAt = child.range.last + 1
+            continue
+        }
+        if (child is OrgDrawer && child.name.equals("PROPERTIES", ignoreCase = true) && !child.unterminated) {
+            drawer = child
+        }
+        break
+    }
+    if (drawer == null) return insertLines(insertAt, ":PROPERTIES:\n:$key: $value\n:END:\n")
+
+    // The drawer's lines after its opening one, keeping the indentation they are written with.
+    var lineStart = text.indexOf('\n', drawer.range.first) + 1
+    while (lineStart in 1..drawer.range.last) {
+        val lineEnd = text.indexOf('\n', lineStart).let { if (it < 0) text.length else it }
+        val line = text.substring(lineStart, lineEnd)
+        val indent = line.takeWhile { it == ' ' || it == '\t' }
+        val trimmed = line.trim()
+        if (trimmed.startsWith(":$key:", ignoreCase = true)) return replace(lineStart until lineEnd, "$indent:$key: $value")
+        if (trimmed.equals(":END:", ignoreCase = true)) return replace(lineStart until lineStart, "$indent:$key: $value\n")
+        lineStart = lineEnd + 1
+    }
+    return this
+}
+
+/** Inserts whole [lines] at [at], the start of a line or the end of the text. */
+private fun OrgDocument.insertLines(at: Int, lines: String): OrgDocument {
+    // What comes before may be the file's last line, with no newline after it.
+    if (at >= text.length && !text.endsWith('\n')) return replace(text.length until text.length, "\n$lines")
+    return replace(at until at, lines)
 }
 
 private val STARTUP = Regex("^#\\+STARTUP:(.*)", RegexOption.IGNORE_CASE)

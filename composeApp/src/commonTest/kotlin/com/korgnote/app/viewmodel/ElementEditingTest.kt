@@ -389,6 +389,26 @@ class ElementEditingTest {
         assertEquals(viewModel.note.content, repository.saves.last().second)
     }
 
+    /** The file's own keywords decide what counts as done, and what the entry reopens as. */
+    @Test
+    fun markingARepeatingTaskDoneMovesItOnAndSavesIt() = runTest {
+        val habits = "#+TODO: TODO NEXT | DONE\n* NEXT Water the plants\nSCHEDULED: <2026-10-24 Sat +1w>\n"
+        repository.files["habits.org"] = habits
+        viewModel.server.load()
+        viewModel.onFileSelected("habits.org")
+
+        viewModel.setTodoAt(habits.indexOf("* NEXT"), "DONE", this)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(
+            "#+TODO: TODO NEXT | DONE\n* TODO Water the plants\nSCHEDULED: <2026-10-31 Sat +1w>\n" +
+                ":PROPERTIES:\n:LAST_REPEAT: [2026-10-24 Sat 14:05]\n:END:\n" +
+                "- State \"DONE\"       from \"NEXT\"       [2026-10-24 Sat 14:05]\n",
+            viewModel.note.content,
+        )
+        assertEquals(viewModel.note.content, repository.saves.last().second)
+    }
+
     @Test
     fun pickingTheCurrentKeywordChangesNothing() = runTest {
         openFile()

@@ -262,12 +262,14 @@ class NotesViewModel(
      * [toggleCheckboxAt] ticks a checkbox: the file is saved and pushed the same way.
      *
      * The change is logged under the heading with the time it was made, as Org logs a state change.
+     * Marking a repeating entry done repeats it, as Org does: it goes back to its first keyword and
+     * its dates move on to the next occurrence.
      */
     fun setTodoAt(offsetInDocument: Int, keyword: String?, scope: CoroutineScope? = null) {
         val file = note.path ?: return
         val document = note.content.toOrgDocument()
         val heading = document.nodeAt<OrgSection>(offsetInDocument) ?: return
-        val updated = document.changeTodoState(heading, keyword, now())
+        val updated = document.changeTodoState(heading, keyword, now(), todoKeywords)
         if (updated.text == document.text) return
         note.content = updated.text
         library.put(file, updated)
