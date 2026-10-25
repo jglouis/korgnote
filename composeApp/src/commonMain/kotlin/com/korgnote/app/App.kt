@@ -236,8 +236,12 @@ fun App() {
                 val wide = with(LocalDensity.current) { window.width.toDp() } >= 600.dp
                 // Too short for a bar above the calendar's own header: the calendar says what it shows,
                 // and the rail which tab it is.
-                val calendarOwnsTop = selectedScreen == BottomItem.CALENDAR &&
-                    with(LocalDensity.current) { window.height.toDp() } < 480.dp
+                val short = with(LocalDensity.current) { window.height.toDp() } < 480.dp
+                val calendarOwnsTop = selectedScreen == BottomItem.CALENDAR && short
+                // Editing there, the keyboard takes half of that height: the element gets what is left,
+                // with no bar above it and no rail squeezed beside it.
+                val editingShort = short && vm.editor.editingIndex != null
+                val rail = wide && !editingShort
                 // Shown only when something is wrong, so they go wherever the top bar's actions go.
                 val statusIcons = @Composable {
                     ConflictStatusIcon(vm.library.conflicts) { path ->
@@ -258,7 +262,7 @@ fun App() {
                     selectedScreen = item
                 }
                 Row {
-                    if (wide) {
+                    if (rail) {
                         NavigationRail(windowInsets = safeInsets.only(WindowInsetsSides.Vertical + WindowInsetsSides.Start)) {
                             BottomItem.entries.forEach { item ->
                                 NavigationRailItem(
@@ -266,8 +270,9 @@ fun App() {
                                     onClick = { selectTab(item) },
                                     icon = { Icon(item.getIconRes(), contentDescription = item.getLabel()) },
                                     label = { Text(item.getLabel()) },
-                                    // Kept, unlike the bottom bar, so the note does not shift sideways;
-                                    // tabs still do not switch mid-edit.
+                                    // Kept while editing where there is the height for it, unlike the
+                                    // bottom bar, so the note does not shift sideways; tabs still do
+                                    // not switch mid-edit.
                                     enabled = vm.editor.editingIndex == null,
                                     alwaysShowLabel = true,
                                 )
@@ -276,13 +281,13 @@ fun App() {
                     }
                     Scaffold(
                         modifier = Modifier.weight(1f),
-                        contentWindowInsets = if (wide) {
+                        contentWindowInsets = if (rail) {
                             safeInsets.only(WindowInsetsSides.Vertical + WindowInsetsSides.End)
                         } else {
                             ScaffoldDefaults.contentWindowInsets
                         },
                         topBar = {
-                            if (!calendarOwnsTop) TopAppBar(
+                            if (!calendarOwnsTop && !editingShort) TopAppBar(
                                 // Reading, the note is what the screen is about: the tab it is on
                                 // already shows in the navigation.
                                 title = {
@@ -293,7 +298,7 @@ fun App() {
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                 },
-                                windowInsets = if (wide) {
+                                windowInsets = if (rail) {
                                     safeInsets.only(WindowInsetsSides.Top + WindowInsetsSides.End)
                                 } else {
                                     TopAppBarDefaults.windowInsets
@@ -430,8 +435,15 @@ fun App() {
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(paddingValues)
-                                // The calendar pads itself; above and below, height is what it is short of.
-                                .padding(if (calendarOwnsTop) PaddingValues(horizontal = 8.dp) else PaddingValues(16.dp))
+                                // The calendar pads itself; above and below, as around an element being edited on a
+                                // short screen, height is what is short.
+                                .padding(
+                                    when {
+                                        calendarOwnsTop -> PaddingValues(horizontal = 8.dp)
+                                        editingShort -> PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+                                        else -> PaddingValues(16.dp)
+                                    }
+                                )
                                 .then(
                                     if (ownsItsScroll) Modifier else Modifier.verticalScroll(screenScrollState)
                                 ),
