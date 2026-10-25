@@ -593,12 +593,21 @@ private fun AnnotatedString.Builder.appendPlanningValue(text: String, keyword: S
     appendInline(text.substring((second ?: first).range.last + 1), viewMode)
 }
 
-/** [stamp], linked to its day in the calendar when it has a real date. */
+/** [stamp], linked to its day in the calendar when it has a real date. Reading mode only. */
 private fun AnnotatedString.Builder.appendCalendarLink(stamp: String) {
     val day = dateOfTimestamp(stamp)
-    if (day == null) append(stamp)
-    else withLink(LinkAnnotation.Url(calendarDayUri(day), TextLinkStyles(style = linkStyle))) { append(stamp) }
+    if (day == null) append(unbroken(stamp))
+    else withLink(LinkAnnotation.Url(calendarDayUri(day), TextLinkStyles(style = linkStyle))) { append(unbroken(stamp)) }
 }
+
+/**
+ * A timestamp as reading mode shows it, in one piece: its spaces are not ones a line may break at,
+ * since a date split from its weekday or time reads as two things.
+ */
+private fun unbroken(stamp: String) = stamp.replace(' ', '\u00A0')
+
+private fun Char.isSpaceOrTab() = this == ' ' || this == '\t'
+
 
 private val timestampDay = Regex("\\d{4}-\\d{2}-\\d{2}")
 
@@ -676,13 +685,13 @@ private fun AnnotatedString.Builder.appendInline(text: String, viewMode: Boolean
                     withStyle(SpanStyle(color = OrgColors.statistics)) { append(m.value) }
                     consumed = m.value.length
                 } ?: OrgSyntax.timestamp.matchAt(text, i)?.let { m ->
-                    withStyle(SpanStyle(color = OrgColors.timestamp)) { append(m.value) }
+                    withStyle(SpanStyle(color = OrgColors.timestamp)) { append(if (viewMode) unbroken(m.value) else m.value) }
                     consumed = m.value.length
                 }
             }
 
             '<' -> OrgSyntax.timestamp.matchAt(text, i)?.let { m ->
-                withStyle(SpanStyle(color = OrgColors.timestamp)) { append(m.value) }
+                withStyle(SpanStyle(color = OrgColors.timestamp)) { append(if (viewMode) unbroken(m.value) else m.value) }
                 consumed = m.value.length
             }
 
@@ -705,7 +714,11 @@ private fun AnnotatedString.Builder.appendInline(text: String, viewMode: Boolean
             }
         }
         if (consumed == 0) {
-            append(c)
+            // Reading, a run of spaces is one: in the file they line things up, as in a logbook's
+            // `- State "DONE"       from "TODO"`, and on screen they only break lines oddly.
+            if (!(viewMode && c.isSpaceOrTab() && i > 0 && text[i - 1].isSpaceOrTab())) {
+                append(if (viewMode && c == '\t') ' ' else c)
+            }
             i++
         } else {
             i += consumed

@@ -229,8 +229,8 @@ class OrgSyntaxHighlightingTest {
     fun scheduledAndDeadlineDatesLinkToTheirCalendarDayInViewMode() {
         val src = "SCHEDULED: <2026-09-20 Sun 10:00> DEADLINE: <2026-09-30 Wed -2d>"
         val out = buildOrgHighlightedString(src, heading, viewMode = true)
-        assertEquals(src, out.text)
-        val links = out.getLinkAnnotations(0, out.length).map { (it.item as LinkAnnotation.Url).url to out.text.substring(it.start, it.end) }
+        assertEquals(src, out.text.withPlainSpaces())
+        val links = out.getLinkAnnotations(0, out.length).map { (it.item as LinkAnnotation.Url).url to out.text.substring(it.start, it.end).withPlainSpaces() }
         assertEquals(
             listOf(
                 calendarDayUri(LocalDate(2026, 9, 20)) to "<2026-09-20 Sun 10:00>",
@@ -245,8 +245,8 @@ class OrgSyntaxHighlightingTest {
     fun aScheduledRangeLinksEachHalfToItsOwnDay() {
         val src = "SCHEDULED: <2026-12-19 Sat>--<2026-12-26 Sat>"
         val out = buildOrgHighlightedString(src, heading, viewMode = true)
-        assertEquals(src, out.text)
-        val links = out.getLinkAnnotations(0, out.length).map { (it.item as LinkAnnotation.Url).url to out.text.substring(it.start, it.end) }
+        assertEquals(src, out.text.withPlainSpaces())
+        val links = out.getLinkAnnotations(0, out.length).map { (it.item as LinkAnnotation.Url).url to out.text.substring(it.start, it.end).withPlainSpaces() }
         assertEquals(
             listOf(
                 calendarDayUri(LocalDate(2026, 12, 19)) to "<2026-12-19 Sat>",
@@ -254,6 +254,23 @@ class OrgSyntaxHighlightingTest {
             ),
             links,
         )
+    }
+
+    @Test
+    fun readingModeKeepsATimestampInOnePiece() {
+        val planning = buildOrgHighlightedString("DEADLINE: <2026-10-24 Sat>", heading, viewMode = true).text
+        assertTrue("<2026-10-24\u00A0Sat>" in planning, planning)
+        val logbook = buildOrgHighlightedString("- Done on [2026-10-19 Mon 11:39]", heading, viewMode = true).text
+        assertTrue("[2026-10-19\u00A0Mon\u00A011:39]" in logbook, logbook)
+    }
+
+    @Test
+    fun readingModeShowsARunOfSpacesAsOne() {
+        val line = "- State \"DONE\"       from \"TODO\"       [2026-10-19 Mon 11:39]"
+        val shown = buildOrgHighlightedString(line, heading, viewMode = true).text
+        assertTrue("State \"DONE\" from \"TODO\" [2026-10-19" in shown, shown)
+        // The editor shows the file as it is.
+        assertEquals(line, buildOrgHighlightedString(line, heading).text)
     }
 
     @Test
@@ -322,4 +339,7 @@ class OrgSyntaxHighlightingTest {
         assertTrue(out.coversColorAt(OrgColors.descriptionTerm, 4 until 8))
         assertTrue(out.coversColorAt(OrgColors.bullet, src.indexOf("1.") until src.indexOf("1.") + 2))
     }
+
+    /** Reading mode keeps timestamps in one piece with no-break spaces; these compare as written. */
+    private fun String.withPlainSpaces() = replace('\u00A0', ' ')
 }
