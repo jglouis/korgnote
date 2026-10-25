@@ -5,6 +5,7 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -32,8 +33,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
 /**
- * The system's back inside the app shell: it closes the drawer before anything else, and otherwise
- * returns from a followed link.
+ * The system's back inside the app shell: it closes the drawer before anything else, goes from
+ * another tab to the note, and on the note returns from a followed link.
  *
  * Back is pressed through a dispatcher of the test's own, which is how Android's back button and
  * gesture reach the app's handlers too.
@@ -111,5 +112,19 @@ class AppBackTest {
         waitForIdle()
         assertEquals("start.org", viewModel.note.path)
         assertFalse(viewModel.links.canGoBack)
+    }
+
+    @Test
+    fun backFromAnotherTabGoesToTheNote() = runComposeUiTest {
+        showApp()
+        runOnIdle { viewModel.onFileSelected("start.org") }
+        onNodeWithText("Search").performClick()
+        onNodeWithText("Search notes").assertExists()
+
+        runOnIdle { back.press() }
+
+        onNodeWithText("Search notes").assertDoesNotExist()
+        // The top bar names the note again; the drawer's tree names it too, off screen.
+        onAllNodesWithText("start.org")[0].assertIsDisplayed()
     }
 }

@@ -41,7 +41,7 @@ kotlin {
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
             implementation(libs.compose.ui)
-            implementation(libs.compose.ui.backhandler)
+            implementation(libs.androidx.navigationevent.compose)
             implementation(libs.compose.components.resources)
             implementation(libs.compose.materialIconsExtended)
             implementation(libs.compose.ui.tooling.preview)
@@ -77,8 +77,6 @@ kotlin {
         jvmTest.dependencies {
             // The desktop runtime the UI tests render on.
             implementation(compose.desktop.currentOs)
-            // To press the system's back from a test: it reaches BackHandler through this.
-            implementation(libs.androidx.navigationevent.compose)
         }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)

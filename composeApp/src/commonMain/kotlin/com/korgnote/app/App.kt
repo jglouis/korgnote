@@ -18,9 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -35,10 +33,13 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import org.koin.compose.koinInject
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import com.korgnote.app.notifications.ReminderTaps
 import org.koin.compose.viewmodel.koinViewModel
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun App() {
     KorgNoteTheme {
@@ -82,10 +83,12 @@ fun App() {
         val documentListState = rememberSaveable(selectedScreen, saver = LazyListState.Saver) { LazyListState() }
 
         // The system's back goes where the top bar's does: back from a followed link, to where it
-        // was tapped. Of two handlers the later one is asked first, so an open drawer closes before
-        // anything is followed back.
-        BackHandler(enabled = selectedScreen == BottomItem.FILE && vm.links.canGoBack) { vm.links.goBack() }
-        BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
+        // was tapped. From another tab it goes to the note first, as Android apps go to their first
+        // tab before they close. Of these handlers the later one is asked first, so an open drawer
+        // closes before anything else.
+        OnBack(enabled = selectedScreen != BottomItem.FILE) { selectedScreen = BottomItem.FILE }
+        OnBack(enabled = selectedScreen == BottomItem.FILE && vm.links.canGoBack) { vm.links.goBack() }
+        OnBack(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
 
         if (creatingNote) {
             NewNoteDialog(
@@ -570,6 +573,16 @@ fun App() {
             }
         }
     }
+}
+
+/** What the system's back does while [enabled]. Of two such handlers the later one is asked first. */
+@Composable
+private fun OnBack(enabled: Boolean, onBack: () -> Unit) {
+    NavigationBackHandler(
+        state = rememberNavigationEventState(NavigationEventInfo.None),
+        isBackEnabled = enabled,
+        onBackCompleted = onBack,
+    )
 }
 
 private enum class BottomItem {
