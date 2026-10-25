@@ -6,6 +6,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
@@ -98,6 +99,8 @@ fun OrgDocumentView(
     onOpenBacklink: (OrgBacklink) -> Unit = {},
     /** The element at the top of the view, as the reader scrolls; where Back returns to. */
     onFirstVisibleElement: (Int) -> Unit = {},
+    /** Hoisted so the screen's floating buttons can see, and move, where the reader is. */
+    listState: LazyListState = rememberLazyListState(),
 ) {
     val elements = remember(text) { text.orgElements() }
     // An element is hidden when it lies inside a folded heading's subtree. The folded heading itself
@@ -109,7 +112,6 @@ fun OrgDocumentView(
             }
         }
     }
-    val listState = rememberLazyListState()
     // The heading a delete is waiting to be confirmed for.
     var confirmingDelete by remember { mutableStateOf<Int?>(null) }
 

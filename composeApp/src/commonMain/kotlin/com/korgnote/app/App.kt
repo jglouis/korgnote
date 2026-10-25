@@ -1,6 +1,13 @@
 package com.korgnote.app
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -9,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
@@ -63,6 +71,10 @@ fun App() {
         var noteDialogError by remember { mutableStateOf<String?>(null) }
         // The conflict copy being compared with its note.
         var comparingCopy by remember { mutableStateOf<String?>(null) }
+        // The open note's scroll position, held here for the floating buttons to read and move.
+        // Keyed by screen so that coming back to Home starts at the top, as it did when the
+        // document view owned it.
+        val documentListState = rememberSaveable(selectedScreen, saver = LazyListState.Saver) { LazyListState() }
 
         if (creatingNote) {
             NewNoteDialog(
@@ -250,8 +262,40 @@ fun App() {
                             selectedScreen == BottomItem.HOME &&
                             vm.note.label != OpenNote.NO_FILE_LABEL
                         ) {
-                            FloatingActionButton(onClick = { vm.editor.addAtEnd() }) {
-                                Icon(Icons.Filled.Add, contentDescription = "Add a heading at the end of the file")
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                // Only while there is more below: at the end it would do nothing.
+                                AnimatedVisibility(
+                                    visible = documentListState.canScrollForward,
+                                    enter = fadeIn() + scaleIn(),
+                                    exit = fadeOut() + scaleOut(),
+                                ) {
+                                    SmallFloatingActionButton(
+                                        onClick = {
+                                            scope.launch {
+                                                val last = documentListState.layoutInfo.totalItemsCount - 1
+                                                if (last < 0) return@launch
+                                                // The last item at the top, then on past it: a final
+                                                // element taller than the screen still ends at the bottom.
+                                                documentListState.scrollToItem(last)
+                                                val page = documentListState.layoutInfo.viewportSize.height.toFloat()
+                                                while (page > 0 && documentListState.canScrollForward) {
+                                                    documentListState.scrollBy(page)
+                                                }
+                                            }
+                                        },
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.KeyboardDoubleArrowDown,
+                                            contentDescription = "Scroll to the end of the file",
+                                        )
+                                    }
+                                }
+                                FloatingActionButton(onClick = { vm.editor.addAtEnd() }) {
+                                    Icon(Icons.Filled.Add, contentDescription = "Add a heading at the end of the file")
+                                }
                             }
                         }
                     },
@@ -405,6 +449,7 @@ fun App() {
                                         backlinks = vm.links.backlinks,
                                         onOpenBacklink = { vm.links.openBacklink(it) },
                                         onFirstVisibleElement = { vm.links.onReadingPositionChanged(it) },
+                                        listState = documentListState,
                                     )
                                 }
                             }
