@@ -230,6 +230,27 @@ note it names.
 - A `PUT` refused with `409` after the manifest said "unchanged" — a save landing on the server
   between the two — is merged exactly like the row above, never retried blindly next cycle.
 
+### Conflicts in the app
+
+A note is **in conflict while a `.sync-conflict-` copy sits beside it** — read off the paths
+(`conflictsIn`), not stored as a flag. That holds across restarts and devices, covers
+Syncthing's copies (`…-HHmmss-DEVICE.org`) too, and needs no bookkeeping: deleting the copy is
+what resolves it. A copy whose note is gone is just a note.
+
+Conflicts are shown per file, not per heading: the copy is a whole file, and one made elsewhere
+carries no heading information. Headings come in when comparing.
+
+- **Top bar**: a warning with the count of notes in conflict; a tap lists them.
+- **File tree**: the note is flagged, and each copy is drawn under it, newest first.
+- **Banner** on the note or a copy: which version is on screen, and *Keep this one* (delete the
+  copy, which the server moves to its trash), *Use the other* (the copy's text replaces the
+  note, pushed as an edit of the server's version, then the copy is deleted) and *Compare*.
+- **Compare**: only the differing lines, with context, each hunk under the heading it falls in.
+
+When a sync ends in a conflict the message line says so, since the open note's text changes
+under the reader; and any sync that moved the replica redraws it, a save's included — left on
+screen, the old text would be written back by the next save.
+
 Org files merge well in practice: edits usually land under different headings, and a
 line-level diff3 resolves those without help. ~200 lines of pure Kotlin, and the most
 test-friendly component in the system.
