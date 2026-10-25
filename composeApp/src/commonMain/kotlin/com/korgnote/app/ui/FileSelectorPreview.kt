@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -74,12 +75,14 @@ fun FileTree(
     /** Offered on a long-press of a note; either may be null to leave it out. */
     onRenameFile: ((path: String) -> Unit)? = null,
     onDeleteFile: ((path: String) -> Unit)? = null,
+    /** Notes with conflict copies: both are flagged, and each copy drawn under its note. */
+    conflicts: Map<String, List<String>> = emptyMap(),
 ) {
     // Keyed by path, not by node: the tree is a new object graph after every filter keystroke and
     // every sync, so identity-keyed state would be lost each time — re-opening every folder the
     // reader had closed, and restarting every animation along with it.
     val collapsed = remember { mutableStateMapOf<String, Boolean>() }
-    val rows = root.visibleRows(collapsed.keys.toSet(), expandAll)
+    val rows = root.visibleRows(collapsed.keys.toSet(), expandAll, conflicts)
 
     LazyColumn(modifier = modifier) {
         items(rows, key = { it.node.path }) { row ->
@@ -99,6 +102,11 @@ fun FileTree(
                 is File -> TreeFileItem(
                     file = node,
                     depth = row.depth,
+                    conflict = when {
+                        row.copyOf != null -> FileConflict.COPY
+                        node.path in conflicts -> FileConflict.NOTE
+                        else -> null
+                    },
                     onFileSelected = onFileSelected,
                     onRename = onRenameFile,
                     onDelete = onDeleteFile,
@@ -153,11 +161,15 @@ private fun TreeFolderItem(
     }
 }
 
+/** A file's part in a conflict: the note that has copies, or one of those copies. */
+private enum class FileConflict { NOTE, COPY }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TreeFileItem(
     file: File,
     depth: Int,
+    conflict: FileConflict?,
     onFileSelected: (String) -> Unit,
     onRename: ((String) -> Unit)?,
     onDelete: ((String) -> Unit)?,
@@ -178,9 +190,25 @@ private fun TreeFileItem(
             horizontalArrangement = Arrangement.Start
         ) {
             Spacer(Modifier.width((depth * 16).dp))
-            Icon(imageVector = Icons.Filled.Description, contentDescription = "File")
+            when (conflict) {
+                null -> Icon(imageVector = Icons.Filled.Description, contentDescription = "File")
+                FileConflict.NOTE -> Icon(
+                    Icons.Filled.SyncProblem,
+                    contentDescription = "Note with a conflict",
+                    tint = MaterialTheme.colorScheme.error,
+                )
+                FileConflict.COPY -> Icon(
+                    Icons.Filled.SyncProblem,
+                    contentDescription = "Conflicting version",
+                    tint = MaterialTheme.colorScheme.outline,
+                )
+            }
             Spacer(Modifier.width(8.dp))
-            Text(file.name, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                file.name,
+                style = if (conflict == FileConflict.COPY) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+                color = if (conflict == FileConflict.NOTE) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            )
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             if (onRename != null) {

@@ -13,6 +13,8 @@ data class TreeRow(
     val depth: Int,
     /** Meaningful for folders; always false for files, which have nothing to open. */
     val expanded: Boolean,
+    /** For a conflict copy drawn under its note: that note's path. */
+    val copyOf: String? = null,
 )
 
 /**
@@ -27,17 +29,39 @@ data class TreeRow(
  * the replica changes, so anything keyed by node identity is thrown away on every keystroke —
  * which is what used to re-open every folder and restart every animation while typing.
  */
-fun Folder.visibleRows(collapsed: Set<String>, expandAll: Boolean = false): List<TreeRow> {
+fun Folder.visibleRows(
+    collapsed: Set<String>,
+    expandAll: Boolean = false,
+    /**
+     * Notes with conflict copies, as `NoteLibrary.conflicts` holds them. Each copy is drawn under
+     * its note rather than wherever its name sorts, so the two read as one problem. A copy whose
+     * note is not in the folder — filtered out, say — stays where it is.
+     */
+    conflicts: Map<String, List<String>> = emptyMap(),
+): List<TreeRow> {
     val rows = mutableListOf<TreeRow>()
 
     fun walk(folder: Folder, depth: Int) {
         val expanded = expandAll || folder.path !in collapsed
         rows += TreeRow(folder, depth, expanded)
         if (!expanded) return
+        val files = folder.children.filterIsInstance<File>().associateBy { it.path }
+        val grouped = folder.children
+            .filter { it is File && it.path in conflicts }
+            .flatMap { conflicts.getValue(it.path) }
+            .filter { it in files }
+            .toSet()
         for (child in folder.children) {
             when (child) {
                 is Folder -> walk(child, depth + 1)
-                is File -> rows += TreeRow(child, depth + 1, expanded = false)
+                is File -> {
+                    if (child.path in grouped) continue
+                    rows += TreeRow(child, depth + 1, expanded = false)
+                    for (copy in conflicts[child.path].orEmpty()) {
+                        val node = files[copy] ?: continue
+                        rows += TreeRow(node, depth + 2, expanded = false, copyOf = child.path)
+                    }
+                }
                 else -> Unit
             }
         }

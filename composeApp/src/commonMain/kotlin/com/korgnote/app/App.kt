@@ -189,6 +189,7 @@ fun App() {
                                     }
                                 },
                                 onRenameFile = { renamingNote = it },
+                                conflicts = vm.library.conflicts,
                                 onDeleteFile = { path ->
                                     scope.launch { deletingNote = path to vm.hasUnsyncedChanges(path) }
                                 },

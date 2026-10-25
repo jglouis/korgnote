@@ -91,4 +91,50 @@ class FileTreeRowsTest {
 
         assertTrue(rows.filter { it.node is File }.none { it.expanded })
     }
+
+    private val withCopies = Folder(
+        name = "Documents",
+        path = "",
+        children = listOf(
+            File("a.org", "a.org"),
+            File("a.plan.org", "a.plan.org"),
+            File("a.sync-conflict-20260101-000000.org", "a.sync-conflict-20260101-000000.org"),
+            File("a.sync-conflict-20260921-101500.org", "a.sync-conflict-20260921-101500.org"),
+            File("b.org", "b.org"),
+        ),
+    )
+
+    private val copies = mapOf(
+        "a.org" to listOf("a.sync-conflict-20260921-101500.org", "a.sync-conflict-20260101-000000.org"),
+    )
+
+    @Test
+    fun conflictCopiesAreDrawnUnderTheirNoteNewestFirst() {
+        val rows = withCopies.visibleRows(collapsed = emptySet(), conflicts = copies)
+
+        assertContentEquals(
+            listOf(
+                "",
+                "a.org",
+                "a.sync-conflict-20260921-101500.org",
+                "a.sync-conflict-20260101-000000.org",
+                "a.plan.org",
+                "b.org",
+            ),
+            rows.map { it.node.path },
+        )
+        assertEquals(listOf(null, null, "a.org", "a.org", null, null), rows.map { it.copyOf })
+        assertEquals(listOf(0, 1, 2, 2, 1, 1), rows.map { it.depth })
+    }
+
+    /** Filtered out of the folder, the note cannot hold its copies; they must not vanish with it. */
+    @Test
+    fun aCopyWhoseNoteIsNotShownStaysWhereItIs() {
+        val filtered = Folder("Documents", "", listOf(File("a.sync-conflict-20260921-101500.org", "a.sync-conflict-20260921-101500.org")))
+
+        val rows = filtered.visibleRows(collapsed = emptySet(), conflicts = copies)
+
+        assertContentEquals(listOf("", "a.sync-conflict-20260921-101500.org"), rows.map { it.node.path })
+        assertEquals(listOf<String?>(null, null), rows.map { it.copyOf })
+    }
 }
