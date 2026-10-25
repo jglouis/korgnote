@@ -437,13 +437,14 @@ fun App() {
                         // does not have to lay out every element first; search does the same with its
                         // results, and the calendar with its agenda list and hour grid. A lazy list cannot
                         // be nested in a vertically scrolling parent — and a screen that fills the space
-                        // left gets none inside one — so this Column yields its scroll to those three;
-                        // every other screen still scrolls here.
+                        // left gets none inside one — so this Column yields its scroll to those three, and
+                        // to settings, which keeps its save button in place below what scrolls.
                         val readingDocument = selectedScreen == BottomItem.FILE &&
                             vm.note.content.isNotBlank()
                         val ownsItsScroll = readingDocument ||
                             selectedScreen == BottomItem.SEARCH ||
-                            selectedScreen == BottomItem.CALENDAR
+                            selectedScreen == BottomItem.CALENDAR ||
+                            selectedScreen == BottomItem.SETTINGS
                         val screenScrollState = rememberScrollState()
                         Column(
                             modifier = Modifier
@@ -565,7 +566,11 @@ fun App() {
 
                                 BottomItem.SETTINGS -> {
                                     val settingsRepo = koinInject<SettingsRepository>()
-                                    SettingsScreen(repo = settingsRepo, onSaved = { scope.launch { vm.server.retry() } })
+                                    SettingsScreen(
+                                        repo = settingsRepo,
+                                        modifier = Modifier.fillMaxSize(),
+                                        onSaved = { scope.launch { vm.server.retry() } },
+                                    )
                                 }
                             }
                         }

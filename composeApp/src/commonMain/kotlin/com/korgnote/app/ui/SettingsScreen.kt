@@ -1,29 +1,59 @@
 package com.korgnote.app.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.files.FileLinkMapping
 import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.common.fs.NotePaths
-import androidx.compose.foundation.layout.Row
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.ui.Alignment
-import com.korgnote.app.di.buildBaseUrl
 import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalTime
 import kotlin.time.Duration.Companion.milliseconds
 
+/**
+ * The app's settings, saved together. The save button shows only once something has changed, and
+ * stays at the bottom of the screen however far down the change was.
+ *
+ * Scrolls itself, so that the button can stay put: the screen hosting it must not scroll.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
+fun SettingsScreen(repo: SettingsRepository, modifier: Modifier = Modifier, onSaved: (() -> Unit)? = null) {
     val scope = rememberCoroutineScope()
     var host by remember { mutableStateOf("") }
     var portText by remember { mutableStateOf("") }
@@ -34,9 +64,14 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
     var remindersOn by remember { mutableStateOf(true) }
     var leadText by remember { mutableStateOf("") }
     var digestOn by remember { mutableStateOf(false) }
-    var digestText by remember { mutableStateOf("") }
+    var digestTime by remember { mutableStateOf(ReminderSettings().digestTime) }
+    var pickingDigestTime by remember { mutableStateOf(false) }
     var newNotesFolder by remember { mutableStateOf("") }
     var fileLinks by remember { mutableStateOf(emptyList<FileLinkMapping>()) }
+    // What the form held when loaded or last saved; null until loaded.
+    val form = listOf(host, portText, token, remindersOn, leadText, digestOn, digestTime, newNotesFolder, fileLinks)
+    var stored by remember { mutableStateOf<List<Any>?>(null) }
+    val changed = stored != null && form != stored
 
     LaunchedEffect(Unit) {
         host = repo.getServerHost()
@@ -46,157 +81,170 @@ fun SettingsScreen(repo: SettingsRepository, onSaved: (() -> Unit)? = null) {
         remindersOn = reminders.enabled
         leadText = reminders.leadMinutes.toString()
         digestOn = reminders.digestEnabled
-        digestText = reminders.digestTime.hhmm()
+        digestTime = reminders.digestTime
         newNotesFolder = repo.getNewNotesFolder()
         fileLinks = repo.getFileLinkMappings()
+        stored = listOf(host, portText, token, remindersOn, leadText, digestOn, digestTime, newNotesFolder, fileLinks)
     }
 
-    Column {
-        Text("Server configuration")
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            modifier = Modifier.fillMaxWidth(),
-            value = host,
-            onValueChange = { host = it },
-            label = { Text("Server host (e.g. 192.168.1.10 or http://example.com)") },
-            singleLine = true
+    if (pickingDigestTime) {
+        val state = rememberTimePickerState(initialHour = digestTime.hour, initialMinute = digestTime.minute, is24Hour = true)
+        AlertDialog(
+            onDismissRequest = { pickingDigestTime = false },
+            title = { Text("Morning digest at") },
+            text = { TimePicker(state = state) },
+            confirmButton = {
+                TextButton(onClick = {
+                    digestTime = LocalTime(state.hour, state.minute)
+                    pickingDigestTime = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { pickingDigestTime = false }) { Text("Cancel") } },
         )
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            modifier = Modifier.fillMaxWidth(),
-            value = portText,
-            onValueChange = { portText = it.filter { ch -> ch.isDigit() } },
-            label = { Text("Port") },
-            singleLine = true
-        )
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            modifier = Modifier.fillMaxWidth(),
-            value = token,
-            onValueChange = { token = it },
-            label = { Text("Access token (leave empty if the server does not require one)") },
-            singleLine = true,
-        )
+    }
 
-        Spacer(Modifier.height(24.dp))
-        Text("Reminders")
-        Text(
-            "Notifications on this device, scheduled from the agenda. They work offline.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.outline,
-        )
-        Spacer(Modifier.height(8.dp))
-        LabelledSwitch("Remind me before timed entries", remindersOn) { remindersOn = it }
-        if (remindersOn) {
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = leadText,
-                onValueChange = { leadText = it.filter { ch -> ch.isDigit() }.take(4) },
-                label = { Text("Minutes before") },
-                singleLine = true,
-            )
+    fun save() {
+        val port = portText.toIntOrNull()
+        if (host.isBlank() || port == null || port !in 1..65535) {
+            error = "Please enter a valid host and port (1-65535)."
+            return
         }
-        Spacer(Modifier.height(8.dp))
-        LabelledSwitch("Morning digest of the day's agenda", digestOn) { digestOn = it }
-        if (digestOn) {
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = digestText,
-                onValueChange = { digestText = it.filter { ch -> ch.isDigit() || ch == ':' }.take(5) },
-                label = { Text("At (HH:MM)") },
-                singleLine = true,
-            )
+        val lead = leadText.toIntOrNull()
+        if (remindersOn && (lead == null || lead !in 0..1440)) {
+            error = "Please enter how many minutes before (0-1440)."
+            return
         }
+        val folder = newNotesFolder.trim().trim('/')
+        // Checked as a note path would be, so a bad folder is refused here and not by the server.
+        if (folder.isNotEmpty() && NotePaths.normalize("$folder/x.org") == null) {
+            error = "Please enter a folder inside the notes, like inbox or notes/inbox."
+            return
+        }
+        fileLinkMappingsError(fileLinks)?.let {
+            error = it
+            return
+        }
+        error = null
+        scope.launch {
+            saving = true
+            try {
+                repo.setServerHost(host.trim())
+                repo.setServerPort(port)
+                repo.setServerToken(token.trim())
+                val current = repo.getReminderSettings()
+                repo.setReminderSettings(
+                    ReminderSettings(
+                        enabled = remindersOn,
+                        leadMinutes = lead ?: current.leadMinutes,
+                        digestEnabled = digestOn,
+                        digestTime = digestTime,
+                    ),
+                )
+                repo.setNewNotesFolder(folder)
+                repo.setFileLinkMappings(
+                    fileLinks.filter { it.from.isNotBlank() }.map { FileLinkMapping(it.from.trim(), it.to.trim()) },
+                )
+                stored = form
+                saved = true
+                onSaved?.invoke()
+            } finally {
+                // "Saved" shows briefly in place of the button.
+                kotlinx.coroutines.delay(1200.milliseconds)
+                saved = false
+                saving = false
+            }
+        }
+    }
 
-        Spacer(Modifier.height(24.dp))
-        Text("New notes")
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            modifier = Modifier.fillMaxWidth(),
-            value = newNotesFolder,
-            onValueChange = { newNotesFolder = it },
-            label = { Text("Folder for new notes (empty for the top)") },
-            placeholder = { Text("inbox") },
-            singleLine = true,
-        )
-
-        Spacer(Modifier.height(24.dp))
-        FileLinkSettings(fileLinks) { fileLinks = it }
-
-        if (error != null) {
+    Box(modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            Text("Server configuration")
             Spacer(Modifier.height(8.dp))
-            Text(error!!)
-        }
-        Spacer(Modifier.height(12.dp))
-        Button(enabled = !saving, onClick = {
-            val port = portText.toIntOrNull()
-            if (host.isBlank() || port == null || port !in 1..65535) {
-                error = "Please enter a valid host and port (1-65535)."
-                return@Button
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = host,
+                onValueChange = { host = it },
+                label = { Text("Server host (e.g. 192.168.1.10 or http://example.com)") },
+                singleLine = true
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = portText,
+                onValueChange = { portText = it.filter { ch -> ch.isDigit() } },
+                label = { Text("Port") },
+                singleLine = true
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = token,
+                onValueChange = { token = it },
+                label = { Text("Access token (leave empty if the server does not require one)") },
+                singleLine = true,
+            )
+
+            Spacer(Modifier.height(24.dp))
+            Text("Reminders")
+            Text(
+                "Notifications on this device, scheduled from the agenda. They work offline.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline,
+            )
+            Spacer(Modifier.height(8.dp))
+            LabelledSwitch("Remind me before timed entries", remindersOn) { remindersOn = it }
+            if (remindersOn) {
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = leadText,
+                    onValueChange = { leadText = it.filter { ch -> ch.isDigit() }.take(4) },
+                    label = { Text("Minutes before") },
+                    singleLine = true,
+                )
             }
-            val lead = leadText.toIntOrNull()
-            if (remindersOn && (lead == null || lead !in 0..1440)) {
-                error = "Please enter how many minutes before (0-1440)."
-                return@Button
-            }
-            val digestTime = ReminderSettings.parseTime(digestText)
-            if (digestOn && digestTime == null) {
-                error = "Please enter the digest time as HH:MM."
-                return@Button
-            }
-            val folder = newNotesFolder.trim().trim('/')
-            // Checked as a note path would be, so a bad folder is refused here and not by the server.
-            if (folder.isNotEmpty() && NotePaths.normalize("$folder/x.org") == null) {
-                error = "Please enter a folder inside the notes, like inbox or notes/inbox."
-                return@Button
-            }
-            fileLinkMappingsError(fileLinks)?.let {
-                error = it
-                return@Button
-            }
-            error = null
-            scope.launch {
-                saving = true
-                try {
-                    repo.setServerHost(host.trim())
-                    repo.setServerPort(port)
-                    repo.setServerToken(token.trim())
-                    val current = repo.getReminderSettings()
-                    repo.setReminderSettings(
-                        ReminderSettings(
-                            enabled = remindersOn,
-                            leadMinutes = lead ?: current.leadMinutes,
-                            digestEnabled = digestOn,
-                            digestTime = digestTime ?: current.digestTime,
-                        ),
-                    )
-                    repo.setNewNotesFolder(folder)
-                    repo.setFileLinkMappings(
-                        fileLinks.filter { it.from.isNotBlank() }.map { FileLinkMapping(it.from.trim(), it.to.trim()) },
-                    )
-                    saved = true
-                    onSaved?.invoke()
-                } finally {
-                    // show saved feedback briefly
-                    kotlinx.coroutines.delay(1200.milliseconds)
-                    saved = false
-                    saving = false
+            Spacer(Modifier.height(8.dp))
+            LabelledSwitch("Morning digest of the day's agenda", digestOn) { digestOn = it }
+            if (digestOn) {
+                OutlinedButton(onClick = { pickingDigestTime = true }) {
+                    Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                    Text("At ${digestTime.hhmm()}")
                 }
             }
-        }) {
-            Text("Save")
+
+            Spacer(Modifier.height(24.dp))
+            Text("New notes")
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = newNotesFolder,
+                onValueChange = { newNotesFolder = it },
+                label = { Text("Folder for new notes (empty for the top)") },
+                placeholder = { Text("inbox") },
+                singleLine = true,
+            )
+
+            Spacer(Modifier.height(24.dp))
+            FileLinkSettings(fileLinks) { fileLinks = it }
+            // Room to scroll the last field out from under the button.
+            Spacer(Modifier.height(96.dp))
         }
-        Spacer(Modifier.height(8.dp))
-        val preview = run {
-            val p = portText.toIntOrNull() ?: 0
-            if (host.isNotBlank() && p in 1..65535) buildBaseUrl(host, p) else ""
-        }
-        if (preview.isNotBlank()) {
-            Text("Base URL: $preview")
-        }
-        if (saved) {
-            Spacer(Modifier.height(4.dp))
-            Text("Saved. Reloading…")
+        Column(
+            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            error?.let {
+                Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
+                    Text(it, color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.padding(12.dp))
+                }
+            }
+            AnimatedVisibility(visible = changed || saved, enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut()) {
+                ExtendedFloatingActionButton(
+                    onClick = { if (!saving) save() },
+                    icon = { Icon(if (saved) Icons.Filled.Check else Icons.Filled.Save, contentDescription = null) },
+                    text = { Text(if (saved) "Saved" else "Save") },
+                )
+            }
         }
     }
 }
