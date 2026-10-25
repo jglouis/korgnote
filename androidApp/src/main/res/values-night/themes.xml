@@ -1,0 +1,4 @@
+<resources>
+    <!-- So that the app opens dark, rather than flashing white, when the system is set to dark. -->
+    <style name="Theme.KorgNote" parent="android:Theme.Material.NoActionBar" />
+</resources>

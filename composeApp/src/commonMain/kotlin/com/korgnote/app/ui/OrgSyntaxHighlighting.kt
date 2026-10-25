@@ -34,44 +34,54 @@ import kotlinx.datetime.LocalDate
 
 /**
  * Colors used by both reading mode ([OrgText]) and editing mode ([OrgSyntaxHighlightTransformation])
- * so that the two views stay visually consistent.
+ * so that the two views stay visually consistent. Each has a light and a dark value, after the
+ * theme.
  */
 object OrgColors {
-    val todo = Color(0xFF2E7D32)
-    val done = Color(0xFF9E9E9E)
-    val planning = Color(0xFF616161)
-    val keyword = Color(0xFF9E9E9E)
-    val checkbox = Color(0xFF1565C0)
-    val stars = Color(0xFFB0BEC5)
-    val tag = Color(0xFF7B1FA2)
-    val priority = Color(0xFFC62828)
-    val statistics = Color(0xFF757575)
-    val link = Color(0xFF1565C0)
-    val timestamp = Color(0xFF00796B)
-    val code = Color(0xFFAD1457)
-    val verbatim = Color(0xFF5D4037)
-    val markup = Color(0xFFB0BEC5)
-    val bullet = Color(0xFF6D4C41)
-    val descriptionTerm = Color(0xFF37474F)
-    val blockDelimiter = Color(0xFF9E9E9E)
-    val blockBackground = Color(0x1A9E9E9E)
-    val drawer = Color(0xFF9E9E9E)
-    val comment = Color(0xFF9E9E9E)
-    val table = Color(0xFF546E7A)
-    val tableRule = Color(0xFFB0BEC5)
-    val footnote = Color(0xFF6A1B9A)
-    val horizontalRule = Color(0xFFB0BEC5)
+    /**
+     * Whether the dark values are in use; [KorgNoteTheme] sets it before anything is drawn. Not
+     * observable: the highlighting is built and cached outside composition, so a change of theme
+     * composes the content afresh instead.
+     */
+    internal var dark = false
 
-    // Src block tokens, after GitHub's light theme
-    val codeKeyword = Color(0xFFCF222E)
-    val codeType = Color(0xFF00796B)
-    val codeBuiltin = Color(0xFF0550AE)
-    val codeFunction = Color(0xFF8250DF)
-    val codeVariable = Color(0xFF953800)
-    val codeConstant = Color(0xFF0550AE)
-    val codeString = Color(0xFF0A3069)
-    val codeComment = Color(0xFF6E7781)
-    val codeTag = Color(0xFF116329)
+    private fun pick(light: Long, dark: Long) = Color(if (this.dark) dark else light)
+
+    val todo: Color get() = pick(0xFF2E7D32, 0xFF81C784)
+    val done: Color get() = pick(0xFF9E9E9E, 0xFF9E9E9E)
+    val planning: Color get() = pick(0xFF616161, 0xFFB0B0B0)
+    val keyword: Color get() = pick(0xFF9E9E9E, 0xFF9E9E9E)
+    val checkbox: Color get() = pick(0xFF1565C0, 0xFF90CAF9)
+    val stars: Color get() = pick(0xFFB0BEC5, 0xFF607D8B)
+    val tag: Color get() = pick(0xFF7B1FA2, 0xFFCE93D8)
+    val priority: Color get() = pick(0xFFC62828, 0xFFEF9A9A)
+    val statistics: Color get() = pick(0xFF757575, 0xFFA0A0A0)
+    val link: Color get() = pick(0xFF1565C0, 0xFF90CAF9)
+    val timestamp: Color get() = pick(0xFF00796B, 0xFF80CBC4)
+    val code: Color get() = pick(0xFFAD1457, 0xFFF48FB1)
+    val verbatim: Color get() = pick(0xFF5D4037, 0xFFBCAAA4)
+    val markup: Color get() = pick(0xFFB0BEC5, 0xFF607D8B)
+    val bullet: Color get() = pick(0xFF6D4C41, 0xFFBCAAA4)
+    val descriptionTerm: Color get() = pick(0xFF37474F, 0xFFB0BEC5)
+    val blockDelimiter: Color get() = pick(0xFF9E9E9E, 0xFF9E9E9E)
+    val blockBackground: Color get() = pick(0x1A9E9E9E, 0x1F9E9E9E)
+    val drawer: Color get() = pick(0xFF9E9E9E, 0xFF9E9E9E)
+    val comment: Color get() = pick(0xFF9E9E9E, 0xFF9E9E9E)
+    val table: Color get() = pick(0xFF546E7A, 0xFF90A4AE)
+    val tableRule: Color get() = pick(0xFFB0BEC5, 0xFF607D8B)
+    val footnote: Color get() = pick(0xFF6A1B9A, 0xFFCE93D8)
+    val horizontalRule: Color get() = pick(0xFFB0BEC5, 0xFF607D8B)
+
+    // Src block tokens, after GitHub's light and dark themes
+    val codeKeyword: Color get() = pick(0xFFCF222E, 0xFFFF7B72)
+    val codeType: Color get() = pick(0xFF00796B, 0xFF80CBC4)
+    val codeBuiltin: Color get() = pick(0xFF0550AE, 0xFF79C0FF)
+    val codeFunction: Color get() = pick(0xFF8250DF, 0xFFD2A8FF)
+    val codeVariable: Color get() = pick(0xFF953800, 0xFFFFA657)
+    val codeConstant: Color get() = pick(0xFF0550AE, 0xFF79C0FF)
+    val codeString: Color get() = pick(0xFF0A3069, 0xFFA5D6FF)
+    val codeComment: Color get() = pick(0xFF6E7781, 0xFF8B949E)
+    val codeTag: Color get() = pick(0xFF116329, 0xFF7EE787)
 }
 
 /** TODO keywords used when nothing better is known: Org's own. */
@@ -109,19 +119,20 @@ fun googleMapsUrl(location: String): String =
 // `\]` must stay escaped: see the note on [OrgSyntax] (JavaScript `u`-mode regexes).
 /** How one emphasis marker is painted. What matches it is [OrgSyntax.emphasis]'s business. */
 @Suppress("RegExpRedundantEscape")
-private class EmphasisSpec(val marker: Char, val style: SpanStyle, val markupColor: Color)
+private class EmphasisSpec(val marker: Char, val style: () -> SpanStyle)
 
 /** What each emphasis marker looks like. The markers themselves are defined in [OrgSyntax]. */
+// Styles are made when used, as the palette depends on the theme.
 private val emphasisStyles: Map<Char, EmphasisSpec> = mapOf(
-    '*' to EmphasisSpec('*', SpanStyle(fontWeight = FontWeight.Bold), OrgColors.markup),
-    '/' to EmphasisSpec('/', SpanStyle(fontStyle = FontStyle.Italic), OrgColors.markup),
-    '_' to EmphasisSpec('_', SpanStyle(textDecoration = TextDecoration.Underline), OrgColors.markup),
-    '+' to EmphasisSpec('+', SpanStyle(textDecoration = TextDecoration.LineThrough), OrgColors.markup),
-    '=' to EmphasisSpec('=', SpanStyle(color = OrgColors.verbatim, fontFamily = FontFamily.Monospace), OrgColors.markup),
-    '~' to EmphasisSpec('~', SpanStyle(color = OrgColors.code, fontFamily = FontFamily.Monospace), OrgColors.markup),
+    '*' to EmphasisSpec('*') { SpanStyle(fontWeight = FontWeight.Bold) },
+    '/' to EmphasisSpec('/') { SpanStyle(fontStyle = FontStyle.Italic) },
+    '_' to EmphasisSpec('_') { SpanStyle(textDecoration = TextDecoration.Underline) },
+    '+' to EmphasisSpec('+') { SpanStyle(textDecoration = TextDecoration.LineThrough) },
+    '=' to EmphasisSpec('=') { SpanStyle(color = OrgColors.verbatim, fontFamily = FontFamily.Monospace) },
+    '~' to EmphasisSpec('~') { SpanStyle(color = OrgColors.code, fontFamily = FontFamily.Monospace) },
 )
 
-private val linkStyle = SpanStyle(color = OrgColors.link, textDecoration = TextDecoration.Underline)
+private val linkStyle get() = SpanStyle(color = OrgColors.link, textDecoration = TextDecoration.Underline)
 
 /**
  * Highlights the inline (intra-line) Org syntax of [text]: links, emphasis, timestamps, footnotes
@@ -703,12 +714,12 @@ private fun AnnotatedString.Builder.appendInline(text: String, viewMode: Boolean
 }
 
 private fun AnnotatedString.Builder.appendEmphasis(spec: EmphasisSpec, content: String, viewMode: Boolean) {
-    if (!viewMode) withStyle(SpanStyle(color = spec.markupColor)) { append(spec.marker) }
-    withStyle(spec.style) {
+    if (!viewMode) withStyle(SpanStyle(color = OrgColors.markup)) { append(spec.marker) }
+    withStyle(spec.style()) {
         // Verbatim/code content is literal; other emphasis may contain nested inline constructs.
         if (spec.marker == '=' || spec.marker == '~') append(content) else appendInline(content, viewMode)
     }
-    if (!viewMode) withStyle(SpanStyle(color = spec.markupColor)) { append(spec.marker) }
+    if (!viewMode) withStyle(SpanStyle(color = OrgColors.markup)) { append(spec.marker) }
 }
 
 private fun AnnotatedString.Builder.appendLink(m: MatchResult, viewMode: Boolean) {

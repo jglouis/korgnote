@@ -1,0 +1,4 @@
+<resources>
+    <!-- The window behind the Compose content, shown before it draws; dark in res/values-night. -->
+    <style name="Theme.KorgNote" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
