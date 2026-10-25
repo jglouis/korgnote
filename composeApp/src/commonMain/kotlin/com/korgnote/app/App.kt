@@ -382,7 +382,8 @@ fun App() {
                             // While an element is being edited the suggestions take the bottom of the
                             // screen, which is where the keyboard pushes everything else against. The
                             // navigation bar goes away with them: switching tabs mid-edit only ever
-                            // happened by accident.
+                            // happened by accident. It goes too while typing anywhere else, as in
+                            // search, where the keyboard pushed it up over the results.
                             if (vm.editor.editingIndex != null) {
                                 CompletionStrip(
                                     items = vm.completion.suggestions,
@@ -404,7 +405,7 @@ fun App() {
                                         Icon(Icons.Filled.Save, contentDescription = "Save this element")
                                     }
                                 }
-                            } else if (!wide) NavigationBar {
+                            } else if (!wide && WindowInsets.ime.getBottom(LocalDensity.current) == 0) NavigationBar {
                                 BottomItem.entries.forEach { item ->
                                     NavigationBarItem(
                                         selected = selectedScreen == item,

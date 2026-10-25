@@ -18,15 +18,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.search.SearchHit
 
 /**
@@ -44,11 +48,14 @@ fun SearchScreen(
     onOpen: (SearchHit) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Opening the tab is opening it to type; coming back to results already there is not.
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { if (query.isBlank()) focus.requestFocus() }
     Column(modifier = modifier.fillMaxSize()) {
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().focusRequester(focus),
             label = { Text("Search notes") },
             placeholder = { Text("words, or tag:work") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
@@ -115,8 +122,9 @@ private fun Result(hit: SearchHit, onOpen: () -> Unit) {
             val snippet = remember(hit, highlight) { hit.snippet(highlight) }
             Text(
                 text = snippet,
-                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                style = MaterialTheme.typography.bodyMedium,
                 maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         if (hit.tags.isNotEmpty()) TagChips(hit.tags)
@@ -128,21 +136,25 @@ private fun SearchHit.location(): String =
     if (kind == SearchHit.Kind.PATH) path else "$path:$line"
 
 /**
- * The matching line with the match emboldened, trimmed of leading indentation so that a deeply
- * nested list item still shows its text rather than its whitespace.
+ * The matching line as reading mode shows it — a heading as its title, a link as its description,
+ * emphasis as emphasis — with the match emboldened. A heading's tags are left to the chips below,
+ * and links are left out: a tap on the result opens it.
  */
-private fun SearchHit.snippet(highlight: Color) = buildAnnotatedString {
-    val trimmed = lineText.length - lineText.trimStart().length
-    val text = lineText.drop(trimmed)
-    if (match.isEmpty()) {
-        append(text)
-        return@buildAnnotatedString
+private fun SearchHit.snippet(highlight: Color): AnnotatedString {
+    var line = lineText.trim()
+    OrgSyntax.heading.find(line)?.let { stars ->
+        line = line.substring(stars.value.length).trimStart()
+        OrgSyntax.tags.find(line)?.let { line = line.substring(0, it.range.first) }
     }
-    val start = (match.first - trimmed).coerceIn(0, text.length)
-    val end = (match.last + 1 - trimmed).coerceIn(start, text.length)
-    append(text.substring(0, start))
-    withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = highlight)) {
-        append(text.substring(start, end))
+    val shown = buildOrgInlineString(line, viewMode = true)
+    return buildAnnotatedString {
+        append(AnnotatedString(shown.text, shown.spanStyles))
+        // Found again in what is shown, since the markup around it is gone: a match that spanned
+        // some of that markup is simply not emboldened.
+        if (!match.isEmpty()) {
+            val words = lineText.substring(match.first, match.last + 1)
+            val at = shown.text.indexOf(words, ignoreCase = true)
+            if (at >= 0) addStyle(SpanStyle(fontWeight = FontWeight.Bold, color = highlight), at, at + words.length)
+        }
     }
-    append(text.substring(end))
 }
