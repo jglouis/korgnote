@@ -269,7 +269,7 @@ private fun AgendaEntry.expandInto(into: MutableList<AgendaOccurrence>, from: Lo
 
     when (kind) {
         AgendaKind.Timestamp, AgendaKind.Closed -> {
-            val spanDays = stamp.end?.let { stamp.start.daysUntil(it) } ?: 0
+            val spanDays = stamp.spanDays
             for (repeat in stamp.repeats(onOrAfter = from.minus(spanDays, DateTimeUnit.DAY))) {
                 if (repeat.date > to) break
                 addDays(into, repeat, spanDays, from, to)
@@ -279,15 +279,19 @@ private fun AgendaEntry.expandInto(into: MutableList<AgendaOccurrence>, from: Lo
         AgendaKind.Scheduled -> {
             val delay = stamp.delay
             val maxDelayDays = delay?.let { stamp.start.daysUntil(stamp.start.plus(it.by, 1)) } ?: 0
+            // `SCHEDULED: <a>--<b>` is how a trip or a week off is usually written, and it is on
+            // every day it covers, not only the first. org-agenda shows only the first.
+            val spanDays = stamp.spanDays
             var firstShown: LocalDate? = null
-            for (repeat in stamp.repeats(onOrAfter = from.minus(maxDelayDays, DateTimeUnit.DAY))) {
+            for (repeat in stamp.repeats(onOrAfter = from.minus(maxDelayDays + spanDays, DateTimeUnit.DAY))) {
                 if (repeat.date > to) break
                 val shift = delay?.takeIf { !it.firstOnly || repeat.index == 0 }?.by
                 val date = shift?.let { repeat.date.plus(it, 1) } ?: repeat.date
                 if (repeat.index == 0) firstShown = date
-                if (date in from..to) into += AgendaOccurrence(this, date, repeat.time, stamp.endTime)
+                addDays(into, repeat.copy(date = date), spanDays, from, to)
             }
-            // Not yet done and already due: org-agenda keeps it in front of you, on today.
+            // Not yet done and already due: org-agenda keeps it in front of you, on today. A range
+            // still running is on today already, and the check below keeps it from showing twice.
             val start = firstShown ?: stamp.start.plus(delay?.by ?: OrgDuration(0, OrgTimeUnit.DAY), 1)
             if (options.carryOver && !done && start < today && today in from..to &&
                 into.none { it.entry === this && it.date == today }
@@ -329,6 +333,9 @@ private fun AgendaEntry.expandInto(into: MutableList<AgendaOccurrence>, from: Lo
 }
 
 private fun AgendaEntry.deadlineCountdown(days: Int): Int? = if (kind == AgendaKind.Deadline) days else null
+
+/** How many days a multi-day range runs past its first: 0 for anything within one day. */
+private val OrgTimestamp.spanDays: Int get() = end?.let { start.daysUntil(it) } ?: 0
 
 private fun AgendaEntry.addDays(into: MutableList<AgendaOccurrence>, repeat: Repeat, spanDays: Int, from: LocalDate, to: LocalDate) {
     for (offset in 0..spanDays) {

@@ -165,8 +165,8 @@ fun LocalTime.hhmm(): String = "${hour.toString().padStart(2, '0')}:${minute.toS
 
 /**
  * What kind of date this is and how it stands relative to today, as `org-agenda` says it:
- * "Deadline", "Due in 3 d.", "Scheduled 2 d. ago" — or null for a plain appointment or scheduled item on its own
- * day, where the date says it all.
+ * "Deadline", "Due in 3 d.", "Scheduled 2 d. ago", or which day of a range it is — or null for a plain
+ * appointment or scheduled item on its own day, where the date says it all.
  */
 fun AgendaOccurrence.statusLabel(today: LocalDate): String? {
     val until = daysUntilDeadline
@@ -180,14 +180,17 @@ fun AgendaOccurrence.statusLabel(today: LocalDate): String? {
         AgendaKind.Scheduled -> if (isCarriedOver) {
             val late = entry.stamp.start.daysUntil(today)
             "Scheduled $late d. ago"
-        } else null
+        } else spanLabel()
 
         AgendaKind.Closed -> "Closed"
-        AgendaKind.Timestamp -> when (span) {
-            DaySpan.Single -> null
-            DaySpan.Start -> "Starts"
-            DaySpan.Middle -> "Continues"
-            DaySpan.End -> "Ends"
-        }
+        AgendaKind.Timestamp -> spanLabel()
     }
+}
+
+/** Where in a multi-day range this day is, or null for a single day. */
+private fun AgendaOccurrence.spanLabel(): String? = when (span) {
+    DaySpan.Single -> null
+    DaySpan.Start -> "Starts"
+    DaySpan.Middle -> "Continues"
+    DaySpan.End -> "Ends"
 }

@@ -232,6 +232,21 @@ class OrgSyntaxHighlightingTest {
     }
 
     @Test
+    fun aScheduledRangeLinksEachHalfToItsOwnDay() {
+        val src = "SCHEDULED: <2026-12-19 Sat>--<2026-12-26 Sat>"
+        val out = buildOrgHighlightedString(src, heading, viewMode = true)
+        assertEquals(src, out.text)
+        val links = out.getLinkAnnotations(0, out.length).map { (it.item as LinkAnnotation.Url).url to out.text.substring(it.start, it.end) }
+        assertEquals(
+            listOf(
+                calendarDayUri(LocalDate(2026, 12, 19)) to "<2026-12-19 Sat>",
+                calendarDayUri(LocalDate(2026, 12, 26)) to "<2026-12-26 Sat>",
+            ),
+            links,
+        )
+    }
+
+    @Test
     fun planningDatesAreNotLinkedInEditModeNorForClosed() {
         assertTrue(buildOrgHighlightedString("SCHEDULED: <2026-09-20 Sun>", heading).getLinkAnnotations(0, 27).isEmpty())
         val closed = buildOrgHighlightedString("CLOSED: [2026-09-20 Sun 10:00]", heading, viewMode = true)

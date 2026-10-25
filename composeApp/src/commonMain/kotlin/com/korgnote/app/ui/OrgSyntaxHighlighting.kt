@@ -518,17 +518,31 @@ private val calendarLinkedPlanningKeywords = setOf("SCHEDULED", "DEADLINE")
 /**
  * The text after a planning [keyword]. In reading mode a `SCHEDULED` or `DEADLINE` timestamp
  * becomes a link to its day in the calendar, the way a `LOCATION` property links to a map.
+ *
+ * A `<a>--<b>` range is one date, so both halves are links: each to its own day, the first to where
+ * the range starts and the second to where it ends.
  */
 private fun AnnotatedString.Builder.appendPlanningValue(text: String, keyword: String?, viewMode: Boolean) {
-    val stamp = OrgSyntax.timestamp.find(text)
-    val day = stamp?.let { dateOfTimestamp(it.value) }
-    if (!viewMode || keyword !in calendarLinkedPlanningKeywords || stamp == null || day == null) {
+    val first = OrgSyntax.timestamp.find(text)
+    if (!viewMode || keyword !in calendarLinkedPlanningKeywords || first == null || dateOfTimestamp(first.value) == null) {
         appendInline(text, viewMode)
         return
     }
-    appendInline(text.substring(0, stamp.range.first), viewMode)
-    withLink(LinkAnnotation.Url(calendarDayUri(day), TextLinkStyles(style = linkStyle))) { append(stamp.value) }
-    appendInline(text.substring(stamp.range.last + 1), viewMode)
+    val second = first.next()?.takeIf { it.range.first == first.range.last + 3 && text.startsWith("--", first.range.last + 1) }
+    appendInline(text.substring(0, first.range.first), viewMode)
+    appendCalendarLink(first.value)
+    if (second != null) {
+        append("--")
+        appendCalendarLink(second.value)
+    }
+    appendInline(text.substring((second ?: first).range.last + 1), viewMode)
+}
+
+/** [stamp], linked to its day in the calendar when it has a real date. */
+private fun AnnotatedString.Builder.appendCalendarLink(stamp: String) {
+    val day = dateOfTimestamp(stamp)
+    if (day == null) append(stamp)
+    else withLink(LinkAnnotation.Url(calendarDayUri(day), TextLinkStyles(style = linkStyle))) { append(stamp) }
 }
 
 private val timestampDay = Regex("\\d{4}-\\d{2}-\\d{2}")

@@ -161,6 +161,15 @@ class CalendarLayoutTest {
     }
 
     @Test
+    fun aScheduledRangeSaysWhichOfItsDaysThisIs() {
+        val agenda = index("* Holidays\nSCHEDULED: <2026-09-22 Tue>--<2026-09-24 Thu>\n")
+        val days = listOf(day(22), today, day(24)).map { agenda.shownOn(it, today, showDone = true).single() }
+        assertEquals(listOf("Starts", "Continues", "Ends"), days.map { it.statusLabel(today) })
+        assertTrue(days.all { it.isAllDay })
+        assertEquals(listOf("Holidays"), agenda.monthDay(day(24), showDone = true).map { it.entry.title })
+    }
+
+    @Test
     fun eachModeStepsByItsOwnPeriod() {
         assertEquals(day(24), CalendarMode.Day.next(today))
         assertEquals(day(30), CalendarMode.Week.next(today))

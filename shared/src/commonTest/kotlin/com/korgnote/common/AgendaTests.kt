@@ -194,6 +194,36 @@ class AgendaTests {
     }
 
     @Test
+    fun aScheduledRangeIsOnEveryDayItCovers() {
+        val found = occurrences("* Holidays\nSCHEDULED: <2026-09-26 Sat>--<2026-10-03 Sat>\n")
+        assertEquals((26..30).map { day(it) }, found.dates())
+        assertEquals(listOf(DaySpan.Start, DaySpan.Middle, DaySpan.Middle, DaySpan.Middle, DaySpan.Middle), found.map { it.span })
+        assertTrue(found.all { it.entry.kind == AgendaKind.Scheduled })
+        val inOctober = occurrences("* Holidays\nSCHEDULED: <2026-09-26 Sat>--<2026-10-03 Sat>\n", from = day(1, 10), to = day(31, 10))
+        assertEquals((1..3).map { day(it, 10) }, inOctober.dates())
+        assertEquals(DaySpan.End, inOctober.last().span)
+    }
+
+    @Test
+    fun aTimedScheduledRangeStartsAndEndsAtItsTimes() {
+        val found = occurrences("* Weekend away\nSCHEDULED: <2026-09-25 Fri 18:00>--<2026-09-27 Sun 11:00>\n")
+        assertEquals(listOf(day(25), day(26), day(27)), found.dates())
+        assertEquals(listOf(LocalTime(18, 0), null, null), found.map { it.time })
+        assertEquals(listOf(null, null, LocalTime(11, 0)), found.map { it.endTime })
+    }
+
+    @Test
+    fun aScheduledRangeUnderWayIsNotAlsoCarriedOver() {
+        val running = occurrences("* TODO Move house\nSCHEDULED: <2026-09-21 Mon>--<2026-09-25 Fri>\n")
+        assertEquals((21..25).map { day(it) }, running.dates())
+        assertTrue(running.none { it.isCarriedOver })
+
+        val over = occurrences("* TODO Move house\nSCHEDULED: <2026-09-18 Fri>--<2026-09-20 Sun>\n")
+        assertEquals(listOf(day(18), day(19), day(20), today), over.dates())
+        assertTrue(over.last().isCarriedOver)
+    }
+
+    @Test
     fun bodyAndHeadingStampsAreAppointments() {
         val text = """
             * Dentist <2026-09-24 Thu 14:30>

@@ -87,7 +87,10 @@ Expansion rules, each a unit test:
 - **Repeaters** → expand occurrences across `[from, to]`; DONE entries with a repeater show
   their *next* occurrence only.
 - **Multi-day ranges** → one occurrence per day, flagged as start/middle/end so the UI can
-  draw a continuous bar.
+  draw a continuous bar. This holds for `SCHEDULED: <a>--<b>` too, which is how a trip or a
+  week off is usually written; org-agenda shows only its first day. A scheduled range still
+  under way is on today already and is not carried over as well. In reading mode each half
+  of a planning range links to its own day in the calendar.
 - **Body timestamps** (active, not attached to a planning line) → `Timestamp` kind; these
   are your "meetings" and they are invisible today.
 - **Inactive `[…]`** → excluded unless explicitly requested.
