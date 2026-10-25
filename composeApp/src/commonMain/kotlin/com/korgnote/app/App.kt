@@ -40,7 +40,7 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun App() {
     MaterialTheme {
-        var selectedScreen by rememberSaveable { mutableStateOf(BottomItem.HOME) }
+        var selectedScreen by rememberSaveable { mutableStateOf(BottomItem.FILE) }
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val scope = rememberCoroutineScope()
         val vm = koinViewModel<NotesViewModel>()
@@ -55,7 +55,7 @@ fun App() {
                 if (target != null) {
                     ReminderTaps.pending.value = null
                     vm.agenda.openReminderTarget(target)
-                    selectedScreen = BottomItem.HOME
+                    selectedScreen = BottomItem.FILE
                 }
             }
         }
@@ -75,7 +75,7 @@ fun App() {
         // The conflict copy being compared with its note.
         var comparingCopy by remember { mutableStateOf<String?>(null) }
         // The open note's scroll position, held here for the floating buttons to read and move.
-        // Keyed by screen so that coming back to Home starts at the top, as it did when the
+        // Keyed by screen so that coming back to File starts at the top, as it did when the
         // document view owned it.
         val documentListState = rememberSaveable(selectedScreen, saver = LazyListState.Saver) { LazyListState() }
 
@@ -92,7 +92,7 @@ fun App() {
                         } else {
                             creatingNote = false
                             noteDialogError = null
-                            selectedScreen = BottomItem.HOME
+                            selectedScreen = BottomItem.FILE
                             drawerState.close()
                         }
                     }
@@ -156,7 +156,7 @@ fun App() {
                     when {
                         uri.startsWith(NOTE_LINK_URI_PREFIX) -> {
                             vm.links.follow(uri.removePrefix(NOTE_LINK_URI_PREFIX))
-                            selectedScreen = BottomItem.HOME
+                            selectedScreen = BottomItem.FILE
                         }
                         uri.startsWith(FILE_LINK_URI_PREFIX) -> vm.files.open(uri.removePrefix(FILE_LINK_URI_PREFIX))
                         day != null -> {
@@ -191,7 +191,7 @@ fun App() {
                                 onOpen = { path ->
                                     scope.launch {
                                         vm.onFileSelected(path)
-                                        selectedScreen = BottomItem.HOME
+                                        selectedScreen = BottomItem.FILE
                                         drawerState.close()
                                     }
                                 },
@@ -248,7 +248,7 @@ fun App() {
                 val statusIcons = @Composable {
                     ConflictStatusIcon(vm.library.conflicts) { path ->
                         vm.onFileSelected(path)
-                        selectedScreen = BottomItem.HOME
+                        selectedScreen = BottomItem.FILE
                     }
                     ServerStatusIcon(
                         unreachable = vm.server.unreachable,
@@ -295,7 +295,7 @@ fun App() {
                                 title = {
                                     val note = vm.note.path?.substringAfterLast('/')
                                     Text(
-                                        if (selectedScreen == BottomItem.HOME && note != null) note else selectedScreen.getLabel(),
+                                        if (selectedScreen == BottomItem.FILE && note != null) note else selectedScreen.getLabel(),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
@@ -314,7 +314,7 @@ fun App() {
                                 },
                                 actions = {
                                     // Back from a followed link, to where it was tapped.
-                                    if (selectedScreen == BottomItem.HOME && vm.links.canGoBack) {
+                                    if (selectedScreen == BottomItem.FILE && vm.links.canGoBack) {
                                         IconButton(onClick = { vm.links.goBack() }) {
                                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                                         }
@@ -327,7 +327,7 @@ fun App() {
                             // While editing, the element's own actions live on the completion strip.
                             if (
                                 vm.editor.editingIndex == null &&
-                                selectedScreen == BottomItem.HOME &&
+                                selectedScreen == BottomItem.FILE &&
                                 vm.note.label != OpenNote.NO_FILE_LABEL
                             ) {
                                 Column(
@@ -427,7 +427,7 @@ fun App() {
                         // be nested in a vertically scrolling parent — and a screen that fills the space
                         // left gets none inside one — so this Column yields its scroll to those three;
                         // every other screen still scrolls here.
-                        val readingDocument = selectedScreen == BottomItem.HOME &&
+                        val readingDocument = selectedScreen == BottomItem.FILE &&
                             vm.note.content.isNotBlank()
                         val ownsItsScroll = readingDocument ||
                             selectedScreen == BottomItem.SEARCH ||
@@ -453,7 +453,7 @@ fun App() {
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             when (selectedScreen) {
-                                BottomItem.HOME -> {
+                                BottomItem.FILE -> {
                                     // Why something could not be done; being offline shows in the top bar instead.
                                     if (vm.lastErrorMessage.isNotBlank()) {
                                         Text(vm.lastErrorMessage, color = MaterialTheme.colorScheme.error)
@@ -529,7 +529,7 @@ fun App() {
                                             // Same shape as the calendar's jump: the view model resolves
                                             // the place once the file's text has arrived.
                                             vm.search.openHit(hit)
-                                            selectedScreen = BottomItem.HOME
+                                            selectedScreen = BottomItem.FILE
                                         },
                                     )
                                 }
@@ -545,7 +545,7 @@ fun App() {
                                             // has loaded: that text arrives asynchronously, so working it out
                                             // here would search the previously open file.
                                             vm.agenda.openEntry(entry)
-                                            selectedScreen = BottomItem.HOME
+                                            selectedScreen = BottomItem.FILE
                                         },
                                         headerActions = { if (calendarOwnsTop) statusIcons() },
                                     )
@@ -565,18 +565,18 @@ fun App() {
 }
 
 private enum class BottomItem {
-    HOME, SEARCH, CALENDAR, SETTINGS;
+    FILE, SEARCH, CALENDAR, SETTINGS;
 
     @Composable
     fun getLabel() = when (this) {
-        HOME -> "Home"
+        FILE -> "File"
         SEARCH -> "Search"
         CALENDAR -> "Calendar"
         SETTINGS -> "Settings"
     }
 
     fun getIconRes() = when (this) {
-        HOME -> Icons.Filled.Home
+        FILE -> Icons.Filled.Description
         SEARCH -> Icons.Filled.Search
         CALENDAR -> Icons.Filled.CalendarMonth
         SETTINGS -> Icons.Filled.Settings
