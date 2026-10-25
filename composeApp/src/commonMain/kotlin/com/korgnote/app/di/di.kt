@@ -46,6 +46,8 @@ val appModule = module {
             notifications = getOrNull<NotificationScheduler>() ?: NoopNotificationScheduler,
             reminderSettings = settings::getReminderSettings,
             newNotesFolder = settings::getNewNotesFolder,
+            pinnedNotes = settings::getPinnedNotes,
+            savePinnedNotes = settings::setPinnedNotes,
         )
     }
 }

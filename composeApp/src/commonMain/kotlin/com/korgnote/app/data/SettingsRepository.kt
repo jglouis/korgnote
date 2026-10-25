@@ -37,5 +37,19 @@ interface SettingsRepository {
     fun getNewNotesFolder(): String
 
     fun setNewNotesFolder(folder: String)
+
+    /**
+     * Notes pinned for quick access, as paths in the order they are shown. Kept per device: what a
+     * phone needs at hand is not what a desktop does.
+     */
+    fun getPinnedNotes(): List<String>
+
+    fun setPinnedNotes(paths: List<String>)
 }
+
+/** Pinned notes as one stored string, a path per line: a note path never holds a line break. */
+internal fun encodePinnedNotes(paths: List<String>): String = paths.joinToString("\n")
+
+internal fun decodePinnedNotes(stored: String?): List<String> =
+    stored.orEmpty().split('\n').filter { it.isNotBlank() }
 

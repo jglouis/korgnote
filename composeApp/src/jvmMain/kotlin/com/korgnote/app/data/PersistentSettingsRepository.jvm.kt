@@ -48,6 +48,12 @@ class PersistentSettingsRepository : SettingsRepository {
         prefs.put(KEY_NEW_NOTES_FOLDER, folder)
     }
 
+    override fun getPinnedNotes(): List<String> = decodePinnedNotes(prefs.get(KEY_PINNED_NOTES, null))
+
+    override fun setPinnedNotes(paths: List<String>) {
+        prefs.put(KEY_PINNED_NOTES, encodePinnedNotes(paths))
+    }
+
     private fun loadHost(): String {
         val def = defaultServerBaseUrl().removePrefix("http://").removePrefix("https://").substringBefore(":")
         return prefs.get(KEY_HOST, def)
@@ -63,5 +69,6 @@ class PersistentSettingsRepository : SettingsRepository {
         private const val KEY_TOKEN = "server_token"
         private const val KEY_REMINDERS = "reminders"
         private const val KEY_NEW_NOTES_FOLDER = "new_notes_folder"
+        private const val KEY_PINNED_NOTES = "pinned_notes"
     }
 }

@@ -48,4 +48,10 @@ class InMemorySettingsRepository(
     override fun setNewNotesFolder(folder: String) {
         newNotesFolder = folder
     }
+
+    private var pinnedNotes = emptyList<String>()
+    override fun getPinnedNotes(): List<String> = pinnedNotes
+    override fun setPinnedNotes(paths: List<String>) {
+        pinnedNotes = paths
+    }
 }

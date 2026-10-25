@@ -47,6 +47,46 @@ class NoteLifecycleUiTest {
     }
 
     @Test
+    fun aLongPressOffersToPinANoteOrUnpinAPinnedOne() = runComposeUiTest {
+        val toggled = mutableListOf<String>()
+        setContent {
+            FileTree(
+                root = root,
+                onFileSelected = {},
+                pinned = setOf("inbox.org"),
+                onTogglePin = { toggled += it },
+            )
+        }
+
+        onNodeWithText("journal.org").performTouchInput { longClick() }
+        onNodeWithText("Pin").performClick()
+        onNodeWithText("inbox.org").performTouchInput { longClick() }
+        onNodeWithText("Unpin").performClick()
+
+        assertEquals(listOf("journal.org", "inbox.org"), toggled)
+    }
+
+    @Test
+    fun aPinnedNoteOpensOnATapAndUnpinsFromItsLongPress() = runComposeUiTest {
+        val opened = mutableListOf<String>()
+        val unpinned = mutableListOf<String>()
+        setContent {
+            PinnedNotes(
+                paths = listOf("agenda.org", "work/todo.org"),
+                onOpen = { opened += it },
+                onUnpin = { unpinned += it },
+            )
+        }
+
+        onNodeWithText("agenda.org").performClick()
+        onNodeWithText("todo.org").performTouchInput { longClick() }
+        onNodeWithText("Unpin").performClick()
+
+        assertEquals(listOf("agenda.org"), opened)
+        assertEquals(listOf("work/todo.org"), unpinned)
+    }
+
+    @Test
     fun theNewNoteDialogShowsTheFileItWillMake() = runComposeUiTest {
         val created = mutableListOf<String>()
         setContent {

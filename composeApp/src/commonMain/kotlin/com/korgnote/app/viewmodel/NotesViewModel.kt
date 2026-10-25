@@ -33,8 +33,8 @@ import kotlin.time.Clock
 /**
  * The app's notes, and everything shown about them.
  *
- * Each concern is its own state holder — [library], [note], [folds], [editor], [completion],
- * [search], [links], [agenda], [server] — and the UI talks to them directly. What stays here is what
+ * Each concern is its own state holder — [library], [note], [folds], [pins], [editor],
+ * [completion], [search], [links], [agenda], [server] — and the UI talks to them directly. What stays here is what
  * crosses them: opening a note, which every one of them follows; rebuilding what is derived from the
  * notes when they change; and the operations that change the notes as files — saving, creating,
  * renaming, deleting, and settling a conflict between a note and its copy.
@@ -68,6 +68,9 @@ class NotesViewModel(
     },
     /** Where [createNote] puts a note; read each time, so a change in Settings applies at once. */
     private val newNotesFolder: () -> String = { "" },
+    /** The notes pinned on this device, read once; and where a change to them is kept. */
+    pinnedNotes: () -> List<String> = { emptyList() },
+    savePinnedNotes: (List<String>) -> Unit = {},
 ) : ViewModel() {
 
     /** The one message line: why something could not be done, or what was done instead. */
@@ -89,6 +92,8 @@ class NotesViewModel(
     val note: OpenNote = OpenNote()
 
     val folds: Folds = Folds(note)
+
+    val pins: NotePins = NotePins(library, pinnedNotes, savePinnedNotes)
 
     val editor: ElementEditor = ElementEditor(
         note,
@@ -195,11 +200,12 @@ class NotesViewModel(
         library.reload()
         refreshDerivedViews()
 
-        // The open note may be gone: deleted here, or on another device.
+        // The open note may be gone: deleted here, or on another device. With nothing open — at
+        // launch, say — the first pinned note opens: it was pinned to be at hand.
         val current = note.path?.takeIf { it in library }
         if (current == null) {
             note.path = null
-            val first = library.documents.keys.minOrNull()
+            val first = pins.shown.firstOrNull() ?: library.documents.keys.minOrNull()
             if (first != null) onFileSelected(first) else note.close()
         } else {
             store.read(current)?.let { fresh ->
@@ -319,6 +325,7 @@ class NotesViewModel(
             return false
         }
         folds.move(from, target)
+        pins.move(from, target)
         if (wasOpen) note.path = target
         showFromReplica()
         if (wasOpen) openAndWait(target)
@@ -340,6 +347,7 @@ class NotesViewModel(
             note.path = null
         }
         folds.forget(path)
+        pins.forget(path)
         store.delete(path)
         showFromReplica()
         server.pushQuietly()
@@ -384,6 +392,7 @@ class NotesViewModel(
         if (wasOpen) editor.cancel()
         if (!store.replaceWithCopy(original, copy)) return false
         folds.forget(copy)
+        pins.forget(copy)
         if (wasOpen) note.path = original
         showFromReplica()
         if (wasOpen) openAndWait(original)

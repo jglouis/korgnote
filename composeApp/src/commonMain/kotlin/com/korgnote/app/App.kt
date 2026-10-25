@@ -168,6 +168,18 @@ fun App() {
                                     Icon(Icons.AutoMirrored.Filled.NoteAdd, contentDescription = "New note")
                                 }
                             }
+                            // Above the filter, so it never scrolls away or filters out.
+                            PinnedNotes(
+                                paths = vm.pins.shown,
+                                onOpen = { path ->
+                                    scope.launch {
+                                        vm.onFileSelected(path)
+                                        selectedScreen = BottomItem.HOME
+                                        drawerState.close()
+                                    }
+                                },
+                                onUnpin = { vm.pins.toggle(it) },
+                            )
                             Spacer(Modifier.width(8.dp))
                             OutlinedTextField(
                                 value = vm.search.filterQuery,
@@ -190,6 +202,8 @@ fun App() {
                                 },
                                 onRenameFile = { renamingNote = it },
                                 conflicts = vm.library.conflicts,
+                                pinned = vm.pins.shown.toSet(),
+                                onTogglePin = { vm.pins.toggle(it) },
                                 onDeleteFile = { path ->
                                     scope.launch { deletingNote = path to vm.hasUnsyncedChanges(path) }
                                 },

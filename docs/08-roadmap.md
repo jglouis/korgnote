@@ -54,6 +54,7 @@ Updated 2026-09-25.
 | ✅ | T22 Whole-file editing | Done — retired; the long-press menu moves, promotes and demotes instead |
 | ✅ | T23 Server container | Done — `Dockerfile` + `docker-compose.yml`; refuses to start without a token or a writable `/notes` |
 | ✅ | T24 Reading-mode affordances | Done — tap to edit, long-press menu, one fold chevron per heading; [09](09-element-editing.md#the-surface) |
+| ✅ | T25 Pinned notes | Done — pin from a note's long-press menu; pins sit above the file tree and the first opens at launch |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -934,6 +935,22 @@ subtree lands on a visible element. [09](09-element-editing.md) is updated to de
 interactions.
 **Not included** Fold-all or unfold-all commands, persisting folds between sessions, and
 `#+STARTUP` visibility. Add them if using the app shows that they are needed.
+
+### T25 · Pinned notes — ✅ **done**
+**Why** A few notes — an agenda, a todo list — are opened far more than the rest, and finding them
+in a tree of hundreds is a scroll every time. Which notes they are is the reader's, so nothing is
+named in the code.
+**Landed** A note's long-press menu in the drawer offers *Pin* (or *Unpin*). Pinned notes are listed
+above the filter, in the order they were pinned, by file name — or by path where two share a name;
+a tap opens one, a long-press unpins it. With nothing pinned the drawer is as it was. At launch the
+first pinned note opens instead of the alphabetically first one.
+**Where pins live** In settings, per device, as paths: pinning changes nothing in the notes and
+syncs nothing, and a phone and a laptop can keep different ones. A rename or move in the app carries
+the pin, in its place; a delete drops it. A pin whose note is missing — renamed on another device,
+or not yet synced — is hidden rather than dropped, and returns with the note.
+**Verified** `PinnedNotesTest` (view model: saving, order, launch, rename, delete, missing notes,
+labels) and two cases in `NoteLifecycleUiTest` (the menu item, the pinned rows).
+**Not included** Reordering pins, and pinning a heading rather than a note.
 
 ---
 

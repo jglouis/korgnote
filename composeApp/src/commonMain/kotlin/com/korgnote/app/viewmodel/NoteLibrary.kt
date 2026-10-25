@@ -42,6 +42,10 @@ class NoteLibrary(private val store: DocumentStore) {
     var tree by mutableStateOf(Folder(name = "Documents", path = "", children = emptyList()))
         private set
 
+    /** Every note's path, as state, for what has to redraw when a note comes or goes. */
+    var paths by mutableStateOf<Set<String>>(emptySet())
+        private set
+
     /**
      * Notes with conflict copies beside them, each with its copies newest first. Read off the paths
      * rather than remembered, so it holds across restarts and devices, covers Syncthing's copies,
@@ -71,6 +75,7 @@ class NoteLibrary(private val store: DocumentStore) {
         for (path in paths) {
             store.read(path)?.let { parsed[path] = it.toOrgDocument() }
         }
+        this.paths = parsed.keys.toSet()
         tree = mapRootToUiFolder(TreeUtils.buildFromPaths(paths, rootName = "Documents"))
         conflicts = conflictsIn(paths)
         loaded = true

@@ -77,6 +77,10 @@ fun FileTree(
     onDeleteFile: ((path: String) -> Unit)? = null,
     /** Notes with conflict copies: both are flagged, and each copy drawn under its note. */
     conflicts: Map<String, List<String>> = emptyMap(),
+    /** Pinned notes, whose long-press menu offers to unpin rather than pin. */
+    pinned: Set<String> = emptySet(),
+    /** Offered on a long-press of a note, as Pin or Unpin; null to leave it out. */
+    onTogglePin: ((path: String) -> Unit)? = null,
 ) {
     // Keyed by path, not by node: the tree is a new object graph after every filter keystroke and
     // every sync, so identity-keyed state would be lost each time — re-opening every folder the
@@ -110,6 +114,8 @@ fun FileTree(
                     onFileSelected = onFileSelected,
                     onRename = onRenameFile,
                     onDelete = onDeleteFile,
+                    pinned = node.path in pinned,
+                    onTogglePin = onTogglePin,
                     modifier = Modifier.animateItem(),
                 )
 
@@ -173,17 +179,19 @@ private fun TreeFileItem(
     onFileSelected: (String) -> Unit,
     onRename: ((String) -> Unit)?,
     onDelete: ((String) -> Unit)?,
+    pinned: Boolean,
+    onTogglePin: ((String) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val hasMenu = onRename != null || onDelete != null
+    val hasMenu = onRename != null || onDelete != null || onTogglePin != null
     Box(modifier = modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .combinedClickable(
                     onClick = { onFileSelected(file.path) },
-                    onLongClickLabel = if (hasMenu) "Rename or delete" else null,
+                    onLongClickLabel = if (hasMenu) "Note actions" else null,
                     onLongClick = if (hasMenu) ({ menuOpen = true }) else null,
                 )
                 .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -211,6 +219,12 @@ private fun TreeFileItem(
             )
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            if (onTogglePin != null) {
+                DropdownMenuItem(
+                    text = { Text(if (pinned) "Unpin" else "Pin") },
+                    onClick = { menuOpen = false; onTogglePin(file.path) },
+                )
+            }
             if (onRename != null) {
                 DropdownMenuItem(
                     text = { Text("Rename or move") },
