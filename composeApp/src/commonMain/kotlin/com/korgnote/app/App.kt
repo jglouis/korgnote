@@ -61,6 +61,8 @@ fun App() {
         // own starting view, as when it is opened from the bottom bar.
         var calendarDay by remember { mutableStateOf<LocalDate?>(null) }
         var noteDialogError by remember { mutableStateOf<String?>(null) }
+        // The conflict copy being compared with its note.
+        var comparingCopy by remember { mutableStateOf<String?>(null) }
 
         if (creatingNote) {
             NewNoteDialog(
@@ -98,6 +100,22 @@ fun App() {
                     }
                 },
             )
+        }
+        comparingCopy?.let { copy ->
+            val original = vm.conflictOriginalOf(copy)
+            if (original == null) {
+                // Settled meanwhile, here or on another device.
+                comparingCopy = null
+            } else {
+                ConflictCompareDialog(
+                    original = original,
+                    copy = copy,
+                    hunks = remember(copy, vm.library.conflicts) { vm.conflictDiff(copy) },
+                    onKeepNote = { comparingCopy = null; scope.launch { vm.discardConflictCopy(copy) } },
+                    onUseCopy = { comparingCopy = null; scope.launch { vm.useConflictCopy(copy) } },
+                    onDismiss = { comparingCopy = null },
+                )
+            }
         }
         deletingNote?.let { (path, unsynced) ->
             DeleteNoteDialog(
@@ -197,6 +215,10 @@ fun App() {
                                     IconButton(onClick = { vm.links.goBack() }) {
                                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                                     }
+                                }
+                                ConflictStatusIcon(vm.library.conflicts) { path ->
+                                    vm.onFileSelected(path)
+                                    selectedScreen = BottomItem.HOME
                                 }
                                 ServerStatusIcon(
                                     unreachable = vm.server.unreachable,
@@ -313,6 +335,17 @@ fun App() {
                                 // Reflect selection from ViewModel in UI
                                 Text(text = vm.note.label)
                                 Spacer(modifier = Modifier.height(16.dp))
+
+                                // A note in conflict, or one of its copies, says so until it is settled.
+                                conflictShown(vm.note.path, vm.library.conflicts)?.let { conflict ->
+                                    ConflictBanner(
+                                        conflict,
+                                        onCompare = { comparingCopy = conflict.copy },
+                                        onKeepNote = { scope.launch { vm.discardConflictCopy(conflict.copy) } },
+                                        onUseCopy = { scope.launch { vm.useConflictCopy(conflict.copy) } },
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                }
 
                                 if (vm.note.content.isBlank()) {
                                     Text("Select an .org file to view its content")
