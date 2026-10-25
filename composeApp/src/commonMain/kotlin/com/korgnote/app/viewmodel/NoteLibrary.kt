@@ -13,6 +13,7 @@ import com.korgnote.common.org.complete.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.corpusTodoKeywords
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.replica.DocumentStore
+import com.korgnote.common.sync.conflictsIn
 import com.korgnote.common.fs.File as SharedFile
 import com.korgnote.common.fs.Folder as SharedFolder
 import com.korgnote.common.fs.Node as SharedNode
@@ -42,6 +43,14 @@ class NoteLibrary(private val store: DocumentStore) {
         private set
 
     /**
+     * Notes with conflict copies beside them, each with its copies newest first. Read off the paths
+     * rather than remembered, so it holds across restarts and devices, covers Syncthing's copies,
+     * and clears itself when a copy is deleted. See [conflictsIn].
+     */
+    var conflicts by mutableStateOf<Map<String, List<String>>>(emptyMap())
+        private set
+
+    /**
      * Set once the replica has been read. Until then the notes are empty because nothing has
      * arrived, not because there are none, and nothing should act on that emptiness.
      */
@@ -63,6 +72,7 @@ class NoteLibrary(private val store: DocumentStore) {
             store.read(path)?.let { parsed[path] = it.toOrgDocument() }
         }
         tree = mapRootToUiFolder(TreeUtils.buildFromPaths(paths, rootName = "Documents"))
+        conflicts = conflictsIn(paths)
         loaded = true
         refreshKeywords()
     }

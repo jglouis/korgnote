@@ -13,6 +13,8 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** What the reader sees when a save meets an edit made on the server. */
@@ -68,5 +70,64 @@ class SyncConflictTest {
         assertEquals(original.replace("TODO First", "WAITING First"), vm.note.content)
         assertTrue(vm.lastErrorMessage.contains("server's version is kept"), vm.lastErrorMessage)
         assertEquals(original.replace("TODO First", "DONE First"), store.read("notes.sync-conflict-20260921-101500.org"))
+    }
+
+    private val copy = "notes.sync-conflict-20260921-101500.org"
+    private val mine = original.replace("TODO First", "DONE First")
+    private val theirs = original.replace("TODO First", "WAITING First")
+
+    /** A conflict made by saving, with its copy already on the server. */
+    private suspend fun conflict() {
+        vm.server.load()
+        api.files[path] = theirs
+        vm.note.content = mine
+        vm.saveCurrentFile()
+        vm.server.pushQuietly()
+    }
+
+    @Test
+    fun aConflictShowsUntilItsCopyIsGone() = runTest {
+        conflict()
+
+        assertEquals(mapOf(path to listOf(copy)), vm.library.conflicts)
+        assertEquals(path, vm.conflictOriginalOf(copy))
+        assertNull(vm.conflictOriginalOf(path))
+        val hunk = vm.conflictDiff(copy).single()
+        assertEquals("* WAITING First", hunk.heading)
+    }
+
+    @Test
+    fun keepingTheNoteDeletesTheCopyEverywhere() = runTest {
+        conflict()
+        vm.onFileSelected(copy)
+
+        vm.discardConflictCopy(copy)
+
+        assertEquals(emptyMap(), vm.library.conflicts)
+        assertFalse(copy in api.files, "the server deletes it too, into its trash")
+        assertEquals(theirs, api.files[path])
+        assertEquals(path, vm.note.path, "the reader is taken to the note")
+        assertEquals(theirs, vm.note.content)
+    }
+
+    @Test
+    fun usingTheCopyMakesItTheNoteEverywhere() = runTest {
+        conflict()
+        vm.onFileSelected(copy)
+
+        assertTrue(vm.useConflictCopy(copy))
+
+        assertEquals(emptyMap(), vm.library.conflicts)
+        assertEquals(mine, api.files[path], "pushed as an edit of the server's version")
+        assertFalse(copy in api.files)
+        assertEquals(path, vm.note.path)
+        assertEquals(mine, vm.note.content)
+    }
+
+    @Test
+    fun onlyACopyCanBeUsed() = runTest {
+        conflict()
+        assertFalse(vm.useConflictCopy(path))
+        assertEquals(theirs, api.files[path])
     }
 }

@@ -19,6 +19,9 @@ import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
+import com.korgnote.common.sync.DiffHunk
+import com.korgnote.common.sync.conflictCopyOriginal
+import com.korgnote.common.sync.diffHunks
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
@@ -34,7 +37,7 @@ import kotlin.time.Clock
  * [search], [links], [agenda], [server] — and the UI talks to them directly. What stays here is what
  * crosses them: opening a note, which every one of them follows; rebuilding what is derived from the
  * notes when they change; and the operations that change the notes as files — saving, creating,
- * renaming, deleting.
+ * renaming, deleting, and settling a conflict between a note and its copy.
  */
 class NotesViewModel(
     sync: SyncEngine,
@@ -340,5 +343,51 @@ class NotesViewModel(
         store.delete(path)
         showFromReplica()
         server.pushQuietly()
+    }
+
+    // --- Conflicts ---
+
+    /**
+     * The note [path] is a conflict copy of, or null when it is not one — or its note is gone, which
+     * leaves nothing to conflict with.
+     */
+    fun conflictOriginalOf(path: String): String? = conflictCopyOriginal(path)?.takeIf { it in library }
+
+    /** How [copy] differs from its note, change by change; empty when it does not, or is no copy. */
+    fun conflictDiff(copy: String): List<DiffHunk> {
+        val original = conflictOriginalOf(copy) ?: return emptyList()
+        val ours = library[original]?.text ?: return emptyList()
+        val theirs = library[copy]?.text ?: return emptyList()
+        return diffHunks(ours, theirs)
+    }
+
+    /**
+     * Settles a conflict by keeping the note as it is: [copy] is deleted, here and on the server,
+     * which keeps it in its trash. A reader looking at the copy is taken to the note.
+     */
+    suspend fun discardConflictCopy(copy: String) {
+        val original = conflictOriginalOf(copy)
+        val wasOpen = note.path == copy
+        deleteNote(copy)
+        if (wasOpen && original != null) openAndWait(original)
+    }
+
+    /**
+     * Settles a conflict in favour of [copy]: its text becomes the note's, pushed as an edit of the
+     * server's version, and the copy is deleted. Returns false, changing nothing, when [copy] is not
+     * a conflict copy of a note here.
+     */
+    suspend fun useConflictCopy(copy: String): Boolean {
+        val original = conflictOriginalOf(copy) ?: return false
+        val wasOpen = note.path == copy || note.path == original
+        // The element editor holds offsets into a text about to be replaced.
+        if (wasOpen) editor.cancel()
+        if (!store.replaceWithCopy(original, copy)) return false
+        folds.forget(copy)
+        if (wasOpen) note.path = original
+        showFromReplica()
+        if (wasOpen) openAndWait(original)
+        server.pushQuietly()
+        return true
     }
 }
