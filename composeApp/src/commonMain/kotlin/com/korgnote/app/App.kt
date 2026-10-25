@@ -18,7 +18,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -36,7 +38,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.korgnote.app.notifications.ReminderTaps
 import org.koin.compose.viewmodel.koinViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun App() {
     KorgNoteTheme {
@@ -78,6 +80,12 @@ fun App() {
         // Keyed by screen so that coming back to File starts at the top, as it did when the
         // document view owned it.
         val documentListState = rememberSaveable(selectedScreen, saver = LazyListState.Saver) { LazyListState() }
+
+        // The system's back goes where the top bar's does: back from a followed link, to where it
+        // was tapped. Of two handlers the later one is asked first, so an open drawer closes before
+        // anything is followed back.
+        BackHandler(enabled = selectedScreen == BottomItem.FILE && vm.links.canGoBack) { vm.links.goBack() }
+        BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
 
         if (creatingNote) {
             NewNoteDialog(
