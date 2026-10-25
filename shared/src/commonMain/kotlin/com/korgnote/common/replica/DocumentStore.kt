@@ -283,15 +283,20 @@ class DocumentStore(private val storage: ReplicaStorage) {
         return name
     }
 
-    /** Flags [path] as diverged from the server, keeping the local version untouched. */
-    suspend fun markConflicted(path: String, remoteEtag: String?) {
+    /**
+     * Flags [path] as diverged from the server, keeping the local version untouched.
+     *
+     * The server's version, [remoteText] at [remoteEtag], becomes the base: it is now saved beside
+     * the note as a conflict copy, so the local version is an edit of it. Leaving the old base would
+     * make the next merge, should the server move again, re-fight a conflict already recorded.
+     */
+    suspend fun markConflicted(path: String, remoteEtag: String, remoteText: String) {
         mutex.withLock {
+            storage.writeBase(path, remoteText)
             val meta = storage.readMeta()
             val existing = meta.files[path] ?: FileMeta(path)
             storage.writeMeta(
-                meta.copy(
-                    files = meta.files + (path to existing.copy(conflicted = true, etag = remoteEtag ?: existing.etag)),
-                ),
+                meta.copy(files = meta.files + (path to existing.copy(conflicted = true, etag = remoteEtag))),
             )
         }
     }

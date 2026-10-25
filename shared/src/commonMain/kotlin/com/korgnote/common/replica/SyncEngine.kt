@@ -25,8 +25,8 @@ data class SyncReport(
  * and remote (R). The store tracks L against B with its dirty flag and B against R with the stored
  * etag, so the whole table reduces to two booleans.
  *
- * Merging is **not** here: a push refused with 409 keeps the local version and flags it (T11). The
- * rule that matters until then is that no branch ever discards an edit the user made.
+ * The rule that matters above all is that no branch ever discards an edit the user made, nor one
+ * the server holds.
  */
 class SyncEngine(
     private val store: DocumentStore,
@@ -95,11 +95,7 @@ class SyncEngine(
                 meta.etag == entry.etag -> record(pushLocal(entry.path, meta.etag), entry.path)
 
                 // Both moved: try to reconcile them, and only involve the user if that fails.
-                else -> when (reconcile(entry.path, entry.etag)) {
-                    Reconciliation.MERGED -> pushed.add(entry.path)
-                    Reconciliation.CONFLICTED -> conflicted.add(entry.path)
-                    Reconciliation.FAILED -> failed.add(entry.path)
-                }
+                else -> record(reconcile(entry.path), entry.path)
             }
         }
 
@@ -208,8 +204,6 @@ class SyncEngine(
         }
     }
 
-    private enum class Reconciliation { MERGED, CONFLICTED, FAILED }
-
     /**
      * Merges a file both sides changed.
      *
@@ -218,10 +212,10 @@ class SyncEngine(
      * `name.sync-conflict-<timestamp>.org` — deliberately not conflict markers inside the note, and
      * deliberately never a choice between the two. Neither version is ever discarded.
      */
-    private suspend fun reconcile(path: String, remoteEtag: String): Reconciliation {
-        val local = store.read(path) ?: return Reconciliation.FAILED
+    private suspend fun reconcile(path: String): PushOutcome {
+        val local = store.read(path) ?: return PushOutcome.SKIPPED
         val base = store.base(path) ?: ""
-        val remote = api.fetch(path) ?: return Reconciliation.FAILED
+        val remote = api.fetch(path) ?: return PushOutcome.FAILED
 
         return when (val result = merge(base, local, remote.text)) {
             is MergeResult.Merged -> {
@@ -229,10 +223,10 @@ class SyncEngine(
                 when (val push = api.push(path, result.text, ifMatch = remote.etag)) {
                     is PushResult.Pushed -> {
                         store.markPushed(path, push.etag, result.text)
-                        Reconciliation.MERGED
+                        PushOutcome.PUSHED
                     }
                     // It moved again while we were merging; the next cycle will pick it up.
-                    else -> Reconciliation.FAILED
+                    else -> PushOutcome.FAILED
                 }
             }
 
@@ -240,8 +234,8 @@ class SyncEngine(
                 store.writeConflictCopy(path, remote.text, timestamp())
                 // The base becomes the server's version, so the next cycle sees a plain local edit
                 // rather than reporting the same conflict forever.
-                store.markConflicted(path, remoteEtag)
-                Reconciliation.CONFLICTED
+                store.markConflicted(path, remote.etag, remote.text)
+                PushOutcome.CONFLICT
             }
         }
     }
@@ -255,10 +249,10 @@ class SyncEngine(
                 store.markPushed(path, result.etag, content)
                 PushOutcome.PUSHED
             }
-            is PushResult.Conflict -> {
-                store.markConflicted(path, result.currentEtag)
-                PushOutcome.CONFLICT
-            }
+            // The server moved between the manifest and this push — an Emacs save landing in that
+            // window. Merge exactly as if the manifest had shown it: recording the new etag and
+            // pushing again next cycle would overwrite that save without anyone seeing it.
+            is PushResult.Conflict -> reconcile(path)
             is PushResult.Failed -> PushOutcome.FAILED
         }
     }

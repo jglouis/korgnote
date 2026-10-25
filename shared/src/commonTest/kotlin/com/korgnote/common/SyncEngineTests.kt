@@ -76,7 +76,11 @@ class SyncEngineTests {
         /** Every write in the order it arrived, as `PUT path` or `DELETE path`. */
         val log = mutableListOf<String>()
 
+        /** Runs once, just before the next push is decided: an edit landing after the manifest. */
+        var beforeNextPush: (() -> Unit)? = null
+
         override suspend fun push(path: String, content: String, ifMatch: String?, mustNotExist: Boolean): PushResult {
+            beforeNextPush?.also { beforeNextPush = null }?.invoke()
             pushed.add(path)
             val current = files[path]
             if (ifMatch != null && current != null && current.first != ifMatch) {
@@ -215,6 +219,67 @@ class SyncEngineTests {
 
         val second = engine.sync()
         assertEquals(emptyList(), second.conflicted, "the same conflict must not repeat")
+    }
+
+    /**
+     * Emacs saving between the manifest and the push: the push is refused, and the save must be
+     * merged in, never overwritten by the next cycle.
+     */
+    @Test
+    fun anEditLandingDuringThePushIsMergedNotOverwritten() = runTest {
+        val (server, store, engine) = setUp()
+        val original = "* TODO First\nbody one\n\n* TODO Second\nbody two\n"
+        server.put("a.org", original)
+        engine.sync()
+
+        store.save("a.org", original.replace("body one", "body one, from the phone"))
+        server.beforeNextPush = { server.put("a.org", original.replace("body two", "body two, from Emacs")) }
+        val report = engine.sync()
+        engine.sync()
+
+        assertEquals(listOf("a.org"), report.pushed)
+        val result = server.files["a.org"]!!.second
+        assertTrue(result.contains("from the phone"), result)
+        assertTrue(result.contains("from Emacs"), result)
+    }
+
+    /** The same race on the same line: the server's version is kept as a conflict copy. */
+    @Test
+    fun aConflictingEditLandingDuringThePushIsKept() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* TODO Task\n")
+        engine.sync()
+
+        store.save("a.org", "* DONE Task\n")
+        server.beforeNextPush = { server.put("a.org", "* NEXT Task\n") }
+        val report = engine.sync()
+        engine.sync()
+
+        assertEquals(listOf("a.org"), report.conflicted)
+        assertEquals("* NEXT Task\n", server.files["a.sync-conflict-20260921-101500.org"]?.second)
+    }
+
+    /**
+     * After a conflict the server's version is the base, so the server moving again under another
+     * heading merges cleanly rather than re-raising the conflict already saved as a copy.
+     */
+    @Test
+    fun aRecordedConflictDoesNotPoisonTheNextMerge() = runTest {
+        val (server, store, engine) = setUp()
+        val original = "* TODO Task\n\n* Other\nbody\n"
+        server.put("a.org", original)
+        engine.sync()
+
+        store.save("a.org", original.replace("TODO", "DONE"))
+        val theirs = original.replace("TODO", "NEXT")
+        server.put("a.org", theirs)
+        server.beforeNextPush = { server.put("a.org", theirs.replace("body", "body, from Emacs")) }
+        assertEquals(listOf("a.org"), engine.sync().conflicted)
+
+        val second = engine.sync()
+        assertEquals(emptyList(), second.conflicted)
+        assertTrue("a.org" in second.pushed, "${second.pushed}")
+        assertEquals("* DONE Task\n\n* Other\nbody, from Emacs\n", server.files["a.org"]?.second)
     }
 
     /** The conflict copy is itself a note, so it syncs to the other device too. */
