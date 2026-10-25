@@ -19,8 +19,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.UriHandler
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.ui.*
@@ -227,269 +230,306 @@ fun App() {
                     }
                 }
             ) {
-                Scaffold(
-                    topBar = {
-                        TopAppBar(
-                            title = { Text(selectedScreen.getLabel()) },
-                            navigationIcon = {
-                                if (selectedScreen != BottomItem.CALENDAR) {
-                                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                        Icon(Icons.Filled.Menu, contentDescription = "Open drawer")
-                                    }
-                                }
-                            },
-                            actions = {
-                                // Back from a followed link, to where it was tapped.
-                                if (selectedScreen == BottomItem.HOME && vm.links.canGoBack) {
-                                    IconButton(onClick = { vm.links.goBack() }) {
-                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                                    }
-                                }
-                                ConflictStatusIcon(vm.library.conflicts) { path ->
-                                    vm.onFileSelected(path)
-                                    selectedScreen = BottomItem.HOME
-                                }
-                                ServerStatusIcon(
-                                    unreachable = vm.server.unreachable,
-                                    retrying = vm.server.retrying,
-                                    onRetry = { scope.launch { vm.server.retry() } },
-                                )
-                            }
-                        )
-                    },
-                    floatingActionButton = {
-                        // While editing, the element's own actions live on the completion strip.
-                        if (
-                            vm.editor.editingIndex == null &&
-                            selectedScreen == BottomItem.HOME &&
-                            vm.note.label != OpenNote.NO_FILE_LABEL
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                // Only while there is more below: at the end it would do nothing.
-                                AnimatedVisibility(
-                                    visible = documentListState.canScrollForward,
-                                    enter = fadeIn() + scaleIn(),
-                                    exit = fadeOut() + scaleOut(),
-                                ) {
-                                    SmallFloatingActionButton(
-                                        onClick = {
-                                            scope.launch {
-                                                val last = documentListState.layoutInfo.totalItemsCount - 1
-                                                if (last < 0) return@launch
-                                                // The last item at the top, then on past it: a final
-                                                // element taller than the screen still ends at the bottom.
-                                                documentListState.scrollToItem(last)
-                                                val page = documentListState.layoutInfo.viewportSize.height.toFloat()
-                                                while (page > 0 && documentListState.canScrollForward) {
-                                                    documentListState.scrollBy(page)
-                                                }
-                                            }
-                                        },
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.KeyboardDoubleArrowDown,
-                                            contentDescription = "Scroll to the end of the file",
-                                        )
-                                    }
-                                }
-                                FloatingActionButton(onClick = { vm.editor.addAtEnd() }) {
-                                    Icon(Icons.Filled.Add, contentDescription = "Add a heading at the end of the file")
-                                }
-                            }
-                        }
-                    },
-                    bottomBar = {
-                        // While an element is being edited the suggestions take the bottom of the
-                        // screen, which is where the keyboard pushes everything else against. The
-                        // navigation bar goes away with them: switching tabs mid-edit only ever
-                        // happened by accident.
-                        if (vm.editor.editingIndex != null) {
-                            CompletionStrip(
-                                items = vm.completion.suggestions,
-                                selectedIndex = vm.completion.selectedIndex,
-                                onAccept = { vm.completion.accept(it) },
-                            ) {
-                                // Saving an element is explicit: edits stay local until this is pressed.
-                                IconButton(onClick = { vm.editor.cancel() }) {
-                                    Icon(Icons.Filled.Close, contentDescription = "Discard changes to this element")
-                                }
-                                // Most headings are added right after editing the one above.
-                                IconButton(onClick = { scope.launch { vm.editor.commitAndAddBelow() } }) {
-                                    Icon(Icons.Filled.Add, contentDescription = "Save and add a heading below")
-                                }
-                                FilledIconButton(
-                                    onClick = { scope.launch { vm.editor.commit() } },
-                                    modifier = Modifier.padding(end = 4.dp),
-                                ) {
-                                    Icon(Icons.Filled.Save, contentDescription = "Save this element")
-                                }
-                            }
-                        } else NavigationBar {
+                // A phone on its side, or a tablet: the screen is short for its width, so the tabs
+                // go down the side instead of taking a band off the bottom.
+                val wide = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() } >= 600.dp
+                // Edge to edge, the cutout and the three-button bar sit on a side in landscape; the
+                // rail keeps the start one clear and the screen beside it the rest.
+                val safeInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
+                val selectTab = { item: BottomItem ->
+                    if (item == BottomItem.CALENDAR) calendarDay = null
+                    selectedScreen = item
+                }
+                Row {
+                    if (wide) {
+                        NavigationRail(windowInsets = safeInsets.only(WindowInsetsSides.Vertical + WindowInsetsSides.Start)) {
                             BottomItem.entries.forEach { item ->
-                                NavigationBarItem(
+                                NavigationRailItem(
                                     selected = selectedScreen == item,
-                                    onClick = {
-                                        if (item == BottomItem.CALENDAR) calendarDay = null
-                                        selectedScreen = item
-                                    },
-                                    icon = {
-                                        Icon(
-                                            item.getIconRes(),
-                                            contentDescription = item.getLabel()
-                                        )
-                                    },
+                                    onClick = { selectTab(item) },
+                                    icon = { Icon(item.getIconRes(), contentDescription = item.getLabel()) },
                                     label = { Text(item.getLabel()) },
-                                    alwaysShowLabel = true
+                                    // Kept, unlike the bottom bar, so the note does not shift sideways;
+                                    // tabs still do not switch mid-edit.
+                                    enabled = vm.editor.editingIndex == null,
+                                    alwaysShowLabel = true,
                                 )
                             }
                         }
                     }
-                ) { paddingValues ->
-                    vm.completion.pendingDatePicker?.let {
-                        val stamp = vm.completion.pickerStamp
-                        OrgDatePickerDialog(
-                            initialDate = stamp?.start ?: vm.completion.context.today,
-                            initialTime = stamp?.startTime,
-                            initialEndTime = stamp?.endTime,
-                            onPick = { date, time, end -> vm.completion.onDatePicked(date, time, end) },
-                            onDismiss = { vm.completion.dismissDatePicker() },
-                        )
-                    }
-                    // Reading mode scrolls itself, one element at a time, so that opening a large file
-                    // does not have to lay out every element first; search does the same with its
-                    // results, and the calendar with its agenda list and hour grid. A lazy list cannot
-                    // be nested in a vertically scrolling parent — and a screen that fills the space
-                    // left gets none inside one — so this Column yields its scroll to those three;
-                    // every other screen still scrolls here.
-                    val readingDocument = selectedScreen == BottomItem.HOME &&
-                        vm.note.content.isNotBlank()
-                    val ownsItsScroll = readingDocument ||
-                        selectedScreen == BottomItem.SEARCH ||
-                        selectedScreen == BottomItem.CALENDAR
-                    val screenScrollState = rememberScrollState()
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(paddingValues)
-                            .padding(16.dp)
-                            .then(
-                                if (ownsItsScroll) Modifier else Modifier.verticalScroll(screenScrollState)
-                            ),
-                        verticalArrangement = Arrangement.Top,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        when (selectedScreen) {
-                            BottomItem.HOME -> {
-                                Text(
-                                    text = selectedScreen.getLabel(),
-                                    style = MaterialTheme.typography.titleLarge
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                // Why something could not be done; being offline shows in the top bar instead.
-                                if (vm.lastErrorMessage.isNotBlank()) {
-                                    Text(vm.lastErrorMessage, color = MaterialTheme.colorScheme.error)
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                }
-                                // Reflect selection from ViewModel in UI
-                                Text(text = vm.note.label)
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                // A note in conflict, or one of its copies, says so until it is settled.
-                                conflictShown(vm.note.path, vm.library.conflicts)?.let { conflict ->
-                                    ConflictBanner(
-                                        conflict,
-                                        onCompare = { comparingCopy = conflict.copy },
-                                        onKeepNote = { scope.launch { vm.discardConflictCopy(conflict.copy) } },
-                                        onUseCopy = { scope.launch { vm.useConflictCopy(conflict.copy) } },
+                    Scaffold(
+                        modifier = Modifier.weight(1f),
+                        contentWindowInsets = if (wide) {
+                            safeInsets.only(WindowInsetsSides.Vertical + WindowInsetsSides.End)
+                        } else {
+                            ScaffoldDefaults.contentWindowInsets
+                        },
+                        topBar = {
+                            TopAppBar(
+                                // Reading, the note is what the screen is about: the tab it is on
+                                // already shows in the navigation.
+                                title = {
+                                    val note = vm.note.path?.substringAfterLast('/')
+                                    Text(
+                                        if (selectedScreen == BottomItem.HOME && note != null) note else selectedScreen.getLabel(),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                }
-
-                                if (vm.note.content.isBlank()) {
-                                    Text("Select an .org file to view its content")
+                                },
+                                windowInsets = if (wide) {
+                                    safeInsets.only(WindowInsetsSides.Top + WindowInsetsSides.End)
                                 } else {
-                                    OrgDocumentView(
-                                        // weight, not wrap: the lazy list needs a bounded height to
-                                        // know what is on screen, and fills what the header leaves.
-                                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                                        text = vm.note.content,
-                                        todoKeywords = vm.todoKeywords,
-                                        editingElementIndex = vm.editor.editingIndex,
-                                        elementDraftValue = vm.editor.draftValue,
-                                        onElementDraftChange = { vm.editor.onDraftChanged(it) },
-                                        onCompletionKey = { key ->
-                                            // Nothing showing means the key was never ours: an arrow
-                                            // has to go on moving the caret.
-                                            if (vm.completion.suggestions.isEmpty()) false else when (key) {
-                                                CompletionKey.ACCEPT -> vm.completion.acceptSelected()
-                                                CompletionKey.DISMISS -> { vm.completion.dismiss(); true }
-                                                CompletionKey.NEXT -> { vm.completion.moveSelection(1); true }
-                                                CompletionKey.PREVIOUS -> { vm.completion.moveSelection(-1); true }
-                                            }
-                                        },
-                                        onEditElement = { vm.editor.beginEdit(it) },
-                                        onAddHeadingBelow = { vm.editor.addAfter(it) },
-                                        onAddSubheading = { vm.editor.addSubheading(it) },
-                                        onDeleteSection = { scope.launch { vm.editor.deleteSection(it) } },
-                                        onMoveSection = { index, up -> scope.launch { vm.editor.moveSection(index, up) } },
-                                        onShiftSection = { index, delta ->
-                                            scope.launch {
-                                                if (delta < 0) vm.editor.promoteSection(index) else vm.editor.demoteSection(index)
-                                            }
-                                        },
-                                        foldedElements = vm.folds.folded,
-                                        onToggleFold = { vm.folds.toggle(it) },
-                                        scrollToElementIndex = vm.note.scrollToElementIndex,
-                                        onScrolledToElement = { vm.note.onScrolledToElement() },
-                                        revealElementIndex = vm.note.revealElementIndex,
-                                        onRevealed = { vm.note.onRevealed() },
-                                        onToggleCheckbox = { offset -> vm.toggleCheckboxAt(offset, scope) },
-                                        onSetTodo = { offset, keyword -> vm.setTodoAt(offset, keyword, scope) },
-                                        backlinks = vm.links.backlinks,
-                                        onOpenBacklink = { vm.links.openBacklink(it) },
-                                        onFirstVisibleElement = { vm.links.onReadingPositionChanged(it) },
-                                        listState = documentListState,
-                                    )
-                                }
-                            }
-
-                            BottomItem.SEARCH -> {
-                                SearchScreen(
-                                    modifier = Modifier.fillMaxSize(),
-                                    query = vm.search.query,
-                                    results = vm.search.results,
-                                    onQueryChange = { vm.search.onQueryChanged(it) },
-                                    onOpen = { hit ->
-                                        // Same shape as the calendar's jump: the view model resolves
-                                        // the place once the file's text has arrived.
-                                        vm.search.openHit(hit)
-                                        selectedScreen = BottomItem.HOME
-                                    },
-                                )
-                            }
-
-                            BottomItem.CALENDAR -> key(calendarDay) {
-                                CalendarScreen(
-                                    modifier = Modifier.fillMaxSize(),
-                                    agenda = vm.agenda.index,
-                                    initialMode = calendarDay?.let { CalendarMode.Day },
-                                    initialAnchorDate = calendarDay,
-                                    onOpenEntry = { entry ->
-                                        // The heading is resolved by the view model once the file's text
-                                        // has loaded: that text arrives asynchronously, so working it out
-                                        // here would search the previously open file.
-                                        vm.agenda.openEntry(entry)
+                                    TopAppBarDefaults.windowInsets
+                                },
+                                navigationIcon = {
+                                    if (selectedScreen != BottomItem.CALENDAR) {
+                                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                            Icon(Icons.Filled.Menu, contentDescription = "Open drawer")
+                                        }
+                                    }
+                                },
+                                actions = {
+                                    // Back from a followed link, to where it was tapped.
+                                    if (selectedScreen == BottomItem.HOME && vm.links.canGoBack) {
+                                        IconButton(onClick = { vm.links.goBack() }) {
+                                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                                        }
+                                    }
+                                    ConflictStatusIcon(vm.library.conflicts) { path ->
+                                        vm.onFileSelected(path)
                                         selectedScreen = BottomItem.HOME
                                     }
-                                )
+                                    ServerStatusIcon(
+                                        unreachable = vm.server.unreachable,
+                                        retrying = vm.server.retrying,
+                                        onRetry = { scope.launch { vm.server.retry() } },
+                                    )
+                                }
+                            )
+                        },
+                        floatingActionButton = {
+                            // While editing, the element's own actions live on the completion strip.
+                            if (
+                                vm.editor.editingIndex == null &&
+                                selectedScreen == BottomItem.HOME &&
+                                vm.note.label != OpenNote.NO_FILE_LABEL
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    // Only while there is more below: at the end it would do nothing.
+                                    AnimatedVisibility(
+                                        visible = documentListState.canScrollForward,
+                                        enter = fadeIn() + scaleIn(),
+                                        exit = fadeOut() + scaleOut(),
+                                    ) {
+                                        SmallFloatingActionButton(
+                                            onClick = {
+                                                scope.launch {
+                                                    val last = documentListState.layoutInfo.totalItemsCount - 1
+                                                    if (last < 0) return@launch
+                                                    // The last item at the top, then on past it: a final
+                                                    // element taller than the screen still ends at the bottom.
+                                                    documentListState.scrollToItem(last)
+                                                    val page = documentListState.layoutInfo.viewportSize.height.toFloat()
+                                                    while (page > 0 && documentListState.canScrollForward) {
+                                                        documentListState.scrollBy(page)
+                                                    }
+                                                }
+                                            },
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.KeyboardDoubleArrowDown,
+                                                contentDescription = "Scroll to the end of the file",
+                                            )
+                                        }
+                                    }
+                                    FloatingActionButton(onClick = { vm.editor.addAtEnd() }) {
+                                        Icon(Icons.Filled.Add, contentDescription = "Add a heading at the end of the file")
+                                    }
+                                }
                             }
+                        },
+                        bottomBar = {
+                            // While an element is being edited the suggestions take the bottom of the
+                            // screen, which is where the keyboard pushes everything else against. The
+                            // navigation bar goes away with them: switching tabs mid-edit only ever
+                            // happened by accident.
+                            if (vm.editor.editingIndex != null) {
+                                CompletionStrip(
+                                    items = vm.completion.suggestions,
+                                    selectedIndex = vm.completion.selectedIndex,
+                                    onAccept = { vm.completion.accept(it) },
+                                ) {
+                                    // Saving an element is explicit: edits stay local until this is pressed.
+                                    IconButton(onClick = { vm.editor.cancel() }) {
+                                        Icon(Icons.Filled.Close, contentDescription = "Discard changes to this element")
+                                    }
+                                    // Most headings are added right after editing the one above.
+                                    IconButton(onClick = { scope.launch { vm.editor.commitAndAddBelow() } }) {
+                                        Icon(Icons.Filled.Add, contentDescription = "Save and add a heading below")
+                                    }
+                                    FilledIconButton(
+                                        onClick = { scope.launch { vm.editor.commit() } },
+                                        modifier = Modifier.padding(end = 4.dp),
+                                    ) {
+                                        Icon(Icons.Filled.Save, contentDescription = "Save this element")
+                                    }
+                                }
+                            } else if (!wide) NavigationBar {
+                                BottomItem.entries.forEach { item ->
+                                    NavigationBarItem(
+                                        selected = selectedScreen == item,
+                                        onClick = { selectTab(item) },
+                                        icon = {
+                                            Icon(
+                                                item.getIconRes(),
+                                                contentDescription = item.getLabel()
+                                            )
+                                        },
+                                        label = { Text(item.getLabel()) },
+                                        alwaysShowLabel = true
+                                    )
+                                }
+                            }
+                        }
+                    ) { paddingValues ->
+                        vm.completion.pendingDatePicker?.let {
+                            val stamp = vm.completion.pickerStamp
+                            OrgDatePickerDialog(
+                                initialDate = stamp?.start ?: vm.completion.context.today,
+                                initialTime = stamp?.startTime,
+                                initialEndTime = stamp?.endTime,
+                                onPick = { date, time, end -> vm.completion.onDatePicked(date, time, end) },
+                                onDismiss = { vm.completion.dismissDatePicker() },
+                            )
+                        }
+                        // Reading mode scrolls itself, one element at a time, so that opening a large file
+                        // does not have to lay out every element first; search does the same with its
+                        // results, and the calendar with its agenda list and hour grid. A lazy list cannot
+                        // be nested in a vertically scrolling parent — and a screen that fills the space
+                        // left gets none inside one — so this Column yields its scroll to those three;
+                        // every other screen still scrolls here.
+                        val readingDocument = selectedScreen == BottomItem.HOME &&
+                            vm.note.content.isNotBlank()
+                        val ownsItsScroll = readingDocument ||
+                            selectedScreen == BottomItem.SEARCH ||
+                            selectedScreen == BottomItem.CALENDAR
+                        val screenScrollState = rememberScrollState()
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(paddingValues)
+                                .padding(16.dp)
+                                .then(
+                                    if (ownsItsScroll) Modifier else Modifier.verticalScroll(screenScrollState)
+                                ),
+                            verticalArrangement = Arrangement.Top,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            when (selectedScreen) {
+                                BottomItem.HOME -> {
+                                    // Why something could not be done; being offline shows in the top bar instead.
+                                    if (vm.lastErrorMessage.isNotBlank()) {
+                                        Text(vm.lastErrorMessage, color = MaterialTheme.colorScheme.error)
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                    }
 
-                            BottomItem.SETTINGS -> {
-                                val settingsRepo = koinInject<SettingsRepository>()
-                                SettingsScreen(repo = settingsRepo, onSaved = { scope.launch { vm.server.retry() } })
+                                    // A note in conflict, or one of its copies, says so until it is settled.
+                                    conflictShown(vm.note.path, vm.library.conflicts)?.let { conflict ->
+                                        ConflictBanner(
+                                            conflict,
+                                            onCompare = { comparingCopy = conflict.copy },
+                                            onKeepNote = { scope.launch { vm.discardConflictCopy(conflict.copy) } },
+                                            onUseCopy = { scope.launch { vm.useConflictCopy(conflict.copy) } },
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                    }
+
+                                    if (vm.note.content.isBlank()) {
+                                        Text("Select an .org file to view its content")
+                                    } else {
+                                        OrgDocumentView(
+                                            // weight, not wrap: the lazy list needs a bounded height to
+                                            // know what is on screen, and fills what the header leaves.
+                                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                                            text = vm.note.content,
+                                            todoKeywords = vm.todoKeywords,
+                                            editingElementIndex = vm.editor.editingIndex,
+                                            elementDraftValue = vm.editor.draftValue,
+                                            onElementDraftChange = { vm.editor.onDraftChanged(it) },
+                                            onCompletionKey = { key ->
+                                                // Nothing showing means the key was never ours: an arrow
+                                                // has to go on moving the caret.
+                                                if (vm.completion.suggestions.isEmpty()) false else when (key) {
+                                                    CompletionKey.ACCEPT -> vm.completion.acceptSelected()
+                                                    CompletionKey.DISMISS -> { vm.completion.dismiss(); true }
+                                                    CompletionKey.NEXT -> { vm.completion.moveSelection(1); true }
+                                                    CompletionKey.PREVIOUS -> { vm.completion.moveSelection(-1); true }
+                                                }
+                                            },
+                                            onEditElement = { vm.editor.beginEdit(it) },
+                                            onAddHeadingBelow = { vm.editor.addAfter(it) },
+                                            onAddSubheading = { vm.editor.addSubheading(it) },
+                                            onDeleteSection = { scope.launch { vm.editor.deleteSection(it) } },
+                                            onMoveSection = { index, up -> scope.launch { vm.editor.moveSection(index, up) } },
+                                            onShiftSection = { index, delta ->
+                                                scope.launch {
+                                                    if (delta < 0) vm.editor.promoteSection(index) else vm.editor.demoteSection(index)
+                                                }
+                                            },
+                                            foldedElements = vm.folds.folded,
+                                            onToggleFold = { vm.folds.toggle(it) },
+                                            scrollToElementIndex = vm.note.scrollToElementIndex,
+                                            onScrolledToElement = { vm.note.onScrolledToElement() },
+                                            revealElementIndex = vm.note.revealElementIndex,
+                                            onRevealed = { vm.note.onRevealed() },
+                                            onToggleCheckbox = { offset -> vm.toggleCheckboxAt(offset, scope) },
+                                            onSetTodo = { offset, keyword -> vm.setTodoAt(offset, keyword, scope) },
+                                            backlinks = vm.links.backlinks,
+                                            onOpenBacklink = { vm.links.openBacklink(it) },
+                                            onFirstVisibleElement = { vm.links.onReadingPositionChanged(it) },
+                                            listState = documentListState,
+                                        )
+                                    }
+                                }
+
+                                BottomItem.SEARCH -> {
+                                    SearchScreen(
+                                        modifier = Modifier.fillMaxSize(),
+                                        query = vm.search.query,
+                                        results = vm.search.results,
+                                        onQueryChange = { vm.search.onQueryChanged(it) },
+                                        onOpen = { hit ->
+                                            // Same shape as the calendar's jump: the view model resolves
+                                            // the place once the file's text has arrived.
+                                            vm.search.openHit(hit)
+                                            selectedScreen = BottomItem.HOME
+                                        },
+                                    )
+                                }
+
+                                BottomItem.CALENDAR -> key(calendarDay) {
+                                    CalendarScreen(
+                                        modifier = Modifier.fillMaxSize(),
+                                        agenda = vm.agenda.index,
+                                        initialMode = calendarDay?.let { CalendarMode.Day },
+                                        initialAnchorDate = calendarDay,
+                                        onOpenEntry = { entry ->
+                                            // The heading is resolved by the view model once the file's text
+                                            // has loaded: that text arrives asynchronously, so working it out
+                                            // here would search the previously open file.
+                                            vm.agenda.openEntry(entry)
+                                            selectedScreen = BottomItem.HOME
+                                        }
+                                    )
+                                }
+
+                                BottomItem.SETTINGS -> {
+                                    val settingsRepo = koinInject<SettingsRepository>()
+                                    SettingsScreen(repo = settingsRepo, onSaved = { scope.launch { vm.server.retry() } })
+                                }
                             }
                         }
                     }
