@@ -182,7 +182,8 @@ fun App() {
         CompositionLocalProvider(LocalUriHandler provides uriHandler) {
             ModalNavigationDrawer(
                 drawerState = drawerState,
-                gesturesEnabled = selectedScreen != BottomItem.CALENDAR,
+                // The drawer opens files, so it belongs to the note's tab, as its button does.
+                gesturesEnabled = selectedScreen == BottomItem.FILE,
                 drawerContent = {
                     ModalDrawerSheet(modifier = Modifier.width(280.dp)) {
                         Column(modifier = Modifier.padding(8.dp)) {
@@ -246,12 +247,13 @@ fun App() {
                 val window = LocalWindowInfo.current.containerSize
                 val wide = with(LocalDensity.current) { window.width.toDp() } >= 600.dp
                 val short = with(LocalDensity.current) { window.height.toDp() } < 480.dp
-                // No bar above the calendar's own header, which says what it shows; the navigation
-                // says which tab it is.
-                val calendarOwnsTop = selectedScreen == BottomItem.CALENDAR
                 // Editing on a screen that short, the keyboard takes half its height: the element gets
                 // what is left, with no bar above it and no rail squeezed beside it.
                 val editingShort = short && vm.editor.editingIndex != null
+                // Only the note has a bar above it, naming it and opening the drawer. The other tabs
+                // are named in the navigation, and their own headers carry what the bar would: the
+                // calendar's period, the search field, the settings' first heading.
+                val topBar = selectedScreen == BottomItem.FILE && !editingShort
                 // Even the status bar: its height is another line of the element.
                 HideStatusBar(editingShort)
                 val rail = wide && !editingShort
@@ -300,13 +302,12 @@ fun App() {
                             ScaffoldDefaults.contentWindowInsets
                         },
                         topBar = {
-                            if (!calendarOwnsTop && !editingShort) TopAppBar(
-                                // Reading, the note is what the screen is about: the tab it is on
-                                // already shows in the navigation.
+                            if (topBar) TopAppBar(
+                                // The note is what the screen is about: the tab it is on already
+                                // shows in the navigation.
                                 title = {
-                                    val note = vm.note.path?.substringAfterLast('/')
                                     Text(
-                                        if (selectedScreen == BottomItem.FILE && note != null) note else selectedScreen.getLabel(),
+                                        vm.note.path?.substringAfterLast('/') ?: BottomItem.FILE.getLabel(),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
@@ -317,15 +318,13 @@ fun App() {
                                     TopAppBarDefaults.windowInsets
                                 },
                                 navigationIcon = {
-                                    if (selectedScreen != BottomItem.CALENDAR) {
-                                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                            Icon(Icons.Filled.Menu, contentDescription = "Open drawer")
-                                        }
+                                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                        Icon(Icons.Filled.Menu, contentDescription = "Open drawer")
                                     }
                                 },
                                 actions = {
                                     // Back from a followed link, to where it was tapped.
-                                    if (selectedScreen == BottomItem.FILE && vm.links.canGoBack) {
+                                    if (vm.links.canGoBack) {
                                         IconButton(onClick = { vm.links.goBack() }) {
                                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                                         }
@@ -454,7 +453,7 @@ fun App() {
                                 // short screen, height is what is short.
                                 .padding(
                                     when {
-                                        calendarOwnsTop -> PaddingValues(horizontal = 8.dp)
+                                        selectedScreen == BottomItem.CALENDAR -> PaddingValues(horizontal = 8.dp)
                                         editingShort -> PaddingValues(horizontal = 16.dp, vertical = 4.dp)
                                         else -> PaddingValues(16.dp)
                                     }
@@ -544,6 +543,7 @@ fun App() {
                                             vm.search.openHit(hit)
                                             selectedScreen = BottomItem.FILE
                                         },
+                                        actions = statusIcons,
                                     )
                                 }
 
@@ -560,7 +560,7 @@ fun App() {
                                             vm.agenda.openEntry(entry)
                                             selectedScreen = BottomItem.FILE
                                         },
-                                        headerActions = { if (calendarOwnsTop) statusIcons() },
+                                        headerActions = statusIcons,
                                     )
                                 }
 
@@ -569,6 +569,7 @@ fun App() {
                                     SettingsScreen(
                                         repo = settingsRepo,
                                         modifier = Modifier.fillMaxSize(),
+                                        serverStatus = statusIcons,
                                         onSaved = { scope.launch { vm.server.retry() } },
                                     )
                                 }

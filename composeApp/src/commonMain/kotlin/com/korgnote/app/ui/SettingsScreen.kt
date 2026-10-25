@@ -53,7 +53,12 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(repo: SettingsRepository, modifier: Modifier = Modifier, onSaved: (() -> Unit)? = null) {
+fun SettingsScreen(
+    repo: SettingsRepository,
+    modifier: Modifier = Modifier,
+    serverStatus: @Composable () -> Unit = {},
+    onSaved: (() -> Unit)? = null,
+) {
     val scope = rememberCoroutineScope()
     var host by remember { mutableStateOf("") }
     var portText by remember { mutableStateOf("") }
@@ -158,7 +163,12 @@ fun SettingsScreen(repo: SettingsRepository, modifier: Modifier = Modifier, onSa
 
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            Text("Server configuration")
+            // Whether the server can be reached, and what conflicts syncing left, next to its
+            // settings: there is no bar above them.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Server configuration", modifier = Modifier.weight(1f))
+                serverStatus()
+            }
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 modifier = Modifier.fillMaxWidth(),

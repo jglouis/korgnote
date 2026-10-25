@@ -3,6 +3,7 @@ package com.korgnote.app.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -47,20 +49,25 @@ fun SearchScreen(
     onQueryChange: (String) -> Unit,
     onOpen: (SearchHit) -> Unit,
     modifier: Modifier = Modifier,
+    actions: @Composable () -> Unit = {},
 ) {
     // Opening the tab is opening it to type; coming back to results already there is not.
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { if (query.isBlank()) focus.requestFocus() }
     Column(modifier = modifier.fillMaxSize()) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier.fillMaxWidth().focusRequester(focus),
-            label = { Text("Search notes") },
-            placeholder = { Text("words, or tag:work") },
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-            singleLine = true,
-        )
+        // [actions] beside the field: there is no bar above it for them.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                modifier = Modifier.weight(1f).focusRequester(focus),
+                label = { Text("Search notes") },
+                placeholder = { Text("words, or tag:work") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                singleLine = true,
+            )
+            actions()
+        }
         Spacer(Modifier.height(8.dp))
 
         when {
