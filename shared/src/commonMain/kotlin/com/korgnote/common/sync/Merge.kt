@@ -20,7 +20,7 @@ sealed interface MergeResult {
  *
  * It deliberately never emits conflict markers. A file full of `<<<<<<<` is a corrupted note, and
  * the caller's answer to a real conflict is to keep both versions as separate files instead — see
- * `docs/05-sync-protocol.md`.
+ * [conflictCopyName] and `docs/05-sync-protocol.md`.
  */
 fun merge(base: String, local: String, remote: String): MergeResult {
     if (local == remote) return MergeResult.Merged(local)
@@ -91,7 +91,7 @@ fun merge(base: String, local: String, remote: String): MergeResult {
  * For each line of [from], the index of the line it corresponds to in [to], or null when the line
  * was changed or removed. Computed as a longest common subsequence.
  */
-private fun alignment(from: List<String>, to: List<String>): Array<Int?> {
+internal fun alignment(from: List<String>, to: List<String>): Array<Int?> {
     val result = arrayOfNulls<Int>(from.size)
     if (from.isEmpty() || to.isEmpty()) return result
 
@@ -117,12 +117,4 @@ private fun alignment(from: List<String>, to: List<String>): Array<Int?> {
         }
     }
     return result
-}
-
-/** The name a conflicting copy is saved under, mirroring Syncthing's so it is already familiar. */
-fun conflictCopyName(path: String, timestamp: String): String {
-    val extension = path.substringAfterLast('.', "")
-    val stem = if (extension.isEmpty()) path else path.dropLast(extension.length + 1)
-    return if (extension.isEmpty()) "$stem.sync-conflict-$timestamp"
-    else "$stem.sync-conflict-$timestamp.$extension"
 }

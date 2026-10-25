@@ -58,8 +58,8 @@ class ServerSync(
             if (report.conflicted.isNotEmpty()) {
                 val names = report.conflicted.joinToString(", ")
                 showMessage(
-                    "Kept your version of $names. The other version is saved beside " +
-                        "it as a .sync-conflict- copy."
+                    "$names also changed on the server. The server's version is kept; yours is " +
+                        "saved beside it as a .sync-conflict- copy."
                 )
             } else {
                 showMessage("")

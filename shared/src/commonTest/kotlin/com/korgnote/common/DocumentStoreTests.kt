@@ -133,6 +133,73 @@ abstract class DocumentStoreContract {
     fun anUnknownDocumentReadsAsNull() = runTest {
         assertNull(store().read("nothing.org"))
     }
+
+    @Test
+    fun keepingTheServersVersionSetsThisOneAside() = runTest {
+        val store = store()
+        store.acceptFromServer("a.org", "* TODO Task\n", etag = "e1")
+        store.save("a.org", "* DONE Task\n")
+
+        val copy = store.keepServerVersion("a.org", "* NEXT Task\n", "e2", "20260921-101500")
+
+        assertEquals("a.sync-conflict-20260921-101500.org", copy)
+        assertEquals("* NEXT Task\n", store.read("a.org"))
+        assertEquals("* NEXT Task\n", store.base("a.org"))
+        assertEquals("e2", store.meta("a.org")?.etag)
+        assertFalse(store.isDirty("a.org"))
+        assertEquals("* DONE Task\n", store.read(copy!!))
+        assertTrue(store.isDirty(copy), "the copy is pushed like any new note")
+        assertNull(store.meta(copy)?.etag)
+    }
+
+    @Test
+    fun keepingTheServersVersionMakesNoCopyOfTheSameText() = runTest {
+        val store = store()
+        store.save("a.org", "* Same\n")
+
+        assertNull(store.keepServerVersion("a.org", "* Same\n", "e1", "20260921-101500"))
+        assertContentEquals(listOf("a.org"), store.paths())
+    }
+
+    @Test
+    fun aSaveIsRefusedWhenTheNoteMovedSinceItWasRead() = runTest {
+        val store = store()
+        store.save("a.org", "* Read\n")
+        store.save("a.org", "* Typed meanwhile\n")
+
+        assertFalse(store.saveIfUnchanged("a.org", expected = "* Read\n", content = "* Merged\n"))
+        assertEquals("* Typed meanwhile\n", store.read("a.org"))
+        assertTrue(store.saveIfUnchanged("a.org", expected = "* Typed meanwhile\n", content = "* Merged\n"))
+        assertEquals("* Merged\n", store.read("a.org"))
+    }
+
+    @Test
+    fun usingTheCopyReplacesTheNoteAndDeletesTheCopy() = runTest {
+        val store = store()
+        store.acceptFromServer("a.org", "* Theirs\n", etag = "e1")
+        store.acceptFromServer("a.sync-conflict-20260921-101500.org", "* Mine\n", etag = "e2")
+
+        assertTrue(store.replaceWithCopy("a.org", "a.sync-conflict-20260921-101500.org"))
+
+        assertEquals("* Mine\n", store.read("a.org"))
+        assertTrue(store.isDirty("a.org"), "pushed as an edit of the server's version")
+        assertEquals("e1", store.meta("a.org")?.etag)
+        assertContentEquals(listOf("a.org"), store.paths())
+        assertEquals(
+            listOf("a.sync-conflict-20260921-101500.org"),
+            store.tombstones().map { it.path },
+            "the server deletes the copy it has",
+        )
+    }
+
+    @Test
+    fun usingAMissingCopyChangesNothing() = runTest {
+        val store = store()
+        store.save("a.org", "* Theirs\n")
+
+        assertFalse(store.replaceWithCopy("a.org", "a.sync-conflict-20260921-101500.org"))
+        assertEquals("* Theirs\n", store.read("a.org"))
+    }
 }
 
 class InMemoryDocumentStoreTest : DocumentStoreContract() {

@@ -18,13 +18,6 @@ data class FileMeta(
     val dirty: Boolean = false,
     val lastSyncedGeneration: Long = 0,
     /**
-     * Set when a push was refused because the server had moved on.
-     *
-     * Until merging arrives (T11) the local version is kept untouched and this flag is how the UI
-     * says so. Losing an edit silently would be far worse than showing a warning.
-     */
-    val conflicted: Boolean = false,
-    /**
      * A tombstone: deleted here, and the server has not been told yet.
      *
      * The working copy and base are already gone; what is kept is [etag], the version the delete

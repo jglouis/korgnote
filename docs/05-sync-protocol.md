@@ -218,10 +218,17 @@ note it names.
 `shared/sync/merge`: a line-based three-way merge (diff3) over `B`, `L`, `R`.
 
 - Clean merge → write the result locally, `PUT` it with `If-Match: R.etag`, update base.
-- Conflicting hunks → **do not** write conflict markers into your notes. Keep `L` as the
-  live file, write `R` beside it as `name.sync-conflict-20260920-101500.org`, update base to
-  `R`, and surface a banner in the UI. The naming deliberately mirrors Syncthing, which you
-  already know how to deal with.
+  If the note was saved again while `R` was being fetched, nothing is written and the next
+  cycle merges with that save too.
+- Conflicting hunks → **do not** write conflict markers into your notes. **The server is the
+  source of truth**: `R` keeps the path, in `notes/` and `base/`, and `L` is written beside it
+  as `name.sync-conflict-20260920-101500.org`, a new note the next cycle pushes. A file in the
+  notes directory is therefore never replaced by a version nobody merged — Emacs never sees its
+  file rewritten under it — and both conflict cases, edited and created, follow one rule. The
+  naming deliberately mirrors Syncthing, which you already know how to deal with; a second
+  copy in the same second gets `-2`, `-3`.
+- A `PUT` refused with `409` after the manifest said "unchanged" — a save landing on the server
+  between the two — is merged exactly like the row above, never retried blindly next cycle.
 
 Org files merge well in practice: edits usually land under different headings, and a
 line-level diff3 resolves those without help. ~200 lines of pure Kotlin, and the most

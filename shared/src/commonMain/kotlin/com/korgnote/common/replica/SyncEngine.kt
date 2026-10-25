@@ -7,6 +7,8 @@ import com.korgnote.common.sync.merge
 data class SyncReport(
     val pulled: List<String> = emptyList(),
     val pushed: List<String> = emptyList(),
+    /** Pushed after merging with the server's version, so the text here changed too. */
+    val merged: List<String> = emptyList(),
     val deletedLocally: List<String> = emptyList(),
     val deletedRemotely: List<String> = emptyList(),
     val conflicted: List<String> = emptyList(),
@@ -16,6 +18,14 @@ data class SyncReport(
     val changedAnything: Boolean
         get() = pulled.isNotEmpty() || pushed.isNotEmpty() ||
             deletedLocally.isNotEmpty() || deletedRemotely.isNotEmpty()
+
+    /**
+     * True when what the replica holds is no longer what was on screen: something arrived, merged,
+     * went, or was set aside as a conflict copy. A plain push leaves the text as it was.
+     */
+    val replicaMoved: Boolean
+        get() = pulled.isNotEmpty() || merged.isNotEmpty() || deletedRemotely.isNotEmpty() ||
+            conflicted.isNotEmpty()
 }
 
 /**
@@ -26,16 +36,18 @@ data class SyncReport(
  * etag, so the whole table reduces to two booleans.
  *
  * The rule that matters above all is that no branch ever discards an edit the user made, nor one
- * the server holds.
+ * the server holds. The server is the source of truth: when two versions cannot be merged, its
+ * version keeps the path and this device's is kept beside it as a conflict copy.
  */
 class SyncEngine(
     private val store: DocumentStore,
     private val api: SyncApi,
     /**
      * Stamp for conflict copies, as `yyyyMMdd-HHmmss`. Injected rather than read from a clock so
-     * the merge behaviour can be tested without one.
+     * the merge behaviour can be tested without one. The default is still that shape, since it is
+     * what marks a file as a conflict copy.
      */
-    private val timestamp: () -> String = { "unknown" },
+    private val timestamp: () -> String = { "00000000-000000" },
 ) {
 
     /** One full cycle: diff the manifest, pull what is stale, push what is dirty. */
@@ -45,6 +57,7 @@ class SyncEngine(
 
         val pulled = mutableListOf<String>()
         val pushed = mutableListOf<String>()
+        val merged = mutableListOf<String>()
         val deletedLocally = mutableListOf<String>()
         val deletedRemotely = mutableListOf<String>()
         val conflicted = mutableListOf<String>()
@@ -59,6 +72,7 @@ class SyncEngine(
 
         fun record(outcome: PushOutcome, path: String) = when (outcome) {
             PushOutcome.PUSHED -> pushed.add(path)
+            PushOutcome.MERGED -> { pushed.add(path); merged.add(path) }
             PushOutcome.CONFLICT -> conflicted.add(path)
             PushOutcome.FAILED -> failed.add(path)
             PushOutcome.SKIPPED -> Unit
@@ -164,6 +178,7 @@ class SyncEngine(
         return SyncReport(
             pulled = pulled,
             pushed = pushed,
+            merged = merged,
             deletedLocally = deletedLocally,
             deletedRemotely = deletedRemotely,
             conflicted = conflicted,
@@ -208,9 +223,9 @@ class SyncEngine(
      * Merges a file both sides changed.
      *
      * A clean merge is written locally and pushed with the *remote's* etag, so the server accepts
-     * it. A real conflict keeps the local version live and saves the server's beside it as
-     * `name.sync-conflict-<timestamp>.org` — deliberately not conflict markers inside the note, and
-     * deliberately never a choice between the two. Neither version is ever discarded.
+     * it. A real conflict keeps the server's version at the path and saves this device's beside it
+     * as `name.sync-conflict-<timestamp>.org` — deliberately not conflict markers inside the note.
+     * Neither version is ever discarded; the user resolves it by keeping one.
      */
     private suspend fun reconcile(path: String): PushOutcome {
         val local = store.read(path) ?: return PushOutcome.SKIPPED
@@ -219,28 +234,28 @@ class SyncEngine(
 
         return when (val result = merge(base, local, remote.text)) {
             is MergeResult.Merged -> {
-                store.save(path, result.text)
+                // Saved here while the server was being asked: merge again next cycle, with it.
+                if (!store.saveIfUnchanged(path, local, result.text)) return PushOutcome.FAILED
                 when (val push = api.push(path, result.text, ifMatch = remote.etag)) {
                     is PushResult.Pushed -> {
                         store.markPushed(path, push.etag, result.text)
-                        PushOutcome.PUSHED
+                        PushOutcome.MERGED
                     }
                     // It moved again while we were merging; the next cycle will pick it up.
                     else -> PushOutcome.FAILED
                 }
             }
 
-            is MergeResult.Conflicted -> {
-                store.writeConflictCopy(path, remote.text, timestamp())
-                // The base becomes the server's version, so the next cycle sees a plain local edit
-                // rather than reporting the same conflict forever.
-                store.markConflicted(path, remote.etag, remote.text)
-                PushOutcome.CONFLICT
-            }
+            is MergeResult.Conflicted ->
+                if (store.keepServerVersion(path, remote.text, remote.etag, timestamp()) != null) {
+                    PushOutcome.CONFLICT
+                } else {
+                    PushOutcome.SKIPPED
+                }
         }
     }
 
-    private enum class PushOutcome { PUSHED, CONFLICT, FAILED, SKIPPED }
+    private enum class PushOutcome { PUSHED, MERGED, CONFLICT, FAILED, SKIPPED }
 
     private suspend fun pushLocal(path: String, ifMatch: String?): PushOutcome {
         val content = store.read(path) ?: return PushOutcome.SKIPPED
@@ -273,10 +288,11 @@ class SyncEngine(
             }
             is PushResult.Conflict -> {
                 val theirs = api.fetch(path) ?: return PushOutcome.FAILED
-                val same = theirs.text == content
-                if (!same) store.writeConflictCopy(path, content, timestamp())
-                store.acceptFromServer(path, theirs.text, theirs.etag)
-                if (same) PushOutcome.SKIPPED else PushOutcome.CONFLICT
+                if (store.keepServerVersion(path, theirs.text, theirs.etag, timestamp()) != null) {
+                    PushOutcome.CONFLICT
+                } else {
+                    PushOutcome.SKIPPED
+                }
             }
             is PushResult.Failed -> PushOutcome.FAILED
         }

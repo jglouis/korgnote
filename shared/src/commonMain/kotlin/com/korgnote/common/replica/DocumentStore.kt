@@ -57,21 +57,40 @@ class DocumentStore(private val storage: ReplicaStorage) {
      */
     suspend fun save(path: String, content: String) {
         requireSafeReplicaPath(path)
-        mutex.withLock {
-            storage.write(path, content)
-            val meta = storage.readMeta()
-            val existing = meta.files[path]
-            storage.writeMeta(
-                meta.copy(
-                    files = meta.files + (path to (existing ?: FileMeta(path)).copy(
-                        path = path,
-                        size = content.length.toLong(),
-                        dirty = true,
-                    )),
-                ),
-            )
-        }
+        mutex.withLock { saveLocked(path, content) }
         _changes.emit(ReplicaChange.Saved(path))
+    }
+
+    /**
+     * [save], but only while [path] still holds [expected]; false, writing nothing, when it moved.
+     *
+     * For a write computed from what was read a moment ago — a merge, across a network round trip —
+     * which must not land on an edit saved in between.
+     */
+    suspend fun saveIfUnchanged(path: String, expected: String, content: String): Boolean {
+        requireSafeReplicaPath(path)
+        val saved = mutex.withLock {
+            if (storage.read(path) != expected) return@withLock false
+            saveLocked(path, content)
+            true
+        }
+        if (saved) _changes.emit(ReplicaChange.Saved(path))
+        return saved
+    }
+
+    private suspend fun saveLocked(path: String, content: String) {
+        storage.write(path, content)
+        val meta = storage.readMeta()
+        val existing = meta.files[path]
+        storage.writeMeta(
+            meta.copy(
+                files = meta.files + (path to (existing ?: FileMeta(path)).copy(
+                    path = path,
+                    size = content.length.toLong(),
+                    dirty = true,
+                )),
+            ),
+        )
     }
 
     /**
@@ -93,7 +112,7 @@ class DocumentStore(private val storage: ReplicaStorage) {
         val files = if (existing?.etag == null) {
             meta.files - path
         } else {
-            meta.files + (path to existing.copy(deleted = true, dirty = false, conflicted = false, size = 0))
+            meta.files + (path to existing.copy(deleted = true, dirty = false, size = 0))
         }
         storage.writeMeta(meta.copy(files = files))
     }
@@ -113,14 +132,14 @@ class DocumentStore(private val storage: ReplicaStorage) {
         requireSafeReplicaPath(path)
         val created = mutex.withLock {
             if (isTaken(path)) return@withLock false
-            createLocked(path, content, inheriting = null)
+            createLocked(path, content)
             true
         }
         if (created) _changes.emit(ReplicaChange.Saved(path))
         return created
     }
 
-    private suspend fun createLocked(path: String, content: String, inheriting: FileMeta?) {
+    private suspend fun createLocked(path: String, content: String) {
         storage.write(path, content)
         val meta = storage.readMeta()
         val tombstone = meta.files[path]?.takeIf { it.deleted }
@@ -131,7 +150,6 @@ class DocumentStore(private val storage: ReplicaStorage) {
                     size = content.length.toLong(),
                     etag = tombstone?.etag,
                     dirty = true,
-                    conflicted = inheriting?.conflicted == true,
                 )),
             ),
         )
@@ -143,7 +161,7 @@ class DocumentStore(private val storage: ReplicaStorage) {
      *
      * Both happen under one lock, so nothing here ever sees one without the other; the sync engine
      * pushes the new note before it deletes the old one, so another device may briefly see both,
-     * but never neither. Unsynced edits travel with the content, and a conflict flag stays with it.
+     * but never neither. Unsynced edits travel with the content.
      */
     suspend fun rename(from: String, to: String): Boolean {
         requireSafeReplicaPath(to)
@@ -151,8 +169,7 @@ class DocumentStore(private val storage: ReplicaStorage) {
         val renamed = mutex.withLock {
             val content = storage.read(from) ?: return@withLock false
             if (isTaken(to)) return@withLock false
-            val previous = storage.readMeta().files[from]
-            createLocked(to, content, inheriting = previous)
+            createLocked(to, content)
             tombstoneLocked(from)
             true
         }
@@ -189,24 +206,26 @@ class DocumentStore(private val storage: ReplicaStorage) {
         generation: Long = 0,
     ) {
         requireSafeReplicaPath(path)
-        mutex.withLock {
-            storage.write(path, content)
-            storage.writeBase(path, content)
-            val meta = storage.readMeta()
-            storage.writeMeta(
-                meta.copy(
-                    generation = maxOf(meta.generation, generation),
-                    files = meta.files + (path to FileMeta(
-                        path = path,
-                        size = content.length.toLong(),
-                        etag = etag,
-                        dirty = false,
-                        lastSyncedGeneration = generation,
-                    )),
-                ),
-            )
-        }
+        mutex.withLock { acceptLocked(path, content, etag, generation) }
         _changes.emit(ReplicaChange.PulledFromServer(path))
+    }
+
+    private suspend fun acceptLocked(path: String, content: String, etag: String?, generation: Long = 0) {
+        storage.write(path, content)
+        storage.writeBase(path, content)
+        val meta = storage.readMeta()
+        storage.writeMeta(
+            meta.copy(
+                generation = maxOf(meta.generation, generation),
+                files = meta.files + (path to FileMeta(
+                    path = path,
+                    size = content.length.toLong(),
+                    etag = etag,
+                    dirty = false,
+                    lastSyncedGeneration = generation,
+                )),
+            ),
+        )
     }
 
     /**
@@ -263,7 +282,6 @@ class DocumentStore(private val storage: ReplicaStorage) {
                     files = meta.files + (path to existing.copy(
                         etag = etag,
                         dirty = false,
-                        conflicted = false,
                         size = pushedContent.length.toLong(),
                     )),
                 ),
@@ -272,37 +290,64 @@ class DocumentStore(private val storage: ReplicaStorage) {
     }
 
     /**
-     * Saves [content] beside [path] as a conflict copy and returns its name.
+     * Settles a conflict the server's way: [path] becomes [serverText] at [serverEtag], and what was
+     * here is saved beside it as a conflict copy, whose name is returned. Null when there was nothing
+     * here to keep, or it already matched the server.
      *
-     * The copy is dirty, so the next sync pushes it and the other device sees it too — which is the
-     * point: the version that could not be merged is not stranded on one machine.
+     * The server's version keeps the path because the server is the source of truth: a file in the
+     * notes directory is never replaced by a version nobody merged. The copy is a new note, dirty, so
+     * the next sync pushes it and every device sees it until someone resolves it.
+     *
+     * One lock for both, and the local text read under it, so a save made while the server was
+     * being asked lands in the copy rather than being overwritten.
      */
-    suspend fun writeConflictCopy(path: String, content: String, timestamp: String): String {
-        val name = conflictCopyName(path, timestamp)
-        save(name, content)
+    suspend fun keepServerVersion(path: String, serverText: String, serverEtag: String, timestamp: String): String? {
+        requireSafeReplicaPath(path)
+        val copy = mutex.withLock {
+            val local = storage.read(path)
+            val copy = if (local != null && local != serverText) {
+                freeCopyName(path, timestamp).also { createLocked(it, local) }
+            } else {
+                null
+            }
+            acceptLocked(path, serverText, serverEtag)
+            copy
+        }
+        copy?.let { _changes.emit(ReplicaChange.Saved(it)) }
+        _changes.emit(ReplicaChange.PulledFromServer(path))
+        return copy
+    }
+
+    /** A conflict copy name for [path] that nothing here has yet: two conflicts can share a second. */
+    private suspend fun freeCopyName(path: String, timestamp: String): String {
+        var name = conflictCopyName(path, timestamp)
+        var counter = 2
+        while (isTaken(name)) name = conflictCopyName(path, "$timestamp-${counter++}")
         return name
     }
 
     /**
-     * Flags [path] as diverged from the server, keeping the local version untouched.
+     * Resolves a conflict in favour of [copy]: its content becomes [path]'s, as an edit to push, and
+     * the copy is deleted. False, changing nothing, when either is missing.
      *
-     * The server's version, [remoteText] at [remoteEtag], becomes the base: it is now saved beside
-     * the note as a conflict copy, so the local version is an edit of it. Leaving the old base would
-     * make the next merge, should the server move again, re-fight a conflict already recorded.
+     * Under one lock, so the replica never holds the note without the content chosen for it; the
+     * engine pushes the edit before it sends the deletion, so the server never has neither.
      */
-    suspend fun markConflicted(path: String, remoteEtag: String, remoteText: String) {
-        mutex.withLock {
-            storage.writeBase(path, remoteText)
-            val meta = storage.readMeta()
-            val existing = meta.files[path] ?: FileMeta(path)
-            storage.writeMeta(
-                meta.copy(files = meta.files + (path to existing.copy(conflicted = true, etag = remoteEtag))),
-            )
+    suspend fun replaceWithCopy(path: String, copy: String): Boolean {
+        requireSafeReplicaPath(path)
+        val replaced = mutex.withLock {
+            val content = storage.read(copy) ?: return@withLock false
+            if (storage.read(path) == null) return@withLock false
+            saveLocked(path, content)
+            tombstoneLocked(copy)
+            true
         }
+        if (replaced) {
+            _changes.emit(ReplicaChange.Saved(path))
+            _changes.emit(ReplicaChange.Deleted(copy))
+        }
+        return replaced
     }
-
-    suspend fun conflictedPaths(): List<String> =
-        storage.readMeta().files.values.filter { it.conflicted }.map { it.path }.sorted()
 
     /** Remembers how far the replica has caught up, so the next sync can ask for a delta. */
     suspend fun setGeneration(generation: Long) {
