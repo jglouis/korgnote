@@ -1,5 +1,7 @@
 package com.korgnote.app.viewmodel
 
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
@@ -64,6 +66,19 @@ class ElementEditingTest {
         assertEquals(initialText + "* TODO Buy milk\n", viewModel.note.content)
         assertEquals(viewModel.note.content, repository.saves.last().second)
         assertNull(viewModel.editor.editingIndex)
+    }
+
+    @Test
+    fun enterAtTheEndOfAListItemStartsTheNext() = runTest {
+        openFile()
+        viewModel.editor.addAtEnd()
+        val typed = "* Shopping\n- milk"
+        viewModel.editor.onDraftChanged(TextFieldValue(typed, TextRange(typed.length)))
+
+        viewModel.editor.onDraftChanged(TextFieldValue("$typed\n", TextRange(typed.length + 1)))
+
+        assertEquals("* Shopping\n- milk\n- ", viewModel.editor.draft)
+        assertEquals(viewModel.editor.draft.length, viewModel.editor.draftCaret)
     }
 
     @Test

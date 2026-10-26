@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import com.korgnote.common.org.edit.continueList
 import com.korgnote.common.org.nextSibling
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.previousSibling
@@ -120,8 +121,16 @@ class ElementEditor(
     }
 
     fun onDraftChanged(value: TextFieldValue) {
-        draftValue = value
+        draftValue = continuedList(draftValue, value) ?: value
         draftMoved()
+    }
+
+    /** [value] with the next list item started, when it is Enter typed at the end of one. */
+    private fun continuedList(previous: TextFieldValue, value: TextFieldValue): TextFieldValue? {
+        if (!previous.selection.collapsed || !value.selection.collapsed) return null
+        if (value.selection.start != previous.selection.start + 1) return null
+        val result = continueList(previous.text, previous.selection.start, value.text) ?: return null
+        return TextFieldValue(result.text, TextRange(result.caret))
     }
 
     /** Convenience for callers that have no caret of their own to report; it goes to the end. */
