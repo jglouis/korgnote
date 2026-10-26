@@ -40,6 +40,10 @@ data class CompletionContext(
     val noteTitles: Map<String, String> = emptyMap(),
     /** Headings of the document being edited, for `[[*Heading]]`. */
     val headings: List<String> = emptyList(),
+    /** `:LOCATION:` values used across the corpus, most-used first, for writing the same place again. */
+    val knownLocations: List<String> = emptyList(),
+    /** Who writes these notes, for `#+AUTHOR:`; blank when Settings does not say. */
+    val author: String = "",
     val today: LocalDate,
 )
 
@@ -131,6 +135,8 @@ fun complete(doc: OrgDocument, cursor: Int, ctx: CompletionContext): List<Comple
 
     return linkItems(prefix, lineStart, cursor, ctx)
         ?: templateItems(prefix, lineStart, cursor)
+        ?: keywordValueItems(prefix, lineStart, cursor, ctx)
+        ?: locationItems(prefix, lineStart, cursor, ctx)
         ?: planningStampItems(line, lineStart, cursor, ctx)
         ?: timestampItems(prefix, cursor, ctx)
         ?: dateItems(prefix, cursor, ctx)
@@ -198,6 +204,62 @@ private fun templateItems(prefix: String, lineStart: Int, cursor: Int): List<Com
             caretOffset = "#+BEGIN_$block\n".length,
         )
     )
+}
+
+/**
+ * The value of a file keyword, once its name is written: the corpus's tags after `#+FILETAGS:`, the
+ * author after `#+AUTHOR:`, today after `#+DATE:` — inactive, as org-roam dates a note.
+ */
+private fun keywordValueItems(prefix: String, lineStart: Int, cursor: Int, ctx: CompletionContext): List<CompletionItem>? {
+    val match = KEYWORD_VALUE.matchEntire(prefix) ?: return null
+    val keyword = match.groupValues[1].uppercase()
+    val value = match.groupValues[2]
+    val valueStart = lineStart + match.groups[2]!!.range.first
+    return when (keyword) {
+        "FILETAGS" -> {
+            // The tag being typed is what follows the last colon or space; the ones before it are done.
+            val typed = value.takeLastWhile { it != ':' && it != ' ' }
+            val before = value.dropLast(typed.length)
+            val written = before.split(':', ' ').filter { it.isNotEmpty() }.toSet()
+            // `:a:b:` is how the notes write them; after a colon, it is already there.
+            val opener = if (before.endsWith(':')) "" else ":"
+            ctx.knownTags
+                .filter { it !in written && it.startsWith(typed, ignoreCase = true) && it != typed }
+                .map { tag ->
+                    CompletionItem(
+                        label = tag,
+                        insert = "$opener$tag:",
+                        replace = (cursor - typed.length) until cursor,
+                        kind = CompletionItem.Kind.TAG,
+                    )
+                }
+        }
+        "AUTHOR" -> listOfNotNull(
+            ctx.author.trim().takeIf { it.isNotEmpty() && it != value.trim() && it.startsWith(value.trim(), ignoreCase = true) }?.let {
+                CompletionItem(label = it, insert = it, replace = valueStart until cursor, kind = CompletionItem.Kind.KEYWORD)
+            },
+        )
+        "DATE" -> if (value.isBlank()) {
+            val stamp = ctx.today.orgStamp(active = false)
+            listOf(CompletionItem(label = stamp, insert = stamp, replace = valueStart until cursor, kind = CompletionItem.Kind.TIMESTAMP))
+        } else {
+            null
+        }
+        else -> null
+    }
+}
+
+/** After `:LOCATION:` in a property drawer, the places the notes already name, most named first. */
+private fun locationItems(prefix: String, lineStart: Int, cursor: Int, ctx: CompletionContext): List<CompletionItem>? {
+    val match = LOCATION_VALUE.matchEntire(prefix) ?: return null
+    val typed = match.groupValues[1]
+    val valueStart = lineStart + match.groups[1]!!.range.first
+    return ctx.knownLocations
+        .filter { it.contains(typed.trim(), ignoreCase = true) && it != typed }
+        .take(MAX_LOCATIONS)
+        .map { location ->
+            CompletionItem(label = location, insert = location, replace = valueStart until cursor, kind = CompletionItem.Kind.KEYWORD)
+        }
 }
 
 /** A bare `<` or `[` asks for today's date: active in angle brackets, inactive in square ones. */
@@ -483,6 +545,11 @@ private val STAMP_REPEATER_OR_DELAY = Regex("(\\+\\+|\\.\\+|\\+|--|-)\\d+[hdwmy]
 private val TAG_PREFIX = Regex(":([\\p{L}\\p{N}_@#%]*)$")
 private val HEADING_FIRST_WORD = Regex("^(\\*+)\\s+(\\S*)$")
 private val KEYWORD_PREFIX = Regex("^#\\+([A-Za-z_]*)$")
+private val KEYWORD_VALUE = Regex("^#\\+(FILETAGS|AUTHOR|DATE):[ \\t]*(.*)$", RegexOption.IGNORE_CASE)
+private val LOCATION_VALUE = Regex("^[ \\t]*:LOCATION:[ \\t]*(.*)$", RegexOption.IGNORE_CASE)
+
+/** As many places as a strip can show and someone can read through. */
+private const val MAX_LOCATIONS = 12
 
 private const val DATE_PICKER_LABEL = "Pick date & time…"
 

@@ -40,8 +40,20 @@ class CompletionContextTest {
 
     private val homeText = """
         #+TITLE: Home
+        #+filetags: :family:
 
         * Repairs                                    :house:
+        :PROPERTIES:
+        :LOCATION: Rue Haute 1
+        :END:
+        * Plumber
+        :PROPERTIES:
+        :LOCATION: Rue Haute 1
+        :END:
+        * Party
+        :PROPERTIES:
+        :LOCATION: Flagey
+        :END:
     """.trimIndent() + "\n"
 
     private lateinit var viewModel: NotesViewModel
@@ -114,5 +126,14 @@ class CompletionContextTest {
         viewModel.server.load()
 
         assertEquals(LocalDate(2026, 9, 23), viewModel.completion.context.today)
+    }
+
+    @Test
+    fun placesAndFileTagsComeFromTheWholeReplica() = runTest {
+        viewModel.server.load()
+        viewModel.onFileSelected(work)
+
+        assertEquals(listOf("Rue Haute 1", "Flagey"), viewModel.completion.context.knownLocations, "most named first")
+        assertTrue("family" in viewModel.completion.context.knownTags, "a file tag is a tag too")
     }
 }

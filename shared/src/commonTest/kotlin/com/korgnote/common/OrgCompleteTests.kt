@@ -371,4 +371,39 @@ class OrgCompleteTests {
         assertTrue(complete(doc, -1, ctx).isEmpty())
         assertTrue(complete(doc, 9_999, ctx).isEmpty())
     }
+
+    // --- File keyword values and locations -----------------------------------------------------
+
+    @Test
+    fun afterFiletagsTheCorpusTagsAreOfferedInOrgsColons() {
+        val items = completeAt("#+FILETAGS: ‸")
+        assertEquals(listOf("work", "home", "wishlist"), items.map { it.label })
+        assertEquals("#+FILETAGS: :work:‸", apply("#+FILETAGS: ‸", items.first()))
+
+        val next = completeAt("#+filetags: :work:w‸")
+        assertEquals(listOf("wishlist"), next.map { it.label }, "narrowed, and without the tag already there")
+        assertEquals("#+filetags: :work:wishlist:‸", apply("#+filetags: :work:w‸", next.single()))
+    }
+
+    @Test
+    fun afterAuthorTheAuthorFromSettingsIsOffered() {
+        val context = ctx.copy(author = "Jean-Guillaume Louis")
+        assertEquals("#+AUTHOR: Jean-Guillaume Louis‸", apply("#+AUTHOR: J‸", completeAt("#+AUTHOR: J‸", context).single()))
+        assertTrue(completeAt("#+AUTHOR: ‸").isEmpty(), "nobody to offer")
+    }
+
+    @Test
+    fun afterDateTodayIsOfferedInactive() {
+        assertEquals("#+DATE: [2026-09-23 Wed]‸", apply("#+DATE: ‸", completeAt("#+DATE: ‸").single()))
+    }
+
+    @Test
+    fun afterLocationThePlacesTheNotesNameAreOffered() {
+        val context = ctx.copy(knownLocations = listOf("Ecam, Brussels", "Home", "Flagey, Ixelles"))
+        val fixture = "* Lunch\n:PROPERTIES:\n:LOCATION: ixel‸\n:END:\n"
+        val items = completeAt(fixture, context)
+        assertEquals(listOf("Flagey, Ixelles"), items.map { it.label })
+        assertEquals("* Lunch\n:PROPERTIES:\n:LOCATION: Flagey, Ixelles‸\n:END:\n", apply(fixture, items.single()))
+        assertEquals(3, completeAt(":LOCATION: ‸", context).size, "all of them before anything is typed")
+    }
 }

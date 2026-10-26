@@ -137,6 +137,7 @@ class NotesViewModel(
         today,
         draft = { editor.activeDraft },
         replaceDraft = { editor.replaceDraft(it) },
+        author = { noteTemplate().author },
     )
 
     val search: NoteSearch = NoteSearch(viewModelScope, library, open = ::open)

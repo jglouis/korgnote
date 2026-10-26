@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import com.korgnote.common.org.OrgDocument
+import com.korgnote.common.org.OrgDrawer
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.agenda.OrgTimestamp
@@ -37,6 +38,8 @@ class CompletionController(
     /** The draft being edited, or null when no element is. */
     private val draft: () -> TextFieldValue?,
     private val replaceDraft: (TextFieldValue) -> Unit,
+    /** Who writes these notes, from Settings, for `#+AUTHOR:`. */
+    private val author: () -> String = { "" },
 ) {
     /**
      * What the editor's completion draws on.
@@ -173,6 +176,8 @@ class CompletionController(
             noteIds = links.noteIds,
             noteTitles = links.noteTitles,
             headings = document?.sectionTitles().orEmpty(),
+            knownLocations = locationsByUse(),
+            author = author(),
             today = today(),
         )
     }
@@ -184,6 +189,23 @@ class CompletionController(
             for (tag in fileTagsOf(document.text)) counts[tag] = (counts[tag] ?: 0) + 1
             for (section in document.allNodes().filterIsInstance<OrgSection>()) {
                 for (tag in section.tags) counts[tag] = (counts[tag] ?: 0) + 1
+            }
+        }
+        return counts.entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+            .map { it.key }
+    }
+
+    /** Every `:LOCATION:` the notes name, most-named first, as [tagsByUse] orders tags. */
+    private fun locationsByUse(): List<String> {
+        val counts = mutableMapOf<String, Int>()
+        for (document in library.documents.values) {
+            if (!document.text.contains(":LOCATION:", ignoreCase = true)) continue
+            for (drawer in document.allNodes().filterIsInstance<OrgDrawer>()) {
+                for ((key, value) in drawer.properties) {
+                    if (key.equals("LOCATION", ignoreCase = true) && value.isNotBlank()) {
+                        counts[value] = (counts[value] ?: 0) + 1
+                    }
+                }
             }
         }
         return counts.entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
