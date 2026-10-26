@@ -3,6 +3,7 @@ package com.korgnote.app.viewmodel
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import com.korgnote.common.org.complete.CompletionItem
+import com.korgnote.common.org.edit.DraftInsert
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
@@ -221,5 +222,37 @@ class CompletionEditingTest {
 
         assertTrue(viewModel.completion.suggestions.isEmpty())
         assertNull(viewModel.editor.editingIndex)
+    }
+
+    @Test
+    fun theTagButtonBeginsATagAndTheSuggestionsFinishIt() = runTest {
+        openAndEdit("* Call the plumber\nBody", caret = 0)
+
+        viewModel.completion.insert(DraftInsert.TAG)
+
+        assertEquals("* Call the plumber :\nBody", viewModel.editor.draft)
+        assertEquals(listOf(":work:", ":home:", ":garden:").sorted(), viewModel.completion.suggestions.map { it.label }.sorted())
+        viewModel.completion.accept(viewModel.completion.suggestions.first { it.label == ":home:" })
+        assertEquals("* Call the plumber :home:\nBody", viewModel.editor.draft)
+    }
+
+    @Test
+    fun theDateButtonWritesThePickedDateAtTheCaret() = runTest {
+        openAndEdit("* Call\nOn  then", caret = "* Call\nOn ".length)
+
+        viewModel.completion.pickDate()
+        viewModel.completion.onDatePicked(LocalDate(2026, 9, 25), LocalTime(9, 30))
+
+        assertEquals("* Call\nOn <2026-09-25 Fri 09:30> then", viewModel.editor.draft)
+    }
+
+    @Test
+    fun theHeadingsButtonsAreOfferedOnlyOnAHeading() = runTest {
+        openAndEdit("* Call\n")
+        assertEquals(DraftInsert.entries, viewModel.completion.inserts)
+
+        viewModel.editor.cancel()
+        viewModel.editor.beginEdit(0)
+        assertEquals(listOf(DraftInsert.LINK, DraftInsert.CHECKBOX), viewModel.completion.inserts)
     }
 }

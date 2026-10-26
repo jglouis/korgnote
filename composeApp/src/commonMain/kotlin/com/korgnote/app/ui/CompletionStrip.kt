@@ -8,6 +8,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.EditCalendar
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -32,9 +41,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.complete.CompletionItem
+import com.korgnote.common.org.edit.DraftInsert
 import com.korgnote.common.org.complete.shiftedEnd
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -62,6 +73,9 @@ enum class CompletionKey { ACCEPT, DISMISS, NEXT, PREVIOUS }
  * working. The keyboard path (Tab to accept, arrows to move, Esc to dismiss) is handled by the
  * field itself, so a desktop user never has to reach for the chips.
  *
+ * With nothing to suggest, the strip holds [inserts] instead: buttons that begin a link, a tag, a
+ * date, a place or a checkbox, so that none of their syntax has to be remembered or typed.
+ *
  * [actions] — discarding and saving the element — sit at the end of the strip for the same reason.
  * As floating buttons they were drawn over the document, and the last element of a file, having
  * nothing below it to scroll up with, stayed under them while it was being edited.
@@ -72,6 +86,10 @@ fun CompletionStrip(
     selectedIndex: Int,
     onAccept: (CompletionItem) -> Unit,
     modifier: Modifier = Modifier,
+    inserts: List<DraftInsert> = emptyList(),
+    onInsert: (DraftInsert) -> Unit = {},
+    /** The date button, which asks a picker before it has anything to insert. */
+    onPickDate: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val listState = rememberLazyListState()
@@ -82,8 +100,7 @@ fun CompletionStrip(
 
     // The bar keeps its place for the whole edit, empty or not. Suggestions come and go with almost
     // every keystroke, and a bar that came and went with them would reflow the document under the
-    // caret each time — trading one distraction for a worse one. Empty, it says what completion
-    // responds to, which is otherwise not discoverable anywhere.
+    // caret each time — trading one distraction for a worse one. Empty, it offers the inserts.
     Surface(
         modifier = modifier.fillMaxWidth().heightIn(min = 48.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
@@ -93,14 +110,18 @@ fun CompletionStrip(
             // The chips scroll in what the actions leave, so the actions never scroll away.
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 if (items.isEmpty()) {
-                    Text(
-                        text = "Type * for keywords, : for tags, [[ for a link, < for a date",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.outline,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                    )
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                    ) {
+                        for (what in inserts) {
+                            item { InsertChip(what.label(), what.icon()) { onInsert(what) } }
+                            // A date anywhere comes next to the link, before the heading's own things.
+                            if (what == DraftInsert.LINK && onPickDate != null) {
+                                item { InsertChip("Date", Icons.Filled.Event, onPickDate) }
+                            }
+                        }
+                    }
                 } else {
                     LazyRow(
                         state = listState,
@@ -128,6 +149,31 @@ fun CompletionStrip(
             actions()
         }
     }
+}
+
+@Composable
+private fun InsertChip(label: String, icon: ImageVector, onClick: () -> Unit) {
+    AssistChip(
+        onClick = onClick,
+        label = { Text(label, style = MaterialTheme.typography.labelLarge) },
+        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(AssistChipDefaults.IconSize)) },
+    )
+}
+
+private fun DraftInsert.label(): String = when (this) {
+    DraftInsert.LINK -> "Link"
+    DraftInsert.TAG -> "Tag"
+    DraftInsert.SCHEDULE -> "Schedule"
+    DraftInsert.LOCATION -> "Place"
+    DraftInsert.CHECKBOX -> "Checkbox"
+}
+
+private fun DraftInsert.icon(): ImageVector = when (this) {
+    DraftInsert.LINK -> Icons.Filled.Link
+    DraftInsert.TAG -> Icons.Filled.Sell
+    DraftInsert.SCHEDULE -> Icons.Filled.EditCalendar
+    DraftInsert.LOCATION -> Icons.Filled.Place
+    DraftInsert.CHECKBOX -> Icons.Filled.CheckBox
 }
 
 /**

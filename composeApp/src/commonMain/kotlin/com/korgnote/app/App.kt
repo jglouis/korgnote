@@ -419,6 +419,9 @@ fun App() {
                                     items = vm.completion.suggestions,
                                     selectedIndex = vm.completion.selectedIndex,
                                     onAccept = { vm.completion.accept(it) },
+                                    inserts = vm.completion.inserts,
+                                    onInsert = { vm.completion.insert(it) },
+                                    onPickDate = { vm.completion.pickDate() },
                                 ) {
                                     // Saving an element is explicit: edits stay local until this is pressed.
                                     IconButton(onClick = { vm.editor.cancel() }) {

@@ -17,7 +17,10 @@ import com.korgnote.common.org.complete.CompletionResult
 import com.korgnote.common.org.complete.applyTo
 import com.korgnote.common.org.complete.complete
 import com.korgnote.common.org.complete.restamp
+import com.korgnote.common.org.edit.DraftInsert
 import com.korgnote.common.org.edit.allNodes
+import com.korgnote.common.org.edit.fitsIn
+import com.korgnote.common.org.edit.insertInto
 import com.korgnote.common.org.search.fileTagsOf
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.org.todoKeywordsOf
@@ -152,6 +155,27 @@ class CompletionController(
     /** The text [item] stands in for, or null when the draft no longer reaches that far. */
     private fun String.replacedBy(item: CompletionItem): String? =
         if (item.replace.last < length) substring(item.replace) else null
+
+    /** The insert buttons that have somewhere to go in the draft: the heading's own need a heading. */
+    val inserts: List<DraftInsert>
+        get() = draft()?.text?.let { text -> DraftInsert.entries.filter { it.fitsIn(text) } }.orEmpty()
+
+    /** An insert button: [what] begun in the draft, with the caret where its suggestions start. */
+    fun insert(what: DraftInsert) {
+        val value = draft() ?: return
+        insertInto(value.text, value.selection.start, what)?.let(::apply)
+    }
+
+    /** The date button: the picker, writing its date at the caret. */
+    fun pickDate() {
+        val at = draft()?.selection?.start ?: return
+        pendingDatePicker = CompletionItem(
+            label = "Date",
+            insert = "",
+            replace = at until at,
+            kind = CompletionItem.Kind.DATE_PICKER,
+        )
+    }
 
     fun dismissDatePicker() {
         pendingDatePicker = null
