@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -22,11 +23,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -306,6 +310,18 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: (
                     node.tags.forEach { tag -> OrgTagChip(tag) }
                 }
             }
+            // Where it happens, a tap away, without opening the property drawer to find the link.
+            node.location()?.let { location ->
+                val uriHandler = LocalUriHandler.current
+                IconButton(onClick = { uriHandler.openUri(googleMapsUrl(location)) }, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Filled.Place,
+                        contentDescription = "Show $location on a map",
+                        tint = OrgColors.link,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
         }
         if (onSetTodo != null) {
             TodoKeywordMenu(
@@ -321,6 +337,15 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: (
         }
     }
 }
+
+/** The heading's own `:LOCATION:` property, or null when it has none. */
+internal fun OrgSection.location(): String? =
+    children.asSequence()
+        .filterIsInstance<OrgDrawer>()
+        .filter { it.name.equals("PROPERTIES", ignoreCase = true) }
+        .flatMap { it.properties }
+        .firstOrNull { (key, _) -> key.equals("LOCATION", ignoreCase = true) }
+        ?.second?.trim()?.takeIf { it.isNotEmpty() }
 
 /**
  * The keywords a heading can move to, in the order the file declares them: the not-done ones, then
