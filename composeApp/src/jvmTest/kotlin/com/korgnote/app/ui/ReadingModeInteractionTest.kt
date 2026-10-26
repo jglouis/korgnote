@@ -261,4 +261,38 @@ class ReadingModeInteractionTest {
 
         assertEquals(listOf(backlink), opened)
     }
+
+    /** Beside the note's own keywords, and only there: it is not a heading's button. */
+    @Test
+    fun theDetailsButtonSitsBesideTheNotesKeywordsAndOpensTheForm() = runComposeUiTest {
+        val noteText = "#+TITLE: Plans\n#+filetags: :work:\n\n* First\nBody.\n* Second\n"
+        val edited = mutableListOf<Int>()
+        var opened = 0
+        setContent { OrgDocumentView(text = noteText, onEditElement = { edited += it }, onEditDetails = { opened++ }) }
+
+        onAllNodesWithContentDescription("Note details").assertCountEquals(1)
+        onNodeWithContentDescription("Note details").performClick()
+
+        assertEquals(1, opened)
+        assertTrue(edited.isEmpty(), "the button's tap is its own")
+    }
+
+    /** A note opening on a heading still has a way to give itself a title. */
+    @Test
+    fun aNoteWithNoKeywordsStillHasTheDetailsButton() = runComposeUiTest {
+        var opened = 0
+        setContent { OrgDocumentView(text = text, onEditDetails = { opened++ }) }
+
+        onAllNodesWithContentDescription("Note details").assertCountEquals(1)
+        onNodeWithContentDescription("Note details").performClick()
+
+        assertEquals(1, opened)
+    }
+
+    @Test
+    fun theDetailsButtonStepsAsideWhileAnElementIsEdited() = runComposeUiTest {
+        setContent { OrgDocumentView(text = "#+TITLE: Plans\n* First\n", editingElementIndex = 1, onEditDetails = {}) }
+
+        onAllNodesWithContentDescription("Note details").assertCountEquals(0)
+    }
 }

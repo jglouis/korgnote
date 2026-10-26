@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -101,6 +102,11 @@ fun OrgDocumentView(
     onFirstVisibleElement: (Int) -> Unit = {},
     /** Hoisted so the screen's floating buttons can see, and move, where the reader is. */
     listState: LazyListState = rememberLazyListState(),
+    /**
+     * The note's title, author, date and tags as a form: a button beside the lines that say them,
+     * above the first heading — or on its own over that heading, in a note that has none yet.
+     */
+    onEditDetails: (() -> Unit)? = null,
 ) {
     val elements = remember(text) { text.orgElements() }
     // An element is hidden when it lies inside a folded heading's subtree. The folded heading itself
@@ -128,12 +134,22 @@ fun OrgDocumentView(
         itemsIndexed(elements, key = { index, _ -> index }) { index, element ->
             if (hidden[index]) return@itemsIndexed
             val slice = remember(text, element) { element.sliceOf(text) }
-            if (element.isPreamble && slice.isBlank()) return@itemsIndexed
+            // Not while an element is being edited: the form rewrites the top of the note.
+            val editDetails = onEditDetails?.takeIf { index == 0 && editingElementIndex == null }
+            if (element.isPreamble && slice.isBlank()) {
+                if (editDetails != null) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { NoteDetailsButton(editDetails) }
+                }
+                return@itemsIndexed
+            }
 
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.Start,
             ) {
+                if (editDetails != null && !element.isPreamble) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { NoteDetailsButton(editDetails) }
+                }
                 if (index == editingElementIndex) {
                     OrgElementEditor(
                         elementKey = index,
@@ -199,6 +215,7 @@ fun OrgDocumentView(
                                 onDemote = onShiftSection?.let { shift -> { shift(index, 1) } },
                             )
                         }
+                        if (editDetails != null && element.isPreamble) NoteDetailsButton(editDetails)
                         if (foldable && onToggleFold != null) {
                             val action = if (folded) "Expand" else "Collapse"
                             IconButton(
@@ -272,6 +289,13 @@ fun OrgDocumentView(
         ) {
             listState.scrollToItem(index)
         }
+    }
+}
+
+@Composable
+private fun NoteDetailsButton(onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
+        Icon(Icons.Filled.EditNote, contentDescription = "Note details", tint = MaterialTheme.colorScheme.outline)
     }
 }
 

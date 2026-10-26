@@ -82,7 +82,7 @@ fun App() {
         var noteDialogError by remember { mutableStateOf<String?>(null) }
         // The conflict copy being compared with its note.
         var comparingCopy by remember { mutableStateOf<String?>(null) }
-        // Opens or starts today's daily, from the drawer or the top bar.
+        // Opens or starts today's daily, from the drawer.
         val openToday = {
             scope.launch {
                 vm.openToday()
@@ -372,18 +372,6 @@ fun App() {
                                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                                         }
                                     }
-                                    // Title, author, date and tags, as a form rather than #+ lines.
-                                    if (vm.note.path != null && vm.editor.editingIndex == null) {
-                                        IconButton(onClick = { editingDetails = true }) {
-                                            Icon(Icons.Filled.EditNote, contentDescription = "Note details")
-                                        }
-                                    }
-                                    // Today's daily, one tap from any note; not while already on it.
-                                    if (vm.note.path != vm.todaysDailyPath()) {
-                                        IconButton(onClick = { openToday() }) {
-                                            Icon(Icons.Filled.Today, contentDescription = "Today's daily")
-                                        }
-                                    }
                                     statusIcons()
                                 }
                             )
@@ -579,6 +567,11 @@ fun App() {
                                             onOpenBacklink = { vm.links.openBacklink(it) },
                                             onFirstVisibleElement = { vm.links.onReadingPositionChanged(it) },
                                             listState = documentListState,
+                                            onEditDetails = if (vm.note.path != null) {
+                                                { editingDetails = true }
+                                            } else {
+                                                null
+                                            },
                                         )
                                     }
                                 }
