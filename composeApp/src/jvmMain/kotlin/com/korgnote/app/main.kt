@@ -23,7 +23,7 @@ fun main() {
     application {
         Window(
             onCloseRequest = ::exitApplication,
-            title = "korgnote",
+            title = "KorgNote",
         ) {
             App()
         }
