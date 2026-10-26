@@ -8,6 +8,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.v2.runComposeUiTest
+import com.korgnote.common.org.edit.FileKeywords
+import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -107,6 +109,29 @@ class NoteLifecycleUiTest {
         onNodeWithText("Create").performClick()
 
         assertEquals(listOf("Idea" to listOf("home", "ecam")), created)
+    }
+
+    @Test
+    fun theDetailsDialogEditsWhatTheNoteSaysAboutItself() = runComposeUiTest {
+        var saved: FileKeywords? = null
+        setContent {
+            NoteDetailsDialog(
+                initial = FileKeywords(title = "Agenda", date = "[2024-03-22 Fri]", tags = listOf("work")),
+                knownTags = listOf("work", "ecam"),
+                defaultAuthor = "Jean-Guillaume Louis",
+                today = LocalDate(2026, 10, 26),
+                onSave = { saved = it },
+                onDismiss = {},
+            )
+        }
+        onNodeWithText("Me").performClick()
+        onNodeWithText("ecam").performClick()
+        onNodeWithText("Save").performClick()
+
+        assertEquals(
+            FileKeywords("Agenda", "Jean-Guillaume Louis", "[2024-03-22 Fri]", listOf("work", "ecam")),
+            saved,
+        )
     }
 
     @Test

@@ -7,7 +7,13 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -25,17 +31,18 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.fs.NotePaths
+import com.korgnote.common.org.agenda.parseOrgTimestamp
+import com.korgnote.common.org.complete.orgStamp
+import com.korgnote.common.org.complete.restamp
+import com.korgnote.common.org.edit.FileKeywords
 import com.korgnote.common.org.template.parseTypedTags
+import kotlinx.datetime.LocalDate
 
 /**
  * Asks for a title and shows the file it will make, so the name on disk is never a surprise.
- * [pathFor] is the view model's own rule, so what is shown is what is created.
- *
- * Tags go into the note's `#+filetags:`. The ones the notes already use are offered as chips for
- * the word being typed — or, before anything is typed, the most used — so a tag is picked rather
- * than spelt again a little differently.
+ * [pathFor] is the view model's own rule, so what is shown is what is created. Tags go into the
+ * note's `#+filetags:`, see [TagsField].
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NewNoteDialog(
     pathFor: (title: String) -> String?,
@@ -52,15 +59,6 @@ fun NewNoteDialog(
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
 
-    val typedTags = parseTypedTags(tagsText.text)
-    // The word the caret is on is still being typed: it narrows the suggestions, and is not yet
-    // one of the tags already chosen.
-    val partial = tagsText.text.takeLastWhile { it !in " ,:\t" }
-    val chosen = if (partial.isEmpty()) typedTags else typedTags.dropLast(1)
-    val suggestions = knownTags
-        .filter { it !in chosen && it.startsWith(partial, ignoreCase = true) && !it.equals(partial, ignoreCase = true) }
-        .take(8)
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("New note") },
@@ -74,26 +72,7 @@ fun NewNoteDialog(
                     modifier = Modifier.focusRequester(focus),
                 )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = tagsText,
-                    onValueChange = { tagsText = it },
-                    label = { Text("Tags") },
-                    placeholder = { Text("work ecam") },
-                    singleLine = true,
-                )
-                if (suggestions.isNotEmpty()) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.padding(top = 4.dp),
-                    ) {
-                        suggestions.forEach { tag ->
-                            TagSuggestionChip(tag) {
-                                val text = (chosen + tag).joinToString(" ") + " "
-                                tagsText = TextFieldValue(text, TextRange(text.length))
-                            }
-                        }
-                    }
-                }
+                TagsField(tagsText, knownTags) { tagsText = it }
                 Spacer(Modifier.height(8.dp))
                 Text(
                     path ?: "Type a title",
@@ -104,7 +83,127 @@ fun NewNoteDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = path != null, onClick = { onCreate(title, typedTags) }) { Text("Create") }
+            TextButton(enabled = path != null, onClick = { onCreate(title, parseTypedTags(tagsText.text)) }) { Text("Create") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/**
+ * Tags typed in one field, separated by spaces. The ones the notes already use are offered as chips
+ * for the word being typed — or, before anything is typed, the most used — so a tag is picked rather
+ * than spelt again a little differently.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun TagsField(value: TextFieldValue, knownTags: List<String>, onValueChange: (TextFieldValue) -> Unit) {
+    val typedTags = parseTypedTags(value.text)
+    // The word the caret is on is still being typed: it narrows the suggestions, and is not yet
+    // one of the tags already chosen.
+    val partial = value.text.takeLastWhile { it !in " ,:\t" }
+    val chosen = if (partial.isEmpty()) typedTags else typedTags.dropLast(1)
+    val suggestions = knownTags
+        .filter { it !in chosen && it.startsWith(partial, ignoreCase = true) && !it.equals(partial, ignoreCase = true) }
+        .take(8)
+
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text("Tags") },
+        placeholder = { Text("work ecam") },
+        singleLine = true,
+    )
+    if (suggestions.isNotEmpty()) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(top = 4.dp),
+        ) {
+            suggestions.forEach { tag ->
+                TagSuggestionChip(tag) {
+                    val text = (chosen + tag).joinToString(" ") + " "
+                    onValueChange(TextFieldValue(text, TextRange(text.length)))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The open note's title, author, date and tags, as a form: what its `#+` lines say, without having
+ * to edit them as text. [initial] is what the note says now; the date has a picker, and the author
+ * can be filled in from Settings with a tap.
+ */
+@Composable
+fun NoteDetailsDialog(
+    initial: FileKeywords,
+    knownTags: List<String>,
+    /** The author Settings names, offered when the note has none. */
+    defaultAuthor: String,
+    today: LocalDate,
+    onSave: (FileKeywords) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var title by remember { mutableStateOf(initial.title) }
+    var author by remember { mutableStateOf(initial.author) }
+    var date by remember { mutableStateOf(initial.date) }
+    var tagsText by remember {
+        val text = initial.tags.joinToString(" ").let { if (it.isEmpty()) it else "$it " }
+        mutableStateOf(TextFieldValue(text, TextRange(text.length)))
+    }
+    var pickingDate by remember { mutableStateOf(false) }
+
+    if (pickingDate) {
+        val stamp = parseOrgTimestamp(date)
+        OrgDatePickerDialog(
+            initialDate = stamp?.start ?: today,
+            initialTime = stamp?.startTime,
+            initialEndTime = stamp?.endTime,
+            onPick = { picked, time, end ->
+                // Inactive, as org-roam dates a note, unless the note had it otherwise.
+                date = restamp(date.ifBlank { picked.orgStamp(active = false) }, picked, time, end)
+                pickingDate = false
+            },
+            onDismiss = { pickingDate = false },
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Note details") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") }, singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = author,
+                    onValueChange = { author = it },
+                    label = { Text("Author") },
+                    singleLine = true,
+                    trailingIcon = if (author.isBlank() && defaultAuthor.isNotBlank()) {
+                        { TextButton(onClick = { author = defaultAuthor }) { Text("Me") } }
+                    } else null,
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = date,
+                    onValueChange = { date = it },
+                    label = { Text("Date") },
+                    singleLine = true,
+                    trailingIcon = {
+                        IconButton(onClick = { pickingDate = true }) {
+                            Icon(Icons.Filled.Event, contentDescription = "Pick the date")
+                        }
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                TagsField(tagsText, knownTags) { tagsText = it }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onSave(FileKeywords(title, author, date, parseTypedTags(tagsText.text)))
+            }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

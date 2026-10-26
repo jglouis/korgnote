@@ -71,6 +71,7 @@ fun App() {
         }
         // At most one of these is open; each names the note it is about.
         var creatingNote by remember { mutableStateOf(false) }
+        var editingDetails by remember { mutableStateOf(false) }
         var renamingNote by remember { mutableStateOf<String?>(null) }
         var deletingNote by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
         // The day a tapped SCHEDULED or DEADLINE date opens the calendar on; null for the calendar's
@@ -129,6 +130,19 @@ fun App() {
                         }
                     }
                 },
+            )
+        }
+        if (editingDetails) {
+            NoteDetailsDialog(
+                initial = remember { vm.openNoteKeywords() },
+                knownTags = vm.completion.context.knownTags,
+                defaultAuthor = remember { settingsRepo.getNoteTemplate().author },
+                today = vm.completion.context.today,
+                onSave = { keywords ->
+                    editingDetails = false
+                    scope.launch { vm.setOpenNoteKeywords(keywords) }
+                },
+                onDismiss = { editingDetails = false },
             )
         }
         renamingNote?.let { path ->
@@ -352,6 +366,12 @@ fun App() {
                                     if (vm.links.canGoBack) {
                                         IconButton(onClick = { vm.links.goBack() }) {
                                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                                        }
+                                    }
+                                    // Title, author, date and tags, as a form rather than #+ lines.
+                                    if (vm.note.path != null && vm.editor.editingIndex == null) {
+                                        IconButton(onClick = { editingDetails = true }) {
+                                            Icon(Icons.Filled.EditNote, contentDescription = "Note details")
                                         }
                                     }
                                     // Today's daily, one tap from any note; not while already on it.

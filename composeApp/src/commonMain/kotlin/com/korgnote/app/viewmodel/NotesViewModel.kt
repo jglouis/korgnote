@@ -16,7 +16,10 @@ import com.korgnote.common.fs.NotePaths
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.edit.FileKeywords
 import com.korgnote.common.org.edit.changeTodoState
+import com.korgnote.common.org.edit.fileKeywordsOf
+import com.korgnote.common.org.edit.withFileKeywords
 import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.edit.toggleCheckbox
 import com.korgnote.common.org.template.dailyFileName
@@ -295,6 +298,26 @@ class NotesViewModel(
         refreshDerivedViews()
 
         scope?.launch { server.push(writeFirst = { store.save(file, note.content) }) }
+    }
+
+    /** What the open note says about itself — title, author, date, tags — for the details form. */
+    fun openNoteKeywords(): FileKeywords = fileKeywordsOf(note.content)
+
+    /**
+     * Rewrites the open note's `#+TITLE:`, `#+AUTHOR:`, `#+DATE:` and `#+filetags:` to say
+     * [keywords], then saves. Refused while an element is being edited, as a restructuring is: the
+     * draft's offsets would move under it.
+     */
+    suspend fun setOpenNoteKeywords(keywords: FileKeywords) {
+        if (note.path == null) return
+        if (editor.editingIndex != null) {
+            showMessage("Save or discard the element you are editing first.")
+            return
+        }
+        val updated = withFileKeywords(note.content, keywords)
+        if (updated == note.content) return
+        note.content = updated
+        saveCurrentFile()
     }
 
     /** Where a note titled [title] would be created, or null when the title makes no file name. */

@@ -4,6 +4,7 @@ import com.korgnote.app.data.NoteTemplateSettings
 import com.korgnote.app.ui.File
 import com.korgnote.app.ui.Folder
 import com.korgnote.app.ui.Node
+import com.korgnote.common.org.edit.FileKeywords
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
@@ -111,6 +112,17 @@ class NoteLifecycleTest {
         assertEquals("Selected: $path", viewModel.note.label)
         assertNull(viewModel.editor.editingIndex, "one that exists is only opened")
         assertTrue(server.files[path]!!.endsWith("* Standup\n"), "and left as it was")
+    }
+
+    @Test
+    fun theDetailsFormRewritesTheNotesKeywordsAndSavesIt() = runTest {
+        viewModel.server.load()
+        viewModel.onFileSelected(existing)
+        assertEquals("Notes", viewModel.openNoteKeywords().title)
+
+        viewModel.setOpenNoteKeywords(FileKeywords(title = "Notes", author = "Me", tags = listOf("home")))
+
+        assertEquals("#+TITLE: Notes\n#+AUTHOR: Me\n#+filetags: :home:\n\n* TODO Something\n", server.files[existing])
     }
 
     @Test
