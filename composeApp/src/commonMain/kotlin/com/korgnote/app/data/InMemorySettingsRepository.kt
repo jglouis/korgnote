@@ -61,4 +61,16 @@ class InMemorySettingsRepository(
     override fun setFileLinkMappings(mappings: List<FileLinkMapping>) {
         fileLinkMappings = mappings
     }
+
+    private var noteTemplate = NoteTemplateSettings()
+    override fun getNoteTemplate(): NoteTemplateSettings = noteTemplate
+    override fun setNoteTemplate(settings: NoteTemplateSettings) {
+        noteTemplate = settings
+    }
+
+    private var tagColors = emptyMap<String, Int>()
+    override fun getTagColors(): Map<String, Int> = tagColors
+    override fun setTagColors(colors: Map<String, Int>) {
+        tagColors = colors
+    }
 }

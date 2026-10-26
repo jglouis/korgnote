@@ -88,21 +88,25 @@ class NoteLifecycleUiTest {
 
     @Test
     fun theNewNoteDialogShowsTheFileItWillMake() = runComposeUiTest {
-        val created = mutableListOf<String>()
+        val created = mutableListOf<Pair<String, List<String>>>()
         setContent {
             NewNoteDialog(
                 pathFor = { title -> title.takeIf { it.isNotBlank() }?.let { "inbox/${it.lowercase()}.org" } },
-                onCreate = { created += it },
+                onCreate = { title, tags -> created += title to tags },
                 onDismiss = {},
+                knownTags = listOf("work", "ecam", "home"),
             )
         }
         onNodeWithText("Create").assertIsNotEnabled()
 
         onNodeWithText("Title").performTextInput("Idea")
         onNodeWithText("inbox/idea.org").assertExists()
+        onNodeWithText("Tags").performTextInput("home e")
+        onNodeWithText("work").assertDoesNotExist()
+        onNodeWithText("ecam").performClick()
         onNodeWithText("Create").performClick()
 
-        assertEquals(listOf("Idea"), created)
+        assertEquals(listOf("Idea" to listOf("home", "ecam")), created)
     }
 
     @Test

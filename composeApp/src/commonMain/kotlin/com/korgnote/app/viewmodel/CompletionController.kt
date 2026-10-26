@@ -17,6 +17,7 @@ import com.korgnote.common.org.complete.applyTo
 import com.korgnote.common.org.complete.complete
 import com.korgnote.common.org.complete.restamp
 import com.korgnote.common.org.edit.allNodes
+import com.korgnote.common.org.search.fileTagsOf
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.org.todoKeywordsOf
 import kotlinx.datetime.LocalDate
@@ -180,6 +181,7 @@ class CompletionController(
     private fun tagsByUse(): List<String> {
         val counts = mutableMapOf<String, Int>()
         for (document in library.documents.values) {
+            for (tag in fileTagsOf(document.text)) counts[tag] = (counts[tag] ?: 0) + 1
             for (section in document.allNodes().filterIsInstance<OrgSection>()) {
                 for (tag in section.tags) counts[tag] = (counts[tag] ?: 0) + 1
             }

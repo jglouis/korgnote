@@ -54,6 +54,19 @@ interface SettingsRepository {
     fun getFileLinkMappings(): List<FileLinkMapping>
 
     fun setFileLinkMappings(mappings: List<FileLinkMapping>)
+
+    /** The author, daily folder and extra header new notes and dailies are written with. */
+    fun getNoteTemplate(): NoteTemplateSettings
+
+    fun setNoteTemplate(settings: NoteTemplateSettings)
+
+    /**
+     * Colours chosen for tags, as `RRGGBB` by tag. Kept per device, like the pins; a tag with none
+     * gets one from its name, which is the same everywhere without being kept at all.
+     */
+    fun getTagColors(): Map<String, Int>
+
+    fun setTagColors(colors: Map<String, Int>)
 }
 
 /** Pinned notes as one stored string, a path per line: a note path never holds a line break. */

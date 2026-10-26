@@ -66,6 +66,18 @@ class PersistentSettingsRepository(appContext: Context) : SettingsRepository {
         prefs.edit { putString(KEY_FILE_LINK_MAPPINGS, encodeFileLinkMappings(mappings)) }
     }
 
+    override fun getNoteTemplate(): NoteTemplateSettings = NoteTemplateSettings.decode(prefs.getString(KEY_NOTE_TEMPLATE, null))
+
+    override fun setNoteTemplate(settings: NoteTemplateSettings) {
+        prefs.edit { putString(KEY_NOTE_TEMPLATE, settings.encode()) }
+    }
+
+    override fun getTagColors(): Map<String, Int> = decodeTagColors(prefs.getString(KEY_TAG_COLORS, null))
+
+    override fun setTagColors(colors: Map<String, Int>) {
+        prefs.edit { putString(KEY_TAG_COLORS, encodeTagColors(colors)) }
+    }
+
     private fun loadHost(): String {
         val def = defaultServerBaseUrl()
             .removePrefix("http://")
@@ -86,5 +98,7 @@ class PersistentSettingsRepository(appContext: Context) : SettingsRepository {
         private const val KEY_REMINDERS = "reminders"
         private const val KEY_PINNED_NOTES = "pinned_notes"
         private const val KEY_FILE_LINK_MAPPINGS = "file_link_mappings"
+        private const val KEY_NOTE_TEMPLATE = "note_template"
+        private const val KEY_TAG_COLORS = "tag_colors"
     }
 }

@@ -47,6 +47,8 @@ fun App() {
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val scope = rememberCoroutineScope()
         val vm = koinViewModel<NotesViewModel>()
+        val settingsRepo = koinInject<SettingsRepository>()
+        LaunchedEffect(Unit) { TagColors.chosen = settingsRepo.getTagColors() }
         LaunchedEffect(Unit) {
             vm.server.load()
             // Then follow the server's change stream for the rest of the session.
@@ -77,6 +79,15 @@ fun App() {
         var noteDialogError by remember { mutableStateOf<String?>(null) }
         // The conflict copy being compared with its note.
         var comparingCopy by remember { mutableStateOf<String?>(null) }
+        // Opens or starts today's daily, from the drawer or the top bar.
+        val openToday = {
+            scope.launch {
+                vm.openToday()
+                selectedScreen = BottomItem.FILE
+                drawerState.close()
+            }
+            Unit
+        }
         // Why something could not be done, shown for a moment rather than over the note, where it
         // stayed until the next thing went wrong. Being offline shows in the top bar instead.
         val snackbarHostState = remember { SnackbarHostState() }
@@ -102,12 +113,13 @@ fun App() {
         if (creatingNote) {
             NewNoteDialog(
                 pathFor = vm::newNotePathFor,
+                knownTags = vm.completion.context.knownTags,
                 error = noteDialogError,
                 onDismiss = { creatingNote = false; noteDialogError = null },
-                onCreate = { title ->
+                onCreate = { title, tags ->
                     scope.launch {
                         // Stays open when refused, with the reason shown behind it.
-                        if (vm.createNote(title) == null) {
+                        if (vm.createNote(title, tags) == null) {
                             noteDialogError = vm.lastErrorMessage.also { vm.clearError() }
                         } else {
                             creatingNote = false
@@ -204,6 +216,9 @@ fun App() {
                                 )
                                 IconButton(onClick = { creatingNote = true }) {
                                     Icon(Icons.AutoMirrored.Filled.NoteAdd, contentDescription = "New note")
+                                }
+                                IconButton(onClick = { openToday() }) {
+                                    Icon(Icons.Filled.Today, contentDescription = "Today's daily")
                                 }
                             }
                             // Above the filter, so it never scrolls away or filters out.
@@ -337,6 +352,12 @@ fun App() {
                                     if (vm.links.canGoBack) {
                                         IconButton(onClick = { vm.links.goBack() }) {
                                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                                        }
+                                    }
+                                    // Today's daily, one tap from any note; not while already on it.
+                                    if (vm.note.path != vm.todaysDailyPath()) {
+                                        IconButton(onClick = { openToday() }) {
+                                            Icon(Icons.Filled.Today, contentDescription = "Today's daily")
                                         }
                                     }
                                     statusIcons()
@@ -569,9 +590,9 @@ fun App() {
                                 }
 
                                 BottomItem.SETTINGS -> {
-                                    val settingsRepo = koinInject<SettingsRepository>()
                                     SettingsScreen(
                                         repo = settingsRepo,
+                                        knownTags = vm.completion.context.knownTags,
                                         modifier = Modifier.fillMaxSize(),
                                         serverStatus = statusIcons,
                                         onSaved = { scope.launch { vm.server.retry() } },

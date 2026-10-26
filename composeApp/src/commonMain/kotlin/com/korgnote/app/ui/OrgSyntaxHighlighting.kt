@@ -304,8 +304,19 @@ private fun AnnotatedString.Builder.appendHighlightedLine(
     for (span in spans) {
         val style = spanStyleFor(span, line, headingColor, todoConfig, viewMode) ?: continue
         addStyle(style, base + span.range.first, base + span.range.last + 1)
+        if (span.kind == OrgSpanKind.Tag) addTagColors(line, span.range, base)
     }
 }
+
+/** Each tag in the `:a:b:` at [range] of [line] in its own colour, over the span's common one. */
+private fun AnnotatedString.Builder.addTagColors(line: String, range: IntRange, base: Int) {
+    for (tag in TAG_NAME.findAll(line.substring(range.first, range.last + 1))) {
+        val start = base + range.first + tag.range.first
+        addStyle(SpanStyle(color = TagColors.of(tag.value)), start, start + tag.value.length)
+    }
+}
+
+private val TAG_NAME = Regex("[^:\\s]+")
 
 /** The reading-mode renderer: it rewrites the line as well as styling it. */
 private fun AnnotatedString.Builder.appendViewModeLine(
@@ -474,7 +485,7 @@ private fun AnnotatedString.Builder.appendDrawerLine(line: String, viewMode: Boo
  * One styled stretch of a heading line. [inline] pieces go through [appendInline] instead of a
  * single span.
  */
-private class HeadingPiece(val style: SpanStyle?, var text: String, val inline: Boolean = false)
+private class HeadingPiece(val style: SpanStyle?, var text: String, val inline: Boolean = false, val tags: Boolean = false)
 
 /**
  * Folds any piece that is only whitespace into its neighbour.
@@ -538,7 +549,7 @@ private fun AnnotatedString.Builder.appendHeading(
         if (tags != null) {
             // The whole tail: the whitespace before the tags, the tags, and any trailing spaces.
             val tagStyle = SpanStyle(color = OrgColors.tag, fontWeight = FontWeight.Normal)
-            pieces += HeadingPiece(tagStyle, rest.substring(tags.range.first))
+            pieces += HeadingPiece(tagStyle, rest.substring(tags.range.first), tags = true)
         }
 
         pieces.foldWhitespaceIntoNeighbours()
@@ -546,7 +557,15 @@ private fun AnnotatedString.Builder.appendHeading(
             when {
                 piece.text.isEmpty() -> Unit
                 piece.inline -> appendInline(piece.text, viewMode)
-                piece.style != null -> withStyle(piece.style) { append(piece.text) }
+                piece.style != null -> withStyle(piece.style) {
+                    val start = length
+                    append(piece.text)
+                    if (piece.tags) {
+                        for (tag in TAG_NAME.findAll(piece.text)) {
+                            addStyle(SpanStyle(color = TagColors.of(tag.value)), start + tag.range.first, start + tag.range.last + 1)
+                        }
+                    }
+                }
                 else -> append(piece.text)
             }
         }

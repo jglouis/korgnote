@@ -290,7 +290,7 @@ private fun matchIn(line: String, words: List<String>): IntRange? {
  *
  * Only the text before the first heading is looked at, which is where Org honours the keyword.
  */
-internal fun fileTagsOf(text: String): List<String> {
+fun fileTagsOf(text: String): List<String> {
     val tags = mutableListOf<String>()
     for (line in text.lineSequence()) {
         // The same lenient heading rule the element splitter uses, for the same reason: two places

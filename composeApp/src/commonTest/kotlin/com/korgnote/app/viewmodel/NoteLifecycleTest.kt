@@ -1,5 +1,6 @@
 package com.korgnote.app.viewmodel
 
+import com.korgnote.app.data.NoteTemplateSettings
 import com.korgnote.app.ui.File
 import com.korgnote.app.ui.Folder
 import com.korgnote.app.ui.Node
@@ -12,6 +13,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.datetime.LocalDate
 import kotlin.test.*
 
 /**
@@ -35,7 +37,14 @@ class NoteLifecycleTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         server = FakeSyncApi(mutableMapOf(existing to existingText))
         store = DocumentStore(InMemoryReplicaStorage())
-        viewModel = NotesViewModel(SyncEngine(store, server), store, newNotesFolder = { inbox })
+        viewModel = NotesViewModel(
+            SyncEngine(store, server),
+            store,
+            today = { LocalDate(2026, 10, 26) },
+            newNotesFolder = { inbox },
+            noteTemplate = { NoteTemplateSettings(author = "Me", extraHeader = "#+STARTUP: overview") },
+            newId = { "id-1" },
+        )
     }
 
     @AfterTest
@@ -53,18 +62,20 @@ class NoteLifecycleTest {
     fun aNewNoteIsCreatedInTheInboxOpenedAtItsFirstHeadingAndPushed() = runTest {
         viewModel.server.load()
 
-        val path = viewModel.createNote("Call the plumber")
+        val path = viewModel.createNote("Call the plumber", tags = listOf("home", "urgent"))
 
         assertEquals("inbox/call_the_plumber.org", path)
         assertEquals("Selected: inbox/call_the_plumber.org", viewModel.note.label)
         assertTrue("inbox/call_the_plumber.org" in viewModel.library.tree.paths())
-        assertEquals("#+TITLE: Call the plumber\n\n", server.files[path], "pushed without waiting for an edit")
+        val head = ":PROPERTIES:\n:ID:       id-1\n:END:\n#+TITLE: Call the plumber\n#+AUTHOR: Me\n" +
+            "#+DATE: [2026-10-26 Mon]\n#+filetags: :home:urgent:\n#+STARTUP: overview\n\n"
+        assertEquals(head, server.files[path], "pushed without waiting for an edit")
         assertEquals(1, viewModel.editor.editingIndex, "straight into the first heading")
         assertEquals("* \n", viewModel.editor.draft)
 
         viewModel.editor.onDraftChanged("* TODO Ask about the boiler\n")
         viewModel.editor.commit()
-        assertEquals("#+TITLE: Call the plumber\n\n* TODO Ask about the boiler\n", server.files[path])
+        assertEquals(head + "* TODO Ask about the boiler\n", server.files[path])
     }
 
     @Test
@@ -79,7 +90,27 @@ class NoteLifecycleTest {
 
         server.online = true
         viewModel.server.load()
-        assertEquals("#+TITLE: Offline idea\n\n", server.files[path])
+        assertTrue(server.files[path]!!.contains("#+TITLE: Offline idea\n"))
+    }
+
+    @Test
+    fun todayOpensTheDailyCreatingItInTheDailyFolderTheFirstTime() = runTest {
+        viewModel.server.load()
+
+        viewModel.openToday()
+
+        val path = "daily/2026-10-26.org"
+        assertEquals("Selected: $path", viewModel.note.label)
+        assertTrue(server.files[path]!!.startsWith(":PROPERTIES:\n:ID:       id-1\n:END:\n#+TITLE: 2026-10-26\n"))
+        assertEquals(1, viewModel.editor.editingIndex, "a new daily starts its first heading")
+        viewModel.editor.onDraftChanged("* Standup\n")
+        viewModel.editor.commit()
+
+        viewModel.onFileSelected(existing)
+        viewModel.openToday()
+        assertEquals("Selected: $path", viewModel.note.label)
+        assertNull(viewModel.editor.editingIndex, "one that exists is only opened")
+        assertTrue(server.files[path]!!.endsWith("* Standup\n"), "and left as it was")
     }
 
     @Test

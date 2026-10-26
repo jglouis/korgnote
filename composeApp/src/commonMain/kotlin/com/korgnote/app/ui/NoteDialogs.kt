@@ -1,6 +1,10 @@
 package com.korgnote.app.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.AlertDialog
@@ -21,23 +25,41 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.fs.NotePaths
+import com.korgnote.common.org.template.parseTypedTags
 
 /**
  * Asks for a title and shows the file it will make, so the name on disk is never a surprise.
  * [pathFor] is the view model's own rule, so what is shown is what is created.
+ *
+ * Tags go into the note's `#+filetags:`. The ones the notes already use are offered as chips for
+ * the word being typed — or, before anything is typed, the most used — so a tag is picked rather
+ * than spelt again a little differently.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NewNoteDialog(
     pathFor: (title: String) -> String?,
-    onCreate: (title: String) -> Unit,
+    onCreate: (title: String, tags: List<String>) -> Unit,
     onDismiss: () -> Unit,
+    /** Tags used across the notes, most used first. */
+    knownTags: List<String> = emptyList(),
     /** Why the last attempt was refused, shown in the dialog rather than behind it. */
     error: String? = null,
 ) {
     var title by remember { mutableStateOf("") }
+    var tagsText by remember { mutableStateOf(TextFieldValue("")) }
     val path = pathFor(title)
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
+
+    val typedTags = parseTypedTags(tagsText.text)
+    // The word the caret is on is still being typed: it narrows the suggestions, and is not yet
+    // one of the tags already chosen.
+    val partial = tagsText.text.takeLastWhile { it !in " ,:\t" }
+    val chosen = if (partial.isEmpty()) typedTags else typedTags.dropLast(1)
+    val suggestions = knownTags
+        .filter { it !in chosen && it.startsWith(partial, ignoreCase = true) && !it.equals(partial, ignoreCase = true) }
+        .take(8)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -52,6 +74,27 @@ fun NewNoteDialog(
                     modifier = Modifier.focusRequester(focus),
                 )
                 Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = tagsText,
+                    onValueChange = { tagsText = it },
+                    label = { Text("Tags") },
+                    placeholder = { Text("work ecam") },
+                    singleLine = true,
+                )
+                if (suggestions.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(top = 4.dp),
+                    ) {
+                        suggestions.forEach { tag ->
+                            TagSuggestionChip(tag) {
+                                val text = (chosen + tag).joinToString(" ") + " "
+                                tagsText = TextFieldValue(text, TextRange(text.length))
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
                 Text(
                     path ?: "Type a title",
                     style = MaterialTheme.typography.bodySmall,
@@ -61,7 +104,7 @@ fun NewNoteDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = path != null, onClick = { onCreate(title) }) { Text("Create") }
+            TextButton(enabled = path != null, onClick = { onCreate(title, typedTags) }) { Text("Create") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

@@ -11,6 +11,7 @@ import com.korgnote.app.files.NoFileOpener
 import com.korgnote.app.notifications.NoopNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
 import com.korgnote.app.notifications.ReminderSettings
+import com.korgnote.app.data.NoteTemplateSettings
 import com.korgnote.common.fs.NotePaths
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgSection
@@ -18,6 +19,9 @@ import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.edit.changeTodoState
 import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.edit.toggleCheckbox
+import com.korgnote.common.org.template.dailyFileName
+import com.korgnote.common.org.template.dailyTitle
+import com.korgnote.common.org.template.newNoteText
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
@@ -32,6 +36,8 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * The app's notes, and everything shown about them.
@@ -55,7 +61,7 @@ class NotesViewModel(
      * A parameter rather than a call to the clock, so a test can say what day it is instead of
      * asserting against whatever day it runs on.
      */
-    today: () -> LocalDate = {
+    private val today: () -> LocalDate = {
         Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
     },
     /** Where reminders go: the device's own notifications, or nowhere on desktop and web. */
@@ -71,6 +77,10 @@ class NotesViewModel(
     },
     /** Where [createNote] puts a note; read each time, so a change in Settings applies at once. */
     private val newNotesFolder: () -> String = { "" },
+    /** The author, daily folder and extra header new notes are written with; read each time too. */
+    private val noteTemplate: () -> NoteTemplateSettings = { NoteTemplateSettings() },
+    /** A new note's `:ID:`; a parameter so a test can know what it will be. */
+    private val newId: () -> String = { @OptIn(ExperimentalUuidApi::class) Uuid.random().toString() },
     /** The notes pinned on this device, read once; and where a change to them is kept. */
     pinnedNotes: () -> List<String> = { emptyList() },
     savePinnedNotes: (List<String>) -> Unit = {},
@@ -291,29 +301,68 @@ class NotesViewModel(
         NotePaths.fileNameFor(title)?.let { NotePaths.join(newNotesFolder(), it) }
 
     /**
-     * Creates a note titled [title] in the new-notes folder, opens it, and starts its first heading:
-     * a capture, so what was worth writing down gets written before anything else is asked.
+     * Creates a note titled [title], tagged with [tags], in the new-notes folder, opens it, and starts
+     * its first heading: a capture, so what was worth writing down gets written before anything else
+     * is asked. It is headed as org-roam heads a note — its own `:ID:`, title, author and date.
      *
      * Returns the new path, or null — with [lastErrorMessage] saying why — when the title makes no
      * file name or a note already has it. Works offline; the next sync pushes it.
      */
-    suspend fun createNote(title: String): String? {
+    suspend fun createNote(title: String, tags: List<String> = emptyList()): String? {
         val path = newNotePathFor(title)
         if (path == null) {
             lastErrorMessage = "A note needs a title with at least one letter or digit."
             return null
         }
-        if (!store.create(path, "#+TITLE: ${title.trim()}\n\n")) {
+        if (!store.create(path, headOfNewNote(title, tags))) {
             lastErrorMessage = "There is already a note called $path."
             return null
         }
+        openNewNote(path)
+        return path
+    }
+
+    /** Where today's daily is, in the daily folder Settings names. */
+    fun todaysDailyPath(): String = NotePaths.join(noteTemplate().dailyFolder, dailyFileName(today()))
+
+    /**
+     * Opens today's daily, creating it first — headed like any new note, titled with the date — when
+     * there is none yet. A new one starts its first heading, as a new note does; one that exists is
+     * only opened, since what is in it is what was being looked for.
+     */
+    suspend fun openToday() {
+        val path = todaysDailyPath()
+        if (path in library) {
+            onFileSelected(path)
+            return
+        }
+        // Already in the replica, though not yet read into the library: it is there to open.
+        if (!store.create(path, headOfNewNote(dailyTitle(today()), emptyList()))) {
+            onFileSelected(path)
+            return
+        }
+        openNewNote(path)
+    }
+
+    private fun headOfNewNote(title: String, tags: List<String>): String {
+        val template = noteTemplate()
+        return newNoteText(
+            id = newId(),
+            title = title,
+            date = today(),
+            author = template.author,
+            tags = tags,
+            extraHeader = template.extraHeader,
+        )
+    }
+
+    private suspend fun openNewNote(path: String) {
         editor.cancel()
         note.path = path
         showFromReplica()
         openAndWait(path)
         editor.addAtEnd()
         server.pushQuietly()
-        return path
     }
 
     /**

@@ -36,7 +36,9 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.korgnote.app.data.NoteTemplateSettings
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.files.FileLinkMapping
 import com.korgnote.app.notifications.ReminderSettings
@@ -58,6 +60,8 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     serverStatus: @Composable () -> Unit = {},
     onSaved: (() -> Unit)? = null,
+    /** Tags used across the notes, most used first: the ones a colour can be chosen for. */
+    knownTags: List<String> = emptyList(),
 ) {
     val scope = rememberCoroutineScope()
     var host by remember { mutableStateOf("") }
@@ -73,8 +77,15 @@ fun SettingsScreen(
     var pickingDigestTime by remember { mutableStateOf(false) }
     var newNotesFolder by remember { mutableStateOf("") }
     var fileLinks by remember { mutableStateOf(emptyList<FileLinkMapping>()) }
+    var author by remember { mutableStateOf("") }
+    var dailyFolder by remember { mutableStateOf("") }
+    var extraHeader by remember { mutableStateOf("") }
+    var tagColors by remember { mutableStateOf(emptyMap<String, Int>()) }
     // What the form held when loaded or last saved; null until loaded.
-    val form = listOf(host, portText, token, remindersOn, leadText, digestOn, digestTime, newNotesFolder, fileLinks)
+    val form = listOf(
+        host, portText, token, remindersOn, leadText, digestOn, digestTime, newNotesFolder, fileLinks,
+        author, dailyFolder, extraHeader, tagColors,
+    )
     var stored by remember { mutableStateOf<List<Any>?>(null) }
     val changed = stored != null && form != stored
 
@@ -89,7 +100,15 @@ fun SettingsScreen(
         digestTime = reminders.digestTime
         newNotesFolder = repo.getNewNotesFolder()
         fileLinks = repo.getFileLinkMappings()
-        stored = listOf(host, portText, token, remindersOn, leadText, digestOn, digestTime, newNotesFolder, fileLinks)
+        val template = repo.getNoteTemplate()
+        author = template.author
+        dailyFolder = template.dailyFolder
+        extraHeader = template.extraHeader
+        tagColors = repo.getTagColors()
+        stored = listOf(
+            host, portText, token, remindersOn, leadText, digestOn, digestTime, newNotesFolder, fileLinks,
+            author, dailyFolder, extraHeader, tagColors,
+        )
     }
 
     if (pickingDigestTime) {
@@ -125,6 +144,11 @@ fun SettingsScreen(
             error = "Please enter a folder inside the notes, like inbox or notes/inbox."
             return
         }
+        val daily = dailyFolder.trim().trim('/')
+        if (daily.isNotEmpty() && NotePaths.normalize("$daily/x.org") == null) {
+            error = "Please enter a folder inside the notes for dailies, like daily."
+            return
+        }
         fileLinkMappingsError(fileLinks)?.let {
             error = it
             return
@@ -146,6 +170,9 @@ fun SettingsScreen(
                     ),
                 )
                 repo.setNewNotesFolder(folder)
+                repo.setNoteTemplate(NoteTemplateSettings(author.trim(), daily, extraHeader.trimEnd()))
+                repo.setTagColors(tagColors)
+                TagColors.chosen = tagColors
                 repo.setFileLinkMappings(
                     fileLinks.filter { it.from.isNotBlank() }.map { FileLinkMapping(it.from.trim(), it.to.trim()) },
                 )
@@ -232,6 +259,40 @@ fun SettingsScreen(
                 placeholder = { Text("inbox") },
                 singleLine = true,
             )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = dailyFolder,
+                onValueChange = { dailyFolder = it },
+                label = { Text("Folder for dailies (empty for the top)") },
+                placeholder = { Text(NoteTemplateSettings.DEFAULT_DAILY_FOLDER) },
+                singleLine = true,
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = author,
+                onValueChange = { author = it },
+                label = { Text("Author") },
+                singleLine = true,
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = extraHeader,
+                onValueChange = { extraHeader = it },
+                label = { Text("Extra header lines, such as #+TODO:") },
+                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                minLines = 2,
+            )
+            Text(
+                "Each new note and daily also gets its own :ID:, #+TITLE:, #+DATE: and your tags.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline,
+            )
+
+            Spacer(Modifier.height(24.dp))
+            TagColorSettings(knownTags, tagColors) { tagColors = it }
 
             Spacer(Modifier.height(24.dp))
             FileLinkSettings(fileLinks) { fileLinks = it }

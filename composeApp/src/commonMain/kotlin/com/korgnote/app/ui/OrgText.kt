@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgSyntax
+import com.korgnote.common.org.template.parseTypedTags
 import com.korgnote.common.org.OrgKeyword
 import com.korgnote.common.org.OrgList
 import com.korgnote.common.org.OrgNode
@@ -226,7 +227,12 @@ private fun RenderNode(
 
         is OrgKeyword -> {
             val title = OrgSyntax.titleKeyword.find(node.content.trim())?.groupValues?.get(1)
-            if (title != null) {
+            // The note's own tags, as chips in their colours, like a heading's.
+            val fileTags = OrgSyntax.filetagsKeyword.find(node.content.trim())?.groupValues?.get(1)
+                ?.let(::parseTypedTags)
+            if (!fileTags.isNullOrEmpty()) {
+                TagChips(fileTags, Modifier.padding(vertical = 2.dp))
+            } else if (title != null) {
                 Text(
                     text = buildOrgInlineString(title),
                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
@@ -368,12 +374,31 @@ fun TagChips(tags: List<String>, modifier: Modifier = Modifier, maxLines: Int = 
 
 @Composable
 private fun OrgTagChip(tag: String) {
-    Surface(color = OrgColors.tag.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
+    val color = TagColors.of(tag)
+    Surface(color = color.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
         Text(
             text = tag,
             style = MaterialTheme.typography.labelSmall,
-            color = OrgColors.tag,
+            color = color,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+        )
+    }
+}
+
+/** A tag offered for picking: a chip in the tag's colour, larger than [OrgTagChip], to be tapped. */
+@Composable
+fun TagSuggestionChip(tag: String, colorOverride: Color? = null, onClick: () -> Unit) {
+    val color = colorOverride ?: TagColors.of(tag)
+    Surface(
+        onClick = onClick,
+        color = color.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(50),
+    ) {
+        Text(
+            text = tag,
+            style = MaterialTheme.typography.labelLarge,
+            color = color,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
         )
     }
 }
