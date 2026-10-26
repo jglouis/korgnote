@@ -38,18 +38,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaKind
 import com.korgnote.common.org.agenda.AgendaOccurrence
@@ -101,15 +108,62 @@ private val chipOrder = compareBy<AgendaOccurrence>(
 private fun Modifier.dimmedIfDone(occurrence: AgendaOccurrence) = if (occurrence.entry.done) alpha(0.45f) else this
 
 /**
- * `TODO Title`, as the heading reads, with the priority cookie when there is one.
+ * A colour for each TODO keyword the calendar shows. In the week and month grids a day is too
+ * narrow for `TODO` or `EVENT` to leave any room for the title, so there the keyword is only an
+ * edge in its colour; the agenda and the day view, which spell it out, write it in the same
+ * colour, which is how the colours are learnt.
+ *
+ * Hashing the name, as tags do, gives `TODO` and `EVENT` the same colour. The open keywords take
+ * [KEYWORD_PALETTE] in alphabetical order instead, which only moves when a keyword is added; a
+ * finished one is grey, whatever it is.
+ */
+class KeywordColors(keywords: Collection<String>) {
+    private val index = keywords.sorted().withIndex().associate { (i, keyword) -> keyword to i }
+
+    /** [entry]'s keyword colour, or null when it has no keyword. */
+    fun of(entry: AgendaEntry): Color? {
+        val keyword = entry.todo ?: return null
+        if (entry.done) return OrgColors.done
+        val swatch = KEYWORD_PALETTE[(index[keyword] ?: return null) % KEYWORD_PALETTE.size]
+        return Color(0xFF000000.toInt() or if (OrgColors.dark) swatch.dark else swatch.light)
+    }
+}
+
+/** Away from the kinds' own colours, so an edge does not vanish into its chip's tint. */
+private val KEYWORD_PALETTE = listOf(5, 10, 7, 1, 8, 11, 6, 0).map { TagColors.palette[it] }
+
+@Composable
+private fun rememberKeywordColors(agenda: AgendaIndex) = remember(agenda) {
+    KeywordColors(agenda.entries.filter { !it.done }.mapNotNullTo(mutableSetOf()) { it.todo })
+}
+
+/** A bar down the left edge in [color], under what follows; nothing for no colour. */
+private fun Modifier.keywordEdge(color: Color?) =
+    if (color == null) this else drawBehind { drawRect(color, size = Size(KEYWORD_EDGE.toPx(), size.height)) }
+
+private val KEYWORD_EDGE = 3.dp
+
+/**
+ * `TODO Title`, as the heading reads, with the priority cookie when there is one and the keyword
+ * in [keywordColor]; or, [titleOnly], just the title, for where the keyword is an edge instead.
  *
  * The title goes through the same inline rendering as reading mode, so a link shows as its
  * description and emphasis as emphasis rather than as markup. The links themselves are left out:
  * tapping an entry opens it, and a link inside it must not take the tap.
  */
-private fun AgendaOccurrence.headline(prefix: String? = null): AnnotatedString = buildAnnotatedString {
-    val keywords = listOfNotNull(prefix, entry.todo, entry.priority?.let { "[#$it]" }).joinToString(" ")
-    if (keywords.isNotEmpty()) append("$keywords ")
+private fun AgendaOccurrence.headline(
+    prefix: String? = null,
+    keywordColor: Color? = null,
+    titleOnly: Boolean = false,
+): AnnotatedString = buildAnnotatedString {
+    if (!titleOnly) {
+        prefix?.let { append("$it ") }
+        entry.todo?.let { todo ->
+            withStyle(SpanStyle(color = keywordColor ?: Color.Unspecified)) { append(todo) }
+            append(" ")
+        }
+        entry.priority?.let { append("[#$it] ") }
+    }
     val title = buildOrgInlineString(entry.title, viewMode = true)
     append(AnnotatedString(title.text, title.spanStyles))
 }
@@ -133,6 +187,7 @@ fun AgendaListView(
     modifier: Modifier = Modifier,
 ) {
     val sections = remember(agenda, from, today, showDone) { agenda.agendaList(from, AGENDA_LIST_DAYS, today, showDone) }
+    val keywordColors = rememberKeywordColors(agenda)
     LazyColumn(modifier = modifier.fillMaxSize().testTag("agendaList")) {
         for (section in sections) {
             item(key = "header-${section.date}") {
@@ -167,14 +222,14 @@ fun AgendaListView(
             // every title a third of the way across.
             val leading = if (section.occurrences.any { it.timeLabel() != null }) 88.dp else 24.dp
             items(section.occurrences, key = { "${section.date}-${it.entry.file}-${it.entry.stamp.range.first}-${it.date}" }) {
-                AgendaRow(it, today, leading, onOpen = { onOpen(it) })
+                AgendaRow(it, today, leading, keywordColors.of(it.entry), onOpen = { onOpen(it) })
             }
         }
     }
 }
 
 @Composable
-private fun AgendaRow(occurrence: AgendaOccurrence, today: LocalDate, leading: Dp, onOpen: () -> Unit) {
+private fun AgendaRow(occurrence: AgendaOccurrence, today: LocalDate, leading: Dp, keywordColor: Color?, onOpen: () -> Unit) {
     val accent = occurrence.entry.kind.accent()
     Row(
         modifier = Modifier
@@ -199,7 +254,7 @@ private fun AgendaRow(occurrence: AgendaOccurrence, today: LocalDate, leading: D
                 Text(it, style = MaterialTheme.typography.labelSmall, color = accent, fontWeight = FontWeight.SemiBold)
             }
             Text(
-                occurrence.headline(),
+                occurrence.headline(keywordColor = keywordColor),
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -214,6 +269,7 @@ private fun AgendaRow(occurrence: AgendaOccurrence, today: LocalDate, leading: D
 // --- Day and week: all-day strip and hour grid -------------------------------------------------
 
 private val HOUR_HEIGHT = 48.dp
+private val TIME_LABEL_SIZE = 9.sp
 private val GUTTER_WIDTH = 44.dp
 
 /**
@@ -236,6 +292,7 @@ fun TimeGridView(
 ) {
     val today = now.date
     val byDate = remember(agenda, dates, today, showDone) { dates.associateWith { agenda.shownOn(it, today, showDone) } }
+    val keywordColors = rememberKeywordColors(agenda)
     Column(modifier.fillMaxSize()) {
         if (dates.size > 1) {
             BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -287,8 +344,18 @@ fun TimeGridView(
                 )
                 dates.forEachIndexed { i, date ->
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        // A day with little on it lets each title take a second line.
+                        val lines = if (compact && allDay[i].size <= 2) 2 else 1
                         allDay[i].take(limit).forEach {
-                            EventChip(it, today, onOpen = { onOpen(it) }, compact = compact, firstShown = i == 0)
+                            EventChip(
+                                it,
+                                today,
+                                keywordColors.of(it.entry),
+                                onOpen = { onOpen(it) },
+                                compact = compact,
+                                firstShown = i == 0,
+                                maxLines = lines,
+                            )
                         }
                         val hidden = allDay[i].size - limit
                         if (hidden > 0) {
@@ -332,6 +399,8 @@ fun TimeGridView(
                 DayColumn(
                     blocks = remember(byDate, date) { layoutTimed(byDate.getValue(date)) },
                     nowMinute = if (date == today) now.hour * 60 + now.minute else null,
+                    keywordColors = keywordColors,
+                    compact = compact,
                     onOpen = onOpen,
                     modifier = Modifier.weight(1f),
                 )
@@ -344,10 +413,15 @@ fun TimeGridView(
 private fun DayColumn(
     blocks: List<TimedBlock>,
     nowMinute: Int?,
+    keywordColors: KeywordColors,
+    compact: Boolean,
     onOpen: (AgendaOccurrence) -> Unit,
     modifier: Modifier,
 ) {
     val lineColor = MaterialTheme.colorScheme.outlineVariant
+    // Seven columns on a phone are a word or so wide: a size smaller keeps more words whole.
+    val titleStyle = MaterialTheme.typography.labelSmall.let { if (compact) it.copy(fontSize = 10.sp, lineHeight = 13.sp) else it }
+    val (titleLine, timeLine) = with(LocalDensity.current) { titleStyle.lineHeight.toDp() to TIME_LABEL_SIZE.toDp() + 2.dp }
     BoxWithConstraints(modifier.height(HOUR_HEIGHT * 24)) {
         // Hour lines.
         for (hour in 0 until 24) {
@@ -356,31 +430,45 @@ private fun DayColumn(
         Box(Modifier.fillMaxHeight().width(1.dp).background(lineColor.copy(alpha = 0.5f)))
 
         for (block in blocks) {
-            val accent = block.occurrence.entry.kind.accent()
+            val occurrence = block.occurrence
+            val accent = occurrence.entry.kind.accent()
+            val keywordColor = keywordColors.of(occurrence.entry)
             val width = maxWidth / block.columns
+            val height = HOUR_HEIGHT * (block.endMinute - block.startMinute) / 60
+            // As many lines of title as the block is tall, less its time; a long meeting in a
+            // narrow column is otherwise two lines of title and a long empty block under them.
+            val lines = ((height - 4.dp - timeLine) / titleLine).toInt().coerceAtLeast(1)
+            val inset = if (compact) 1.dp else 3.dp
             Column(
                 Modifier
                     .offset(x = width * block.column, y = HOUR_HEIGHT * block.startMinute / 60)
                     .width(width)
-                    .height(HOUR_HEIGHT * (block.endMinute - block.startMinute) / 60)
+                    .height(height)
                     .padding(1.dp)
                     .clip(RoundedCornerShape(4.dp))
                     // Opaque, so the hour lines do not run through the text.
                     .background(MaterialTheme.colorScheme.surface)
                     .background(accent.copy(alpha = 0.18f))
-                    .clickable { onOpen(block.occurrence) }
-                    .dimmedIfDone(block.occurrence)
-                    .padding(horizontal = 3.dp, vertical = 1.dp),
+                    .keywordEdge(keywordColor)
+                    .clickable { onOpen(occurrence) }
+                    .dimmedIfDone(occurrence)
+                    .padding(
+                        start = (if (keywordColor != null) KEYWORD_EDGE else 0.dp) + inset,
+                        end = inset,
+                        top = 1.dp,
+                        bottom = 1.dp,
+                    ),
             ) {
                 Text(
-                    block.occurrence.headline(),
-                    style = MaterialTheme.typography.labelSmall,
+                    occurrence.headline(keywordColor = keywordColor, titleOnly = compact),
+                    modifier = Modifier.keywordDescription(occurrence, compact),
+                    style = titleStyle,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
+                    maxLines = lines,
                     overflow = TextOverflow.Ellipsis,
                 )
-                block.occurrence.timeLabel()?.let {
-                    Text(it, fontSize = 9.sp, color = accent, maxLines = 1)
+                occurrence.timeLabel()?.let {
+                    Text(it, fontSize = TIME_LABEL_SIZE, color = accent, maxLines = 1)
                 }
             }
         }
@@ -406,9 +494,11 @@ private fun DayColumn(
 private fun EventChip(
     occurrence: AgendaOccurrence,
     today: LocalDate,
+    keywordColor: Color?,
     onOpen: () -> Unit,
     compact: Boolean = false,
     firstShown: Boolean = true,
+    maxLines: Int = 1,
 ) {
     val accent = occurrence.entry.kind.accent()
     val status = occurrence.statusLabel(today)
@@ -420,15 +510,23 @@ private fun EventChip(
         DaySpan.End -> RoundedCornerShape(topEnd = r, bottomEnd = r) to PaddingValues(end = 1.dp)
     }
     val showTitle = occurrence.span == DaySpan.Single || occurrence.span == DaySpan.Start || firstShown
+    // The edge goes with the title, at the start of the bar, not on every day it crosses.
+    val edge = keywordColor?.takeIf { showTitle }
     Row(
         Modifier
             .fillMaxWidth()
             .padding(inset)
             .clip(shape)
             .background(accent.copy(alpha = 0.18f))
+            .keywordEdge(edge)
             .clickable(onClick = onOpen)
             .dimmedIfDone(occurrence)
-            .padding(horizontal = 3.dp, vertical = if (compact) 0.dp else 2.dp),
+            .padding(
+                start = if (edge != null) KEYWORD_EDGE + 2.dp else 3.dp,
+                end = 3.dp,
+                top = if (compact) 0.dp else 2.dp,
+                bottom = if (compact) 0.dp else 2.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (!compact) {
@@ -438,16 +536,26 @@ private fun EventChip(
         Text(
             text = when {
                 !showTitle -> AnnotatedString(" ")
-                !compact && status != null && occurrence.entry.kind == AgendaKind.Deadline -> occurrence.headline(prefix = "$status:")
-                else -> occurrence.headline()
+                !compact && status != null && occurrence.entry.kind == AgendaKind.Deadline ->
+                    occurrence.headline(prefix = "$status:", keywordColor = keywordColor)
+                else -> occurrence.headline(keywordColor = keywordColor, titleOnly = compact)
             },
+            modifier = if (showTitle) Modifier.keywordDescription(occurrence, compact) else Modifier,
             fontSize = if (compact) 9.sp else 11.sp,
             lineHeight = if (compact) 11.sp else 13.sp,
             color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
+            // A range is one line on every day it crosses, so its bar stays straight.
+            maxLines = if (occurrence.span == DaySpan.Single) maxLines else 1,
             overflow = TextOverflow.Ellipsis,
         )
     }
+}
+
+/** The keyword a title-only entry leaves out, still read out by a screen reader. */
+private fun Modifier.keywordDescription(occurrence: AgendaOccurrence, titleOnly: Boolean): Modifier {
+    val keyword = occurrence.entry.todo?.takeIf { titleOnly } ?: return this
+    val title = buildOrgInlineString(occurrence.entry.title, viewMode = true).text
+    return semantics { contentDescription = "$keyword $title" }
 }
 
 @Composable
@@ -488,6 +596,7 @@ fun MonthView(
 ) {
     val firstOfMonth = LocalDate(anchorDate.year, anchorDate.month, 1)
     val start = firstOfMonth.startOfWeek()
+    val keywordColors = rememberKeywordColors(agenda)
     Column(modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth()) {
             for (d in listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")) {
@@ -503,7 +612,7 @@ fun MonthView(
             val rowHeight = maxOf(maxHeight / 6, MONTH_ROW_MIN_HEIGHT)
             // A compact chip or the "+n" line under the day number, with the gap above it.
             val line = with(LocalDensity.current) { 11.sp.toDp() } + 1.dp
-            val lines = ((rowHeight - 26.dp) / line).toInt().coerceIn(1, 3)
+            val lines = ((rowHeight - 26.dp) / line).toInt().coerceIn(1, MONTH_MAX_LINES)
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                 for (row in 0 until 6) {
                     Row(Modifier.fillMaxWidth().height(rowHeight)) {
@@ -522,9 +631,22 @@ fun MonthView(
                                 DayNumber(date, isToday = date == today, dim = date.month != anchorDate.month)
                                 // The count of the rest takes a line too, unless there are none.
                                 val fits = if (shown.size > lines) lines - 1 else lines
+                                // The lines the entries leave over give their titles a second one,
+                                // the first entries' first: a cell is narrow, but often tall.
+                                var spare = (lines - shown.size).coerceAtLeast(0)
                                 shown.take(fits).forEach {
+                                    val twoLines = it.span == DaySpan.Single && spare > 0
+                                    if (twoLines) spare--
                                     Spacer(Modifier.height(1.dp))
-                                    EventChip(it, today, onOpen = { onDayClick(date) }, compact = true, firstShown = col == 0)
+                                    EventChip(
+                                        it,
+                                        today,
+                                        keywordColors.of(it.entry),
+                                        onOpen = { onDayClick(date) },
+                                        compact = true,
+                                        firstShown = col == 0,
+                                        maxLines = if (twoLines) 2 else 1,
+                                    )
                                 }
                                 if (shown.size > fits) {
                                     Text("+${shown.size - fits}", fontSize = 9.sp, lineHeight = 11.sp, color = MaterialTheme.colorScheme.outline)
@@ -539,3 +661,6 @@ fun MonthView(
 }
 
 private val MONTH_ROW_MIN_HEIGHT = 52.dp
+
+/** Lines of entries under a day's number, on a screen tall enough for them. */
+private const val MONTH_MAX_LINES = 6

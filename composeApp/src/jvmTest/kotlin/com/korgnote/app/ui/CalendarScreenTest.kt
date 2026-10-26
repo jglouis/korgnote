@@ -158,4 +158,35 @@ class CalendarScreenTest {
         onNodeWithText("Today").performClick()
         assertShown("Wed 23 Sep 2026")
     }
+
+    /** A day of the week or month is too narrow for `TODO` and the title both: the title stays. */
+    @Test
+    fun theGridsShowTheTitleWithoutItsKeyword() = runComposeUiTest {
+        for (mode in listOf(CalendarMode.Week, CalendarMode.Month)) {
+            show(mode)
+            onNodeWithText("Submit the grant proposal").assertExists()
+            onAllNodesWithText("TODO", substring = true).assertCountEquals(0)
+            // Still there for a screen reader.
+            onNodeWithContentDescription("TODO Submit the grant proposal").assertExists()
+        }
+    }
+
+    @Test
+    fun theAgendaAndTheDayStillSpellTheKeywordOut() = runComposeUiTest {
+        for (mode in listOf(CalendarMode.Agenda, CalendarMode.Day)) {
+            show(mode)
+            assertShown("TODO Submit the grant proposal")
+        }
+    }
+
+    @Test
+    fun eachOpenKeywordHasItsOwnColour() {
+        val colors = KeywordColors(listOf("TODO", "EVENT", "DOING", "WAIT"))
+        fun entry(todo: String?, done: Boolean = false) = agenda.entries.first().copy(todo = todo, done = done)
+
+        val open = listOf("TODO", "EVENT", "DOING", "WAIT").map { colors.of(entry(it)) }
+        assertEquals(4, open.toSet().size, "TODO and EVENT, which a hash of the name confuses, included")
+        assertEquals(null, colors.of(entry(null)))
+        assertEquals(OrgColors.done, colors.of(entry("DONE", done = true)))
+    }
 }
