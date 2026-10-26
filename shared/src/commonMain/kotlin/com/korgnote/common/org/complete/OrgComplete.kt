@@ -380,8 +380,10 @@ private fun tagItems(
     val match = TAG_PREFIX.find(prefix) ?: return null
     val typed = match.groupValues[1]
     val replace = (lineStart + match.range.first) until cursor
+    // A tag the heading already has is not worth offering again.
+    val written = OrgSyntax.tags.find(line)?.groupValues?.get(1).orEmpty().split(':').toSet() - typed
     return ctx.knownTags
-        .filter { it.startsWith(typed, ignoreCase = true) }
+        .filter { it.startsWith(typed, ignoreCase = true) && it !in written }
         .map { tag ->
             CompletionItem(
                 label = ":$tag:",

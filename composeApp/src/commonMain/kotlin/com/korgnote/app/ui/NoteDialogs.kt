@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Event
@@ -28,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.fs.NotePaths
@@ -112,6 +114,8 @@ fun TagsField(value: TextFieldValue, knownTags: List<String>, onValueChange: (Te
         label = { Text("Tags") },
         placeholder = { Text("work ecam") },
         singleLine = true,
+        // Tags are names: a keyboard that capitalises or corrects them makes new, different ones.
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
     )
     if (suggestions.isNotEmpty()) {
         FlowRow(

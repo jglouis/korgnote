@@ -406,4 +406,9 @@ class OrgCompleteTests {
         assertEquals("* Lunch\n:PROPERTIES:\n:LOCATION: Flagey, Ixelles‸\n:END:\n", apply(fixture, items.single()))
         assertEquals(3, completeAt(":LOCATION: ‸", context).size, "all of them before anything is typed")
     }
+
+    @Test
+    fun aTagTheHeadingAlreadyHasIsNotOfferedAgain() {
+        assertEquals(listOf(":home:", ":wishlist:"), completeAt("* Call :work:‸").map { it.label })
+    }
 }

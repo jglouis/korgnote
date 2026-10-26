@@ -20,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.UriHandler
@@ -47,6 +48,7 @@ fun App() {
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val scope = rememberCoroutineScope()
         val vm = koinViewModel<NotesViewModel>()
+        val focusManager = LocalFocusManager.current
         val settingsRepo = koinInject<SettingsRepository>()
         LaunchedEffect(Unit) { TagColors.chosen = settingsRepo.getTagColors() }
         LaunchedEffect(Unit) {
@@ -262,6 +264,8 @@ fun App() {
                                 // had closed: a hidden match looks like a filter that does not work.
                                 expandAll = vm.search.filterQuery.isNotBlank(),
                                 onFileSelected = { name ->
+                                    // The filter had the keyboard open; the note is to be read.
+                                    focusManager.clearFocus()
                                     scope.launch {
                                         vm.onFileSelected(name)
                                         drawerState.close()

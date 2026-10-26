@@ -313,12 +313,12 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: (
             // Where it happens, a tap away, without opening the property drawer to find the link.
             node.location()?.let { location ->
                 val uriHandler = LocalUriHandler.current
-                IconButton(onClick = { uriHandler.openUri(googleMapsUrl(location)) }, modifier = Modifier.size(32.dp)) {
+                IconButton(onClick = { uriHandler.openUri(googleMapsUrl(location)) }, modifier = Modifier.size(44.dp)) {
                     Icon(
                         Icons.Filled.Place,
                         contentDescription = "Show $location on a map",
                         tint = OrgColors.link,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(24.dp),
                     )
                 }
             }

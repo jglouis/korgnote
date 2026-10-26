@@ -7,7 +7,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckBox
@@ -108,17 +115,34 @@ fun CompletionStrip(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // The chips scroll in what the actions leave, so the actions never scroll away.
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            BoxWithConstraints(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 if (items.isEmpty()) {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-                    ) {
+                    // A date anywhere comes next to the link, before the heading's own things.
+                    val buttons = buildList {
                         for (what in inserts) {
-                            item { InsertChip(what.label(), what.icon()) { onInsert(what) } }
-                            // A date anywhere comes next to the link, before the heading's own things.
-                            if (what == DraftInsert.LINK && onPickDate != null) {
-                                item { InsertChip("Date", Icons.Filled.Event, onPickDate) }
+                            add(Triple(what.label(), what.icon()) { onInsert(what) })
+                            if (what == DraftInsert.LINK && onPickDate != null) add(Triple("Date", Icons.Filled.Event, onPickDate))
+                        }
+                    }
+                    // Labelled where there is room for all of them; on a phone, icons, so that none
+                    // is scrolled out of sight where nobody would know to look for it.
+                    if (maxWidth >= LABELLED_INSERT_WIDTH * buttons.size) {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                        ) {
+                            buttons.forEach { (label, icon, onClick) -> item { InsertChip(label, icon, onClick) } }
+                        }
+                    } else {
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        ) {
+                            buttons.forEach { (label, icon, onClick) ->
+                                IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
+                                    Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                         }
                     }
@@ -132,7 +156,16 @@ fun CompletionStrip(
                             val selected = index == selectedIndex
                             AssistChip(
                                 onClick = { onAccept(item) },
-                                label = { Text(item.label, style = MaterialTheme.typography.labelLarge) },
+                                // A long address must not take the whole strip and hide the others.
+                                label = {
+                                    Text(
+                                        item.label,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.widthIn(max = 150.dp),
+                                    )
+                                },
                                 colors = if (selected) {
                                     AssistChipDefaults.assistChipColors(
                                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -146,10 +179,15 @@ fun CompletionStrip(
                     }
                 }
             }
+            // Set apart, so that discarding is never mistaken for one of the inserts beside it.
+            VerticalDivider(Modifier.height(28.dp).padding(horizontal = 2.dp))
             actions()
         }
     }
 }
+
+/** Room for one labelled insert chip; below that per button, the strip shows icons. */
+private val LABELLED_INSERT_WIDTH = 104.dp
 
 @Composable
 private fun InsertChip(label: String, icon: ImageVector, onClick: () -> Unit) {
