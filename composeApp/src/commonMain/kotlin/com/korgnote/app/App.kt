@@ -77,6 +77,15 @@ fun App() {
         var noteDialogError by remember { mutableStateOf<String?>(null) }
         // The conflict copy being compared with its note.
         var comparingCopy by remember { mutableStateOf<String?>(null) }
+        // Why something could not be done, shown for a moment rather than over the note, where it
+        // stayed until the next thing went wrong. Being offline shows in the top bar instead.
+        val snackbarHostState = remember { SnackbarHostState() }
+        LaunchedEffect(vm.lastErrorMessage) {
+            val message = vm.lastErrorMessage
+            if (message.isBlank()) return@LaunchedEffect
+            vm.clearError()
+            snackbarHostState.showSnackbar(message, withDismissAction = true, duration = SnackbarDuration.Long)
+        }
         // The open note's scroll position, held here for the floating buttons to read and move.
         // Keyed by screen so that coming back to File starts at the top, as it did when the
         // document view owned it.
@@ -301,6 +310,7 @@ fun App() {
                         } else {
                             ScaffoldDefaults.contentWindowInsets
                         },
+                        snackbarHost = { SnackbarHost(snackbarHostState) },
                         topBar = {
                             if (topBar) TopAppBar(
                                 // The note is what the screen is about: the tab it is on already
@@ -466,12 +476,6 @@ fun App() {
                         ) {
                             when (selectedScreen) {
                                 BottomItem.FILE -> {
-                                    // Why something could not be done; being offline shows in the top bar instead.
-                                    if (vm.lastErrorMessage.isNotBlank()) {
-                                        Text(vm.lastErrorMessage, color = MaterialTheme.colorScheme.error)
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                    }
-
                                     // A note in conflict, or one of its copies, says so until it is settled.
                                     conflictShown(vm.note.path, vm.library.conflicts)?.let { conflict ->
                                         ConflictBanner(
