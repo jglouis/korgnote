@@ -30,6 +30,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -39,6 +41,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.korgnote.common.org.OrgElement
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.link.OrgBacklink
 import com.korgnote.common.org.nextSibling
@@ -124,6 +127,9 @@ fun OrgDocumentView(
             }
         }
     }
+    // How many headings each element sits under, which is how far it is indented.
+    val depths = remember(elements) { elements.nestingDepths() }
+    val guideColor = MaterialTheme.colorScheme.outlineVariant
     // The heading a delete is waiting to be confirmed for.
     var confirmingDelete by remember { mutableStateOf<Int?>(null) }
     // The element a jump just landed on — a link, a search hit, an agenda entry, Back — lit for a
@@ -175,7 +181,7 @@ fun OrgDocumentView(
                     } else {
                         Modifier
                     }
-                ),
+                ).nestingGuides(depths[index], guideColor),
                 horizontalAlignment = Alignment.Start,
             ) {
                 if (editDetails != null && !element.isPreamble) {
@@ -323,6 +329,44 @@ fun OrgDocumentView(
         }
     }
 }
+
+/**
+ * For each element, the number of headings it sits under: a `**` under a `*` is 1, and so is a
+ * `***` right under a `*`, since a skipped level is no deeper an outline.
+ */
+internal fun List<OrgElement>.nestingDepths(): IntArray {
+    val open = ArrayList<Int>() // the levels of the headings the walk is inside, outermost first
+    return IntArray(size) { index ->
+        val level = this[index].level
+        if (level == 0) return@IntArray 0
+        while (open.isNotEmpty() && open.last() >= level) open.removeAt(open.lastIndex)
+        open.size.also { open += level }
+    }
+}
+
+/**
+ * Indents a sub-heading under its parent, with a thin bar down the left for each heading it sits
+ * under. Neighbouring items draw their bars end to end, so a subtree reads as one strand.
+ *
+ * Deep outlines stop indenting at [MAX_GUIDES], so that a phone's width is not all margin.
+ */
+private fun Modifier.nestingGuides(depth: Int, color: Color): Modifier {
+    if (depth == 0) return this
+    val shown = depth.coerceAtMost(MAX_GUIDES)
+    return drawBehind {
+        val step = GUIDE_STEP.toPx()
+        val width = GUIDE_WIDTH.toPx()
+        for (d in 0 until shown) {
+            val x = d * step + GUIDE_INSET.toPx()
+            drawLine(color, Offset(x, 0f), Offset(x, size.height), strokeWidth = width)
+        }
+    }.padding(start = GUIDE_STEP * shown)
+}
+
+private val GUIDE_STEP = 14.dp
+private val GUIDE_INSET = 4.dp
+private val GUIDE_WIDTH = 2.dp
+private const val MAX_GUIDES = 5
 
 /** A jump's arrival at the element at [index]; compared by identity, so each jump is its own. */
 private class Landing(val index: Int)

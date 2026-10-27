@@ -185,23 +185,6 @@ class ElementEditor(
     }
 
     /**
-     * Saves the draft, then opens a new heading after it — the editor's own way of adding, since
-     * most headings are added right after editing the one above.
-     *
-     * The new heading follows the *last* heading the draft holds, at that heading's level: a draft
-     * that gained a `** ` line of its own continues from there, as Org's M-RET would at its end.
-     */
-    suspend fun commitAndAddBelow() {
-        val index = editingIndex ?: return
-        val start = note.content.orgElements().getOrNull(index)?.start ?: return
-        val draftEnd = start + (draft.length - 1).coerceAtLeast(0)
-        commit()
-        if (editingIndex != null) return // refused; the draft is still open
-        val last = note.content.elementIndexOfOffset(draftEnd) ?: return
-        addAfter(last)
-    }
-
-    /**
      * Deletes the heading at [index] with its body and every sub-heading, then saves.
      *
      * Refused while an element is open in the editor, as every restructuring is. Returns whether

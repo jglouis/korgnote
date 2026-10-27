@@ -30,6 +30,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -83,6 +84,11 @@ import com.korgnote.common.org.isNumeric
 import com.korgnote.common.org.parseOrgTable
 import com.korgnote.common.org.srcLanguageOf
 import com.korgnote.common.org.toOrgString
+import com.korgnote.common.org.edit.Progress
+import com.korgnote.common.org.edit.STATISTICS_COOKIE
+import com.korgnote.common.org.edit.progressOf
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 
 
 
@@ -116,6 +122,8 @@ fun OrgText(
             // One requester per top-level node so a calendar entry (which always refers to a
             // top-level OrgSection) can be scrolled into view within the surrounding scroll container.
             val requesters = remember(content) { content.children.map { BringIntoViewRequester() } }
+            // The author and the date, as one line where the first of them is written.
+            val byline = remember(content) { noteBylineOf(content) }
             content.children.forEachIndexed { idx, child ->
                 // A Column, not a Box: some nodes (e.g. a heading plus its body) render as several
                 // sibling composables that must stack vertically, which a Box would overlay instead.
@@ -123,12 +131,15 @@ fun OrgText(
                     modifier = Modifier.bringIntoViewRequester(requesters[idx]),
                     horizontalAlignment = Alignment.Start
                 ) {
-                    RenderNode(
-                        node = child,
-                        todoConfig = todoConfig,
-                        onToggleCheckbox = onToggleCheckbox,
-                        onSetTodo = onSetTodo,
-                    )
+                    when {
+                        byline == null || idx !in byline.indices -> RenderNode(
+                            node = child,
+                            todoConfig = todoConfig,
+                            onToggleCheckbox = onToggleCheckbox,
+                            onSetTodo = onSetTodo,
+                        )
+                        idx == byline.indices.min() -> NoteBylineView(byline)
+                    }
                 }
             }
             LaunchedEffect(scrollToChildIndex, requesters) {
@@ -196,10 +207,21 @@ private fun RenderNode(
         }
 
         is OrgList -> {
+            val guide = MaterialTheme.colorScheme.outlineVariant
             Column(
                 horizontalAlignment = Alignment.Start,
-                // A nested list is indented by the depth its source had.
-                modifier = Modifier.padding(start = (node.indent * 4).dp),
+                // A nested list is indented by the depth its source had, with a bar down its left
+                // as a sub-heading has.
+                modifier = if (node.indent > 0) {
+                    Modifier
+                        .drawBehind {
+                            val x = 6.dp.toPx()
+                            drawLine(guide, Offset(x, 0f), Offset(x, size.height), strokeWidth = 2.dp.toPx())
+                        }
+                        .padding(start = (node.indent * 4).coerceAtLeast(14).dp)
+                } else {
+                    Modifier
+                },
             ) {
                 node.children.forEachIndexed { index, child ->
                     val marker = if (node.ordered) "${index + 1}${node.bulletType}" else "${node.bulletType}"
@@ -271,6 +293,10 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: (
     }
     val style = base.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
     var picking by remember { mutableStateOf(false) }
+    // A filled-in `[2/5]` or `[40%]` is drawn as a bar beside the title rather than as text in it.
+    val progress = remember(node.title) {
+        STATISTICS_COOKIE.find(node.title)?.let { cookie -> progressOf(cookie)?.let { cookie to it } }
+    }
     // A Box so the keyword menu opens from the heading, whose first word the keyword is.
     Box {
         Row(
@@ -296,7 +322,8 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: (
                     }
                     append(' ')
                 }
-                var title = node.title
+                var title = progress?.let { (cookie, _) -> node.title.removeRange(cookie.range).replace("  ", " ").trim() }
+                    ?: node.title
                 OrgSyntax.priority.find(title)?.let { prio ->
                     withStyle(SpanStyle(color = OrgColors.priority)) { append(prio.value) }
                     title = title.substring(prio.value.length)
@@ -304,6 +331,10 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: (
                 appendOrgInline(title, viewMode = true)
             }
             Text(text = heading, style = style, modifier = Modifier.weight(1f, fill = false))
+            progress?.let { (cookie, value) ->
+                Spacer(Modifier.width(8.dp))
+                ProgressPill(value, percent = cookie.value.endsWith("%]"))
+            }
             if (node.tags.isNotEmpty()) {
                 Spacer(Modifier.width(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -333,6 +364,42 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: (
                     if (keyword != node.todo) onSetTodo(node, keyword)
                 },
                 onDismiss = { picking = false },
+            )
+        }
+    }
+}
+
+/**
+ * A heading's statistics cookie as a short bar and its count, `2/5` or `40%` as it was written; green
+ * once everything under it is done.
+ */
+@Composable
+private fun ProgressPill(progress: Progress, percent: Boolean) {
+    val complete = progress.total > 0 && progress.done >= progress.total
+    val color = if (complete) OrgColors.todo else MaterialTheme.colorScheme.primary
+    val label = if (percent) "${progress.percent}%" else "${progress.done}/${progress.total}"
+    Surface(
+        color = color.copy(alpha = 0.10f),
+        shape = RoundedCornerShape(50),
+        modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "$label done" },
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+        ) {
+            LinearProgressIndicator(
+                progress = { if (progress.total == 0) 0f else progress.done.toFloat() / progress.total },
+                color = color,
+                trackColor = color.copy(alpha = 0.2f),
+                drawStopIndicator = {},
+                modifier = Modifier.width(32.dp).height(4.dp),
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = color,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 6.dp),
             )
         }
     }

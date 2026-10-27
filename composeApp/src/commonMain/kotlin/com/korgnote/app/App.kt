@@ -1,5 +1,7 @@
 package com.korgnote.app
 
+import com.korgnote.common.org.edit.DraftInsert
+import com.korgnote.common.org.link.LinkTarget
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -76,6 +78,8 @@ fun App() {
         // At most one of these is open; each names the note it is about.
         var creatingNote by remember { mutableStateOf(false) }
         var editingDetails by remember { mutableStateOf(false) }
+        // The notes and headings a link can go to, while the link picker is open.
+        var pickingLink by remember { mutableStateOf<List<LinkTarget>?>(null) }
         var renamingNote by remember { mutableStateOf<String?>(null) }
         var deletingNote by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
         // The day a tapped SCHEDULED or DEADLINE date opens the calendar on; null for the calendar's
@@ -309,7 +313,7 @@ fun App() {
                 // Even the status bar: its height is another line of the element.
                 HideStatusBar(editingShort)
                 val rail = wide && !editingShort
-                // Shown only when something is wrong, so they go wherever the top bar's actions go.
+                // The sync's state, and any conflict, go wherever the top bar's actions go.
                 val statusIcons = @Composable {
                     ConflictStatusIcon(vm.library.conflicts) { path ->
                         vm.onFileSelected(path)
@@ -317,7 +321,8 @@ fun App() {
                     }
                     ServerStatusIcon(
                         unreachable = vm.server.unreachable,
-                        retrying = vm.server.retrying,
+                        syncing = vm.server.syncing,
+                        lastSynced = vm.server.lastSynced,
                         onRetry = { scope.launch { vm.server.retry() } },
                     )
                 }
@@ -444,14 +449,11 @@ fun App() {
                                     inserts = vm.completion.inserts,
                                     onInsert = { vm.completion.insert(it) },
                                     onPickDate = { vm.completion.pickDate() },
+                                    onPickLink = { pickingLink = vm.linkTargets() },
                                 ) {
                                     // Saving an element is explicit: edits stay local until this is pressed.
                                     IconButton(onClick = { vm.editor.cancel() }) {
                                         Icon(Icons.Filled.Close, contentDescription = "Discard changes to this element")
-                                    }
-                                    // Most headings are added right after editing the one above.
-                                    IconButton(onClick = { scope.launch { vm.editor.commitAndAddBelow() } }) {
-                                        Icon(Icons.Filled.Add, contentDescription = "Save and add a heading below")
                                     }
                                     FilledIconButton(
                                         onClick = { scope.launch { vm.editor.commit() } },
@@ -478,6 +480,21 @@ fun App() {
                             }
                         }
                     ) { paddingValues ->
+                        pickingLink?.let { targets ->
+                            LinkPickerDialog(
+                                targets = targets,
+                                currentPath = vm.note.path.orEmpty(),
+                                onPick = { target ->
+                                    pickingLink = null
+                                    scope.launch { vm.insertLinkTo(target) }
+                                },
+                                onTypeLink = {
+                                    pickingLink = null
+                                    vm.completion.insert(DraftInsert.LINK)
+                                },
+                                onDismiss = { pickingLink = null },
+                            )
+                        }
                         vm.completion.pendingDatePicker?.let {
                             val stamp = vm.completion.pickerStamp
                             OrgDatePickerDialog(

@@ -223,47 +223,6 @@ class ElementEditingTest {
     }
 
     @Test
-    fun savingAndAddingBelowKeepsTheDraftAndOpensASibling() = runTest {
-        openFile()
-
-        viewModel.editor.beginEdit(1)
-        viewModel.editor.onDraftChanged("* TODO First task\nEdited.\n\n")
-        viewModel.editor.commitAndAddBelow()
-
-        val saved = initialText.replace("Body of the first task.", "Edited.")
-        assertEquals(saved, repository.saves.last().second, "the draft is saved before anything else")
-        assertEquals(2, viewModel.editor.editingIndex)
-        assertEquals("* \n", viewModel.editor.draft)
-
-        viewModel.editor.onDraftChanged("* TODO Right after\n")
-        viewModel.editor.commit()
-        assertEquals(
-            saved.replace("\n* TODO Second task", "\n* TODO Right after\n* TODO Second task"),
-            viewModel.note.content,
-        )
-    }
-
-    @Test
-    fun savingAndAddingBelowFollowsTheLastHeadingInTheDraft() = runTest {
-        openFile()
-
-        viewModel.editor.beginEdit(1)
-        viewModel.editor.onDraftChanged("* TODO First task\n** Typed child\n")
-        viewModel.editor.commitAndAddBelow()
-
-        assertEquals("** \n", viewModel.editor.draft, "a sibling of the typed child, at its level")
-        viewModel.editor.onDraftChanged("** Another child\n")
-        viewModel.editor.commit()
-        assertEquals(
-            initialText.replace(
-                "* TODO First task\nBody of the first task.\n\n",
-                "* TODO First task\n** Typed child\n** Another child\n",
-            ),
-            viewModel.note.content,
-        )
-    }
-
-    @Test
     fun typingAHeadingLineInADraftAddsAHeadingOnSave() = runTest {
         openFile()
 

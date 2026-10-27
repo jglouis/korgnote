@@ -15,6 +15,8 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
 
 /**
  * Following the server's change stream, and how being unable to reach the server is shown.
@@ -30,11 +32,14 @@ class ServerSyncTest {
     private var replicaShown = 0
     private var message: String? = null
 
+    private var clock = Instant.fromEpochSeconds(1_800_000_000)
+
     private fun TestScope.serverSync() = ServerSync(
         backgroundScope,
         SyncEngine(store, api),
         onReplicaChanged = { replicaShown++ },
         showMessage = { message = it },
+        now = { clock },
     )
 
     /** Runs whatever is due [millis] from now, the way [advanceTimeBy] alone does not. */
@@ -109,6 +114,23 @@ class ServerSyncTest {
         // Opens at 0, 2, 6, 14, 30 s, then every 30 s rather than 32, 64 … apart.
         after(90_000)
         assertEquals(7, api.streamOpened)
+    }
+
+    @Test
+    fun aSyncThatGetsThroughIsStampedAndOneThatFailsIsNot() = runTest {
+        val server = serverSync()
+        assertNull(server.lastSynced)
+
+        server.load()
+        assertEquals(clock, server.lastSynced)
+        assertFalse(server.syncing, "over once it returns")
+
+        val synced = clock
+        clock += 5.minutes
+        api.online = false
+        server.retry()
+        assertEquals(synced, server.lastSynced, "offline, the last sync is still the one that got through")
+        assertNotNull(server.unreachable)
     }
 
     @Test

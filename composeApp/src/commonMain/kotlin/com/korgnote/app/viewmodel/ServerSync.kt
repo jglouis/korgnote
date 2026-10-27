@@ -1,6 +1,7 @@
 package com.korgnote.app.viewmodel
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.korgnote.common.replica.SyncEngine
@@ -13,7 +14,9 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /**
  * Talking to the server: sync cycles, and following its change stream.
@@ -28,6 +31,7 @@ class ServerSync(
     private val onReplicaChanged: suspend () -> Unit,
     /** Shows a message to the user; an empty one clears it. */
     private val showMessage: (String) -> Unit,
+    private val now: () -> Instant = { Clock.System.now() },
 ) {
     /**
      * Why the server could not be reached on the last attempt, or null when it answered.
@@ -43,6 +47,19 @@ class ServerSync(
     var retrying by mutableStateOf(false)
         private set
 
+    /**
+     * When the replica last matched the server: the end of the last sync that got through, or the
+     * last change the stream delivered. Null until the first one, this run.
+     */
+    var lastSynced by mutableStateOf<Instant?>(null)
+        private set
+
+    /** Syncs in flight, of any kind: a save's push as well as a retry or the stream's catch-up. */
+    private var inFlight by mutableIntStateOf(0)
+
+    /** True while any sync is talking to the server, for the status icon to show it working. */
+    val syncing: Boolean get() = inFlight > 0
+
     /** Cuts the change stream's backoff short, so a retry that got through reconnects it at once. */
     private val wake = Channel<Unit>(Channel.CONFLATED)
 
@@ -54,7 +71,7 @@ class ServerSync(
      */
     suspend fun load() {
         try {
-            val report = sync.sync()
+            val report = syncOnce()
             unreachable = null
             if (!reportConflicts(report)) showMessage("")
         } catch (t: Throwable) {
@@ -98,7 +115,10 @@ class ServerSync(
             var backoff = 1.seconds
             while (isActive) {
                 try {
-                    sync.watch { onReplicaChanged() }
+                    sync.watch {
+                        lastSynced = now()
+                        onReplicaChanged()
+                    }
                     // A clean end means the server closed the stream; reconnect promptly.
                     backoff = 1.seconds
                 } catch (t: Throwable) {
@@ -115,7 +135,7 @@ class ServerSync(
                 // Not runCatching: it would swallow cancellation and keep the loop alive after the
                 // view model is gone.
                 try {
-                    reportConflicts(sync.sync())
+                    reportConflicts(syncOnce())
                     unreachable = null
                     onReplicaChanged()
                 } catch (catchUpFailed: Throwable) {
@@ -140,7 +160,7 @@ class ServerSync(
     suspend fun push(writeFirst: suspend () -> Unit = {}) {
         try {
             writeFirst()
-            val report = sync.sync()
+            val report = syncOnce()
             unreachable = null
             // A merge or a conflict changed the note under the screen. Left showing the old text,
             // the next save would write it back over what the server added.
@@ -163,13 +183,23 @@ class ServerSync(
      */
     suspend fun pushQuietly() {
         try {
-            reportConflicts(sync.sync())
+            reportConflicts(syncOnce())
             unreachable = null
             onReplicaChanged()
         } catch (t: Throwable) {
             currentCoroutineContext().ensureActive()
             unreachable = reason(t)
             println("[DEBUG_LOG][ServerSync] Sync after a file change failed: ${t.message}")
+        }
+    }
+
+    /** One sync cycle, counted in [syncing] while it runs and stamped in [lastSynced] when it gets through. */
+    private suspend fun syncOnce(): SyncReport {
+        inFlight++
+        try {
+            return sync.sync().also { lastSynced = now() }
+        } finally {
+            inFlight--
         }
     }
 

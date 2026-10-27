@@ -1,5 +1,7 @@
 package com.korgnote.app.viewmodel
 
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -14,6 +16,7 @@ import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.app.data.NoteTemplateSettings
 import com.korgnote.common.fs.NotePaths
 import com.korgnote.common.org.OrgCheckboxItem
+import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.edit.FileKeywords
@@ -22,6 +25,12 @@ import com.korgnote.common.org.edit.fileKeywordsOf
 import com.korgnote.common.org.edit.withFileKeywords
 import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.edit.toggleCheckbox
+import com.korgnote.common.org.link.LinkTarget
+import com.korgnote.common.org.link.linkTargetsOf
+import com.korgnote.common.org.link.withFileId
+import com.korgnote.common.org.link.withHeadingId
+import com.korgnote.common.org.orgElements
+import com.korgnote.common.org.edit.updateStatisticsCookies
 import com.korgnote.common.org.template.dailyFileName
 import com.korgnote.common.org.template.dailyTitle
 import com.korgnote.common.org.template.newNoteText
@@ -291,6 +300,8 @@ class NotesViewModel(
      */
     suspend fun saveCurrentFile() {
         val path = note.path ?: return
+        // A heading's `[2/5]` counts what is under it, which the edit may have changed.
+        note.content = updateStatisticsCookies(note.content, todoKeywords)
         store.save(path, note.content)
         library.put(path, note.content.toOrgDocument())
         refreshDerivedViews()
@@ -308,7 +319,7 @@ class NotesViewModel(
         val file = note.path ?: return
         val document = note.content.toOrgDocument()
         val item = document.nodeAt<OrgCheckboxItem>(offsetInDocument) ?: return
-        val updated = document.toggleCheckbox(item)
+        val updated = document.toggleCheckbox(item).withStatistics()
         note.content = updated.text
         library.put(file, updated)
         // Not now: the box should flip the moment it is tapped.
@@ -331,7 +342,7 @@ class NotesViewModel(
         val file = note.path ?: return
         val document = note.content.toOrgDocument()
         val heading = document.nodeAt<OrgSection>(offsetInDocument) ?: return
-        val updated = document.changeTodoState(heading, keyword, now(), todoKeywords)
+        val updated = document.changeTodoState(heading, keyword, now(), todoKeywords).withStatistics()
         if (updated.text == document.text) return
         note.content = updated.text
         library.put(file, updated)
@@ -339,6 +350,72 @@ class NotesViewModel(
 
         scope?.launch { server.push(writeFirst = { store.save(file, note.content) }) }
     }
+
+    /** This document with its statistics cookies counting what is now under them, as Org updates them. */
+    private fun OrgDocument.withStatistics(): OrgDocument =
+        updateStatisticsCookies(text, todoKeywords).let { if (it == text) this else it.toOrgDocument() }
+
+    /**
+     * Every note and heading a link can go to, for the heading-link picker: the open note as it
+     * stands on screen, so that its offsets are the ones the editor holds. The open note itself is
+     * left out as a whole, and so is a heading with no title yet, such as the one just added.
+     */
+    fun linkTargets(): List<LinkTarget> {
+        val documents = library.documents.toMutableMap()
+        note.path?.let { documents[it] = note.content.toOrgDocument() }
+        return linkTargetsOf(documents).filter { target ->
+            !(target.isNote && target.path == note.path) && target.title.isNotBlank()
+        }
+    }
+
+    /**
+     * Writes a link to [target] at the caret of the element being edited, as org-roam's
+     * `org-roam-node-insert` does: by its `:ID:`, which a heading without one is given first.
+     *
+     * The id goes where the heading is. In another note it is saved and pushed at once, as Emacs
+     * would; harmless if the link is then discarded. In the open note it waits for the element's
+     * save, which is the save that writes the link — and the heading being edited gets it in its
+     * draft.
+     */
+    suspend fun insertLinkTo(target: LinkTarget) {
+        val index = editor.editingIndex ?: return
+        val draft = editor.activeDraft ?: return
+        val id = target.id ?: newId()
+        val link = target.linkWith(id)
+        val from = draft.selection.min
+        var text = draft.text.replaceRange(from, draft.selection.max, link)
+        var caret = from + link.length
+        val path = target.path
+        if (target.id != null) {
+            // Already has one: nothing to write but the link.
+        } else if (path == note.path) {
+            val element = note.content.orgElements().getOrNull(index)
+            if (element != null && target.offset == element.start) {
+                val withId = withHeadingId(text, 0, id)
+                if (text.firstDifferenceWith(withId) < caret) caret += withId.length - text.length
+                text = withId
+            } else {
+                note.content = withHeadingId(note.content, target.offset ?: return, id)
+            }
+        } else {
+            val before = library[path]?.text ?: return
+            val updated = target.offset?.let { withHeadingId(before, it, id) } ?: withFileId(before, id)
+            if (updated != before) {
+                store.save(path, updated)
+                library.put(path, updated.toOrgDocument())
+                refreshDerivedViewsSoon()
+                server.pushQuietly()
+            }
+        }
+        // The edit may have ended while the other note was written; the link then has nowhere to go.
+        if (editor.editingIndex != index) return
+        editor.replaceDraft(TextFieldValue(text, TextRange(caret)))
+        completion.onDraftChanged()
+    }
+
+    /** Where this text and [other] first differ. */
+    private fun String.firstDifferenceWith(other: String): Int =
+        indices.firstOrNull { it >= other.length || this[it] != other[it] } ?: length
 
     /** What the open note says about itself — title, author, date, tags — for the details form. */
     fun openNoteKeywords(): FileKeywords = fileKeywordsOf(note.content)

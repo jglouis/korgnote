@@ -97,6 +97,8 @@ fun CompletionStrip(
     onInsert: (DraftInsert) -> Unit = {},
     /** The date button, which asks a picker before it has anything to insert. */
     onPickDate: (() -> Unit)? = null,
+    /** The link button, when it finds a note or heading to link to instead of starting a `[[`. */
+    onPickLink: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val listState = rememberLazyListState()
@@ -120,7 +122,8 @@ fun CompletionStrip(
                     // A date anywhere comes next to the link, before the heading's own things.
                     val buttons = buildList {
                         for (what in inserts) {
-                            add(Triple(what.label(), what.icon()) { onInsert(what) })
+                            val onClick = if (what == DraftInsert.LINK && onPickLink != null) onPickLink else { -> onInsert(what) }
+                            add(Triple(what.label(), what.icon(), onClick))
                             if (what == DraftInsert.LINK && onPickDate != null) add(Triple("Date", Icons.Filled.Event, onPickDate))
                         }
                     }

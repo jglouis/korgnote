@@ -1,5 +1,8 @@
 package com.korgnote.app.ui
 
+import androidx.compose.ui.text.font.FontWeight
+import com.korgnote.common.org.edit.STATISTICS_COOKIE
+import com.korgnote.common.org.edit.progressOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -8,7 +11,6 @@ import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
@@ -700,7 +702,15 @@ private fun AnnotatedString.Builder.appendInline(text: String, viewMode: Boolean
                     withStyle(SpanStyle(color = OrgColors.footnote)) { append(m.value) }
                     consumed = m.value.length
                 } ?: OrgSyntax.statistics.matchAt(text, i)?.let { m ->
-                    withStyle(SpanStyle(color = OrgColors.statistics)) { append(m.value) }
+                    // Read as it is: all done stands out from part done.
+                    val complete = viewMode && STATISTICS_COOKIE.matchEntire(m.value)?.let(::progressOf)
+                        ?.let { it.total > 0 && it.done >= it.total } == true
+                    val style = if (complete) {
+                        SpanStyle(color = OrgColors.todo, fontWeight = FontWeight.Bold)
+                    } else {
+                        SpanStyle(color = OrgColors.statistics)
+                    }
+                    withStyle(style) { append(m.value) }
                     consumed = m.value.length
                 } ?: OrgSyntax.timestamp.matchAt(text, i)?.let { m ->
                     withStyle(SpanStyle(color = OrgColors.timestamp)) { append(if (viewMode) unbroken(m.value) else m.value) }
