@@ -1,6 +1,7 @@
 package com.korgnote.app
 
 import androidx.compose.ui.window.ComposeUIViewController
+import com.korgnote.app.data.PairingLinks
 import com.korgnote.app.data.PersistentSettingsRepository
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.di.initKoin
@@ -25,3 +26,10 @@ fun MainViewController(): UIViewController {
 
     return ComposeUIViewController { App() }
 }
+
+/**
+ * A `korgnote:` link the app was opened with — the Camera app offers to open the pairing QR code's
+ * link here — handed to Settings. Whether it was a pairing link.
+ */
+@Suppress("unused")
+fun openUrl(url: String): Boolean = PairingLinks.offer(url)

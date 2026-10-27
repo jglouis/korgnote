@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.DevicePairing
+import com.korgnote.app.data.PairingLinks
 import com.korgnote.app.data.NoteTemplateSettings
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.files.FileLinkMapping
@@ -197,7 +198,14 @@ fun SettingsScreen(
                 serverStatus()
             }
             Spacer(Modifier.height(8.dp))
-            PairingSettings(repo, pairing, onChanged = { onSaved?.invoke() })
+            val incomingLink by PairingLinks.pending.collectAsState()
+            PairingSettings(
+                repo,
+                pairing,
+                onChanged = { onSaved?.invoke() },
+                incomingLink = incomingLink,
+                onIncomingLinkUsed = { PairingLinks.pending.value = null },
+            )
 
             Spacer(Modifier.height(24.dp))
             Text("Server on this computer")

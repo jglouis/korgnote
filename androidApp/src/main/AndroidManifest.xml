@@ -34,6 +34,16 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- korgnote://pair?… links, which the server's pairing QR code carries: the camera
+                 offers to open them here. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="korgnote" android:host="pair" />
+            </intent-filter>
         </activity>
 
         <!-- The pairing QR code scanner, upright like the rest of the app rather than ZXing's landscape. -->

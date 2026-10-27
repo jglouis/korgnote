@@ -25,8 +25,7 @@ import kotlin.time.Clock
 // Simple Koin setup for Multiplatform Compose
 val appModule = module {
 
-    // The certificate TLS may present: the paired computer's, or while pairing, the one its QR
-    // code names. The HTTP client trusts nothing else.
+    // The certificate TLS may present: the paired computer's. The HTTP client trusts nothing else.
     single { CertificatePins { get<SettingsRepository>().getPairedServer()?.fingerprint } }
 
     // Provide Ktor HttpClient with JSON plugin (base URL includes port; client itself is engine + JSON only)
@@ -38,7 +37,8 @@ val appModule = module {
         KtorSyncApi(get()) { endpointsFor(settings) }
     }
 
-    single { DevicePairing(get(), get(), get()) }
+    // A fresh client for each pairing, trusting only the certificate its QR code names.
+    single { DevicePairing({ pins -> platformBuildHttpClient(pins) }, get()) }
 
     single { SyncEngine(get(), get(), ::conflictTimestamp) }
     // The local replica. Each platform contributes the ReplicaStorage it can actually use:

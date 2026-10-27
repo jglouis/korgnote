@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.ui.*
 import com.korgnote.app.data.DevicePairing
+import com.korgnote.app.data.PairingLinks
 import com.korgnote.app.viewmodel.LinkEdit
 import org.koin.mp.KoinPlatform
 import com.korgnote.app.viewmodel.NotesViewModel
@@ -71,6 +72,11 @@ fun App() {
                     selectedScreen = BottomItem.FILE
                 }
             }
+        }
+        // A pairing link opened from another app — the camera, reading the QR code — goes to
+        // Settings, which pairs with it.
+        LaunchedEffect(Unit) {
+            PairingLinks.pending.collect { link -> if (link != null) selectedScreen = BottomItem.SETTINGS }
         }
         // Coming back to the app moves the reminder window on and drops what has already fired.
         LifecycleResumeEffect(Unit) {

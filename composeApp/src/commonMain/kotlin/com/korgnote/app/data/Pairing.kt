@@ -12,7 +12,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.coroutines.CancellationException
-import kotlin.concurrent.Volatile
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -61,22 +61,26 @@ fun buildLocalBaseUrl(host: String, port: Int): String {
 internal fun hostForUrl(address: String): String = if (':' in address && !address.startsWith("[")) "[$address]" else address
 
 /**
- * The certificates the HTTP client accepts over TLS: the paired server's, and while pairing, the
- * one the QR code names. Every engine that speaks TLS asks this, so nothing else is ever trusted.
+ * The certificate an HTTP client accepts over TLS: the paired server's for the app's own client, the
+ * one a QR code names for a pairing's. Every engine that speaks TLS asks this, so nothing else is
+ * ever trusted.
  */
-class CertificatePins(private val paired: () -> String?) {
-    @Volatile
-    private var trying: String? = null
+class CertificatePins(private val fingerprint: () -> String?) {
+    fun accepted(): Set<String> = setOfNotNull(fingerprint())
+}
 
-    fun accepted(): Set<String> = setOfNotNull(paired(), trying)
+/**
+ * A pairing link another app opened this one with — the camera, having read the QR code — waiting
+ * for Settings to pair with it.
+ */
+object PairingLinks {
+    val pending = MutableStateFlow<String?>(null)
 
-    suspend fun <T> whileTrying(fingerprint: String, block: suspend () -> T): T {
-        trying = fingerprint
-        try {
-            return block()
-        } finally {
-            trying = null
-        }
+    /** Keeps [uri] for Settings when it is a pairing link; whether it was one. */
+    fun offer(uri: String?): Boolean {
+        if (uri == null || PairingLink.parse(uri) == null) return false
+        pending.value = uri
+        return true
     }
 }
 
@@ -91,17 +95,21 @@ sealed interface PairingResult {
  * Pairs this device with the server a [PairingLink] describes: tries its addresses in turn, over TLS
  * to the certificate the link names and no other, and trades the link's one-time code for a token.
  * Pairing again with the same server gives up the old token, so the Devices page lists it once.
+ *
+ * Each pairing gets an HTTP client of its own from [newClient], trusting the link's certificate
+ * alone. The app's client will not do: it trusts the certificate paired before, and keeps
+ * connections open that were checked against that one — a request it sent could go over one of
+ * them, and the link's certificate would never be checked at all.
  */
 class DevicePairing(
-    private val client: HttpClient,
-    private val pins: CertificatePins,
+    private val newClient: (CertificatePins) -> HttpClient,
     private val settings: SettingsRepository,
 ) {
     suspend fun pair(link: PairingLink, deviceName: String): PairingResult {
         val previous = settings.getPairedServer()?.takeIf { it.serverId == link.serverId }
         val request = PairRequest(link.code, deviceName, previous?.deviceId, previous?.token)
-        var lastProblem: String? = null
-        return pins.whileTrying(link.fingerprint) {
+        val client = newClient(CertificatePins { link.fingerprint })
+        return client.use {
             for (address in link.addresses) {
                 val response = try {
                     client.post("https://${hostForUrl(address)}:${link.port}/api/pair") {
@@ -110,12 +118,11 @@ class DevicePairing(
                     }
                 } catch (e: CancellationException) {
                     throw e
-                } catch (e: Exception) {
-                    lastProblem = e.message
+                } catch (_: Exception) {
                     continue
                 }
                 if (response.status != HttpStatusCode.OK) {
-                    return@whileTrying PairingResult.Failed(response.bodyAsText().ifBlank { "The server said ${response.status}." })
+                    return@use PairingResult.Failed(response.bodyAsText().ifBlank { "The server said ${response.status}." })
                 }
                 val answer = response.body<PairResponse>()
                 val server = PairedServer(
@@ -129,11 +136,14 @@ class DevicePairing(
                     token = answer.token,
                 )
                 settings.setPairedServer(server)
-                return@whileTrying PairingResult.Paired(server)
+                return@use PairingResult.Paired(server)
             }
+            // The platform's own words are no help here: an address with nothing at it and a server
+            // showing another certificate both end the connection, and neither is worth a stack.
             PairingResult.Failed(
-                "Could not reach ${link.serverName.ifBlank { "the computer" }} at ${link.addresses.joinToString(" or ")}. " +
-                    "Is this device on the same network?" + (lastProblem?.let { " ($it)" } ?: ""),
+                "Could not reach ${link.serverName.ifBlank { "the computer" }} at ${link.addresses.joinToString(" or ")}, " +
+                    "or it did not show the certificate the code names. Is this device on the same network, " +
+                    "and is the code from this computer's Devices page?",
             )
         }
     }

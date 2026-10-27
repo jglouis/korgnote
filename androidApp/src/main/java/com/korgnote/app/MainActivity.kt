@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.Modifier
+import com.korgnote.app.data.PairingLinks
 import com.korgnote.app.notifications.ReminderAlarms
 import com.korgnote.app.notifications.ReminderTaps
 import com.korgnote.app.notifications.ReminderTarget
@@ -27,6 +28,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         openReminderFrom(intent)
+        // Not on a rotation, which recreates the activity with the link it was opened with.
+        if (savedInstanceState == null) PairingLinks.offer(intent?.dataString)
         val missing = buildList {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN) add(Manifest.permission.ACCESS_LOCAL_NETWORK)
@@ -44,10 +47,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // A tap on a reminder while the app is already open arrives here rather than in onCreate.
+    // A tap on a reminder, or a pairing link, while the app is already open arrives here rather
+    // than in onCreate.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         openReminderFrom(intent)
+        PairingLinks.offer(intent.dataString)
     }
 
     /** A notification's tap carries the note and heading it is about; the app opens them. */
