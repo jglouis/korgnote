@@ -1,5 +1,7 @@
 package com.korgnote.app.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -24,8 +26,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -43,6 +47,8 @@ import com.korgnote.common.org.previousSibling
 import com.korgnote.common.org.sliceOf
 import com.korgnote.common.org.subtreeEnd
 import com.korgnote.common.org.toOrgDocument
+import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Reading view of a whole document, rendered one editable element at a time.
@@ -120,6 +126,19 @@ fun OrgDocumentView(
     }
     // The heading a delete is waiting to be confirmed for.
     var confirmingDelete by remember { mutableStateOf<Int?>(null) }
+    // The element a jump just landed on — a link, a search hit, an agenda entry, Back — lit for a
+    // moment so the eye finds it among its neighbours. A new [Landing] each time, so landing on
+    // the same element twice lights it twice.
+    var landing by remember { mutableStateOf<Landing?>(null) }
+    val landingGlow = remember { Animatable(0f) }
+    val landingColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+    LaunchedEffect(landing) {
+        if (landing == null) return@LaunchedEffect
+        landingGlow.snapTo(1f)
+        delay(LANDING_HOLD)
+        landingGlow.animateTo(0f, tween(durationMillis = LANDING_FADE_MILLIS))
+        landing = null
+    }
 
     LazyColumn(
         modifier = modifier,
@@ -144,7 +163,19 @@ fun OrgDocumentView(
             }
 
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().then(
+                    if (landing?.index == index) {
+                        // Read while drawing, so the fade redraws the element without recomposing it.
+                        Modifier.drawBehind {
+                            drawRoundRect(
+                                landingColor.copy(alpha = landingColor.alpha * landingGlow.value),
+                                cornerRadius = CornerRadius(8.dp.toPx()),
+                            )
+                        }
+                    } else {
+                        Modifier
+                    }
+                ),
                 horizontalAlignment = Alignment.Start,
             ) {
                 if (editDetails != null && !element.isPreamble) {
@@ -265,6 +296,7 @@ fun OrgDocumentView(
             // scrollToItem, not bringIntoView: the target is usually far off screen and has not been
             // composed yet, so there is no node to bring anywhere — the list has to go to it.
             listState.scrollToItem(index)
+            landing = Landing(index)
             onScrolledToElement()
         }
     }
@@ -291,6 +323,13 @@ fun OrgDocumentView(
         }
     }
 }
+
+/** A jump's arrival at the element at [index]; compared by identity, so each jump is its own. */
+private class Landing(val index: Int)
+
+/** How long a landed-on element stays lit before it fades, and how long the fade takes. */
+private val LANDING_HOLD = 700.milliseconds
+private const val LANDING_FADE_MILLIS = 1300
 
 @Composable
 private fun NoteDetailsButton(onClick: () -> Unit) {
