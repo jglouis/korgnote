@@ -77,7 +77,8 @@ fun LinkPickerDialog(
                         modifier = Modifier.padding(top = 12.dp),
                     )
                 }
-                LazyColumn(Modifier.heightIn(max = 360.dp).padding(top = 8.dp)) {
+                // Short enough that the buttons stay above a phone's keyboard, which the dialog makes room for.
+                LazyColumn(Modifier.heightIn(max = 240.dp).padding(top = 8.dp)) {
                     items(shown, key = { "${it.path}#${it.offset}" }) { target ->
                         LinkTargetRow(target, onClick = { onPick(target) })
                     }
