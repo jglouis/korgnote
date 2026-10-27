@@ -225,7 +225,10 @@ private inline fun forEachStampedLine(element: String, action: (lineStart: Int, 
 
 /** The title as it should read in a list: a stamp in the heading is shown as the date, not as text. */
 private fun String.withoutStamps(): String =
-    OrgSyntax.timestamp.replace(this, "").replace(Regex("\\s{2,}"), " ").trim()
+    // A range's two stamps go with the `--` between them, which means nothing left on its own.
+    OrgSyntax.timestamp.replace(replace(STAMP_RANGE, ""), "").replace(Regex("\\s{2,}"), " ").trim()
+
+private val STAMP_RANGE = Regex("(?:${OrgSyntax.timestamp.pattern})--(?:${OrgSyntax.timestamp.pattern})")
 
 // --- Expanding entries into days ---------------------------------------------------------------
 
