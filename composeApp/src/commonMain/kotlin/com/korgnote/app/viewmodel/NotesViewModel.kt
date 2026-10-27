@@ -32,13 +32,19 @@ import com.korgnote.common.replica.SyncEngine
 import com.korgnote.common.sync.DiffHunk
 import com.korgnote.common.sync.conflictCopyOriginal
 import com.korgnote.common.sync.diffHunks
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -90,6 +96,8 @@ class NotesViewModel(
     /** Where linked folders are on this device, read on each tap; and what opens a linked file. */
     fileLinkMappings: () -> List<FileLinkMapping> = { emptyList() },
     fileOpener: FileOpener = NoFileOpener,
+    /** Where scans of every note run when they need not hold up the screen; see [refreshDerivedViewsSoon]. */
+    private val background: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
 
     /** The one message line: why something could not be done, or what was done instead. */
@@ -210,11 +218,42 @@ class NotesViewModel(
      * describe a document as it used to be.
      */
     private fun refreshDerivedViews() {
+        // This one is up to date; one put off would only redo it.
+        pendingRefresh?.cancel()
+        pendingRefresh = null
         // Links first: completion offers the ids and titles they collect.
         links.refresh()
         agenda.refresh()
         search.refresh()
         completion.refreshContext()
+    }
+
+    /** A refresh put off by [refreshDerivedViewsSoon], until it runs or another replaces it. */
+    private var pendingRefresh: Job? = null
+
+    /**
+     * [refreshDerivedViews] for a change that barely touches what they show, such as a ticked
+     * checkbox: once changes stop coming, with the scans of every note away from the main thread.
+     *
+     * Run at once, the scans hold the tick up long enough to be felt on a phone, and a run of
+     * ticks pays for them on each one. Meanwhile the links, agenda and search describe the note as
+     * it was a moment ago, which a checkbox cannot make wrong in any way that matters.
+     */
+    private fun refreshDerivedViewsSoon() {
+        pendingRefresh?.cancel()
+        pendingRefresh = viewModelScope.launch {
+            delay(DERIVED_REFRESH_PAUSE)
+            // Read here, on the main thread; what is built from them reads nothing else.
+            val texts = library.texts()
+            val keywords = library.corpusKeywords
+            val linkTables = withContext(background) { LinkNavigator.Tables(texts) }
+            val agendaIndex = withContext(background) { agenda.build(texts, keywords) }
+            pendingRefresh = null
+            links.show(linkTables)
+            agenda.show(agendaIndex)
+            search.refresh()
+            completion.refreshContext()
+        }
     }
 
     /** Rebuilds everything the UI shows out of the replica. */
@@ -272,7 +311,8 @@ class NotesViewModel(
         val updated = document.toggleCheckbox(item)
         note.content = updated.text
         library.put(file, updated)
-        refreshDerivedViews()
+        // Not now: the box should flip the moment it is tapped.
+        refreshDerivedViewsSoon()
 
         // Written locally in the coroutine, then pushed; a failure leaves the file dirty for the
         // next cycle rather than losing the toggle.
@@ -481,5 +521,14 @@ class NotesViewModel(
         if (wasOpen) openAndWait(original)
         server.pushQuietly()
         return true
+    }
+
+    internal companion object {
+        /**
+         * How long the ticking has to stop before [refreshDerivedViewsSoon] refreshes: long enough
+         * to take a run of ticks down a list as one, short enough that the calendar is right by the
+         * time anyone switches to it.
+         */
+        val DERIVED_REFRESH_PAUSE = 600.milliseconds
     }
 }

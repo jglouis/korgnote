@@ -33,14 +33,32 @@ class LinkNavigator(
     var backlinks by mutableStateOf<List<OrgBacklink>>(emptyList())
         private set
 
-    fun refresh() {
-        val texts = library.texts()
-        index = OrgLinkIndex(texts)
-        noteIds = texts.keys.mapNotNull { path -> index.fileIdOf(path)?.let { path to it } }.toMap()
-        noteTitles = texts.mapNotNull { (path, text) ->
+    fun refresh() = show(Tables(library.texts()))
+
+    /** [refresh], with the tables already built: away from the main thread, say. */
+    fun show(tables: Tables) {
+        index = tables.index
+        noteIds = tables.noteIds
+        noteTitles = tables.noteTitles
+        refreshBacklinks()
+    }
+
+    /**
+     * Everything [refresh] reads off the notes. Built from a copy of their text and touching no
+     * state, so it can be built on any thread.
+     */
+    class Tables(texts: Map<String, String>) {
+        val index = OrgLinkIndex(texts)
+        val noteIds = texts.keys.mapNotNull { path -> index.fileIdOf(path)?.let { path to it } }.toMap()
+        val noteTitles = texts.mapNotNull { (path, text) ->
             TITLE_LINE.find(text)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }?.let { path to it }
         }.toMap()
-        refreshBacklinks()
+
+        init {
+            // Every note's backlinks are found in one pass, on the first ask. Ask now, so that pass
+            // is made wherever the tables are built rather than wherever they are shown.
+            index.backlinksTo("")
+        }
     }
 
     private fun refreshBacklinks() {

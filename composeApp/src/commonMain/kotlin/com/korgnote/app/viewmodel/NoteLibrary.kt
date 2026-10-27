@@ -64,9 +64,15 @@ class NoteLibrary(private val store: DocumentStore) {
     /**
      * The keywords a note that declares none is read with: every `#+TODO:` in the notes, standing
      * in for the editor-wide setting the app cannot see. See [corpusTodoKeywords].
+     *
+     * Worked out when asked for, not on every change: a ticked checkbox changes a note without
+     * changing its keywords, and should not pay for a scan of every note.
      */
-    var corpusKeywords: OrgTodoConfig = DEFAULT_TODO_KEYWORDS
-        private set
+    val corpusKeywords: OrgTodoConfig
+        get() = keywords ?: corpusTodoKeywords(parsed.values.map { it.text }).also { keywords = it }
+
+    /** [corpusKeywords] as last worked out; null since the notes changed. */
+    private var keywords: OrgTodoConfig? = DEFAULT_TODO_KEYWORDS
 
     /** Rereads every note from the replica. */
     suspend fun reload() {
@@ -79,17 +85,13 @@ class NoteLibrary(private val store: DocumentStore) {
         tree = mapRootToUiFolder(TreeUtils.buildFromPaths(paths, rootName = "Documents"))
         conflicts = conflictsIn(paths)
         loaded = true
-        refreshKeywords()
+        keywords = null
     }
 
     /** Replaces one note with [document], as just saved; the tree is unchanged since the path is. */
     fun put(path: String, document: OrgDocument) {
         parsed[path] = document
-        refreshKeywords()
-    }
-
-    private fun refreshKeywords() {
-        corpusKeywords = corpusTodoKeywords(parsed.values.map { it.text })
+        keywords = null
     }
 
     private fun mapSharedToUi(node: SharedNode): Node {

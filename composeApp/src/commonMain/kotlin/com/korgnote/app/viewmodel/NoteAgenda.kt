@@ -8,6 +8,7 @@ import com.korgnote.app.notifications.Reminder
 import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.app.notifications.ReminderTarget
 import com.korgnote.app.notifications.planReminders
+import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOptions
@@ -34,24 +35,27 @@ class NoteAgenda(
     private val open: (path: String, offset: Int) -> Unit,
 ) {
     /** Every dated entry in the notes, which the calendar asks for a day at a time. */
-    var index by mutableStateOf(build())
+    var index by mutableStateOf(build(library.texts(), library.corpusKeywords))
         private set
 
     /** Rebuilds the index from the notes as they now are, and plans reminders from it. */
-    fun refresh() {
-        index = build()
+    fun refresh() = show(build(library.texts(), library.corpusKeywords))
+
+    /** [refresh], with the index already built by [build]: away from the main thread, say. */
+    fun show(built: AgendaIndex) {
+        index = built
         refreshReminders()
     }
 
     /**
+     * The index of [texts], read with [keywords] where a note declares none. Touches no state, so
+     * it can be built on any thread.
+     *
      * Rebuilt with everything else derived from the notes. Today is read here, so the index a day
      * old still carries over to the right day once anything changes.
      */
-    private fun build(): AgendaIndex =
-        AgendaIndex(
-            agendaEntries(library.texts(), library.corpusKeywords),
-            AgendaOptions(today = today()),
-        )
+    fun build(texts: Map<String, String>, keywords: OrgTodoConfig): AgendaIndex =
+        AgendaIndex(agendaEntries(texts, keywords), AgendaOptions(today = today()))
 
     /** Opens the file an agenda entry comes from, at its heading. */
     fun openEntry(entry: AgendaEntry) = open(entry.file, entry.headingOffset)
