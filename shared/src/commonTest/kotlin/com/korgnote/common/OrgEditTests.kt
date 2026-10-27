@@ -82,7 +82,7 @@ class OrgEditTests {
     @Test
     fun tickingACheckboxChangesOnlyItsMarker() {
         val result = doc.toggleCheckbox(checkbox("first")).text
-        assertOnlyLineChanged(result, "- [ ] first", "- [x] first")
+        assertOnlyLineChanged(result, "- [ ] first", "- [X] first")
     }
 
     @Test
@@ -97,7 +97,7 @@ class OrgEditTests {
         val text = "- [ ] same\n- [ ] same\n"
         val d = text.toOrgDocument()
         val second = d.allNodes().filterIsInstance<OrgCheckboxItem>()[1]
-        assertEquals("- [ ] same\n- [x] same\n", d.toggleCheckbox(second).text)
+        assertEquals("- [ ] same\n- [X] same\n", d.toggleCheckbox(second).text)
     }
 
     /** Ported from the ordinal-based toggle this replaced: nothing else on the page moves. */
@@ -107,7 +107,7 @@ class OrgEditTests {
         val d = text.toOrgDocument()
         val second = d.allNodes().filterIsInstance<OrgCheckboxItem>()[1]
 
-        assertEquals("* TODO Task A  \n\n\n- [ ] First\n- [x] Second  \n", d.toggleCheckbox(second).text)
+        assertEquals("* TODO Task A  \n\n\n- [ ] First\n- [X] Second  \n", d.toggleCheckbox(second).text)
     }
 
     /**

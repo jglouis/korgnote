@@ -627,7 +627,7 @@ fun corpusTodoKeywords(texts: Iterable<String>): OrgTodoConfig {
 
 
 // Flips the checked state of the nth (0-based, document order) checkbox item directly in the raw
-// text, changing only that line's "[ ]"/"[x]" marker and leaving every other character - including
+// text, changing only that line's "[ ]"/"[X]" marker and leaving every other character - including
 // blank lines, trailing whitespace, and indentation elsewhere in the file - untouched.
 // Returns null if there is no such checkbox (ordinal out of range).
 // Convenience helpers to classify a section's state according to document metadata.
@@ -661,7 +661,7 @@ fun OrgNode.toOrgString(): String = when (this) {
         if (!unterminated) { appendLine(); append(":END:") }
     }
     is OrgCheckboxItem -> buildString {
-        append("- [").append(if (checked) "x" else " ").append("] ").append(text)
+        append("- [").append(if (checked) "X" else " ").append("] ").append(text)
         children.forEach { appendLine(); append(it.toOrgString()) }
     }
     is OrgListItem -> buildString {
@@ -672,7 +672,7 @@ fun OrgNode.toOrgString(): String = when (this) {
         val pad = " ".repeat(indent)
         val marker = if (ordered) "${index + 1}$bulletType" else "$bulletType"
         val body = when (child) {
-            is OrgCheckboxItem -> "[" + (if (child.checked) "x" else " ") + "] " + child.text
+            is OrgCheckboxItem -> "[" + (if (child.checked) "X" else " ") + "] " + child.text
             is OrgListItem -> child.text
             is OrgDescriptionItem -> "${child.term} :: ${child.description}"
             is OrgRaw -> child.content

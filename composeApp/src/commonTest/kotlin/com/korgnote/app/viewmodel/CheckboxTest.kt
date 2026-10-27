@@ -61,7 +61,7 @@ class CheckboxTest {
 
         viewModel.toggleCheckboxAt(text.indexOf("- [ ] Milk"), this)
 
-        assertTrue(viewModel.note.content.contains("- [x] Milk"))
+        assertTrue(viewModel.note.content.contains("- [X] Milk"))
         assertEquals("- [ ] Milk", viewModel.search.results.single().lineText, "not yet: a tick may follow")
 
         viewModel.toggleCheckboxAt(text.indexOf("- [ ] Bread"), this)
@@ -69,7 +69,7 @@ class CheckboxTest {
         assertEquals("- [ ] Milk", viewModel.search.results.single().lineText, "the second tick put it off")
 
         advanceUntilIdle()
-        assertEquals("- [x] Milk", viewModel.search.results.single().lineText)
+        assertEquals("- [X] Milk", viewModel.search.results.single().lineText)
     }
 
     @Test
@@ -79,7 +79,7 @@ class CheckboxTest {
         viewModel.toggleCheckboxAt(text.indexOf("- [ ] Milk"), this)
         advanceUntilIdle()
 
-        assertTrue(server.files.getValue(path).contains("- [x] Milk"))
+        assertTrue(server.files.getValue(path).contains("- [X] Milk"))
     }
 
     @Test
@@ -89,6 +89,6 @@ class CheckboxTest {
         viewModel.toggleCheckboxAt(text.indexOf("- [ ] Milk"), this)
         viewModel.saveCurrentFile()
 
-        assertEquals("- [x] Milk", viewModel.search.results.single().lineText)
+        assertEquals("- [X] Milk", viewModel.search.results.single().lineText)
     }
 }

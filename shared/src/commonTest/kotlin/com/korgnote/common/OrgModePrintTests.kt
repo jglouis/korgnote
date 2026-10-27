@@ -37,7 +37,7 @@ class OrgModePrintTests {
         val doc = input.toOrgDocument()
         val expected = """
             - [ ] Task one
-            - [x] Task two
+            - [X] Task two
             - plain item
         """.trimIndent()
         assertEquals(expected, doc.toOrgString())
@@ -120,7 +120,7 @@ class OrgModePrintTests {
             #+TITLE: Mixed
             Intro line
             - a
-            - [x] b
+            - [X] b
             ** TODO Task
             Work
         """.trimIndent()

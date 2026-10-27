@@ -69,7 +69,7 @@ fun OrgDocument.setCheckbox(item: OrgCheckboxItem, checked: Boolean): OrgDocumen
     if (item.range.isEmpty()) return this
     val line = lineRangeAt(item.range.first) ?: return this
     val marker = markerRangeIn(line) ?: return this
-    return replace(marker, if (checked) "[x]" else "[ ]")
+    return replace(marker, if (checked) "[X]" else "[ ]")
 }
 
 private fun OrgDocument.markerRangeIn(line: IntRange): IntRange? {
