@@ -45,3 +45,19 @@ expect fun rememberFolderPicker(onPicked: (String) -> Unit): (() -> Unit)?
 
 /** How to show a folder from [rememberFolderPicker]: a name for it, not the address behind it. */
 expect fun folderLabel(folder: String): String
+
+/** A file chosen in [rememberFilePicker]: the path a link names it by, or why no link can. */
+sealed interface PickedFile {
+    data class Linkable(val path: String) : PickedFile
+
+    data class NotLinkable(val reason: String) : PickedFile
+}
+
+/**
+ * The system's file picker, for the file a link leads to: a function that shows it, after which
+ * [onPicked] receives the path the link should write. That is the path as the notes' own machine
+ * names it, through [mappings] in reverse: a file in the folder set for `~/Sync` is `~/Sync/…`.
+ * Null where no file can be chosen.
+ */
+@Composable
+expect fun rememberFilePicker(mappings: List<FileLinkMapping>, onPicked: (PickedFile) -> Unit): (() -> Unit)?

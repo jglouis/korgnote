@@ -15,8 +15,8 @@ import kotlinx.coroutines.launch
  */
 class FileLinks(
     private val scope: CoroutineScope,
-    /** Read on each tap, so a change in Settings applies at once. */
-    private val mappings: () -> List<FileLinkMapping>,
+    /** Read on each tap, so a change in Settings applies at once; the link form reads them in reverse. */
+    val mappings: () -> List<FileLinkMapping>,
     private val opener: FileOpener,
     /** Shows a message to the user; an empty one clears it. */
     private val showMessage: (String) -> Unit,

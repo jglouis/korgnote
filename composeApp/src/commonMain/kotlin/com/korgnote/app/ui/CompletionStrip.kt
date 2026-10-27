@@ -99,12 +99,18 @@ fun CompletionStrip(
     onPickDate: (() -> Unit)? = null,
     /** The link button, when it finds a note or heading to link to instead of starting a `[[`. */
     onPickLink: (() -> Unit)? = null,
+    /**
+     * Opens the link form on the link the caret is in; null when it is in none. Its button stays in
+     * front of the suggestions, which the caret in a link's target brings up in place of the inserts.
+     */
+    onEditLink: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     // Keyboard selection can walk past the edge of the strip; keep the chosen chip in sight.
+    val leading = if (onEditLink != null) 1 else 0
     LaunchedEffect(selectedIndex) {
-        if (selectedIndex in items.indices) listState.animateScrollToItem(selectedIndex)
+        if (selectedIndex in items.indices) listState.animateScrollToItem(selectedIndex + leading)
     }
 
     // The bar keeps its place for the whole edit, empty or not. Suggestions come and go with almost
@@ -122,8 +128,12 @@ fun CompletionStrip(
                     // A date anywhere comes next to the link, before the heading's own things.
                     val buttons = buildList {
                         for (what in inserts) {
-                            val onClick = if (what == DraftInsert.LINK && onPickLink != null) onPickLink else { -> onInsert(what) }
-                            add(Triple(what.label(), what.icon(), onClick))
+                            when {
+                                // On a link, the link button is for that link.
+                                what == DraftInsert.LINK && onEditLink != null -> add(Triple("Edit link", what.icon(), onEditLink))
+                                what == DraftInsert.LINK && onPickLink != null -> add(Triple(what.label(), what.icon(), onPickLink))
+                                else -> add(Triple(what.label(), what.icon()) { onInsert(what) })
+                            }
                             if (what == DraftInsert.LINK && onPickDate != null) add(Triple("Date", Icons.Filled.Event, onPickDate))
                         }
                     }
@@ -155,6 +165,7 @@ fun CompletionStrip(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                     ) {
+                        if (onEditLink != null) item { InsertChip("Edit link", Icons.Filled.Link, onEditLink) }
                         itemsIndexed(items) { index, item ->
                             val selected = index == selectedIndex
                             AssistChip(

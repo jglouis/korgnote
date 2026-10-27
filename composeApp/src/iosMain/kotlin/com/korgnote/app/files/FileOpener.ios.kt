@@ -6,3 +6,6 @@ import androidx.compose.runtime.Composable
 actual fun rememberFolderPicker(onPicked: (String) -> Unit): (() -> Unit)? = null
 
 actual fun folderLabel(folder: String): String = folder
+
+@Composable
+actual fun rememberFilePicker(mappings: List<FileLinkMapping>, onPicked: (PickedFile) -> Unit): (() -> Unit)? = null

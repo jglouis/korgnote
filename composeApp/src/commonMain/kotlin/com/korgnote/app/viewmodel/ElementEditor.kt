@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import com.korgnote.common.org.edit.continueList
+import com.korgnote.common.org.edit.pastedLink
 import com.korgnote.common.org.nextSibling
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.previousSibling
@@ -121,8 +122,14 @@ class ElementEditor(
     }
 
     fun onDraftChanged(value: TextFieldValue) {
-        draftValue = continuedList(draftValue, value) ?: value
+        draftValue = continuedList(draftValue, value) ?: linkedPaste(draftValue, value) ?: value
         draftMoved()
+    }
+
+    /** [value] with a web address just pasted written as an Org link, when that is what it is. */
+    private fun linkedPaste(previous: TextFieldValue, value: TextFieldValue): TextFieldValue? {
+        val result = pastedLink(previous.text, previous.selection.start, previous.selection.end, value.text) ?: return null
+        return TextFieldValue(result.text, TextRange(result.caret))
     }
 
     /** [value] with the next list item started, when it is Enter typed at the end of one. */

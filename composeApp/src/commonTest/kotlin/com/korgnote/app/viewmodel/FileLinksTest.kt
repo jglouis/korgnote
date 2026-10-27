@@ -6,6 +6,8 @@ import com.korgnote.app.files.FileOpener
 import com.korgnote.app.files.covering
 import com.korgnote.app.files.decodeFileLinkMappings
 import com.korgnote.app.files.encodeFileLinkMappings
+import com.korgnote.app.files.linkPathFor
+import com.korgnote.app.files.pathBelow
 import com.korgnote.app.ui.fileLinkMappingsError
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -96,5 +98,26 @@ class FileLinksTest {
         assertNull(fileLinkMappingsError(listOf(phoneSync, FileLinkMapping(" ", ""))))
         assertNotNull(fileLinkMappingsError(listOf(FileLinkMapping("~/Sync", ""))))
         assertNotNull(fileLinkMappingsError(listOf(FileLinkMapping("Sync", "/sdcard/Sync"))))
+    }
+
+    @Test
+    fun aChosenFileIsWrittenAsTheMappingNamesItsFolder() {
+        val mappings = listOf(FileLinkMapping("~/Sync", "/sdcard/Sync"), FileLinkMapping("/data/photos", "/sdcard/Sync/photos"))
+
+        assertEquals("~/Sync/bills/a.pdf", mappings.linkPathFor { pathBelow(it.to, "/sdcard/Sync/bills/a.pdf") })
+        assertEquals("/data/photos/b.jpg", mappings.linkPathFor { pathBelow(it.to, "/sdcard/Sync/photos/b.jpg") }, "the closest folder wins")
+        assertNull(mappings.linkPathFor { pathBelow(it.to, "/sdcard/Download/c.pdf") })
+        assertNull(mappings.linkPathFor { pathBelow(it.to, "/sdcard/Syncthing/c.pdf") }, "folder by folder, not by letters")
+    }
+
+    @Test
+    fun aMappingWithAHalfMissingIsNotReadBackwards() {
+        assertNull(listOf(FileLinkMapping("", "/sdcard/Sync")).linkPathFor { pathBelow(it.to, "/sdcard/Sync/a.pdf") })
+    }
+
+    @Test
+    fun theFolderItselfIsNotAFileBelowIt() {
+        assertNull(pathBelow("/sdcard/Sync", "/sdcard/Sync"))
+        assertEquals(listOf("a", "b.pdf"), pathBelow("/sdcard/Sync/", "/sdcard/Sync/a/b.pdf"))
     }
 }

@@ -41,14 +41,15 @@ import com.korgnote.common.org.link.matching
  * does: the words typed match the note's title, its path and the headings above, in any order.
  *
  * Picking one writes an `id:` link, giving the heading an `:ID:` first when it has none. A web
- * address or a file is still a link to type, which [onTypeLink] starts.
+ * address or a file goes through the link form instead, which [onTypeLink] opens; null where the
+ * picker was opened from that form.
  */
 @Composable
 fun LinkPickerDialog(
     targets: List<LinkTarget>,
     currentPath: String,
     onPick: (LinkTarget) -> Unit,
-    onTypeLink: () -> Unit,
+    onTypeLink: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
@@ -85,7 +86,7 @@ fun LinkPickerDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onTypeLink) { Text("Web or file link…") } },
+        confirmButton = { if (onTypeLink != null) TextButton(onClick = onTypeLink) { Text("Web or file link…") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

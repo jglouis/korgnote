@@ -56,6 +56,7 @@ Updated 2026-09-25.
 | ✅ | T24 Reading-mode affordances | Done — tap to edit, long-press menu, one fold chevron per heading; [09](09-element-editing.md#the-surface) |
 | ✅ | T25 Pinned notes | Done — pin from a note's long-press menu; pins sit above the file tree and the first opens at launch |
 | ✅ | T26 Linked files | Done — `[[file:~/Sync/x.pdf]]` opens in the device's app for it; Settings maps `~/Sync` to where it is on a phone |
+| ✅ | T28 Links without syntax | Done — a pasted address becomes a link; a form edits a link's label and target, a file chosen through File links in reverse |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -995,6 +996,32 @@ Run once over the 371 real notes: no out-of-range span.
 coloured — a call cannot be told from a `let` binding without more than one line of context),
 variables inside unquoted heredocs, YAML block scalars, nested languages (`<script>` in HTML).
 Colours are for the light theme, which is the only one the app has.
+
+### T28 · Links without syntax — ✅ **done**
+**Why** On a phone keyboard `[[target][label]]` is the hardest thing in the notes to type, and the
+only ways in were the note finder and typing it. Changing a link's label meant editing inside its
+brackets; a file link meant typing a path the phone does not even use.
+**Landed** `LinkEditing.kt` in `shared/`. A web address pasted while editing becomes `[[address]]`,
+or `[[address][words]]` when pasted over words; it stays bare where Org wants it bare — a property
+such as `:ROAM_REFS:`, a `#+` line, a block, a `[[` being typed. A paste is told from typing by
+the address arriving whole in place of the selection. With the caret on a link, the strip's link
+button becomes *Edit link* — kept in front of the suggestions that the caret in a target brings up
+— and opens a form: the label, then *Web* (an address; `example.com` gets `https://`), *Note* (the
+note finder, linking by `:ID:` as before) or *File*. *Remove link* leaves the label as text. The
+finder's *Web or file link…* opens the same form for a new link, the selection as its label.
+**Files, in reverse** *Choose a file…* opens the system's picker — on Android in the first folder
+under File links — and writes the path as the notes' own machine knows it: a file under the folder
+set for `~/Sync` is `~/Sync/…`; the closest folder wins, as the longest does the other way. Android
+reads the path from shared storage's document ids, or from `findDocumentPath` for other providers,
+and refuses a file outside every linked folder (Recent, Downloads) with what to do instead.
+Desktop uses its file dialog; outside a mapping it writes the path, home as `~`. iOS and the web
+type the path.
+**Verified** `LinkEditingTest` (16), `LinkEditTest` (7), reverse cases in `FileLinksTest`,
+`DesktopLinkPathTest`, `AppLinkEditTest` (the form through the real screen). On the phone: a paste
+from the text menu, the form on note and web links, a PDF chosen in `Sync/board_game` written as
+`~/Sync/board_game/…`, every edit discarded and the replica compared byte for byte afterwards.
+**Not included** Fetching a page's title for the label (it would mean a request to the site from
+the phone); editing a link from reading mode without opening the element; iOS's picker.
 
 ---
 

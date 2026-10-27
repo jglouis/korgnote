@@ -26,6 +26,29 @@ fun List<FileLinkMapping>.covering(path: String): Pair<FileLinkMapping, List<Str
     return if (".." in below) null else mapping to below
 }
 
+/**
+ * The path a link writes for a file chosen on this device: [covering] the other way round. [below]
+ * says, for a mapping, the folders and file name of the file inside its [FileLinkMapping.to], or
+ * null when the file is not in that folder. The closest folder wins, as the longest [from] does
+ * the other way, so `~/Sync/photos/a.jpg` is written through a mapping for `photos` itself.
+ */
+fun List<FileLinkMapping>.linkPathFor(below: (FileLinkMapping) -> List<String>?): String? =
+    filter { it.from.isNotBlank() && it.to.isNotBlank() }
+        .mapNotNull { mapping -> below(mapping)?.takeIf { ".." !in it }?.let { mapping to it } }
+        .minByOrNull { (_, names) -> names.size }
+        ?.let { (mapping, names) -> joinPath(pathSegments(mapping.from) + names) }
+
+/** [path]'s folders and file name below [folder], both plain paths; null when it is not inside it. */
+fun pathBelow(folder: String, path: String): List<String>? {
+    val inside = pathSegments(folder)
+    val segments = pathSegments(path)
+    return if (segments.size > inside.size && segments.subList(0, inside.size) == inside) segments.drop(inside.size) else null
+}
+
+/** [pathSegments] put back together: `~`, `Sync`, `a.pdf` is `~/Sync/a.pdf`. */
+internal fun joinPath(segments: List<String>): String =
+    if (segments.firstOrNull() == "/") "/" + segments.drop(1).joinToString("/") else segments.joinToString("/")
+
 /** `~/Sync/a.pdf` is `~`, `Sync`, `a.pdf`; `/home/a.pdf` is `/`, `home`, `a.pdf`. */
 internal fun pathSegments(path: String): List<String> {
     val p = path.trim()

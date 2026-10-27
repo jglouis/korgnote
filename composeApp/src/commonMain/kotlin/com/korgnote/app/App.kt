@@ -1,6 +1,5 @@
 package com.korgnote.app
 
-import com.korgnote.common.org.edit.DraftInsert
 import com.korgnote.common.org.link.LinkTarget
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -30,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.ui.*
+import com.korgnote.app.viewmodel.LinkEdit
 import com.korgnote.app.viewmodel.NotesViewModel
 import com.korgnote.app.viewmodel.OpenNote
 import kotlinx.coroutines.flow.collectLatest
@@ -80,6 +80,7 @@ fun App() {
         var editingDetails by remember { mutableStateOf(false) }
         // The notes and headings a link can go to, while the link picker is open.
         var pickingLink by remember { mutableStateOf<List<LinkTarget>?>(null) }
+        var editingLink by remember { mutableStateOf<LinkEdit?>(null) }
         var renamingNote by remember { mutableStateOf<String?>(null) }
         var deletingNote by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
         // The day a tapped SCHEDULED or DEADLINE date opens the calendar on; null for the calendar's
@@ -450,6 +451,7 @@ fun App() {
                                     onInsert = { vm.completion.insert(it) },
                                     onPickDate = { vm.completion.pickDate() },
                                     onPickLink = { pickingLink = vm.linkTargets() },
+                                    onEditLink = vm.linkToEdit()?.takeUnless { it.isNew }?.let { edit -> { editingLink = edit } },
                                 ) {
                                     // Saving an element is explicit: edits stay local until this is pressed.
                                     IconButton(onClick = { vm.editor.cancel() }) {
@@ -490,9 +492,27 @@ fun App() {
                                 },
                                 onTypeLink = {
                                     pickingLink = null
-                                    vm.completion.insert(DraftInsert.LINK)
+                                    editingLink = vm.linkToEdit()
                                 },
                                 onDismiss = { pickingLink = null },
+                            )
+                        }
+                        editingLink?.let { edit ->
+                            LinkEditorDialog(
+                                edit = edit,
+                                noteTitle = vm::noteLinkTitle,
+                                linkTargets = vm::linkTargets,
+                                currentPath = vm.note.path.orEmpty(),
+                                fileLinkMappings = vm.files.mappings(),
+                                onSave = { target, description, note ->
+                                    editingLink = null
+                                    scope.launch { vm.saveLink(edit, target, description, note) }
+                                },
+                                onRemove = {
+                                    editingLink = null
+                                    vm.removeLink(edit)
+                                },
+                                onDismiss = { editingLink = null },
                             )
                         }
                         vm.completion.pendingDatePicker?.let {
