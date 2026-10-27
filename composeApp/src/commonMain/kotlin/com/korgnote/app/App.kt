@@ -30,6 +30,8 @@ import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.ui.*
 import com.korgnote.app.viewmodel.NotesViewModel
 import com.korgnote.app.viewmodel.OpenNote
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import org.koin.compose.koinInject
@@ -94,11 +96,15 @@ fun App() {
         // Why something could not be done, shown for a moment rather than over the note, where it
         // stayed until the next thing went wrong. Being offline shows in the top bar instead.
         val snackbarHostState = remember { SnackbarHostState() }
-        LaunchedEffect(vm.lastErrorMessage) {
-            val message = vm.lastErrorMessage
-            if (message.isBlank()) return@LaunchedEffect
-            vm.clearError()
-            snackbarHostState.showSnackbar(message, withDismissAction = true, duration = SnackbarDuration.Long)
+        // Not keyed on the message: clearing it would restart the effect and cancel the snackbar
+        // the moment it appeared. A newer message replaces the one on screen.
+        LaunchedEffect(vm) {
+            snapshotFlow { vm.lastErrorMessage }
+                .filter { it.isNotBlank() }
+                .collectLatest { message ->
+                    vm.clearError()
+                    snackbarHostState.showSnackbar(message, withDismissAction = true, duration = SnackbarDuration.Long)
+                }
         }
         // The open note's scroll position, held here for the floating buttons to read and move.
         // Keyed by screen so that coming back to File starts at the top, as it did when the
@@ -195,7 +201,7 @@ fun App() {
         // A tapped link into the notes arrives here as a `korgnote-link:` URI, from a note, the
         // calendar or search alike, a link to a file outside them as a `korgnote-file:` one, and a
         // tapped planning date as a `korgnote-calendar:` one; anything else is the platform's to
-        // open, as before.
+        // open, as before. A link that leads nowhere says why, and leaves the screen as it was.
         val platformUriHandler = LocalUriHandler.current
         val uriHandler = remember(platformUriHandler, vm) {
             object : UriHandler {
@@ -203,15 +209,19 @@ fun App() {
                     val day = calendarDayOf(uri)
                     when {
                         uri.startsWith(NOTE_LINK_URI_PREFIX) -> {
-                            vm.links.follow(uri.removePrefix(NOTE_LINK_URI_PREFIX))
-                            selectedScreen = BottomItem.FILE
+                            if (vm.links.follow(uri.removePrefix(NOTE_LINK_URI_PREFIX))) selectedScreen = BottomItem.FILE
                         }
                         uri.startsWith(FILE_LINK_URI_PREFIX) -> vm.files.open(uri.removePrefix(FILE_LINK_URI_PREFIX))
                         day != null -> {
                             calendarDay = day
                             selectedScreen = BottomItem.CALENDAR
                         }
-                        else -> platformUriHandler.openUri(uri)
+                        // Android throws when no app takes the link, and the tap would do nothing.
+                        else -> try {
+                            platformUriHandler.openUri(uri)
+                        } catch (e: Exception) {
+                            vm.links.onExternalLinkFailed(uri)
+                        }
                     }
                 }
             }

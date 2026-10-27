@@ -129,9 +129,12 @@ class OrgSyntaxHighlightingTest {
     }
 
     @Test
-    fun linksThatAreNotNotesAreNotFollowable() {
+    fun linksThatAreNotNotesGoToTheAppToSayWhyTheyLeadNowhere() {
         val out = buildOrgInlineString("press [[kbd:C-c C-c]] or see [[./linus.jpeg]]")
-        assertEquals(emptyList(), out.getLinkAnnotations(0, out.length))
+        assertEquals(
+            listOf("${NOTE_LINK_URI_PREFIX}kbd:C-c C-c", "${NOTE_LINK_URI_PREFIX}./linus.jpeg"),
+            out.getLinkAnnotations(0, out.length).map { (it.item as LinkAnnotation.Url).url },
+        )
     }
 
     @Test

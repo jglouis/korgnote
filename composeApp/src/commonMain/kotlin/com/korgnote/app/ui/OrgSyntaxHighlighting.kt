@@ -15,7 +15,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import com.korgnote.common.org.link.fileLinkPath
-import com.korgnote.common.org.link.isNoteLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
@@ -759,17 +758,19 @@ private fun AnnotatedString.Builder.appendLink(m: MatchResult, viewMode: Boolean
     val description = m.groupValues[2]
     if (viewMode) {
         val label = description.ifEmpty { target.removePrefix("file:") }
-        if (isNoteLink(target)) {
-            // Opened by the app, not the platform: see [NOTE_LINK_URI_PREFIX].
-            withLink(LinkAnnotation.Url(NOTE_LINK_URI_PREFIX + target, TextLinkStyles(style = linkStyle))) {
-                append(label)
-            }
-        } else if (fileLinkPath(target) != null) {
+        if (fileLinkPath(target) != null) {
             withLink(LinkAnnotation.Url(FILE_LINK_URI_PREFIX + target, TextLinkStyles(style = linkStyle))) {
                 append(label)
             }
-        } else {
+        } else if (isExternalUrl(target)) {
             appendUrl(target, label, viewMode = true)
+        } else {
+            // Opened by the app, not the platform: see [NOTE_LINK_URI_PREFIX]. That includes the
+            // links it cannot follow — `kbd:`, `mu4e:`, a picture beside the note — so that a tap
+            // on something drawn as a link says why it goes nowhere instead of doing nothing.
+            withLink(LinkAnnotation.Url(NOTE_LINK_URI_PREFIX + target, TextLinkStyles(style = linkStyle))) {
+                append(label)
+            }
         }
         return
     }

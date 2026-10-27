@@ -70,26 +70,56 @@ class LinkNavigator(
 
     /**
      * Follows a link tapped in reading mode: to the note, and the place in it, that [target] names.
-     * Says why when it cannot — the note is gone, the id is unknown, or it is not a note at all.
+     * Says why when it cannot — the note is gone, the id is unknown, or it is not a note at all —
+     * and returns whether it went anywhere.
      */
-    fun follow(target: String) {
-        val from = note.path ?: return
-        when (val resolved = index.resolve(target, from)) {
+    fun follow(target: String): Boolean {
+        // With no note open, as when a link in the calendar is tapped at launch, a relative link
+        // is read from the top of the notes.
+        val from = note.path
+        return when (val resolved = index.resolve(target, from.orEmpty())) {
             is OrgLinkResolution.Note -> {
-                rememberHere(from)
+                from?.let { rememberHere(it) }
                 open(resolved.path, resolved.offset)
                 showMessage(
                     resolved.missedSearch
                         ?.let { "\"$it\" is not in ${resolved.path} any more; opened the note instead." }
                         .orEmpty()
                 )
+                true
             }
-            is OrgLinkResolution.NotFound -> showMessage("Nothing in the notes matches [[$target]].")
-            is OrgLinkResolution.NotANote -> showMessage("[[$target]] is not a note, so it cannot be opened here.")
+            is OrgLinkResolution.NotFound -> {
+                showMessage("Nothing in the notes matches [[$target]].")
+                false
+            }
+            is OrgLinkResolution.NotANote -> {
+                showMessage(whyNotANote(target))
+                false
+            }
             // Web links are opened by the platform before they get here; this is the fallback.
-            is OrgLinkResolution.External -> showMessage("Open $target in a browser.")
+            is OrgLinkResolution.External -> {
+                showMessage("Open $target in a browser.")
+                false
+            }
         }
     }
+
+    /** A web or mail link the device has no app for. */
+    fun onExternalLinkFailed(target: String) {
+        showMessage("Nothing on this device opens $target.")
+    }
+
+    /** Why [target], a link to something other than a note, leads nowhere here. */
+    private fun whyNotANote(target: String): String =
+        when (val scheme = SCHEME.find(target.trim())?.groupValues?.get(1)?.lowercase()) {
+            // A file elsewhere on the machine is opened through File links, before it gets here;
+            // one kept beside the notes never reaches this device.
+            null, "file", "file+sys", "file+emacs" ->
+                "[[$target]] is a file kept beside the notes, and only notes are synced to this device."
+            // Its keys are usually in the description, `[[kbd:][C-c C-c]]`, leaving nothing to quote.
+            "kbd" -> "A kbd: link names keys to press in Emacs; it does not lead anywhere."
+            else -> "[[$target]] is a $scheme: link, which only Emacs can follow."
+        }
 
     /** Returns to where the last followed link was tapped. */
     fun goBack() {
@@ -118,5 +148,8 @@ class LinkNavigator(
 
     private companion object {
         val TITLE_LINE = Regex("(?im)^[ \\t]*#\\+TITLE:[ \\t]*(.+)$")
+
+        /** A link's type, read as [OrgLinkIndex] reads it. */
+        val SCHEME = Regex("^([A-Za-z][A-Za-z0-9+-]*):(?!\\s)")
     }
 }

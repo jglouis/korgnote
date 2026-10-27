@@ -113,11 +113,40 @@ class LinkNavigationTest {
     fun aBrokenLinkSaysSoAndGoesNowhere() = runTest {
         openDaily()
 
-        viewModel.links.follow("id:missing")
+        assertFalse(viewModel.links.follow("id:missing"))
 
         assertEquals("Selected: daily/today.org", viewModel.note.label)
         assertTrue(viewModel.lastErrorMessage.contains("Nothing in the notes"), viewModel.lastErrorMessage)
         assertFalse(viewModel.links.canGoBack)
+    }
+
+    @Test
+    fun aLinkToSomethingOtherThanANoteSaysWhyItGoesNowhere() = runTest {
+        openDaily()
+
+        for ((link, reason) in listOf(
+            "kbd:C-c C-c" to "keys to press in Emacs",
+            "mu4e:msgid:123@example.org" to "mu4e: link, which only Emacs can follow",
+            "./photo.jpeg" to "only notes are synced",
+            "file:scan.pdf" to "only notes are synced",
+        )) {
+            viewModel.clearError()
+            assertFalse(viewModel.links.follow(link), link)
+            assertTrue(viewModel.lastErrorMessage.contains(reason), viewModel.lastErrorMessage)
+        }
+        assertEquals("Selected: daily/today.org", viewModel.note.label)
+        assertFalse(viewModel.links.canGoBack)
+    }
+
+    @Test
+    fun aLinkTappedWithNoNoteOpenStillGoes() = runTest {
+        viewModel.server.load()
+        viewModel.note.close()
+
+        assertTrue(viewModel.links.follow("id:plan-id"))
+
+        assertEquals("Selected: project.org", viewModel.note.label)
+        assertFalse(viewModel.links.canGoBack, "there is nowhere to go back to")
     }
 
     @Test
