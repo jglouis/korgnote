@@ -4,11 +4,13 @@
 #   scripts/run-server-container.sh [NOTES_DIR] [docker compose up options, e.g. -d]
 #
 # Settings come from the environment, then from .env at the repository root, then from defaults.
-# A missing token is generated once and saved in .env, so the app keeps working across runs; the
-# notes directory is saved there too, so later runs need no argument.
+# The notes directory is saved in .env, so later runs need no argument. This computer's addresses
+# and name are looked up on every run and handed to the container, which cannot see them, for the
+# pairing QR code; the certificate and paired devices live in ~/.korgnote-server.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+source scripts/host-addresses.sh
 env_file=.env
 
 # Prints KEY's value from .env, without quotes; nothing when the file or the key is missing.
@@ -41,21 +43,27 @@ fi
 notes_dir=$(cd "$notes_dir" && pwd)
 save_env_value NOTES_HOST_DIR "$notes_dir"
 
-token=${KORGNOTE_TOKEN:-$(env_value KORGNOTE_TOKEN)}
-if [[ -z $token ]]; then
-  token=$(openssl rand -hex 16)
-  save_env_value KORGNOTE_TOKEN "$token"
-  echo "Generated a new token and saved it in $env_file; enter it in the app's Settings."
-fi
+state_dir=${KORGNOTE_STATE_HOST_DIR:-$(env_value KORGNOTE_STATE_HOST_DIR)}
+state_dir=${state_dir:-$HOME/.korgnote-server}
+state_dir=${state_dir/#\~/$HOME}
+# Made here, by you, so that Docker does not make it as root.
+mkdir -p "$state_dir"
+chmod 700 "$state_dir"
 
 # Exported values win over .env in docker compose; an argument must override a saved directory.
-export NOTES_HOST_DIR=$notes_dir KORGNOTE_TOKEN=$token
+export NOTES_HOST_DIR=$notes_dir KORGNOTE_STATE_HOST_DIR=$state_dir
 uid=${KORGNOTE_UID:-$(env_value KORGNOTE_UID)}
 gid=${KORGNOTE_GID:-$(env_value KORGNOTE_GID)}
 export KORGNOTE_UID=${uid:-$(id -u)} KORGNOTE_GID=${gid:-$(id -g)}
+export KORGNOTE_ADVERTISED_ADDRESSES=${KORGNOTE_ADVERTISED_ADDRESSES:-$(host_addresses)}
+export KORGNOTE_SERVER_NAME=${KORGNOTE_SERVER_NAME:-$(host_name)}
 port=${KORGNOTE_HOST_PORT:-$(env_value KORGNOTE_HOST_PORT)}
 
-echo "Notes: $notes_dir"
-echo "Token: $token"
-echo "Web:   http://localhost:${port:-8080}/"
+if [[ -n $(env_value KORGNOTE_TOKEN) ]]; then
+  echo "KORGNOTE_TOKEN in $env_file is no longer used: devices pair instead. It can be removed."
+fi
+echo "Notes:   $notes_dir"
+echo "State:   $state_dir"
+echo "Web:     http://localhost:${port:-8080}/"
+echo "Devices: http://localhost:${port:-8080}/devices   (pair a phone here, or with scripts/pair.sh)"
 exec docker compose up --build "$@"

@@ -1,71 +1,132 @@
 package com.korgnote.server
 
+import com.korgnote.common.SERVER_PORT
+import com.korgnote.common.pairing.SECURE_PORT
+import java.io.File
+import java.net.Inet4Address
+import java.net.NetworkInterface
+
 /**
- * How the server exposes itself: which interface it listens on, and whether a token is required.
+ * How the server exposes itself, from the environment.
  *
- * The default is the safe one — loopback only, so an unauthenticated server is not reachable from
- * the network at all. Setting `KORGNOTE_TOKEN` opens it to the LAN behind bearer auth.
- *
- * `KORGNOTE_ALLOW_LAN=1` opens it to the LAN with **no** authentication. That exists because the
- * app is developed against real phones over a LAN, and making that require a token every time would
- * be a tax on every test run. It is a deliberate, logged, opt-in hole: never use it on a network you
- * do not control.
- *
- * `KORGNOTE_REQUIRE_TOKEN=1` turns a missing token into a refusal to start. The container image sets
- * it, because a container is exactly where a port gets published by accident, and inside one the
- * loopback default would only make the server unreachable rather than safe.
+ * Two ports. The plain one ([httpPort]) is for the computer the server runs on: the web client, the
+ * desktop app, the Devices page where devices are paired and revoked. It listens on loopback, so
+ * nothing else can reach it — in the container it listens everywhere inside, and the compose file
+ * publishes it on the host's loopback only. The secure one ([httpsPort]) is for the network: TLS
+ * with the server's own certificate, and nothing but the sync API, for paired devices only.
  */
-data class ServerSecurity(
-    val token: String?,
-    val allowLanWithoutToken: Boolean,
-    val tokenMandatory: Boolean = false,
+data class ServerConfig(
+    val httpHost: String = LOOPBACK,
+    val httpPort: Int = SERVER_PORT,
+    val httpsHost: String = ALL_INTERFACES,
+    val httpsPort: Int = SECURE_PORT,
+    /** The port a pairing QR code tells devices to use: [httpsPort] unless the container publishes it as another. */
+    val advertisedPort: Int = httpsPort,
+    val stateDir: File = File(System.getProperty("user.home"), ".korgnote-server"),
+    /** What a device shows the server as once paired. */
+    val serverName: String = "KorgNote",
+    /** Addresses for the QR code that the server cannot find for itself, as in a container. */
+    val advertisedAddresses: List<String> = emptyList(),
+    /** A `KORGNOTE_TOKEN` left over from before pairing, which is now ignored; worth a line in the log. */
+    val leftoverToken: Boolean = false,
 ) {
-    /** Loopback unless something has explicitly made it safe — or explicitly accepted the risk. */
-    val bindHost: String
-        get() = if (token != null || allowLanWithoutToken) ALL_INTERFACES else LOOPBACK
-
-    val requiresToken: Boolean get() = token != null
-
-    val reachableFromNetwork: Boolean get() = bindHost == ALL_INTERFACES
+    fun describe(): String =
+        "Paired devices: https on $httpsHost:$httpsPort. This computer only: http on $httpHost:$httpPort " +
+            "(web client, desktop app, and the Devices page at /devices). State in ${stateDir.absolutePath}." +
+            if (leftoverToken) " $TOKEN_VARIABLE is set but no longer used: pair devices on the Devices page instead." else ""
 
     companion object {
         const val LOOPBACK = "127.0.0.1"
         const val ALL_INTERFACES = "0.0.0.0"
 
+        const val HTTP_HOST_VARIABLE = "KORGNOTE_HTTP_HOST"
+        const val PORT_VARIABLE = "KORGNOTE_PORT"
+        const val HTTPS_PORT_VARIABLE = "KORGNOTE_HTTPS_PORT"
+        const val ADVERTISED_PORT_VARIABLE = "KORGNOTE_ADVERTISED_PORT"
+        const val STATE_DIR_VARIABLE = "KORGNOTE_STATE_DIR"
+        const val SERVER_NAME_VARIABLE = "KORGNOTE_SERVER_NAME"
+        const val ADDRESSES_VARIABLE = "KORGNOTE_ADVERTISED_ADDRESSES"
         const val TOKEN_VARIABLE = "KORGNOTE_TOKEN"
-        const val ALLOW_LAN_VARIABLE = "KORGNOTE_ALLOW_LAN"
-        const val REQUIRE_TOKEN_VARIABLE = "KORGNOTE_REQUIRE_TOKEN"
 
-        fun fromEnvironment(read: (String) -> String? = System::getenv): ServerSecurity =
-            ServerSecurity(
-                token = read(TOKEN_VARIABLE)?.trim()?.takeUnless { it.isEmpty() },
-                allowLanWithoutToken = isSet(read(ALLOW_LAN_VARIABLE)),
-                tokenMandatory = isSet(read(REQUIRE_TOKEN_VARIABLE)),
+        fun fromEnvironment(read: (String) -> String? = System::getenv): ServerConfig {
+            fun value(name: String) = read(name)?.trim()?.takeIf { it.isNotEmpty() }
+            val defaults = ServerConfig()
+            val httpsPort = value(HTTPS_PORT_VARIABLE)?.toIntOrNull() ?: defaults.httpsPort
+            return ServerConfig(
+                httpHost = value(HTTP_HOST_VARIABLE) ?: defaults.httpHost,
+                httpPort = value(PORT_VARIABLE)?.toIntOrNull() ?: defaults.httpPort,
+                httpsPort = httpsPort,
+                advertisedPort = value(ADVERTISED_PORT_VARIABLE)?.toIntOrNull() ?: httpsPort,
+                stateDir = value(STATE_DIR_VARIABLE)?.let { File(expandHome(it)) } ?: defaults.stateDir,
+                serverName = value(SERVER_NAME_VARIABLE) ?: defaults.serverName,
+                advertisedAddresses = value(ADDRESSES_VARIABLE)?.split(',', ' ')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty(),
+                leftoverToken = value(TOKEN_VARIABLE) != null,
             )
-
-        private fun isSet(value: String?): Boolean = value?.trim()?.lowercase() in setOf("1", "true", "yes")
-
-        /** No token and reachable: what the test host and local development use. */
-        fun open(): ServerSecurity = ServerSecurity(token = null, allowLanWithoutToken = true)
-    }
-
-    /** Why this configuration must not start, or null when it may. */
-    fun startupError(): String? =
-        if (tokenMandatory && token == null) {
-            "$REQUIRE_TOKEN_VARIABLE is set but $TOKEN_VARIABLE is not: refusing to start without a token. " +
-                "Generate one with `openssl rand -hex 16`."
-        } else {
-            null
         }
 
-    /** A line for the log explaining, in one sentence, what this server will accept. */
-    fun describe(): String = when {
-        requiresToken -> "Listening on $bindHost; /api requires a bearer token ($TOKEN_VARIABLE)."
-        allowLanWithoutToken ->
-            "Listening on $bindHost with NO authentication because $ALLOW_LAN_VARIABLE is set. " +
-                "Convenient for testing on a device; unsafe on a shared network."
-        else ->
-            "Listening on $bindHost (loopback only). Set $TOKEN_VARIABLE to serve the LAN with a " +
-                "token, or $ALLOW_LAN_VARIABLE=1 to serve it without one while testing."
+        private fun expandHome(path: String) =
+            if (path == "~" || path.startsWith("~/")) System.getProperty("user.home") + path.removePrefix("~") else path
     }
 }
+
+/**
+ * Who may use what, as the module enforces it: [devices] for the network, and the plain port for
+ * this computer only. [securePort] is the port TLS arrives on; null where there is none, as under
+ * the test host, which then stands for the computer itself.
+ */
+class ServerAccess(
+    val devices: DeviceRegistry,
+    val securePort: Int?,
+    /** What a pairing QR code says about this server; null where devices cannot pair. */
+    val pairing: PairingDetails?,
+) {
+    companion object {
+        /** No network side at all: what the test host and the API tests want. */
+        fun localOnly(devices: DeviceRegistry = DeviceRegistry(file = null)) = ServerAccess(devices, securePort = null, pairing = null)
+    }
+}
+
+/** The server's side of a pairing link, all but the one-time code and the addresses of the moment. */
+class PairingDetails(
+    val serverId: String,
+    val serverName: String,
+    val fingerprint: String,
+    val port: Int,
+    /** Addresses given at startup; the Devices page adds what the computer's own interfaces say, when it can see them. */
+    val configuredAddresses: List<String>,
+) {
+    /** Set by `scripts/pair.sh`, which asks the host for its addresses: the newest a QR code was made with. */
+    @Volatile
+    var lastAddresses: List<String> = emptyList()
+
+    /** Where devices may find this server, best guesses first. */
+    fun addresses(): List<String> = (lastAddresses + configuredAddresses + interfaceAddresses()).distinct()
+}
+
+/**
+ * This computer's IPv4 addresses on the networks it is on. None inside a container, whose
+ * interfaces are the container's own: there the run script passes the host's in.
+ */
+internal fun interfaceAddresses(): List<String> {
+    if (File("/.dockerenv").exists()) return emptyList()
+    return runCatching {
+        NetworkInterface.getNetworkInterfaces().toList()
+            .filter { it.isUp && !it.isLoopback && !it.isVirtual && !it.isPointToPoint }
+            .flatMap { it.inetAddresses.toList() }
+            .filterIsInstance<Inet4Address>()
+            .filter { it.isSiteLocalAddress }
+            .map { it.hostAddress }
+    }.getOrDefault(emptyList())
+}
+
+/**
+ * Whether [host], from a request's `Host` header, names this computer: `localhost`, a loopback
+ * address, or the address the Android emulator reaches its host by. A page served from any other
+ * name — one that resolves to 127.0.0.1 to get past the browser's same-origin rule — is refused.
+ */
+internal fun namesThisComputer(host: String): Boolean {
+    val h = host.trim().removePrefix("[").removeSuffix("]").lowercase()
+    return h == "localhost" || h == "::1" || h.startsWith("127.") || h == ANDROID_EMULATOR_HOST
+}
+
+private const val ANDROID_EMULATOR_HOST = "10.0.2.2"

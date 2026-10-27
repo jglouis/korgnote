@@ -1,6 +1,9 @@
 package com.korgnote.app.di
 
+import com.korgnote.app.data.CertificatePins
+import com.korgnote.app.data.DevicePairing
 import com.korgnote.app.data.KtorSyncApi
+import com.korgnote.app.data.endpointsFor
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.files.FileOpener
 import com.korgnote.app.files.NoFileOpener
@@ -22,15 +25,20 @@ import kotlin.time.Clock
 // Simple Koin setup for Multiplatform Compose
 val appModule = module {
 
+    // The certificate TLS may present: the paired computer's, or while pairing, the one its QR
+    // code names. The HTTP client trusts nothing else.
+    single { CertificatePins { get<SettingsRepository>().getPairedServer()?.fingerprint } }
+
     // Provide Ktor HttpClient with JSON plugin (base URL includes port; client itself is engine + JSON only)
-    single { platformBuildHttpClient() }
+    single { platformBuildHttpClient(get()) }
 
     // The sync API v1 client. Nothing here parses Org: it moves text and etags.
     single<SyncApi> {
         val settings = get<SettingsRepository>()
-        val baseUrlProvider = { buildBaseUrl(settings.getServerHost(), settings.getServerPort()) }
-        KtorSyncApi(get(), baseUrlProvider, settings::getServerToken)
+        KtorSyncApi(get()) { endpointsFor(settings) }
     }
+
+    single { DevicePairing(get(), get(), get()) }
 
     single { SyncEngine(get(), get(), ::conflictTimestamp) }
     // The local replica. Each platform contributes the ReplicaStorage it can actually use:
@@ -64,14 +72,9 @@ fun initKoin(extraModules: List<Module> = emptyList()) {
     }
 }
 
-// Helper to build base URL from host and port
-fun buildBaseUrl(host: String, port: Int): String {
-    val normalized = if (host.startsWith("http://") || host.startsWith("https://")) host else "http://$host"
-    return "$normalized:$port"
-}
-
-// Platform-specific client builder (Android adds Logging, others are minimal)
-expect fun platformBuildHttpClient(): HttpClient
+// Platform-specific client builder (Android adds Logging, others are minimal). Over TLS it trusts
+// what [pins] accepts and nothing else.
+expect fun platformBuildHttpClient(pins: CertificatePins): HttpClient
 
 /**
  * Stamp for conflict copies: `yyyyMMdd-HHmmss` in local time, matching Syncthing's naming so the

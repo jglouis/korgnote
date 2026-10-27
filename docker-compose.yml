@@ -1,11 +1,11 @@
 # T23 — the sync server with the notes directory from the host.
 #
-#   export KORGNOTE_TOKEN=$(openssl rand -hex 16)   # the app needs this token too
-#   export NOTES_HOST_DIR=~/notes
-#   export KORGNOTE_UID=$(id -u) KORGNOTE_GID=$(id -g)
-#   docker compose up --build
+#   scripts/run-server-container.sh [NOTES_DIR]     # sets everything below, then runs this
 #
-# No TLS here: put the reverse proxy from the README in front of it for anything beyond your own LAN.
+# Two ports. 8443 is for paired devices, over TLS with the server's own certificate: phones pair by
+# scanning the QR code on the Devices page, http://localhost:8080/devices. 8080 is for this computer
+# only — the web client, the desktop app, the Devices page — and has no token: it must stay published
+# on 127.0.0.1, never on the network.
 services:
   korgnote:
     build: .
@@ -13,12 +13,19 @@ services:
     # Notes the app creates must belong to you on the host, not to root or to UID 1000.
     user: "${KORGNOTE_UID:-1000}:${KORGNOTE_GID:-1000}"
     environment:
-      # Required: the image refuses to start without it.
-      KORGNOTE_TOKEN: "${KORGNOTE_TOKEN:?set KORGNOTE_TOKEN (openssl rand -hex 16)}"
+      # What paired devices call this server, and where they can reach it: the container cannot see
+      # the host's addresses, so the run script passes them in. The Devices page lets you edit them.
+      KORGNOTE_SERVER_NAME: "${KORGNOTE_SERVER_NAME:-KorgNote}"
+      KORGNOTE_ADVERTISED_ADDRESSES: "${KORGNOTE_ADVERTISED_ADDRESSES:-}"
+      KORGNOTE_ADVERTISED_PORT: "${KORGNOTE_HTTPS_HOST_PORT:-8443}"
       # The web client is served at / by default; uncomment to serve the API only.
       # KORGNOTE_DISABLE_WEB: "1"
     volumes:
       - "${NOTES_HOST_DIR:?set NOTES_HOST_DIR to your notes directory}:/notes"
+      # The certificate, the server's id and the paired devices — the same folder a server run
+      # outside the container uses, so both are the same server to a paired phone.
+      - "${KORGNOTE_STATE_HOST_DIR:?set KORGNOTE_STATE_HOST_DIR, e.g. ~/.korgnote-server}:/state"
     ports:
-      - "${KORGNOTE_HOST_PORT:-8080}:8080"
+      - "${KORGNOTE_HTTPS_HOST_PORT:-8443}:8443"
+      - "127.0.0.1:${KORGNOTE_HOST_PORT:-8080}:8080"
     restart: unless-stopped

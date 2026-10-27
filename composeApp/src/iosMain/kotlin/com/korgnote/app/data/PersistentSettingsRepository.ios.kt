@@ -5,7 +5,6 @@ import com.korgnote.app.files.decodeFileLinkMappings
 import com.korgnote.app.files.encodeFileLinkMappings
 import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.common.SERVER_PORT
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import platform.Foundation.NSUserDefaults
 
@@ -14,15 +13,12 @@ class PersistentSettingsRepository : SettingsRepository {
 
     private val hostFlow = MutableStateFlow(loadHost())
     private val portFlow = MutableStateFlow(loadPort())
-    private val tokenFlow = MutableStateFlow(defaults.stringForKey(KEY_TOKEN).orEmpty())
+    private var pairedServer: PairedServer? = PairedServer.decode(defaults.stringForKey(KEY_PAIRED_SERVER))
 
-    override val serverHostFlow: Flow<String> = hostFlow
-    override val serverPortFlow: Flow<Int> = portFlow
-    override val serverTokenFlow: Flow<String> = tokenFlow
 
     override fun getServerHost(): String = hostFlow.value
     override fun getServerPort(): Int = portFlow.value
-    override fun getServerToken(): String = tokenFlow.value
+    override fun getPairedServer(): PairedServer? = pairedServer
 
     override fun setServerHost(host: String) {
         hostFlow.value = host
@@ -34,9 +30,11 @@ class PersistentSettingsRepository : SettingsRepository {
         defaults.setInteger(port.toLong(), forKey = KEY_PORT)
     }
 
-    override fun setServerToken(token: String) {
-        tokenFlow.value = token
-        defaults.setObject(token, forKey = KEY_TOKEN)
+    override fun setPairedServer(server: PairedServer?) {
+        pairedServer = server
+        if (server == null) defaults.removeObjectForKey(KEY_PAIRED_SERVER) else defaults.setObject(server.encode(), forKey = KEY_PAIRED_SERVER)
+        // The shared token from before pairing, which nothing reads any more.
+        defaults.removeObjectForKey(KEY_TOKEN)
     }
 
     override fun getReminderSettings(): ReminderSettings = ReminderSettings.decode(defaults.stringForKey(KEY_REMINDERS))
@@ -95,6 +93,7 @@ class PersistentSettingsRepository : SettingsRepository {
         private const val KEY_HOST = "server_host"
         private const val KEY_PORT = "server_port"
         private const val KEY_TOKEN = "server_token"
+        private const val KEY_PAIRED_SERVER = "paired_server"
         private const val KEY_REMINDERS = "reminders"
         private const val KEY_NEW_NOTES_FOLDER = "new_notes_folder"
         private const val KEY_PINNED_NOTES = "pinned_notes"

@@ -5,7 +5,6 @@ import com.korgnote.app.files.decodeFileLinkMappings
 import com.korgnote.app.files.encodeFileLinkMappings
 import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.common.SERVER_PORT
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.prefs.Preferences
 
@@ -14,15 +13,12 @@ class PersistentSettingsRepository : SettingsRepository {
 
     private val hostFlow = MutableStateFlow(loadHost())
     private val portFlow = MutableStateFlow(loadPort())
-    private val tokenFlow = MutableStateFlow(prefs.get(KEY_TOKEN, ""))
+    private var pairedServer: PairedServer? = PairedServer.decode(prefs.get(KEY_PAIRED_SERVER, null))
 
-    override val serverHostFlow: Flow<String> = hostFlow
-    override val serverPortFlow: Flow<Int> = portFlow
-    override val serverTokenFlow: Flow<String> = tokenFlow
 
     override fun getServerHost(): String = hostFlow.value
     override fun getServerPort(): Int = portFlow.value
-    override fun getServerToken(): String = tokenFlow.value
+    override fun getPairedServer(): PairedServer? = pairedServer
 
     override fun setServerHost(host: String) {
         hostFlow.value = host
@@ -34,9 +30,11 @@ class PersistentSettingsRepository : SettingsRepository {
         prefs.putInt(KEY_PORT, port)
     }
 
-    override fun setServerToken(token: String) {
-        tokenFlow.value = token
-        prefs.put(KEY_TOKEN, token)
+    override fun setPairedServer(server: PairedServer?) {
+        pairedServer = server
+        if (server == null) prefs.remove(KEY_PAIRED_SERVER) else prefs.put(KEY_PAIRED_SERVER, server.encode())
+        // The shared token from before pairing, which nothing reads any more.
+        prefs.remove(KEY_TOKEN)
     }
 
     override fun getReminderSettings(): ReminderSettings = ReminderSettings.decode(prefs.get(KEY_REMINDERS, null))
@@ -89,6 +87,7 @@ class PersistentSettingsRepository : SettingsRepository {
         private const val KEY_HOST = "server_host"
         private const val KEY_PORT = "server_port"
         private const val KEY_TOKEN = "server_token"
+        private const val KEY_PAIRED_SERVER = "paired_server"
         private const val KEY_REMINDERS = "reminders"
         private const val KEY_NEW_NOTES_FOLDER = "new_notes_folder"
         private const val KEY_PINNED_NOTES = "pinned_notes"

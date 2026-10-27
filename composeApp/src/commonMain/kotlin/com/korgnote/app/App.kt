@@ -29,7 +29,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.ui.*
+import com.korgnote.app.data.DevicePairing
 import com.korgnote.app.viewmodel.LinkEdit
+import org.koin.mp.KoinPlatform
 import com.korgnote.app.viewmodel.NotesViewModel
 import com.korgnote.app.viewmodel.OpenNote
 import kotlinx.coroutines.flow.collectLatest
@@ -663,6 +665,7 @@ fun App() {
                                         modifier = Modifier.fillMaxSize(),
                                         serverStatus = statusIcons,
                                         onSaved = { scope.launch { vm.server.retry() } },
+                                        pairing = remember { KoinPlatform.getKoin().getOrNull<DevicePairing>() },
                                     )
                                 }
                             }

@@ -10,17 +10,22 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 /**
- * The configured token has to reach the wire on every sync request, not just the first.
+ * The paired token has to reach the wire on every sync request, and a paired computer that is not
+ * at one of its addresses is looked for at the others.
  */
 class KtorSyncApiAuthTest {
 
     private val sent = mutableListOf<String?>()
+    private val hosts = mutableListOf<String>()
 
-    private fun apiWith(token: String): KtorSyncApi {
+    private fun apiWith(vararg endpoints: Endpoint, unreachable: Set<String> = emptySet()): KtorSyncApi {
         val engine = MockEngine { request ->
+            hosts.add(request.url.host)
+            if (request.url.host in unreachable) throw RuntimeException("no route to ${request.url.host}")
             sent.add(request.headers[HttpHeaders.Authorization])
             respond(
                 content = """{"generation":1,"complete":true,"entries":[],"deleted":[]}""",
@@ -28,28 +33,48 @@ class KtorSyncApiAuthTest {
             )
         }
         val client = HttpClient(engine) { install(ContentNegotiation) { json() } }
-        return KtorSyncApi(client, { "http://example.test:8080" }, { token })
+        return KtorSyncApi(client) { endpoints.toList() }
     }
 
     @Test
-    fun aConfiguredTokenIsSentAsABearerHeader() = runTest {
-        apiWith("s3cret").manifest()
+    fun thePairedTokenIsSentAsABearerHeader() = runTest {
+        apiWith(Endpoint("https://192.168.1.20:8443", "s3cret")).manifest()
         assertEquals("Bearer s3cret", sent.single())
     }
 
     @Test
-    fun noHeaderIsSentWhenNoTokenIsConfigured() = runTest {
-        apiWith("").manifest()
-        assertNull(sent.single(), "an empty token must not become 'Bearer '")
+    fun theServerOnThisComputerGetsNoHeader() = runTest {
+        apiWith(Endpoint("http://localhost:8080", null)).manifest()
+        assertNull(sent.single())
     }
 
     @Test
     fun everyRequestCarriesTheToken() = runTest {
-        val api = apiWith("s3cret")
+        val api = apiWith(Endpoint("https://192.168.1.20:8443", "s3cret"))
         api.manifest()
         api.fetch("notes.org")
         api.push("notes.org", "* hi\n", ifMatch = null)
 
         assertEquals(List<String?>(3) { "Bearer s3cret" }, sent.toList())
+    }
+
+    @Test
+    fun anAddressThatCannotBeReachedGivesWayToTheNext() = runTest {
+        val api = apiWith(
+            Endpoint("https://10.0.0.5:8443", "s3cret"),
+            Endpoint("https://192.168.1.20:8443", "s3cret"),
+            unreachable = setOf("10.0.0.5"),
+        )
+        api.manifest()
+        api.manifest()
+
+        assertEquals(listOf("10.0.0.5", "192.168.1.20", "192.168.1.20"), hosts, "the one that answered is tried first after")
+    }
+
+    @Test
+    fun whenNoneAnswersTheLastProblemIsReported() = runTest {
+        val api = apiWith(Endpoint("https://10.0.0.5:8443", "t"), unreachable = setOf("10.0.0.5"))
+        val error = assertFailsWith<RuntimeException> { api.manifest() }
+        assertEquals("no route to 10.0.0.5", error.message)
     }
 }

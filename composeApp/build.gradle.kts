@@ -65,6 +65,8 @@ kotlin {
             implementation(libs.ktor.client.android)
             // Ktor client logging (debug diagnostics)
             implementation(libs.ktor.client.logging)
+            // Scans the pairing QR code on the device itself, without Play services.
+            implementation(libs.zxing.android.embedded)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

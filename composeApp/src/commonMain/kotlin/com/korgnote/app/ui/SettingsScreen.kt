@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.korgnote.app.data.DevicePairing
 import com.korgnote.app.data.NoteTemplateSettings
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.files.FileLinkMapping
@@ -62,11 +63,12 @@ fun SettingsScreen(
     onSaved: (() -> Unit)? = null,
     /** Tags used across the notes, most used first: the ones a colour can be chosen for. */
     knownTags: List<String> = emptyList(),
+    /** Pairs this device with a computer; null where nothing can, as in tests. */
+    pairing: DevicePairing? = null,
 ) {
     val scope = rememberCoroutineScope()
     var host by remember { mutableStateOf("") }
     var portText by remember { mutableStateOf("") }
-    var token by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     var saved by remember { mutableStateOf(false) }
@@ -83,7 +85,7 @@ fun SettingsScreen(
     var tagColors by remember { mutableStateOf(emptyMap<String, Int>()) }
     // What the form held when loaded or last saved; null until loaded.
     val form = listOf(
-        host, portText, token, remindersOn, leadText, digestOn, digestTime, newNotesFolder, fileLinks,
+        host, portText, remindersOn, leadText, digestOn, digestTime, newNotesFolder, fileLinks,
         author, dailyFolder, extraHeader, tagColors,
     )
     var stored by remember { mutableStateOf<List<Any>?>(null) }
@@ -92,7 +94,6 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         host = repo.getServerHost()
         portText = repo.getServerPort().toString()
-        token = repo.getServerToken()
         val reminders = repo.getReminderSettings()
         remindersOn = reminders.enabled
         leadText = reminders.leadMinutes.toString()
@@ -106,7 +107,7 @@ fun SettingsScreen(
         extraHeader = template.extraHeader
         tagColors = repo.getTagColors()
         stored = listOf(
-            host, portText, token, remindersOn, leadText, digestOn, digestTime, newNotesFolder, fileLinks,
+            host, portText, remindersOn, leadText, digestOn, digestTime, newNotesFolder, fileLinks,
             author, dailyFolder, extraHeader, tagColors,
         )
     }
@@ -159,7 +160,6 @@ fun SettingsScreen(
             try {
                 repo.setServerHost(host.trim())
                 repo.setServerPort(port)
-                repo.setServerToken(token.trim())
                 val current = repo.getReminderSettings()
                 repo.setReminderSettings(
                     ReminderSettings(
@@ -193,15 +193,25 @@ fun SettingsScreen(
             // Whether the server can be reached, and what conflicts syncing left, next to its
             // settings: there is no bar above them.
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Server configuration", modifier = Modifier.weight(1f))
+                Text("Server", modifier = Modifier.weight(1f))
                 serverStatus()
             }
+            Spacer(Modifier.height(8.dp))
+            PairingSettings(repo, pairing, onChanged = { onSaved?.invoke() })
+
+            Spacer(Modifier.height(24.dp))
+            Text("Server on this computer")
+            Text(
+                "Used when not paired: by the desktop app and the web client on the computer the server runs on.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline,
+            )
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 modifier = Modifier.fillMaxWidth(),
                 value = host,
                 onValueChange = { host = it },
-                label = { Text("Server host (e.g. 192.168.1.10 or http://example.com)") },
+                label = { Text("Host (localhost, or 10.0.2.2 from the Android emulator)") },
                 singleLine = true
             )
             Spacer(Modifier.height(8.dp))
@@ -211,14 +221,6 @@ fun SettingsScreen(
                 onValueChange = { portText = it.filter { ch -> ch.isDigit() } },
                 label = { Text("Port") },
                 singleLine = true
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = token,
-                onValueChange = { token = it },
-                label = { Text("Access token (leave empty if the server does not require one)") },
-                singleLine = true,
             )
 
             Spacer(Modifier.height(24.dp))

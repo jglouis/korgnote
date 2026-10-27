@@ -2,12 +2,8 @@ package com.korgnote.app.data
 
 import com.korgnote.app.files.FileLinkMapping
 import com.korgnote.app.notifications.ReminderSettings
-import kotlinx.coroutines.flow.Flow
 
 interface SettingsRepository {
-    val serverHostFlow: Flow<String>
-    val serverPortFlow: Flow<Int>
-
     fun getServerHost(): String
     fun getServerPort(): Int
 
@@ -15,16 +11,13 @@ interface SettingsRepository {
     fun setServerPort(port: Int)
 
     /**
-     * Bearer token for the server, or empty when it does not ask for one.
-     *
-     * A server started without `KORGNOTE_TOKEN` serves loopback only, or the LAN if it was told to;
-     * either way it accepts requests without a token, so leaving this blank is normal while testing.
+     * The computer this device is paired with, or null. While paired, the app reaches the server
+     * there, over TLS; [getServerHost] and [getServerPort] name the server on this computer
+     * itself, which is what the desktop app and the web client use.
      */
-    val serverTokenFlow: Flow<String>
+    fun getPairedServer(): PairedServer?
 
-    fun getServerToken(): String
-
-    fun setServerToken(token: String)
+    fun setPairedServer(server: PairedServer?)
 
     /** Reminder lead time and daily digest (T18). */
     fun getReminderSettings(): ReminderSettings

@@ -4,7 +4,6 @@ import com.korgnote.app.files.FileLinkMapping
 import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.common.SERVER_PORT
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.Flow
 
 class InMemorySettingsRepository(
     initialHost: String = defaultServerBaseUrl()
@@ -12,19 +11,16 @@ class InMemorySettingsRepository(
         .removePrefix("https://")
         .substringBefore(":"),
     initialPort: Int = SERVER_PORT,
-    initialToken: String = "",
+    initialPairedServer: PairedServer? = null,
 ) : SettingsRepository {
     private val host = MutableStateFlow(initialHost)
     private val port = MutableStateFlow(initialPort)
-    private val token = MutableStateFlow(initialToken)
+    private var pairedServer = initialPairedServer
 
-    override val serverHostFlow: Flow<String> = host
-    override val serverPortFlow: Flow<Int> = port
-    override val serverTokenFlow: Flow<String> = token
 
     override fun getServerHost(): String = host.value
     override fun getServerPort(): Int = port.value
-    override fun getServerToken(): String = token.value
+    override fun getPairedServer(): PairedServer? = pairedServer
 
     override fun setServerHost(host: String) {
         this.host.value = host
@@ -34,8 +30,8 @@ class InMemorySettingsRepository(
         this.port.value = port
     }
 
-    override fun setServerToken(token: String) {
-        this.token.value = token
+    override fun setPairedServer(server: PairedServer?) {
+        pairedServer = server
     }
 
     private var reminders = ReminderSettings()

@@ -22,6 +22,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.encodeURLPathPart
 import io.ktor.http.HttpStatusCode
 import io.ktor.utils.io.readLine
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -40,29 +41,51 @@ private data class WireManifest(
  *
  * Nothing here parses Org: the client receives text and etags, and the parsing happens locally
  * against the replica (D2, D3).
+ *
+ * A paired computer may be at any of several addresses, so each request goes to the one that
+ * answered last, and on to the others when that one cannot be reached.
  */
 class KtorSyncApi(
     private val client: HttpClient,
-    private val baseUrlProvider: () -> String,
-    private val tokenProvider: () -> String = { "" },
+    /** Read on every request, so that pairing or a change in Settings applies at once. */
+    private val endpoints: () -> List<Endpoint>,
 ) : SyncApi {
 
-    private fun url(suffix: String) = "${baseUrlProvider()}/api/v1$suffix"
+    private var lastReached: String? = null
 
     /**
-     * A file's URL, each segment percent-encoded: a note named with a space, `#` or `?` would
-     * otherwise address some other path, or none.
+     * [request] sent to each endpoint in turn, the one reached last first, until one answers; what
+     * stopped the last one otherwise. An answer of any status counts: only an address that cannot
+     * be reached is worth trying another for.
      */
-    private fun fileUrl(path: String) = url("/files/" + path.split('/').joinToString("/") { it.encodeURLPathPart() })
+    private suspend fun <T> reach(request: suspend (api: String, token: String?) -> T): T {
+        val ordered = endpoints().sortedBy { if (it.baseUrl == lastReached) 0 else 1 }
+        var failure: Exception? = null
+        for (endpoint in ordered) {
+            try {
+                return request("${endpoint.baseUrl}/api/v1", endpoint.token).also { lastReached = endpoint.baseUrl }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                failure = e
+            }
+        }
+        throw failure ?: IllegalStateException("No server is set. Pair with a computer in Settings.")
+    }
 
-    private fun HttpRequestBuilder.authorize() {
-        val token = tokenProvider().trim()
-        if (token.isNotEmpty()) header(HttpHeaders.Authorization, "Bearer $token")
+    /**
+     * A file's path under the API, each segment percent-encoded: a note named with a space, `#` or
+     * `?` would otherwise address some other path, or none.
+     */
+    private fun filePath(path: String) = "/files/" + path.split('/').joinToString("/") { it.encodeURLPathPart() }
+
+    private fun HttpRequestBuilder.authorize(token: String?) {
+        if (!token.isNullOrBlank()) header(HttpHeaders.Authorization, "Bearer ${token.trim()}")
     }
 
     override suspend fun manifest(since: Long?): RemoteManifest {
         val suffix = if (since != null) "/manifest?since=$since" else "/manifest"
-        val wire: WireManifest = client.get(url(suffix)) { authorize() }.body()
+        val wire: WireManifest = reach { api, token -> client.get(api + suffix) { authorize(token) }.body() }
         return RemoteManifest(
             generation = wire.generation,
             complete = wire.complete,
@@ -72,7 +95,7 @@ class KtorSyncApi(
     }
 
     override suspend fun fetch(path: String): RemoteFile? {
-        val response = client.get(fileUrl(path)) { authorize() }
+        val response = reach { api, token -> client.get(api + filePath(path)) { authorize(token) } }
         if (response.status != HttpStatusCode.OK) return null
         val etag = response.headers[HttpHeaders.ETag]?.trim('"') ?: return null
         return RemoteFile(path, etag, response.bodyAsText())
@@ -84,11 +107,13 @@ class KtorSyncApi(
         ifMatch: String?,
         mustNotExist: Boolean,
     ): PushResult {
-        val response = client.put(fileUrl(path)) {
-            authorize()
-            if (ifMatch != null) header(HttpHeaders.IfMatch, ifMatch)
-            if (mustNotExist) header(HttpHeaders.IfNoneMatch, "*")
-            setBody(content)
+        val response = reach { api, token ->
+            client.put(api + filePath(path)) {
+                authorize(token)
+                if (ifMatch != null) header(HttpHeaders.IfMatch, ifMatch)
+                if (mustNotExist) header(HttpHeaders.IfNoneMatch, "*")
+                setBody(content)
+            }
         }
         return when (response.status) {
             HttpStatusCode.OK ->
@@ -101,9 +126,9 @@ class KtorSyncApi(
         }
     }
 
-    override suspend fun events(onChange: suspend (path: String, deleted: Boolean) -> Unit) {
-        client.prepareGet(url("/events")) {
-            authorize()
+    override suspend fun events(onChange: suspend (path: String, deleted: Boolean) -> Unit) = reach { api, token ->
+        client.prepareGet("$api/events") {
+            authorize(token)
             // The stream is meant to stay open. Without this the client's request timeout kills it
             // after a few seconds, and the Android engine then fails while draining the chunked
             // body ("Unbalanced enter/exit"), so live updates stop and the log fills with stacks.
@@ -130,9 +155,11 @@ class KtorSyncApi(
     }
 
     override suspend fun delete(path: String, ifMatch: String): DeleteResult {
-        val response = client.delete(fileUrl(path)) {
-            authorize()
-            header(HttpHeaders.IfMatch, ifMatch)
+        val response = reach { api, token ->
+            client.delete(api + filePath(path)) {
+                authorize(token)
+                header(HttpHeaders.IfMatch, ifMatch)
+            }
         }
         return when (response.status) {
             HttpStatusCode.NoContent -> DeleteResult.Deleted

@@ -60,88 +60,62 @@ in your IDE’s toolbar or run it directly from the terminal:
   .\gradlew.bat :server:run
   ```
 
-#### Server options
+#### Two ports: this computer, and paired devices
+
+The server has two doors:
+
+- **8080, plain HTTP, this computer only.** It listens on `127.0.0.1`, so nothing else on the
+  network can reach it, and it asks for no token. The web client, the desktop app and the
+  **Devices page** (`http://localhost:8080/devices`) use it.
+- **8443, HTTPS, for paired devices.** It listens on every interface and serves nothing but the
+  sync API, to devices that paired. The certificate is the server's own, made on first start; a
+  device trusts it by its fingerprint alone, so there is no domain, authority or renewal involved.
+
+To pair a phone: open the Devices page on the computer, press **Show a pairing code**, and scan it
+in the app under **Settings → Pair with a computer** (or paste the link shown under it). The code
+carries this computer's addresses, the certificate's fingerprint and a one-time code the phone
+trades for a token of its own. `scripts/pair.sh` prints the same QR code in the terminal. The
+Devices page lists the paired devices, when each was last seen, and revokes them.
+
+The certificate, the server's id and the paired devices are kept in `~/.korgnote-server`, outside
+the notes. Deleting it makes a new certificate, and every device has to pair again.
 
 | Variable | Effect |
 |---|---|
 | `NOTES_DIR` | Directory of `.org` files to serve. Defaults to the bundled samples. |
-| `KORGNOTE_TOKEN` | Require `Authorization: Bearer <token>` on `/api`, and listen on all interfaces. |
-| `KORGNOTE_ALLOW_LAN` | `1` to listen on all interfaces **without** a token. For testing only. |
-| `KORGNOTE_PORT` | Port to listen on. Defaults to 8080; handy for a second instance while testing. |
+| `KORGNOTE_PORT` | The plain port. Defaults to 8080; handy for a second instance while testing. |
+| `KORGNOTE_HTTP_HOST` | Where the plain port listens. Defaults to `127.0.0.1`; the container image sets `0.0.0.0` and the compose file publishes it on loopback. |
+| `KORGNOTE_HTTPS_PORT` | The port for paired devices. Defaults to 8443. |
+| `KORGNOTE_ADVERTISED_PORT` | The HTTPS port a pairing code names, when it is published as another. |
+| `KORGNOTE_ADVERTISED_ADDRESSES` | Addresses for pairing codes, comma-separated. Found by the server itself outside a container. |
+| `KORGNOTE_SERVER_NAME` | What paired devices call the server. |
+| `KORGNOTE_STATE_DIR` | Where the certificate and devices are kept. Defaults to `~/.korgnote-server`. |
 | `KORGNOTE_DISABLE_WEB` | `1` to serve the API only, even when a web client build is present. |
-| `KORGNOTE_REQUIRE_TOKEN` | `1` to refuse to start without `KORGNOTE_TOKEN`. Set by the container image. |
 | `KORGNOTE_REQUIRE_NOTES_DIR` | `1` to refuse to start when `NOTES_DIR` is missing or not writable, instead of serving the samples. Set by the container image. |
 
-With no variables set the server listens on **127.0.0.1 only**, so an unauthenticated server is not
-reachable from the network. It logs, on startup, one line saying which of these three modes it is in.
+The plain port trusts whoever reaches it, so it must never be reachable from the network. The
+server also refuses there a browser page that reached it through another name (DNS rebinding) or
+that tries to change notes from another site.
 
-Testing against a phone or another machine needs one of the two open modes:
-
-```shell
-# Convenient: reachable on the LAN, no token to type into the app.
-NOTES_DIR=~/notes KORGNOTE_ALLOW_LAN=1 ./gradlew :server:run
-
-# Safer: reachable on the LAN, but every request must carry the token.
-NOTES_DIR=~/notes KORGNOTE_TOKEN=$(openssl rand -hex 16) ./gradlew :server:run
-```
-
-With a token, put the same value in the app under **Settings → Access token**. Leave that field empty
-when the server runs without one.
-
-`KORGNOTE_ALLOW_LAN` is a deliberate hole, kept because developing against a real device otherwise
-means re-entering a token on every device after every reinstall. It is safe on a home network you
-control and unsafe on anything shared — a café, an office, a conference.
-
-#### TLS
-
-The server speaks plain HTTP and does not terminate TLS. Traffic on a LAN you control is usually
-fine; anything crossing a network you do not control should go through a reverse proxy that holds
-the certificate, with the server bound to loopback behind it:
-
-```nginx
-server {
-    listen 443 ssl;
-    server_name notes.example.com;
-
-    ssl_certificate     /etc/letsencrypt/live/notes.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/notes.example.com/privkey.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-}
-```
-
-Set `KORGNOTE_TOKEN` as well: the proxy protects the traffic, the token protects the endpoint. Point
-the app at `https://notes.example.com` (host field) with port `443`.
+The Android emulator reaches its host's loopback at `10.0.2.2`: set that as the host under
+**Settings → Server on this computer** and it uses the plain port, unpaired.
 
 #### In a container
 
 A `Dockerfile` and a `docker-compose.yml` at the repository root run the server with a notes
-directory from the host:
+directory from the host. `scripts/run-server-container.sh [NOTES_DIR]` sets everything up: it keeps
+the notes directory in `.env` (not committed), makes `~/.korgnote-server` for the state, and passes
+the container this computer's addresses and name, which it cannot see from inside. Extra arguments
+go to `docker compose up`, e.g. `-d` to run in the background.
 
-```shell
-export KORGNOTE_TOKEN=$(openssl rand -hex 16)   # also goes into the app
-export NOTES_HOST_DIR=~/notes
-export KORGNOTE_UID=$(id -u) KORGNOTE_GID=$(id -g)
-docker compose up --build
-```
+The compose file publishes 8443 to the network and 8080 on `127.0.0.1` only. The image is stricter
+than a plain run: a missing or unwritable `/notes` stops it rather than falling back to the
+samples, so a wrong volume path fails loudly. It runs as `KORGNOTE_UID:KORGNOTE_GID` so notes
+created from the app belong to you on the host. `KORGNOTE_HOST_PORT` and `KORGNOTE_HTTPS_HOST_PORT`
+change the published ports.
 
-`scripts/run-server-container.sh [NOTES_DIR]` does the same: it generates the token on the first
-run and keeps it, with the notes directory, in `.env` (not committed), so later runs need no
-argument. Extra arguments go to `docker compose up`, e.g. `-d` to run in the background.
-
-The image is stricter than a plain run: it refuses to start without a token, and a missing or
-unwritable `/notes` stops it rather than falling back to the samples, so a wrong volume path fails
-loudly. It runs as `KORGNOTE_UID:KORGNOTE_GID` so notes created from the app belong to you on the
-host. `KORGNOTE_HOST_PORT` changes the published port (default 8080).
-
-The image also carries the web client, built in the same stage, and serves it at `/` on the same
-origin as the API: open `http://<host>:8080/` and enter the token in Settings. Set
-`KORGNOTE_DISABLE_WEB=1` to serve the API only. Behind the reverse proxy above,
-publish it on loopback only (`127.0.0.1:8080:8080`).
+The image also carries the web client, built in the same stage, and serves it at `/` on the plain
+port: open `http://localhost:8080/`. Set `KORGNOTE_DISABLE_WEB=1` to serve the API only.
 
 Edits made on the host reach connected clients through the server's file watcher. That has been
 checked through a Docker Desktop bind mount on macOS; if a host edit ever does not show up, check the

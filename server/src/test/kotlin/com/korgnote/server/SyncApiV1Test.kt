@@ -41,7 +41,7 @@ class SyncApiV1Test {
 
     private fun ApplicationTestBuilder.serve(dir: File) {
         System.setProperty("notes.dir", dir.absolutePath)
-        application { module(ServerSecurity.open()) }
+        application { module(ServerAccess.localOnly()) }
     }
 
     @Test

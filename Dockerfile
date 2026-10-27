@@ -1,6 +1,3 @@
-# check=skip=SecretsUsedInArgOrEnv
-# (It flags KORGNOTE_REQUIRE_TOKEN by name; that variable is a switch, not a secret.)
-
 # T23 — the sync server in a container. Build from the repository root:
 #
 #   docker build -t korgnote-server .
@@ -30,12 +27,16 @@ COPY --from=build /src/server/build/install/server /opt/korgnote
 # serves the API only.
 COPY --from=build /src/composeApp/build/dist/wasmJs/productionExecutable /opt/korgnote/web
 
-# The container is exactly where a port gets published by accident, so it refuses to start without a
-# token, and a missing or unwritable /notes is fatal instead of falling back to the samples.
+# A missing or unwritable /notes is fatal instead of falling back to the samples. The plain port
+# listens on every interface inside, which is the only way a published port reaches it: the
+# compose file publishes it on the host's loopback only, since it serves this computer without a
+# token. The secure port is for paired devices; /state keeps the certificate and the device list.
 ENV NOTES_DIR=/notes \
     WASM_DIR=/opt/korgnote/web \
     KORGNOTE_PORT=8080 \
-    KORGNOTE_REQUIRE_TOKEN=1 \
+    KORGNOTE_HTTP_HOST=0.0.0.0 \
+    KORGNOTE_HTTPS_PORT=8443 \
+    KORGNOTE_STATE_DIR=/state \
     KORGNOTE_REQUIRE_NOTES_DIR=1
 
 # Files the server creates in the mounted directory belong to this user. Match the host user that
@@ -47,7 +48,7 @@ USER ${UID}:${GID}
 # Ktor resolves the working directory at startup, and the base image's (/home/nonroot) is closed to
 # any UID but 65532.
 WORKDIR /opt/korgnote
-EXPOSE 8080
+EXPOSE 8080 8443
 # There is no /bin/sh for Gradle's bin/server script, so start the JVM directly with what that script
 # would pass: the development flag from server/build.gradle.kts, and native access for Netty's
 # transport (which only silences the JDK's warning).

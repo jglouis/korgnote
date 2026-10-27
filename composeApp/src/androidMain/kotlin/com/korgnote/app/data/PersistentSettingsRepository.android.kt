@@ -7,7 +7,6 @@ import com.korgnote.app.files.decodeFileLinkMappings
 import com.korgnote.app.files.encodeFileLinkMappings
 import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.common.SERVER_PORT
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import androidx.core.content.edit
 
@@ -16,15 +15,12 @@ class PersistentSettingsRepository(appContext: Context) : SettingsRepository {
 
     private val hostFlow = MutableStateFlow(loadHost())
     private val portFlow = MutableStateFlow(loadPort())
-    private val tokenFlow = MutableStateFlow(prefs.getString(KEY_TOKEN, "").orEmpty())
+    private var pairedServer: PairedServer? = PairedServer.decode(prefs.getString(KEY_PAIRED_SERVER, null))
 
-    override val serverHostFlow: Flow<String> = hostFlow
-    override val serverPortFlow: Flow<Int> = portFlow
-    override val serverTokenFlow: Flow<String> = tokenFlow
 
     override fun getServerHost(): String = hostFlow.value
     override fun getServerPort(): Int = portFlow.value
-    override fun getServerToken(): String = tokenFlow.value
+    override fun getPairedServer(): PairedServer? = pairedServer
 
     override fun setServerHost(host: String) {
         hostFlow.value = host
@@ -36,9 +32,13 @@ class PersistentSettingsRepository(appContext: Context) : SettingsRepository {
         prefs.edit { putInt(KEY_PORT, port) }
     }
 
-    override fun setServerToken(token: String) {
-        tokenFlow.value = token
-        prefs.edit { putString(KEY_TOKEN, token) }
+    override fun setPairedServer(server: PairedServer?) {
+        pairedServer = server
+        prefs.edit {
+            if (server == null) remove(KEY_PAIRED_SERVER) else putString(KEY_PAIRED_SERVER, server.encode())
+            // The shared token from before pairing, which nothing reads any more.
+            remove(KEY_TOKEN)
+        }
     }
 
     override fun getReminderSettings(): ReminderSettings = ReminderSettings.decode(prefs.getString(KEY_REMINDERS, null))
@@ -95,6 +95,7 @@ class PersistentSettingsRepository(appContext: Context) : SettingsRepository {
         private const val KEY_NEW_NOTES_FOLDER = "new_notes_folder"
         private const val KEY_PORT = "server_port"
         private const val KEY_TOKEN = "server_token"
+        private const val KEY_PAIRED_SERVER = "paired_server"
         private const val KEY_REMINDERS = "reminders"
         private const val KEY_PINNED_NOTES = "pinned_notes"
         private const val KEY_FILE_LINK_MAPPINGS = "file_link_mappings"

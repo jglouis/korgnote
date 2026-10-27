@@ -1,7 +1,6 @@
 package com.korgnote.server
 
 import com.korgnote.common.Greeting
-import com.korgnote.common.SERVER_PORT
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -16,21 +15,37 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import java.io.File
 import java.nio.file.Paths
-import kotlin.system.exitProcess
 
 fun main() {
-    val security = ServerSecurity.fromEnvironment()
-    security.startupError()?.let {
-        System.err.println(it)
-        exitProcess(1)
-    }
-    // KORGNOTE_PORT mostly exists so a second instance can be run alongside the real one while
-    // testing, without stopping the one being used.
-    val port = System.getenv("KORGNOTE_PORT")?.trim()?.toIntOrNull() ?: SERVER_PORT
+    val config = ServerConfig.fromEnvironment()
+    val identity = ServerIdentity.loadOrCreate(config.stateDir)
+    val access = ServerAccess(
+        DeviceRegistry(File(config.stateDir, "devices.json")),
+        securePort = config.httpsPort,
+        pairing = PairingDetails(identity.serverId, config.serverName, identity.fingerprint, config.advertisedPort, config.advertisedAddresses),
+    )
     fun isSet(name: String) = System.getenv(name)?.trim()?.lowercase() in setOf("1", "true", "yes")
-    embeddedServer(Netty, port = port, host = security.bindHost) {
+    embeddedServer(
+        Netty,
+        configure = {
+            connector {
+                host = config.httpHost
+                port = config.httpPort
+            }
+            sslConnector(
+                keyStore = identity.keyStore,
+                keyAlias = ServerIdentity.KEY_ALIAS,
+                keyStorePassword = { identity.keyStorePassword.toCharArray() },
+                privateKeyPassword = { identity.keyStorePassword.toCharArray() },
+            ) {
+                host = config.httpsHost
+                port = config.httpsPort
+            }
+        },
+    ) {
+        log.info(config.describe())
         module(
-            security,
+            access,
             watchFiles = true,
             requireNotesDir = isSet(REQUIRE_NOTES_DIR_VARIABLE),
             serveWebClient = !isSet(DISABLE_WEB_VARIABLE),
@@ -50,11 +65,11 @@ const val REQUIRE_NOTES_DIR_VARIABLE = "KORGNOTE_REQUIRE_NOTES_DIR"
 
 
 /**
- * [security] defaults to open because that is what the test host and a plain local run want; `main`
- * passes what the environment actually asks for.
+ * [access] defaults to this computer only, with no network side, because that is what the test host
+ * wants; `main` passes the paired devices and the secure port.
  */
 fun Application.module(
-    security: ServerSecurity = ServerSecurity.open(),
+    access: ServerAccess = ServerAccess.localOnly(),
     /**
      * Whether to watch the notes directory for external edits.
      *
@@ -68,8 +83,6 @@ fun Application.module(
     /** Serve the wasm client at `/` when a build of it is found; see [DISABLE_WEB_VARIABLE]. */
     serveWebClient: Boolean = true,
 ) {
-    log.info(security.describe())
-
     install(ContentNegotiation) { json() }
 
     // Org files are text and compress well; the whole-library endpoint is over a megabyte.
@@ -78,20 +91,11 @@ fun Application.module(
         deflate()
     }
 
-    if (security.requiresToken) {
-        intercept(ApplicationCallPipeline.Plugins) {
-            if (call.request.uri.startsWith("/api")) {
-                val offered = call.request.header(HttpHeaders.Authorization)
-                    ?.removePrefix("Bearer ")
-                    ?.trim()
-                if (offered != security.token) {
-                    call.respondText(
-                        "Unauthorized. Send 'Authorization: Bearer <token>'.",
-                        status = HttpStatusCode.Unauthorized,
-                    )
-                    return@intercept finish()
-                }
-            }
+    intercept(ApplicationCallPipeline.Plugins) {
+        val refusal = refusalOf(call, access)
+        if (refusal != null) {
+            call.respondText(refusal.second, status = refusal.first)
+            return@intercept finish()
         }
     }
 
@@ -238,9 +242,12 @@ fun Application.module(
             }
         }
 
+        devicesPage(access)
+
         route("/api") {
             // Sync API v1. The endpoints it replaced were deleted in T10.
             syncApiV1(store, journal)
+            pairingApi(access)
 
             get("/") {
                 call.respondText("Ktor: ${Greeting().greet()}")
@@ -256,3 +263,40 @@ suspend fun RoutingContext.respondFavIcon() {
         call.respondBytes(bytes, contentType = ContentType.Image.PNG)
     }
 }
+/**
+ * Why [call] may not go on, as a status and a sentence; null when it may.
+ *
+ * Over TLS, only the sync API answers, and only to a paired device's token — pairing itself
+ * excepted, which is how a device gets one. The plain port answers this computer only, which its
+ * loopback binding already ensures; a browser on this computer is held to it as well, since any page
+ * it has open could otherwise send requests here: the `Host` must name this computer, which stops a
+ * page reaching it through a name of its own (DNS rebinding), and a change must come from a page of
+ * this server's own, which stops one changing notes from another site.
+ */
+internal fun refusalOf(call: ApplicationCall, access: ServerAccess): Pair<HttpStatusCode, String>? {
+    val path = call.request.path()
+    if (access.securePort != null && call.request.local.localPort == access.securePort) {
+        if (path == "/api/pair") return null
+        if (!path.startsWith("/api/") || path.startsWith("/api/local/")) {
+            return HttpStatusCode.NotFound to "Not found. The web client and the Devices page are on the computer the server runs on."
+        }
+        val token = call.request.header(HttpHeaders.Authorization)?.removePrefix("Bearer ")?.trim()
+        return if (token.isNullOrEmpty() || access.devices.authenticate(token) == null) {
+            HttpStatusCode.Unauthorized to "This device is not paired, or was revoked. Pair it again from the Devices page."
+        } else {
+            null
+        }
+    }
+    if (!namesThisComputer(call.request.host())) {
+        return HttpStatusCode.Forbidden to "This port serves the computer the server runs on, by the name localhost."
+    }
+    val method = call.request.httpMethod
+    if (method != HttpMethod.Get && method != HttpMethod.Head && method != HttpMethod.Options) {
+        val origin = call.request.header(HttpHeaders.Origin)?.let { runCatching { Url(it) }.getOrNull() ?: Url("null://") }
+        if (origin != null && !(origin.host.equals(call.request.host(), ignoreCase = true) && origin.port == call.request.port())) {
+            return HttpStatusCode.Forbidden to "Changes are accepted from this server's own pages only."
+        }
+    }
+    return null
+}
+
