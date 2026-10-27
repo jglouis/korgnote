@@ -91,6 +91,8 @@ data class OrgCheckboxItem(
     val checked: Boolean,
     val text: String,
     override val children: List<OrgNode> = emptyList(),
+    /** `[-]`: some of the boxes under it are ticked and some are not. Never [checked] as well. */
+    val partial: Boolean = false,
 ) : OrgNode()
 
 /** A plain (non-checkbox) list item, which may own a nested list. */
@@ -379,7 +381,7 @@ fun String.toOrgDocument(): OrgDocument {
             val description = OrgSyntax.descriptionTerm.find(text)
             val item: OrgNode = when {
                 checkbox.isNotEmpty() ->
-                    OrgCheckboxItem(checkbox.contains('x', ignoreCase = true), text, nested.toList())
+                    OrgCheckboxItem(checkbox.contains('x', ignoreCase = true), text, nested.toList(), partial = '-' in checkbox)
                 description != null -> OrgDescriptionItem(
                     term = description.groupValues[2].trim(),
                     description = text.substring(description.value.length).trim(),
@@ -661,7 +663,7 @@ fun OrgNode.toOrgString(): String = when (this) {
         if (!unterminated) { appendLine(); append(":END:") }
     }
     is OrgCheckboxItem -> buildString {
-        append("- [").append(if (checked) "X" else " ").append("] ").append(text)
+        append("- [").append(if (checked) "X" else if (partial) "-" else " ").append("] ").append(text)
         children.forEach { appendLine(); append(it.toOrgString()) }
     }
     is OrgListItem -> buildString {
@@ -672,7 +674,7 @@ fun OrgNode.toOrgString(): String = when (this) {
         val pad = " ".repeat(indent)
         val marker = if (ordered) "${index + 1}$bulletType" else "$bulletType"
         val body = when (child) {
-            is OrgCheckboxItem -> "[" + (if (child.checked) "X" else " ") + "] " + child.text
+            is OrgCheckboxItem -> "[" + (if (child.checked) "X" else if (child.partial) "-" else " ") + "] " + child.text
             is OrgListItem -> child.text
             is OrgDescriptionItem -> "${child.term} :: ${child.description}"
             is OrgRaw -> child.content

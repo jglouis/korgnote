@@ -1,6 +1,7 @@
 package com.korgnote.common.org.edit
 
 import com.korgnote.common.org.OrgCheckboxItem
+import com.korgnote.common.org.OrgList
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgDrawer
 import com.korgnote.common.org.OrgNode
@@ -70,6 +71,76 @@ fun OrgDocument.setCheckbox(item: OrgCheckboxItem, checked: Boolean): OrgDocumen
     val line = lineRangeAt(item.range.first) ?: return this
     val marker = markerRangeIn(line) ?: return this
     return replace(marker, if (checked) "[X]" else "[ ]")
+}
+
+/**
+ * Ticks or unticks [item] as Org's `C-c C-c` leaves a list: a box with boxes under it says what they
+ * say — `[X]` when all are ticked, `[ ]` when none are, `[-]` when some are — so ticking one updates
+ * every box above it.
+ *
+ * Org would put a box with boxes under it straight back to what they say, so a tap on one would do
+ * nothing. Here it ticks or unticks them all instead, and so ends where Org would have.
+ *
+ * Every marker is three characters, so this is a set of same-length replacements: nothing else in
+ * the file moves.
+ */
+fun OrgDocument.tickAsOrgDoes(item: OrgCheckboxItem): OrgDocument {
+    if (item.range.isEmpty()) return this
+    // The outermost list holding the item: Org settles the boxes of the whole list.
+    val list = allNodes().filterIsInstance<OrgList>()
+        .filter { item.range.first in it.range }
+        .maxByOrNull { it.range.last - it.range.first }
+        ?: return toggleCheckbox(item)
+    val target = list.allBoxes().firstOrNull { it.range.first == item.range.first } ?: return toggleCheckbox(item)
+    val ticked = !target.checked
+
+    val wanted = mutableMapOf<Int, Char>() // a box's line start → the mark it should have
+    fun setAll(box: OrgCheckboxItem) {
+        wanted[box.range.first] = if (ticked) 'X' else ' '
+        box.childBoxes().forEach(::setAll)
+    }
+    setAll(target)
+    // Bottom-up: a box with boxes under it takes its mark from theirs, once theirs are settled.
+    fun settle(box: OrgCheckboxItem): Char {
+        val children = box.childBoxes().map(::settle)
+        val mark = when {
+            children.isEmpty() -> wanted[box.range.first] ?: box.mark()
+            children.all { it == 'X' } -> 'X'
+            children.all { it == ' ' } -> ' '
+            else -> '-'
+        }
+        wanted[box.range.first] = mark
+        return mark
+    }
+    list.topBoxes().forEach(::settle)
+
+    var updated = text
+    for (box in list.allBoxes()) {
+        val mark = wanted[box.range.first] ?: continue
+        if (mark == box.mark()) continue
+        val line = lineRangeAt(box.range.first) ?: continue
+        val marker = markerRangeIn(line) ?: continue
+        updated = updated.replaceRange(marker, "[$mark]")
+    }
+    return if (updated == text) this else updated.toOrgDocument()
+}
+
+private fun OrgCheckboxItem.mark(): Char = if (checked) 'X' else if (partial) '-' else ' '
+
+/** The boxes of the lists directly under this item. */
+private fun OrgNode.childBoxes(): List<OrgCheckboxItem> =
+    children.filterIsInstance<OrgList>().flatMap { it.children }.filterIsInstance<OrgCheckboxItem>()
+
+/** A list's own boxes, not those of the lists nested in it. */
+private fun OrgList.topBoxes(): List<OrgCheckboxItem> = children.filterIsInstance<OrgCheckboxItem>()
+
+/** Every box in a list, nested ones included, as they come in the text. */
+private fun OrgList.allBoxes(): List<OrgCheckboxItem> = buildList {
+    fun walk(node: OrgNode) {
+        if (node is OrgCheckboxItem) add(node)
+        node.children.forEach(::walk)
+    }
+    children.forEach(::walk)
 }
 
 private fun OrgDocument.markerRangeIn(line: IntRange): IntRange? {

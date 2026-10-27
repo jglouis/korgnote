@@ -24,7 +24,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material3.Checkbox
+import androidx.compose.material3.TriStateCheckbox
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -775,7 +776,7 @@ private fun RenderCheckboxItem(
 ) {
     // Keyed by where the item came from: two items with the same text are still different items.
     key(item.range.first) {
-        CheckboxLine(checked = item.checked, text = item.text, onCheckedChange = {
+        CheckboxLine(checked = item.checked, partial = item.partial, text = item.text, onCheckedChange = {
             onToggleCheckbox?.invoke(item)
         })
     }
@@ -786,9 +787,18 @@ private fun CheckboxLine(
     checked: Boolean,
     text: String,
     onCheckedChange: (Boolean) -> Unit,
+    /** `[-]`, drawn as a box part-way ticked. */
+    partial: Boolean = false,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(checked = checked, onCheckedChange = { newValue: Boolean -> onCheckedChange(newValue) })
+        TriStateCheckbox(
+            state = when {
+                checked -> ToggleableState.On
+                partial -> ToggleableState.Indeterminate
+                else -> ToggleableState.Off
+            },
+            onClick = { onCheckedChange(!checked) },
+        )
         Spacer(Modifier.width(6.dp))
         Text(text = buildOrgItemString(text), style = MaterialTheme.typography.bodyMedium)
     }

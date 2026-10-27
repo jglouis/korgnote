@@ -24,7 +24,7 @@ import com.korgnote.common.org.edit.changeTodoState
 import com.korgnote.common.org.edit.fileKeywordsOf
 import com.korgnote.common.org.edit.withFileKeywords
 import com.korgnote.common.org.edit.nodeAt
-import com.korgnote.common.org.edit.toggleCheckbox
+import com.korgnote.common.org.edit.tickAsOrgDoes
 import com.korgnote.common.org.link.LinkTarget
 import com.korgnote.common.org.link.linkTargetsOf
 import com.korgnote.common.org.link.withFileId
@@ -319,7 +319,7 @@ class NotesViewModel(
         val file = note.path ?: return
         val document = note.content.toOrgDocument()
         val item = document.nodeAt<OrgCheckboxItem>(offsetInDocument) ?: return
-        val updated = document.toggleCheckbox(item).withStatistics()
+        val updated = document.tickAsOrgDoes(item).withStatistics()
         note.content = updated.text
         library.put(file, updated)
         // Not now: the box should flip the moment it is tapped.
