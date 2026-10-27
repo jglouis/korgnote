@@ -128,6 +128,68 @@ fun layoutTimed(occurrences: List<AgendaOccurrence>): List<TimedBlock> {
     return blocks
 }
 
+// --- Multi-day ranges --------------------------------------------------------------------------
+
+/**
+ * A multi-day range drawn as one bar over the days of a week row: from column [first] to [last] of
+ * the days shown, on [lane] counting down from the top. [occurrence] is its first day on screen.
+ *
+ * [continuesBefore] and [continuesAfter] say the range goes on past the row, so the bar is squared
+ * off on that side.
+ */
+data class RangeBar(
+    val occurrence: AgendaOccurrence,
+    val first: Int,
+    val last: Int,
+    val lane: Int,
+    val continuesBefore: Boolean,
+    val continuesAfter: Boolean,
+) {
+    val columns: IntRange get() = first..last
+}
+
+/**
+ * The multi-day ranges among [days] — what each column of a row shows, in column order — as bars,
+ * each in the topmost lane it fits in without covering another. A bar's title then has the width of
+ * every day it crosses, where a chip per day had a day's.
+ *
+ * A range's days are known by their entry and by following on from one another, so a repeating
+ * range that comes round twice in a row is two bars.
+ */
+fun layoutRangeBars(days: List<List<AgendaOccurrence>>): List<RangeBar> {
+    class Open(val occurrence: AgendaOccurrence, val first: Int, var last: Int, var lastSpan: DaySpan)
+
+    val bars = mutableListOf<Open>()
+    days.forEachIndexed { column, occurrences ->
+        for (occurrence in occurrences) {
+            if (occurrence.span == DaySpan.Single) continue
+            val continuing = if (occurrence.span == DaySpan.Start) null else bars.lastOrNull {
+                it.occurrence.entry == occurrence.entry && it.last == column - 1 && it.lastSpan != DaySpan.End
+            }
+            if (continuing != null) {
+                continuing.last = column
+                continuing.lastSpan = occurrence.span
+            } else {
+                bars += Open(occurrence, column, column, occurrence.span)
+            }
+        }
+    }
+    // Earliest first, and of those the longest, so the long bars take the top lanes and keep them.
+    val laneEnds = mutableListOf<Int>()
+    return bars.sortedWith(compareBy<Open>({ it.first }, { -(it.last - it.first) })).map { bar ->
+        val free = laneEnds.indexOfFirst { it < bar.first }
+        val lane = if (free >= 0) free.also { laneEnds[it] = bar.last } else laneEnds.size.also { laneEnds += bar.last }
+        RangeBar(
+            occurrence = bar.occurrence,
+            first = bar.first,
+            last = bar.last,
+            lane = lane,
+            continuesBefore = bar.occurrence.span == DaySpan.Middle || bar.occurrence.span == DaySpan.End,
+            continuesAfter = bar.lastSpan == DaySpan.Start || bar.lastSpan == DaySpan.Middle,
+        )
+    }
+}
+
 // --- The agenda list ---------------------------------------------------------------------------
 
 /** A heading in the agenda list and what is under it. */

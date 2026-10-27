@@ -25,6 +25,41 @@ class CalendarLayoutTest {
 
     private fun List<TimedBlock>.byTitle() = associate { it.occurrence.entry.title to (it.column to it.columns) }
 
+    // --- Multi-day ranges ---
+
+    /** Each bar as `title first..last lane`, with `<` or `>` where it goes on past the row. */
+    private fun bars(text: String, from: Int, to: Int): List<String> {
+        val agenda = index(text)
+        val days = (from..to).map { agenda.on(day(it)) }
+        return layoutRangeBars(days).map {
+            (if (it.continuesBefore) "<" else "") + "${it.occurrence.entry.title} ${it.first}..${it.last} ${it.lane}" +
+                (if (it.continuesAfter) ">" else "")
+        }
+    }
+
+    @Test
+    fun aRangeIsOneBarOverItsDays() {
+        assertEquals(
+            listOf("Trip 1..3 0"),
+            bars("* Trip <2026-09-22 Tue>--<2026-09-24 Thu>\n* Call <2026-09-23 Wed 10:00>", from = 21, to = 27),
+        )
+    }
+
+    @Test
+    fun aRangeThatGoesOnPastTheRowIsOpenOnThatSide() {
+        assertEquals(listOf("<Trip 0..1 0>"), bars("* Trip <2026-09-18 Fri>--<2026-09-30 Wed>", from = 22, to = 23))
+    }
+
+    @Test
+    fun overlappingRangesTakeLanesAndAFreeLaneIsReused() {
+        val text = """
+            * Long <2026-09-21 Mon>--<2026-09-27 Sun>
+            * Early <2026-09-21 Mon>--<2026-09-22 Tue>
+            * Late <2026-09-24 Thu>--<2026-09-26 Sat>
+        """.trimIndent()
+        assertEquals(listOf("Long 0..6 0", "Early 0..1 1", "Late 3..5 1"), bars(text, from = 21, to = 27))
+    }
+
     // --- Hour grid ---
 
     @Test

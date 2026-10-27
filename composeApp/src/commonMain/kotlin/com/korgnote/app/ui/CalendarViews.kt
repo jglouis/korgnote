@@ -334,7 +334,6 @@ fun TimeGridView(
         }
         val compact = dates.size > 1
         if (allDay.any { it.isNotEmpty() }) {
-            val limit = if (dates.size > 1) 3 else Int.MAX_VALUE
             Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
                 Text(
                     "all day",
@@ -342,29 +341,12 @@ fun TimeGridView(
                     color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.width(GUTTER_WIDTH).padding(top = 2.dp),
                 )
-                dates.forEachIndexed { i, date ->
+                if (compact) {
+                    WeekAllDay(dates, allDay, today, keywordColors, onOpen, onDayClick, Modifier.weight(1f))
+                } else {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        // A day with little on it lets each title take a second line.
-                        val lines = if (compact && allDay[i].size <= 2) 2 else 1
-                        allDay[i].take(limit).forEach {
-                            EventChip(
-                                it,
-                                today,
-                                keywordColors.of(it.entry),
-                                onOpen = { onOpen(it) },
-                                compact = compact,
-                                firstShown = i == 0,
-                                maxLines = lines,
-                            )
-                        }
-                        val hidden = allDay[i].size - limit
-                        if (hidden > 0) {
-                            Text(
-                                "+$hidden",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.clickable { onDayClick(date) }.padding(horizontal = 2.dp),
-                            )
+                        allDay.single().forEach {
+                            EventChip(it, today, keywordColors.of(it.entry), onOpen = { onOpen(it) })
                         }
                     }
                 }
@@ -484,11 +466,119 @@ private fun DayColumn(
 }
 
 /**
+ * The week's all-day strip: each multi-day range as one bar across its days, with room for two
+ * lines of title, then each day's own entries under it, as many as [ALL_DAY_LIMIT] allows and a
+ * count of the rest.
+ */
+@Composable
+private fun WeekAllDay(
+    dates: List<LocalDate>,
+    allDay: List<List<AgendaOccurrence>>,
+    today: LocalDate,
+    keywordColors: KeywordColors,
+    onOpen: (AgendaOccurrence) -> Unit,
+    onDayClick: (LocalDate) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val bars = remember(allDay) { layoutRangeBars(allDay) }
+    val lanes = (bars.maxOfOrNull { it.lane } ?: -1) + 1
+    val shownLanes = lanes.coerceAtMost(ALL_DAY_LIMIT)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        for (lane in 0 until shownLanes) {
+            BarLane(bars.filter { it.lane == lane }, dates.size) { bar ->
+                RangeBarChip(bar, keywordColors.of(bar.occurrence.entry), maxLines = 2, onOpen = { onOpen(bar.occurrence) })
+            }
+        }
+        Row(Modifier.fillMaxWidth()) {
+            dates.forEachIndexed { i, date ->
+                val singles = allDay[i].filter { it.span == DaySpan.Single }
+                val limit = (ALL_DAY_LIMIT - shownLanes).coerceAtLeast(1)
+                // The ranges that crossed this day in a lane left out count among the rest.
+                val hidden = (singles.size - limit).coerceAtLeast(0) +
+                    bars.count { it.lane >= shownLanes && i in it.columns }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // A day with little on it lets each title take a second line.
+                    val lines = if (singles.size <= 2) 2 else 1
+                    singles.take(limit).forEach {
+                        EventChip(it, today, keywordColors.of(it.entry), onOpen = { onOpen(it) }, compact = true, maxLines = lines)
+                    }
+                    if (hidden > 0) {
+                        Text(
+                            "+$hidden",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.clickable { onDayClick(date) }.padding(horizontal = 2.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Entries in the week's all-day strip, bars and days together, before the rest are counted. */
+private const val ALL_DAY_LIMIT = 3
+
+/** One lane of [bars] across a row of [days] columns, each bar as wide as the days it crosses. */
+@Composable
+private fun BarLane(bars: List<RangeBar>, days: Int, modifier: Modifier = Modifier, bar: @Composable (RangeBar) -> Unit) {
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        var column = 0
+        for (each in bars.sortedBy { it.first }) {
+            if (each.first > column) Spacer(Modifier.weight((each.first - column).toFloat()))
+            Box(Modifier.weight((each.last - each.first + 1).toFloat())) { bar(each) }
+            column = each.last + 1
+        }
+        if (column < days) Spacer(Modifier.weight((days - column).toFloat()))
+    }
+}
+
+/**
+ * A multi-day range over the days of a row, its title across all of them. Rounded where it starts
+ * and ends, square where it goes on past the row.
+ */
+@Composable
+private fun RangeBarChip(
+    bar: RangeBar,
+    keywordColor: Color?,
+    maxLines: Int,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val occurrence = bar.occurrence
+    val accent = occurrence.entry.kind.accent()
+    val r = 3.dp
+    val start = if (bar.continuesBefore) 0.dp else r
+    val end = if (bar.continuesAfter) 0.dp else r
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(start = if (bar.continuesBefore) 0.dp else 1.dp, end = if (bar.continuesAfter) 0.dp else 1.dp)
+            .clip(RoundedCornerShape(topStart = start, bottomStart = start, topEnd = end, bottomEnd = end))
+            .background(accent.copy(alpha = 0.18f))
+            .keywordEdge(keywordColor)
+            .clickable(onClick = onOpen)
+            .dimmedIfDone(occurrence)
+            .padding(start = if (keywordColor != null) KEYWORD_EDGE + 2.dp else 3.dp, end = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = occurrence.headline(keywordColor = keywordColor, titleOnly = true),
+            modifier = Modifier.keywordDescription(occurrence, titleOnly = true),
+            fontSize = 9.sp,
+            lineHeight = 11.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
  * An entry in the all-day strip or a month cell: its colour, and as much of its title as fits.
  *
- * A day of a multi-day range is squared off on the sides where the range continues and carries its
- * title only where it starts — or on [firstShown], the first column on screen — so that the days
- * read as one bar.
+ * A day of a multi-day range, in the day view, is squared off on the sides where the range goes on.
+ * The week and the month draw a range as one [RangeBarChip] across its days instead.
  */
 @Composable
 private fun EventChip(
@@ -497,7 +587,6 @@ private fun EventChip(
     keywordColor: Color?,
     onOpen: () -> Unit,
     compact: Boolean = false,
-    firstShown: Boolean = true,
     maxLines: Int = 1,
 ) {
     val accent = occurrence.entry.kind.accent()
@@ -509,20 +598,17 @@ private fun EventChip(
         DaySpan.Middle -> RectangleShape to PaddingValues()
         DaySpan.End -> RoundedCornerShape(topEnd = r, bottomEnd = r) to PaddingValues(end = 1.dp)
     }
-    val showTitle = occurrence.span == DaySpan.Single || occurrence.span == DaySpan.Start || firstShown
-    // The edge goes with the title, at the start of the bar, not on every day it crosses.
-    val edge = keywordColor?.takeIf { showTitle }
     Row(
         Modifier
             .fillMaxWidth()
             .padding(inset)
             .clip(shape)
             .background(accent.copy(alpha = 0.18f))
-            .keywordEdge(edge)
+            .keywordEdge(keywordColor)
             .clickable(onClick = onOpen)
             .dimmedIfDone(occurrence)
             .padding(
-                start = if (edge != null) KEYWORD_EDGE + 2.dp else 3.dp,
+                start = if (keywordColor != null) KEYWORD_EDGE + 2.dp else 3.dp,
                 end = 3.dp,
                 top = if (compact) 0.dp else 2.dp,
                 bottom = if (compact) 0.dp else 2.dp,
@@ -535,12 +621,11 @@ private fun EventChip(
         }
         Text(
             text = when {
-                !showTitle -> AnnotatedString(" ")
                 !compact && status != null && occurrence.entry.kind == AgendaKind.Deadline ->
                     occurrence.headline(prefix = "$status:", keywordColor = keywordColor)
                 else -> occurrence.headline(keywordColor = keywordColor, titleOnly = compact)
             },
-            modifier = if (showTitle) Modifier.keywordDescription(occurrence, compact) else Modifier,
+            modifier = Modifier.keywordDescription(occurrence, compact),
             fontSize = if (compact) 9.sp else 11.sp,
             lineHeight = if (compact) 11.sp else 13.sp,
             color = MaterialTheme.colorScheme.onSurface,
@@ -562,7 +647,7 @@ private fun Modifier.keywordDescription(occurrence: AgendaOccurrence, titleOnly:
 private fun DayNumber(date: LocalDate, isToday: Boolean, dim: Boolean = false) {
     Box(
         Modifier
-            .size(24.dp)
+            .size(DAY_NUMBER_SIZE)
             .background(if (isToday) MaterialTheme.colorScheme.primary else Color.Transparent, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
@@ -615,41 +700,69 @@ fun MonthView(
             val lines = ((rowHeight - 26.dp) / line).toInt().coerceIn(1, MONTH_MAX_LINES)
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                 for (row in 0 until 6) {
-                    Row(Modifier.fillMaxWidth().height(rowHeight)) {
-                        for (col in 0 until 7) {
-                            val date = start.plus(row * 7 + col, DateTimeUnit.DAY)
-                            val shown = agenda.monthDay(date, showDone).sortedWith(chipOrder)
-                            Column(
-                                Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .padding(vertical = 1.dp)
-                                    .clickable { onDayClick(date) }
-                                    .testTag("monthDay-$date"),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-                                DayNumber(date, isToday = date == today, dim = date.month != anchorDate.month)
-                                // The count of the rest takes a line too, unless there are none.
-                                val fits = if (shown.size > lines) lines - 1 else lines
-                                // The lines the entries leave over give their titles a second one,
-                                // the first entries' first: a cell is narrow, but often tall.
-                                var spare = (lines - shown.size).coerceAtLeast(0)
-                                shown.take(fits).forEach {
-                                    val twoLines = it.span == DaySpan.Single && spare > 0
-                                    if (twoLines) spare--
-                                    Spacer(Modifier.height(1.dp))
-                                    EventChip(
-                                        it,
-                                        today,
-                                        keywordColors.of(it.entry),
-                                        onOpen = { onDayClick(date) },
-                                        compact = true,
-                                        firstShown = col == 0,
-                                        maxLines = if (twoLines) 2 else 1,
-                                    )
+                    val dates = (0 until 7).map { col -> start.plus(row * 7 + col, DateTimeUnit.DAY) }
+                    val days = dates.map { agenda.monthDay(it, showDone).sortedWith(chipOrder) }
+                    // Each range as one bar across its days in the week, its title as wide as the bar.
+                    val bars = remember(days) { layoutRangeBars(days) }
+                    val lanes = (bars.maxOfOrNull { it.lane } ?: -1) + 1
+                    // A line is kept for the count of the rest wherever a lane is left out.
+                    val shownLanes = if (lanes > lines) lines - 1 else lanes
+                    Box(Modifier.fillMaxWidth().height(rowHeight)) {
+                        Row(Modifier.fillMaxSize()) {
+                            dates.forEachIndexed { col, date ->
+                                val singles = days[col].filter { it.span == DaySpan.Single }
+                                val crossing = bars.count { it.lane >= shownLanes && col in it.columns }
+                                Column(
+                                    Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .padding(vertical = 1.dp)
+                                        .clickable { onDayClick(date) }
+                                        .testTag("monthDay-$date"),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    DayNumber(date, isToday = date == today, dim = date.month != anchorDate.month)
+                                    // Under the lanes the bars are drawn in, over the cells.
+                                    Spacer(Modifier.height(line * shownLanes))
+                                    val room = lines - shownLanes
+                                    val rest = singles.size + crossing
+                                    // The count of the rest takes a line too, unless there are none.
+                                    val fits = if (rest > room) (room - 1).coerceAtLeast(0) else room
+                                    // The lines the entries leave over give their titles a second one,
+                                    // the first entries' first: a cell is narrow, but often tall.
+                                    var spare = (room - singles.size).coerceAtLeast(0)
+                                    singles.take(fits).forEach {
+                                        val twoLines = spare > 0
+                                        if (twoLines) spare--
+                                        Spacer(Modifier.height(1.dp))
+                                        EventChip(
+                                            it,
+                                            today,
+                                            keywordColors.of(it.entry),
+                                            onOpen = { onDayClick(date) },
+                                            compact = true,
+                                            maxLines = if (twoLines) 2 else 1,
+                                        )
+                                    }
+                                    val hidden = rest - singles.take(fits).size
+                                    if (hidden > 0) {
+                                        Text("+$hidden", fontSize = 9.sp, lineHeight = 11.sp, color = MaterialTheme.colorScheme.outline)
+                                    }
                                 }
-                                if (shown.size > fits) {
-                                    Text("+${shown.size - fits}", fontSize = 9.sp, lineHeight = 11.sp, color = MaterialTheme.colorScheme.outline)
+                            }
+                        }
+                        // Drawn over the cells, below the day numbers, at the height their spacers keep.
+                        Column(Modifier.fillMaxWidth().padding(top = 1.dp + DAY_NUMBER_SIZE)) {
+                            for (lane in 0 until shownLanes) {
+                                Spacer(Modifier.height(1.dp))
+                                BarLane(bars.filter { it.lane == lane }, days = 7, modifier = Modifier.height(line - 1.dp)) { bar ->
+                                    RangeBarChip(
+                                        bar,
+                                        keywordColors.of(bar.occurrence.entry),
+                                        maxLines = 1,
+                                        onOpen = { onDayClick(dates[bar.first]) },
+                                        modifier = Modifier.fillMaxHeight(),
+                                    )
                                 }
                             }
                         }
@@ -661,6 +774,9 @@ fun MonthView(
 }
 
 private val MONTH_ROW_MIN_HEIGHT = 52.dp
+
+/** The circle a day's number sits in. */
+private val DAY_NUMBER_SIZE = 24.dp
 
 /** Lines of entries under a day's number, on a screen tall enough for them. */
 private const val MONTH_MAX_LINES = 6
