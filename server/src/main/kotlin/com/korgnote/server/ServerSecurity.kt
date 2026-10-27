@@ -120,13 +120,11 @@ internal fun interfaceAddresses(): List<String> {
 }
 
 /**
- * Whether [host], from a request's `Host` header, names this computer: `localhost`, a loopback
- * address, or the address the Android emulator reaches its host by. A page served from any other
+ * Whether [host], from a request's `Host` header, names this computer: `localhost` or a loopback
+ * address. A page served from any other
  * name — one that resolves to 127.0.0.1 to get past the browser's same-origin rule — is refused.
  */
 internal fun namesThisComputer(host: String): Boolean {
     val h = host.trim().removePrefix("[").removeSuffix("]").lowercase()
-    return h == "localhost" || h == "::1" || h.startsWith("127.") || h == ANDROID_EMULATOR_HOST
+    return h == "localhost" || h == "::1" || h.startsWith("127.")
 }
-
-private const val ANDROID_EMULATOR_HOST = "10.0.2.2"

@@ -40,6 +40,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.DevicePairing
 import com.korgnote.app.data.PairingLinks
+import com.korgnote.app.data.canPair
+import com.korgnote.app.data.usesLocalServer
 import com.korgnote.app.data.NoteTemplateSettings
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.files.FileLinkMapping
@@ -131,7 +133,7 @@ fun SettingsScreen(
 
     fun save() {
         val port = portText.toIntOrNull()
-        if (host.isBlank() || port == null || port !in 1..65535) {
+        if (usesLocalServer && (host.isBlank() || port == null || port !in 1..65535)) {
             error = "Please enter a valid host and port (1-65535)."
             return
         }
@@ -159,8 +161,10 @@ fun SettingsScreen(
         scope.launch {
             saving = true
             try {
-                repo.setServerHost(host.trim())
-                repo.setServerPort(port)
+                if (usesLocalServer && port != null) {
+                    repo.setServerHost(host.trim())
+                    repo.setServerPort(port)
+                }
                 val current = repo.getReminderSettings()
                 repo.setReminderSettings(
                     ReminderSettings(
@@ -198,38 +202,43 @@ fun SettingsScreen(
                 serverStatus()
             }
             Spacer(Modifier.height(8.dp))
-            val incomingLink by PairingLinks.pending.collectAsState()
-            PairingSettings(
-                repo,
-                pairing,
-                onChanged = { onSaved?.invoke() },
-                incomingLink = incomingLink,
-                onIncomingLinkUsed = { PairingLinks.pending.value = null },
-            )
+            if (canPair) {
+                val incomingLink by PairingLinks.pending.collectAsState()
+                PairingSettings(
+                    repo,
+                    pairing,
+                    onChanged = { onSaved?.invoke() },
+                    incomingLink = incomingLink,
+                    onIncomingLinkUsed = { PairingLinks.pending.value = null },
+                )
+            }
 
-            Spacer(Modifier.height(24.dp))
-            Text("Server on this computer")
-            Text(
-                "Used when not paired: by the desktop app and the web client on the computer the server runs on.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline,
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = host,
-                onValueChange = { host = it },
-                label = { Text("Host (localhost, or 10.0.2.2 from the Android emulator)") },
-                singleLine = true
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = portText,
-                onValueChange = { portText = it.filter { ch -> ch.isDigit() } },
-                label = { Text("Port") },
-                singleLine = true
-            )
+            // Only where there is a computer of this device's own to run a server: not on a phone.
+            if (usesLocalServer) {
+                Spacer(Modifier.height(24.dp))
+                Text("Server on this computer")
+                Text(
+                    if (canPair) "Used when not paired." else "The server this page comes from.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = host,
+                    onValueChange = { host = it },
+                    label = { Text("Host (usually localhost)") },
+                    singleLine = true
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = portText,
+                    onValueChange = { portText = it.filter { ch -> ch.isDigit() } },
+                    label = { Text("Port") },
+                    singleLine = true
+                )
+            }
 
             Spacer(Modifier.height(24.dp))
             Text("Reminders")

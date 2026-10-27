@@ -97,8 +97,8 @@ The plain port trusts whoever reaches it, so it must never be reachable from the
 server also refuses there a browser page that reached it through another name (DNS rebinding) or
 that tries to change notes from another site.
 
-The Android emulator reaches its host's loopback at `10.0.2.2`: set that as the host under
-**Settings → Server on this computer** and it uses the plain port, unpaired.
+Phones and the Android emulator pair like any other device: the plain port is not theirs to
+use, and the app on Android refuses plain HTTP altogether.
 
 #### In a container
 

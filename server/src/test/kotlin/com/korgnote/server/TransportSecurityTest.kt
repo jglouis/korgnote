@@ -131,7 +131,7 @@ class TransportSecurityTest {
         assertEquals(HttpStatusCode.Forbidden, client.get("/api/v1/manifest") { header(HttpHeaders.Host, "rebound.example:8080") }.status)
         assertEquals(HttpStatusCode.Forbidden, client.get("/api/v1/manifest") { header(HttpHeaders.Host, "192.168.1.20:8080") }.status)
         assertEquals(HttpStatusCode.OK, client.get("/api/v1/manifest") { header(HttpHeaders.Host, "127.0.0.1:8080") }.status)
-        assertEquals(HttpStatusCode.OK, client.get("/api/v1/manifest") { header(HttpHeaders.Host, "10.0.2.2:8080") }.status, "the emulator's way to its host")
+        assertEquals(HttpStatusCode.Forbidden, client.get("/api/v1/manifest") { header(HttpHeaders.Host, "10.0.2.2:8080") }.status, "the emulator pairs, as a phone does")
     }
 
     @Test

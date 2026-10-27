@@ -44,11 +44,18 @@ data class PairedServer(
 /** Where a request can go: a base URL, and the token to send there, if any. */
 data class Endpoint(val baseUrl: String, val token: String?)
 
-/** The paired server's addresses with its token; or, unpaired, the server on this computer, which wants none. */
-fun endpointsFor(settings: SettingsRepository): List<Endpoint> {
+/**
+ * The paired server's addresses with its token; or, unpaired, the server on this computer, which
+ * wants none — where there is one: on a phone, nothing, rather than a request in the clear to an
+ * address that will not answer it.
+ */
+fun endpointsFor(settings: SettingsRepository, localServer: Boolean = usesLocalServer): List<Endpoint> {
     val paired = settings.getPairedServer()
-    return paired?.baseUrls()?.map { Endpoint(it, paired.token) }
-        ?: listOf(Endpoint(buildLocalBaseUrl(settings.getServerHost(), settings.getServerPort()), null))
+    return when {
+        paired != null -> paired.baseUrls().map { Endpoint(it, paired.token) }
+        localServer -> listOf(Endpoint(buildLocalBaseUrl(settings.getServerHost(), settings.getServerPort()), null))
+        else -> emptyList()
+    }
 }
 
 /** `http://host:port` for the server on this computer, from the host and port in Settings. */

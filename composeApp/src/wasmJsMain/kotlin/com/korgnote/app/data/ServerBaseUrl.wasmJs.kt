@@ -9,3 +9,9 @@ internal actual fun defaultServerBaseUrl(): String {
     // window.location.origin returns e.g. "http://localhost:8081"
     return window.location.origin
 }
+
+internal actual val usesLocalServer: Boolean = true
+
+// A page cannot choose which certificate to trust, so it cannot pair; it is served by the server
+// it talks to, on the computer that runs it.
+internal actual val canPair: Boolean = false

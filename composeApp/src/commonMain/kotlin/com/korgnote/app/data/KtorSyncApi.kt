@@ -74,7 +74,7 @@ class KtorSyncApi(
                 failure = e
             }
         }
-        throw failure ?: IllegalStateException("No server is set. Pair with a computer in Settings.")
+        throw failure ?: NotPairedException("This device is not paired with a computer yet. Pair it in Settings.")
     }
 
     /** This response, unless it is the server refusing this device, which is worth saying as that. */
@@ -182,7 +182,7 @@ class KtorSyncApi(
     }
 }
 
-/** The server answered and refused this device: it was never paired with it, or it was revoked. */
+/** This device is not paired: it never was, or the server answered and refused it, having revoked it. */
 class NotPairedException(message: String) : Exception(message)
 
 private val PATH_IN_FRAME =Regex("\"path\"\\s*:\\s*\"([^\"]+)\"")
