@@ -17,6 +17,7 @@ import io.ktor.client.plugins.timeout
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
+import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.encodeURLPathPart
@@ -66,11 +67,22 @@ class KtorSyncApi(
                 return request("${endpoint.baseUrl}/api/v1", endpoint.token).also { lastReached = endpoint.baseUrl }
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: NotPairedException) {
+                // Reached, and refused: another address is the same server, and would refuse too.
+                throw e
             } catch (e: Exception) {
                 failure = e
             }
         }
         throw failure ?: IllegalStateException("No server is set. Pair with a computer in Settings.")
+    }
+
+    /** This response, unless it is the server refusing this device, which is worth saying as that. */
+    private suspend fun HttpResponse.unlessRefused(): HttpResponse {
+        if (status == HttpStatusCode.Unauthorized) {
+            throw NotPairedException(bodyAsText().ifBlank { "The computer no longer knows this device. Pair it again in Settings." })
+        }
+        return this
     }
 
     /**
@@ -85,7 +97,7 @@ class KtorSyncApi(
 
     override suspend fun manifest(since: Long?): RemoteManifest {
         val suffix = if (since != null) "/manifest?since=$since" else "/manifest"
-        val wire: WireManifest = reach { api, token -> client.get(api + suffix) { authorize(token) }.body() }
+        val wire: WireManifest = reach { api, token -> client.get(api + suffix) { authorize(token) }.unlessRefused().body() }
         return RemoteManifest(
             generation = wire.generation,
             complete = wire.complete,
@@ -95,7 +107,7 @@ class KtorSyncApi(
     }
 
     override suspend fun fetch(path: String): RemoteFile? {
-        val response = reach { api, token -> client.get(api + filePath(path)) { authorize(token) } }
+        val response = reach { api, token -> client.get(api + filePath(path)) { authorize(token) }.unlessRefused() }
         if (response.status != HttpStatusCode.OK) return null
         val etag = response.headers[HttpHeaders.ETag]?.trim('"') ?: return null
         return RemoteFile(path, etag, response.bodyAsText())
@@ -113,7 +125,7 @@ class KtorSyncApi(
                 if (ifMatch != null) header(HttpHeaders.IfMatch, ifMatch)
                 if (mustNotExist) header(HttpHeaders.IfNoneMatch, "*")
                 setBody(content)
-            }
+            }.unlessRefused()
         }
         return when (response.status) {
             HttpStatusCode.OK ->
@@ -137,7 +149,7 @@ class KtorSyncApi(
                 socketTimeoutMillis = INFINITE
             }
         }.execute { response ->
-            val channel = response.bodyAsChannel()
+            val channel = response.unlessRefused().bodyAsChannel()
             var deleted = false
             while (true) {
                 val line = channel.readLine() ?: break
@@ -159,7 +171,7 @@ class KtorSyncApi(
             client.delete(api + filePath(path)) {
                 authorize(token)
                 header(HttpHeaders.IfMatch, ifMatch)
-            }
+            }.unlessRefused()
         }
         return when (response.status) {
             HttpStatusCode.NoContent -> DeleteResult.Deleted
@@ -170,7 +182,10 @@ class KtorSyncApi(
     }
 }
 
-private val PATH_IN_FRAME = Regex("\"path\"\\s*:\\s*\"([^\"]+)\"")
+/** The server answered and refused this device: it was never paired with it, or it was revoked. */
+class NotPairedException(message: String) : Exception(message)
+
+private val PATH_IN_FRAME =Regex("\"path\"\\s*:\\s*\"([^\"]+)\"")
 
 /** Ktor spells "no timeout" as Long.MAX_VALUE. */
 private const val INFINITE = Long.MAX_VALUE

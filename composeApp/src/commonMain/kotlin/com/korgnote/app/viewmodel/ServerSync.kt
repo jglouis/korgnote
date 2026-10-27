@@ -1,6 +1,7 @@
 package com.korgnote.app.viewmodel
 
 import androidx.compose.runtime.getValue
+import com.korgnote.app.data.NotPairedException
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -218,6 +219,8 @@ class ServerSync(
     }
 
     private fun reason(t: Throwable): String {
+        // Reached, and refused: what to do about it is not checking the connection.
+        if (t is NotPairedException) return t.message.orEmpty()
         val msg = t.message ?: ""
         val simple = t::class.simpleName ?: "Error"
         return "Cannot reach the server. Please check Settings and your connection. ($simple: $msg)"
