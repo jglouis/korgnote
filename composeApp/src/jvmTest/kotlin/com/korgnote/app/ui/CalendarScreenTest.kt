@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -28,6 +29,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * T17's acceptance: a day with two timed meetings, an all-day range and a deadline renders in all
@@ -242,6 +244,58 @@ class CalendarScreenTest {
         // From its start, the next swipe turns to the week before.
         onRoot().performTouchInput { swipeRight(startX = 60f, endX = 380f) }
         assertShown("14–20 Sep 2026")
+    }
+
+    private fun ComposeUiTest.heightOf(text: String) = onNodeWithText(text).fetchSemanticsNode().size.height.toFloat()
+
+    /** Two fingers pulled apart up and down stretch the hours, and pushed together squeeze them. */
+    @Test
+    fun aPinchStretchesAndSqueezesTheHours() = runComposeUiTest {
+        show(CalendarMode.Day)
+        val before = heightOf("Design review")
+
+        onNodeWithTag("hourGrid").performTouchInput {
+            pinch(Offset(150f, centerY - 50f), Offset(150f, centerY - 100f), Offset(250f, centerY + 50f), Offset(250f, centerY + 100f))
+        }
+        val stretched = heightOf("Design review")
+        assertTrue(stretched > before * 1.5f, "stretched from $before to $stretched")
+        assertShown("Wed 23 Sep 2026")
+
+        onNodeWithTag("hourGrid").performTouchInput {
+            pinch(Offset(150f, centerY - 100f), Offset(150f, centerY - 25f), Offset(250f, centerY + 100f), Offset(250f, centerY + 25f))
+        }
+        val squeezed = heightOf("Design review")
+        assertTrue(squeezed < stretched / 2f, "squeezed from $stretched to $squeezed")
+        assertShown("Wed 23 Sep 2026")
+    }
+
+    /** What is between the fingers stays between them. */
+    @Test
+    fun aPinchKeepsWhatIsBetweenTheFingersInPlace() = runComposeUiTest {
+        show(CalendarMode.Day)
+        val grid = onNodeWithTag("hourGrid").fetchSemanticsNode().positionInRoot
+        fun middleOfTheReview() = onNodeWithText("Design review").fetchSemanticsNode().let { it.positionInRoot.y + it.size.height / 2f }
+        val before = middleOfTheReview()
+
+        // Fingers either side of the review, in the grid's own coordinates.
+        val y = before - grid.y
+        onNodeWithTag("hourGrid").performTouchInput {
+            pinch(Offset(150f, y - 30f), Offset(150f, y - 60f), Offset(250f, y + 30f), Offset(250f, y + 60f))
+        }
+        assertEquals(before, middleOfTheReview(), 6f)
+    }
+
+    /** The hours stay as pinched on the next day, and in the week. */
+    @Test
+    fun thePinchIsKeptFromDayToWeek() = runComposeUiTest {
+        show(CalendarMode.Day)
+        onNodeWithTag("hourGrid").performTouchInput {
+            pinch(Offset(150f, centerY - 50f), Offset(150f, centerY - 100f), Offset(250f, centerY + 50f), Offset(250f, centerY + 100f))
+        }
+        val stretched = heightOf("Design review")
+
+        onNodeWithText("Week").performClick()
+        assertEquals(stretched, heightOf("Design review"), 1f)
     }
 
     /** The same the other way: past Sunday, the next swipe turns to the week after. */

@@ -93,6 +93,8 @@ fun CalendarScreen(
     var base by rememberSaveable(stateSaver = LocalDateSaver) { mutableStateOf(initialAnchorDate ?: today) }
     // Finished entries are history, and a year of them buries what is still to do.
     var showDone by rememberSaveable { mutableStateOf(false) }
+    // How far the hours are pinched, kept from one day or week to the next and between the two.
+    var hourHeight by rememberSaveable { mutableStateOf(DEFAULT_HOUR_HEIGHT.value) }
     val pager = key(mode, base) { rememberPagerState(initialPage = CALENDAR_MIDDLE_PAGE) { CALENDAR_PAGES } }
     val scope = rememberCoroutineScope()
     fun dateOf(page: Int) = mode.shift(base, page - CALENDAR_MIDDLE_PAGE)
@@ -154,6 +156,8 @@ fun CalendarScreen(
                         showDone = showDone,
                         onOpen = open,
                         onDayClick = {},
+                        hourHeight = hourHeight.dp,
+                        onHourHeightChange = { hourHeight = it.value },
                     )
 
                     CalendarMode.Week -> TimeGridView(
@@ -163,6 +167,8 @@ fun CalendarScreen(
                         showDone = showDone,
                         onOpen = open,
                         onDayClick = { show(CalendarMode.Day, it) },
+                        hourHeight = hourHeight.dp,
+                        onHourHeightChange = { hourHeight = it.value },
                     )
 
                     CalendarMode.Month -> MonthView(

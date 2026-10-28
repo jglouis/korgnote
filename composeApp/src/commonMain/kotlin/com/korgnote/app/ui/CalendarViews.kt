@@ -2,6 +2,7 @@ package com.korgnote.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,7 +36,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -49,6 +52,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -77,6 +84,8 @@ import kotlinx.datetime.Month
 import kotlinx.datetime.daysUntil
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
+import kotlin.math.abs
+import kotlin.math.pow
 
 // --- How each kind looks -----------------------------------------------------------------------
 
@@ -280,8 +289,16 @@ private fun AgendaRow(occurrence: AgendaOccurrence, today: LocalDate, leading: D
 
 // --- Day and week: all-day strip and hour grid -------------------------------------------------
 
-/** An hour of the grid: a minute a dp, which leaves a half-hour meeting room for its title and time. */
-private val HOUR_HEIGHT = 60.dp
+/**
+ * An hour of the grid until it is pinched: a minute a dp, which leaves a half-hour meeting room for
+ * its title and time.
+ */
+val DEFAULT_HOUR_HEIGHT = 60.dp
+
+/** Pinched in, a whole day on a phone's screen; pinched out, room for a quarter-hour's title and time. */
+private val MIN_HOUR_HEIGHT = 24.dp
+private val MAX_HOUR_HEIGHT = 240.dp
+
 private val TIME_LABEL_SIZE = 9.sp
 private val TIME_LABEL_LINE = 11.sp
 private val GUTTER_WIDTH = 44.dp
@@ -300,6 +317,9 @@ private val MIN_DAY_WIDTH = 96.dp
  * The grid opens scrolled to an hour before now, or to [dayStartHour] on other days, rather than at
  * midnight, which is rarely where anything is. Where the days do not all fit across, they scroll
  * sideways together with their headers and all-day strip, and open on today.
+ *
+ * Two fingers pulled apart or together on the grid stretch or squeeze the hours, [hourHeight] each,
+ * around the time between the fingers; Ctrl and the wheel do the same where there is no touch.
  */
 @Composable
 fun TimeGridView(
@@ -311,6 +331,8 @@ fun TimeGridView(
     onDayClick: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
     dayStartHour: Int = 7,
+    hourHeight: Dp = DEFAULT_HOUR_HEIGHT,
+    onHourHeightChange: (Dp) -> Unit = {},
 ) {
     val today = now.date
     val byDate = remember(agenda, dates, today, showDone) { dates.associateWith { agenda.shownOn(it, today, showDone) } }
@@ -382,12 +404,23 @@ fun TimeGridView(
             val preferred = if (today in dates) (now.hour - 1).coerceAtLeast(0) else dayStartHour
             val initialHour = minOf(preferred, firstEvent ?: preferred)
             // A little above the hour, so its label is not cut in half.
-            val initialScroll = with(LocalDensity.current) { (HOUR_HEIGHT * initialHour - 8.dp).coerceAtLeast(0.dp).roundToPx() }
+            val initialScroll = with(LocalDensity.current) { (hourHeight * initialHour - 8.dp).coerceAtLeast(0.dp).roundToPx() }
             val scroll = rememberScrollState(initialScroll)
-            Row(Modifier.fillMaxWidth().weight(1f).verticalScroll(scroll).testTag("hourGrid")) {
+            val currentHourHeight by rememberUpdatedState(hourHeight)
+            val currentOnHourHeightChange by rememberUpdatedState(onHourHeightChange)
+            val zoom = Modifier.zoomHours { factor, focusY ->
+                val old = currentHourHeight
+                val new = (old * factor).coerceIn(MIN_HOUR_HEIGHT, MAX_HOUR_HEIGHT)
+                if (new != old) {
+                    currentOnHourHeightChange(new)
+                    // The time between the fingers stays between them.
+                    scroll.dispatchRawDelta((scroll.value + focusY) * (new / old - 1))
+                }
+            }
+            Row(Modifier.fillMaxWidth().weight(1f).then(zoom).verticalScroll(scroll).testTag("hourGrid")) {
                 Column(Modifier.width(GUTTER_WIDTH)) {
                     for (hour in 0 until 24) {
-                        Box(Modifier.height(HOUR_HEIGHT)) {
+                        Box(Modifier.height(hourHeight)) {
                             if (hour > 0) {
                                 Text(
                                     "${hour.toString().padStart(2, '0')}:00",
@@ -404,6 +437,7 @@ fun TimeGridView(
                         DayColumn(
                             blocks = remember(byDate, date) { layoutTimed(byDate.getValue(date)) },
                             nowMinute = if (date == today) now.hour * 60 + now.minute else null,
+                            hourHeight = hourHeight,
                             keywordColors = keywordColors,
                             compact = compact,
                             onOpen = onOpen,
@@ -437,10 +471,39 @@ private class StopAtTheEdge : NestedScrollConnection {
     }
 }
 
+/**
+ * Calls [onZoom] with how much two fingers moved apart up and down since the last event, and where
+ * between them they are, and keeps their moves from the scroll and the pager under them; or with a
+ * step of Ctrl and the wheel, at the pointer. One finger is left alone, to scroll.
+ */
+private fun Modifier.zoomHours(onZoom: (factor: Float, focusY: Float) -> Unit) = pointerInput(Unit) {
+    // Fingers side by side rather than one over the other say nothing about the hours.
+    val minSpan = 24.dp.toPx()
+    awaitEachGesture {
+        do {
+            // Before the scroll under it sees the event, so that two fingers do not also scroll.
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            val pressed = event.changes.filter { it.pressed }
+            if (pressed.size >= 2) {
+                val (a, b) = pressed
+                val span = abs(a.position.y - b.position.y)
+                val before = abs(a.previousPosition.y - b.previousPosition.y)
+                if (span >= minSpan && before >= minSpan) onZoom(span / before, (a.position.y + b.position.y) / 2)
+                event.changes.forEach { it.consume() }
+            } else if (event.type == PointerEventType.Scroll && event.keyboardModifiers.isCtrlPressed) {
+                val change = event.changes.first()
+                onZoom(1.1f.pow(-change.scrollDelta.y), change.position.y)
+                change.consume()
+            }
+        } while (event.changes.any { it.pressed })
+    }
+}
+
 @Composable
 private fun DayColumn(
     blocks: List<TimedBlock>,
     nowMinute: Int?,
+    hourHeight: Dp,
     keywordColors: KeywordColors,
     compact: Boolean,
     onOpen: (AgendaOccurrence) -> Unit,
@@ -449,10 +512,10 @@ private fun DayColumn(
     val lineColor = MaterialTheme.colorScheme.outlineVariant
     val titleStyle = MaterialTheme.typography.labelSmall
     val (titleLine, timeLine) = with(LocalDensity.current) { titleStyle.lineHeight.toDp() to TIME_LABEL_LINE.toDp() }
-    BoxWithConstraints(modifier.height(HOUR_HEIGHT * 24)) {
+    BoxWithConstraints(modifier.height(hourHeight * 24)) {
         // Hour lines.
         for (hour in 0 until 24) {
-            HorizontalDivider(Modifier.offset(y = HOUR_HEIGHT * hour), color = lineColor.copy(alpha = 0.5f))
+            HorizontalDivider(Modifier.offset(y = hourHeight * hour), color = lineColor.copy(alpha = 0.5f))
         }
         Box(Modifier.fillMaxHeight().width(1.dp).background(lineColor.copy(alpha = 0.5f)))
 
@@ -461,7 +524,7 @@ private fun DayColumn(
             val accent = occurrence.entry.kind.accent()
             val keywordColor = keywordColors.of(occurrence.entry)
             val width = maxWidth / block.columns
-            val height = HOUR_HEIGHT * (block.endMinute - block.startMinute) / 60
+            val height = hourHeight * (block.endMinute - block.startMinute) / 60
             // The time under the title where there is room for both, rather than half of it cut off:
             // where a block sits on the grid already says roughly when it is.
             val time = occurrence.timeLabel()?.takeIf { height - 4.dp >= titleLine + timeLine }
@@ -471,7 +534,7 @@ private fun DayColumn(
             val inset = if (compact) 1.dp else 3.dp
             Column(
                 Modifier
-                    .offset(x = width * block.column, y = HOUR_HEIGHT * block.startMinute / 60)
+                    .offset(x = width * block.column, y = hourHeight * block.startMinute / 60)
                     .width(width)
                     .height(height)
                     .padding(1.dp)
@@ -505,7 +568,7 @@ private fun DayColumn(
 
         if (nowMinute != null) {
             val nowColor = MaterialTheme.colorScheme.error
-            Box(Modifier.fillMaxWidth().offset(y = HOUR_HEIGHT * nowMinute / 60 - 1.dp).testTag("nowLine")) {
+            Box(Modifier.fillMaxWidth().offset(y = hourHeight * nowMinute / 60 - 1.dp).testTag("nowLine")) {
                 Box(Modifier.fillMaxWidth().height(2.dp).offset(y = 3.dp).background(nowColor))
                 Box(Modifier.size(8.dp).background(nowColor, CircleShape))
             }
