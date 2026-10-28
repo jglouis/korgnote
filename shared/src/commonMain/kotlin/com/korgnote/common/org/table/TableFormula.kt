@@ -254,6 +254,10 @@ internal class FormulaParser(private val text: String) {
         val FUNCTIONS = setOf(
             "vsum", "vmean", "vmedian", "vmin", "vmax", "vcount",
             "min", "max", "abs", "round", "floor", "ceil", "trunc", "sqrt", "if",
+            "vprod", "vvar", "vpvar", "vsdev", "vpsdev",
+            "exp", "ln", "log10", "log", "sign", "fact", "gcd", "lcm",
+            "pv", "fv", "pmt", "npv",
+            "year", "month", "day", "weekday",
         )
 
         // Calc's binding powers (math-standard-opers): the left one decides whether an operator

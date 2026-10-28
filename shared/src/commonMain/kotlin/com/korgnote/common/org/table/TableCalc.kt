@@ -1,6 +1,11 @@
 package com.korgnote.common.org.table
 
-import kotlin.math.sqrt
+import com.korgnote.common.org.complete.orgStamp
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.daysUntil
+import kotlinx.datetime.isoDayNumber
+import kotlinx.datetime.plus
 
 /**
  * A table's lines as its formulas see them, from a row of cells per line and null for a rule.
@@ -111,7 +116,13 @@ private sealed interface Value {
     data class Cell(val text: String, val line: Int, val column: Int) : Value
 
     data class Several(val items: List<Value>) : Value
+
+    /** A day, from a timestamp cell or a date computed from one: `[2024-07-01 Mon]`. */
+    data class Date(val date: LocalDate) : Value
 }
+
+private val orgDate = Regex("""[\[<](\d{4})-(\d{2})-(\d{2})(?:\s+[^\s\d\]>]+)?[]>]""")
+private val orgTimestamp = Regex("""[\[<]\d{4}-\d{2}-\d{2}[^]>]*[]>]""")
 
 /** Evaluates one formula for one cell of [layout]: the one at [line], in [column]. */
 private class Evaluation(
@@ -198,8 +209,13 @@ private class Evaluation(
     )
 
     private fun binary(expr: Expr.Binary): Value {
-        val a = number(evaluate(expr.left))
-        val b = number(evaluate(expr.right))
+        val left = evaluate(expr.left)
+        val right = evaluate(expr.right)
+        val leftDate = date(left)
+        val rightDate = date(right)
+        if (leftDate != null || rightDate != null) return dates(expr.operator, leftDate, left, rightDate, right)
+        val a = number(left)
+        val b = number(right)
         fun truth(holds: Boolean) = Value.Number(CalcNumber.Whole(if (holds) 1 else 0))
         return when (expr.operator) {
             "+" -> Value.Number(a + b)
@@ -221,6 +237,39 @@ private class Evaluation(
         }
     }
 
+    /**
+     * Arithmetic on days, as Calc does it on Org's timestamps: the days from one date to another, or
+     * a date some whole number of days before or after another.
+     */
+    private fun dates(operator: String, leftDate: LocalDate?, left: Value, rightDate: LocalDate?, right: Value): Value {
+        fun days(value: Value): Int = (number(value) as? CalcNumber.Whole)?.value?.toInt()
+            ?: throw FormulaError("Only whole days can be added to or taken from a date.")
+        return when {
+            operator == "-" && leftDate != null && rightDate != null ->
+                Value.Number(CalcNumber.Whole(rightDate.daysUntil(leftDate).toLong()))
+            operator == "+" && leftDate != null && rightDate == null -> Value.Date(leftDate.plus(days(right), DateTimeUnit.DAY))
+            operator == "+" && leftDate == null && rightDate != null -> Value.Date(rightDate.plus(days(left), DateTimeUnit.DAY))
+            operator == "-" && leftDate != null -> Value.Date(leftDate.plus(-days(right), DateTimeUnit.DAY))
+            else -> throw FormulaError("Dates can only be subtracted from each other, or have days added or taken away.")
+        }
+    }
+
+    /** The day [value] holds, when it is one: a timestamp cell without a time of day. */
+    private fun date(value: Value): LocalDate? = when (value) {
+        is Value.Date -> value.date
+        is Value.Cell -> orgDate.matchEntire(value.text)?.destructured?.let { (y, m, d) ->
+            runCatching { LocalDate(y.toInt(), m.toInt(), d.toInt()) }.getOrNull()
+        } ?: if (orgTimestamp.matches(value.text)) {
+            throw FormulaError("Row ${layout.rowNumber(value.line)}, column ${value.column} holds “${value.text}”: only dates without a time or a repeater are computed here.")
+        } else {
+            null
+        }
+        else -> null
+    }
+
+    /** What [value] writes in a cell: a number as Calc shows it, a date as an inactive timestamp. */
+    fun text(value: Value): String = date(value)?.orgStamp(active = false) ?: number(value).toCalcString()
+
     private fun call(expr: Expr.Call): Value {
         val name = expr.name
         if (name == "if") {
@@ -229,9 +278,29 @@ private class Evaluation(
             return evaluate(expr.arguments[if (condition.isZero) 2 else 1])
         }
         val values = expr.arguments.map { evaluate(it) }
+        if (name in DATE_PARTS) {
+            if (values.size != 1) throw FormulaError("$name(…) takes one date.")
+            val date = date(values[0]) ?: throw FormulaError("$name(…) needs a date, as [2024-07-01 Mon].")
+            return Value.Number(
+                CalcNumber.Whole(
+                    when (name) {
+                        "year" -> date.year
+                        "month" -> date.month.ordinal + 1
+                        "day" -> date.day
+                        // Calc counts from Sunday, 0.
+                        else -> date.dayOfWeek.isoDayNumber % 7
+                    }.toLong(),
+                ),
+            )
+        }
+        if (name == "npv") {
+            if (values.size < 2) throw FormulaError("npv(rate, values…) needs a rate and at least one value.")
+            val rest = values.drop(1).flatMap { if (it is Value.Several) it.items else listOf(it) }.map { number(it) }
+            return Value.Number(CalcFunctions.netPresentValue(number(values[0]), rest))
+        }
         if (name.startsWith("v") || name == "min" || name == "max") {
             val items = values.flatMap { if (it is Value.Several) it.items else listOf(it) }.map { number(it) }
-            if (items.isEmpty() && name != "vsum" && name != "vcount") {
+            if (items.isEmpty() && name != "vsum" && name != "vcount" && name != "vprod") {
                 throw FormulaError("$name(…) has no number to work on: every cell it reads is empty.")
             }
             return Value.Number(
@@ -245,6 +314,11 @@ private class Evaluation(
                     }
                     "vmin", "min" -> items.reduce { best, n -> if (n < best) n else best }
                     "vmax", "max" -> items.reduce { best, n -> if (n > best) n else best }
+                    "vprod" -> CalcFunctions.product(items)
+                    "vvar" -> CalcFunctions.variance(name, items, population = false)
+                    "vpvar" -> CalcFunctions.variance(name, items, population = true)
+                    "vsdev" -> CalcFunctions.deviation(name, items, population = false)
+                    "vpsdev" -> CalcFunctions.deviation(name, items, population = true)
                     else -> throw FormulaError("The function $name is not supported here.")
                 },
             )
@@ -259,7 +333,25 @@ private class Evaluation(
                 "floor" -> single().floor()
                 "ceil" -> single().ceil()
                 "trunc" -> single().truncate()
-                "sqrt" -> squareRoot(single())
+                "sqrt" -> CalcFunctions.squareRoot(single())
+                "exp" -> CalcFunctions.exp(single())
+                "ln" -> CalcFunctions.ln(single())
+                "log10" -> CalcFunctions.log10(single())
+                "sign" -> CalcFunctions.sign(single())
+                "fact" -> CalcFunctions.factorial(single())
+                "log", "gcd", "lcm", "pv", "fv", "pmt" -> {
+                    val arity = if (name == "log" || name == "gcd" || name == "lcm") 2 else 3
+                    if (values.size != arity) throw FormulaError("$name(…) takes $arity values.")
+                    val n = values.map { number(it) }
+                    when (name) {
+                        "log" -> CalcFunctions.log(name, n[0], n[1])
+                        "gcd" -> CalcFunctions.gcd(n[0], n[1])
+                        "lcm" -> CalcFunctions.lcm(n[0], n[1])
+                        "pv" -> CalcFunctions.presentValue(n[0], n[1], n[2])
+                        "fv" -> CalcFunctions.futureValue(n[0], n[1], n[2])
+                        else -> CalcFunctions.payment(n[0], n[1], n[2])
+                    }
+                }
                 "round" -> when (values.size) {
                     1 -> number(values[0]).round()
                     2 -> {
@@ -274,25 +366,19 @@ private class Evaluation(
         )
     }
 
-    private fun squareRoot(n: CalcNumber): CalcNumber {
-        if (n.signum() < 0) throw FormulaError("sqrt($n) is not a real number.")
-        if (n is CalcNumber.Whole) {
-            val root = sqrt(n.value.toDouble()).toLong()
-            for (r in root - 1..root + 1) if (r >= 0 && r * r == n.value) return CalcNumber.Whole(r)
-        }
-        return CalcNumber.fromDouble(sqrt(n.toDouble()))
-    }
-
     fun number(value: Value): CalcNumber = when (value) {
         is Value.Number -> value.value
         is Value.Cell -> CalcNumber.parse(value.text) ?: throw FormulaError(
             "Row ${layout.rowNumber(value.line)}, column ${value.column} holds “${value.text}”, which is not a number.",
         )
         is Value.Several -> throw FormulaError("A range has to go in a function, such as vsum(…) or vmean(…).")
+        is Value.Date -> throw FormulaError("A date cannot be computed with like a number: subtract dates for the days between them.")
     }
 
     private fun divisionByZero(): Nothing = throw FormulaError("Division by zero.")
 }
+
+private val DATE_PARTS = setOf("year", "month", "day", "weekday")
 
 /** A formula of a table that cannot be computed, and why. */
 data class FormulaProblem(
@@ -343,7 +429,8 @@ fun recalculate(rows: List<List<String>?>, formulas: List<String>): Recalculatio
         try {
             val evaluation = Evaluation(live, line, column, planned.formula.numbers)
             val result = evaluation.evaluate(planned.formula.expression)
-            val text = evaluation.number(result).toCalcString()
+            val text = evaluation.text(result)
+            if (planned.formula.format != null && text.startsWith("[")) throw FormulaError("A date cannot be given a number format.")
             val written = planned.formula.format?.let { formatLikeEmacs(it, text) } ?: text
             cells[line]!![column - 1] = written
         } catch (e: FormulaError) {

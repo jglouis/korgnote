@@ -185,6 +185,8 @@ private val REFERENCE = Regex(
 
 private val FRIENDLY_NAMES = mapOf(
     "vsum" to "sum", "vmean" to "mean", "vmedian" to "median", "vmin" to "min", "vmax" to "max", "vcount" to "count",
+    "vprod" to "product", "vvar" to "variance", "vpvar" to "population variance",
+    "vsdev" to "standard deviation", "vpsdev" to "population standard deviation",
 )
 
 /**
