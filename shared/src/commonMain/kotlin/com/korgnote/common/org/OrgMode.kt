@@ -489,8 +489,9 @@ fun String.toOrgDocument(): OrgDocument {
             i = next
             continue
         }
-        // Prefer parsing headings (lines starting with one or more '*') as sections before '*' lists
-        if (line.startsWith("*")) {
+        // Headings (stars, then a space) open sections before `*` lists are tried. A line that only
+        // starts with a star, as `*bold* text` does, is a paragraph.
+        if (OrgSyntax.heading.containsMatchIn(line)) {
             flushParagraph()
             val heading = orgHeadingOf(line)
             // A heading ends every open heading at its level or deeper; what remains is its parent.
@@ -511,7 +512,7 @@ fun String.toOrgDocument(): OrgDocument {
                 continue@mainLoop
             }
         }
-        // Lists come from the shared grammar now, which also covers `1.`/`1)` and nesting. A `*`
+        // Lists come from the shared grammar now, which also covers `1.`/`1)` and nesting. A `* `
         // marker at column 0 never reaches here: the heading rule above claims it first.
         if (OrgSyntax.listItem.containsMatchIn(line)) {
             flushParagraph()

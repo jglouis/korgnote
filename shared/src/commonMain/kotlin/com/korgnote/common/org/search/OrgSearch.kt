@@ -293,9 +293,9 @@ private fun matchIn(line: String, words: List<String>): IntRange? {
 fun fileTagsOf(text: String): List<String> {
     val tags = mutableListOf<String>()
     for (line in text.lineSequence()) {
-        // The same lenient heading rule the element splitter uses, for the same reason: two places
-        // disagreeing about where the preamble ends is worse than either being individually right.
-        if (line.startsWith("*")) break
+        // The same heading rule the element splitter uses: two places disagreeing about where the
+        // preamble ends is worse than either being individually right.
+        if (OrgSyntax.heading.containsMatchIn(line)) break
         val value = OrgSyntax.filetagsKeyword.find(line)?.groupValues?.get(1) ?: continue
         value.split(':', ' ', '\t').forEach { tag -> tag.trim().takeIf { it.isNotEmpty() }?.let { tags += it } }
     }

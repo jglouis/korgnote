@@ -24,17 +24,13 @@ data class OrgElement(
 fun OrgElement.sliceOf(text: String): String = text.substring(start, endExclusive)
 
 /**
- * A line begins a heading.
+ * A line begins a heading: stars, then whitespace, as Org has it, so `*bold* text` is not one.
  *
- * Deliberately the same rule as [toOrgDocument]'s section detection rather than the stricter
- * "stars followed by whitespace" that Org itself uses: if the splitter and the parser disagreed
- * about where a heading starts, the range shown for editing would not be the range written back.
- * Consistency between the two matters more here than either being individually right — a
- * disagreement corrupts a file, whereas a shared quirk merely splits an element oddly.
- *
- * Both should move to the real grammar together; see `docs/04-org-core.md`.
+ * Deliberately the same rule as [toOrgDocument]'s section detection: if the splitter and the
+ * parser disagreed about where a heading starts, the range shown for editing would not be the
+ * range written back.
  */
-private fun isHeadingLine(line: String): Boolean = line.startsWith("*")
+private fun isHeadingLine(line: String): Boolean = OrgSyntax.heading.containsMatchIn(line)
 
 /** Number of leading `*` characters. */
 private fun headingLevel(line: String): Int = line.takeWhile { it == '*' }.length

@@ -1,5 +1,7 @@
 package com.korgnote.common.org.edit
 
+import com.korgnote.common.org.OrgSyntax
+
 /**
  * A note's own description of itself — the `#+TITLE:`, `#+AUTHOR:`, `#+DATE:` and `#+FILETAGS:`
  * above its first heading — as the details form edits it. Values are as written, tags as a list.
@@ -56,7 +58,7 @@ private fun withFileKeyword(text: String, key: String, spelling: String, value: 
         val end = text.indexOf('\n', lineStart).let { if (it < 0) text.length else it }
         val next = if (end < text.length) end + 1 else end
         val line = text.substring(lineStart, end)
-        if (line.startsWith("*")) break
+        if (OrgSyntax.heading.containsMatchIn(line)) break
         val match = FILE_KEYWORD.matchEntire(line)
         if (match != null && match.groupValues[1].equals(key, ignoreCase = true)) {
             val written = line.substring(0, line.indexOf(':') + 1)
@@ -90,7 +92,7 @@ private fun withFileKeyword(text: String, key: String, spelling: String, value: 
 }
 
 /** The lines above the first heading, where Org reads a file's keywords. */
-private fun preambleLines(text: String): Sequence<String> = text.lineSequence().takeWhile { !it.startsWith("*") }
+private fun preambleLines(text: String): Sequence<String> = text.lineSequence().takeWhile { !OrgSyntax.heading.containsMatchIn(it) }
 
 private val FILE_KEYWORD = Regex("^#\\+(TITLE|AUTHOR|DATE|FILETAGS):(.*)$", RegexOption.IGNORE_CASE)
 private val KEYWORD_LINE = Regex("^#\\+\\w+:")
