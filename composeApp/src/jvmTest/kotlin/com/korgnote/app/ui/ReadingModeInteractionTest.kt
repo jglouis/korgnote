@@ -295,4 +295,20 @@ class ReadingModeInteractionTest {
 
         onAllNodesWithContentDescription("Note details").assertCountEquals(0)
     }
+
+    /** A table is edited as a grid: its tap is its own, like a checkbox's. */
+    @Test
+    fun aTapOnATableOpensItAsAGridAndDoesNotEdit() = runComposeUiTest {
+        val tableText = "* Shopping\n| Item | Qty |\n| Milk | 2 |\n"
+        val edited = mutableListOf<Int>()
+        val tables = mutableListOf<Int>()
+        setContent {
+            OrgDocumentView(text = tableText, onEditElement = { edited += it }, onEditTable = { tables += it })
+        }
+
+        onNodeWithText("Milk").performClick()
+
+        assertEquals(listOf(tableText.indexOf("| Item")), tables)
+        assertTrue(edited.isEmpty(), "the table's tap is its own")
+    }
 }

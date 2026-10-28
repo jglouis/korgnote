@@ -70,6 +70,8 @@ fun OrgDocumentView(
     onToggleCheckbox: ((offsetInDocument: Int) -> Unit)? = null,
     /** A keyword picked from a heading's TODO keyword, or null to clear it, with that heading's offset in [text]. */
     onSetTodo: ((offsetInDocument: Int, keyword: String?) -> Unit)? = null,
+    /** A tap on a table, with its offset in [text]: tables are edited as a grid, not as text. */
+    onEditTable: ((offsetInDocument: Int) -> Unit)? = null,
     editingElementIndex: Int? = null,
     elementDraftValue: TextFieldValue = TextFieldValue(""),
     onElementDraftChange: (TextFieldValue) -> Unit = {},
@@ -234,6 +236,9 @@ fun OrgDocumentView(
                                 },
                                 onSetTodo = onSetTodo?.let { set ->
                                     { heading, keyword -> set(element.start + heading.range.first, keyword) }
+                                },
+                                onEditTable = onEditTable?.let { edit ->
+                                    { table -> edit(element.start + table.range.first) }
                                 },
                             )
                             ElementMenu(

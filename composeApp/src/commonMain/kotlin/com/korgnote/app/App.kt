@@ -166,6 +166,13 @@ fun App() {
                 onDismiss = { editingDetails = false },
             )
         }
+        vm.tableEdit?.let { edit ->
+            TableEditorDialog(
+                initial = edit.grid,
+                onSave = { grid -> scope.launch { vm.commitTableEdit(grid) } },
+                onDismiss = { vm.cancelTableEdit() },
+            )
+        }
         renamingNote?.let { path ->
             RenameNoteDialog(
                 path = path,
@@ -618,6 +625,7 @@ fun App() {
                                             onRevealed = { vm.note.onRevealed() },
                                             onToggleCheckbox = { offset -> vm.toggleCheckboxAt(offset, scope) },
                                             onSetTodo = { offset, keyword -> vm.setTodoAt(offset, keyword, scope) },
+                                            onEditTable = { vm.beginTableEdit(it) },
                                             backlinks = vm.links.backlinks,
                                             onOpenBacklink = { vm.links.openBacklink(it) },
                                             onFirstVisibleElement = { vm.links.onReadingPositionChanged(it) },

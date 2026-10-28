@@ -18,9 +18,12 @@ import com.korgnote.common.fs.NotePaths
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgSection
+import com.korgnote.common.org.OrgTable
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.edit.DraftLink
 import com.korgnote.common.org.edit.FileKeywords
+import com.korgnote.common.org.edit.TableGrid
+import com.korgnote.common.org.edit.replaceOrgTable
 import com.korgnote.common.org.edit.linkAt
 import com.korgnote.common.org.edit.orgLinkOf
 import com.korgnote.common.org.edit.withLink
@@ -489,6 +492,52 @@ class NotesViewModel(
         val updated = withFileKeywords(note.content, keywords)
         if (updated == note.content) return
         note.content = updated
+        saveCurrentFile()
+    }
+
+    /** A table of the open note being edited as a grid, as [beginTableEdit] opened it. */
+    data class TableEdit(val path: String, val range: IntRange, val original: String, val grid: TableGrid)
+
+    /** The table being edited in its own editor, or null when none is. */
+    var tableEdit by mutableStateOf<TableEdit?>(null)
+        private set
+
+    /**
+     * Opens the table whose source contains [offsetInDocument] as a grid, cell by cell: a table is
+     * all but impossible to keep aligned as text on a phone. Refused while an element is being
+     * edited, as the note's details are.
+     */
+    fun beginTableEdit(offsetInDocument: Int) {
+        val path = note.path ?: return
+        if (editor.editingIndex != null) {
+            showMessage("Save or discard the element you are editing first.")
+            return
+        }
+        val table = note.content.toOrgDocument().nodeAt<OrgTable>(offsetInDocument) ?: return
+        tableEdit = TableEdit(path, table.range, note.content.substring(table.range), TableGrid.of(table))
+    }
+
+    fun cancelTableEdit() {
+        tableEdit = null
+    }
+
+    /**
+     * Writes [grid] over the table being edited, aligned, and saves. Nothing is written when nothing
+     * changed — not even the alignment — or when the table's text moved while the editor was open,
+     * say by a sync, since the range would then cover something else.
+     */
+    suspend fun commitTableEdit(grid: TableGrid) {
+        val edit = tableEdit ?: return
+        tableEdit = null
+        if (grid == edit.grid) return
+        val content = note.content
+        val unchanged = note.path == edit.path && edit.range.last < content.length &&
+            content.substring(edit.range) == edit.original
+        if (!unchanged) {
+            showMessage("The note changed while the table was open, so the table was not saved.")
+            return
+        }
+        note.content = replaceOrgTable(content, edit.range, grid)
         saveCurrentFile()
     }
 

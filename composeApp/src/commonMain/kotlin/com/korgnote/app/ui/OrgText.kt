@@ -20,7 +20,9 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Place
@@ -83,6 +85,7 @@ import com.korgnote.common.org.OrgTableRow
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.isNumeric
 import com.korgnote.common.org.parseOrgTable
+import com.korgnote.common.org.parseTodoConfigFrom
 import com.korgnote.common.org.srcLanguageOf
 import com.korgnote.common.org.toOrgString
 import com.korgnote.common.org.edit.Progress
@@ -107,6 +110,8 @@ fun OrgText(
     // A keyword picked for a heading, or null to clear it. A tap on the heading's TODO keyword offers
     // the choice, and only on a keyword [todoKeywords] knows.
     onSetTodo: ((heading: OrgSection, keyword: String?) -> Unit)? = null,
+    // A tap on a table, which is edited as a grid rather than as the element's text.
+    onEditTable: ((table: OrgTable) -> Unit)? = null,
     // Index into content.children (when content is an OrgDocument) to scroll into view, e.g. after
     // opening a file from a calendar entry. Consumed once via onScrolledToChildIndex.
     scrollToChildIndex: Int? = null,
@@ -133,11 +138,14 @@ fun OrgText(
                     horizontalAlignment = Alignment.Start
                 ) {
                     when {
+                        // The note's own drawer, above its first heading, says what its ID is.
+                        child is OrgDrawer -> OrgDrawerView(child.name, child.lines, showId = true)
                         byline == null || idx !in byline.indices -> RenderNode(
                             node = child,
                             todoConfig = todoConfig,
                             onToggleCheckbox = onToggleCheckbox,
                             onSetTodo = onSetTodo,
+                            onEditTable = onEditTable,
                         )
                         idx == byline.indices.min() -> NoteBylineView(byline)
                     }
@@ -156,6 +164,7 @@ fun OrgText(
                 todoConfig = todoConfig,
                 onToggleCheckbox = onToggleCheckbox,
                 onSetTodo = onSetTodo,
+                onEditTable = onEditTable,
             )
         }
     }
@@ -168,11 +177,13 @@ private fun RenderNode(
     onToggleCheckbox: ((OrgCheckboxItem) -> Unit)?,
     // Only documents and sections pass this on: nothing else can hold a heading.
     onSetTodo: ((OrgSection, String?) -> Unit)? = null,
+    // Likewise: a table sits in a section's body, never in a list.
+    onEditTable: ((OrgTable) -> Unit)? = null,
 ) {
     when (node) {
         is OrgDocument -> {
             Column(horizontalAlignment = Alignment.Start) {
-                node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox, onSetTodo) }
+                node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox, onSetTodo, onEditTable) }
             }
         }
 
@@ -181,7 +192,7 @@ private fun RenderNode(
             // its whole subtree. The heading itself carries the level, so nothing here indents:
             // the visual result is the same flow of blocks the flat model produced.
             OrgHeading(node, todoConfig, onSetTodo)
-            node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox, onSetTodo) }
+            node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox, onSetTodo, onEditTable) }
         }
 
         // The grammar models these now, so they render from the node rather than by re-scanning
@@ -257,8 +268,12 @@ private fun RenderNode(
             // The note's own tags, as chips in their colours, like a heading's.
             val fileTags = OrgSyntax.filetagsKeyword.find(node.content.trim())?.groupValues?.get(1)
                 ?.let(::parseTypedTags)
+            val keywords = TODO_KEYWORDS_LINE.find(node.content.trim())
+                ?.let { parseTodoConfigFrom(listOf("#+TODO: " + it.groupValues[1])) }
             if (!fileTags.isNullOrEmpty()) {
                 TagChips(fileTags, Modifier.padding(vertical = 2.dp))
+            } else if (keywords != null && (keywords.todo.isNotEmpty() || keywords.done.isNotEmpty())) {
+                TodoKeywordsView(keywords)
             } else if (title != null) {
                 Text(
                     text = buildOrgInlineString(title),
@@ -277,7 +292,10 @@ private fun RenderNode(
 
         is OrgRaw -> OrgBody(node.content, todoConfig)
 
-        is OrgTable -> OrgTableView(node)
+        is OrgTable -> OrgTableView(
+            node,
+            modifier = if (onEditTable == null) Modifier else Modifier.clickable(onClickLabel = "Edit table") { onEditTable(node) },
+        )
 
         is OrgTableRow -> OrgTableView(OrgTable(listOf(node)))
     }
@@ -632,12 +650,76 @@ private fun OrgBlockView(type: String, params: String, lines: List<String>) {
 internal fun orgDrawerSource(name: String, lines: List<String>): String =
     (listOf(orgDrawerLabel(name)) + lines + ":END:").joinToString("\n")
 
+/** The `:ID:` a `:PROPERTIES:` drawer holds, or null when it is another drawer or has none. */
+internal fun drawerIdOf(name: String, lines: List<String>): String? {
+    if (!name.trim().trim(':').equals("PROPERTIES", ignoreCase = true)) return null
+    return lines.firstNotNullOfOrNull { ID_PROPERTY.matchEntire(it)?.groupValues?.get(1)?.trim() }
+        ?.takeIf { it.isNotEmpty() }
+}
+
+private val ID_PROPERTY = Regex("^\\s*:ID:\\s*(.*)$", RegexOption.IGNORE_CASE)
+
+/** `#+TODO:`, and the `SEQ_` and `TYP_` spellings Org reads the same way, with the keywords after. */
+private val TODO_KEYWORDS_LINE = Regex("^#\\+(?:SEQ_|TYP_)?TODO:\\s*(.*)$", RegexOption.IGNORE_CASE)
+
+/**
+ * A note's `#+TODO:` line as what it declares: its keywords, each in the colour headings show it in,
+ * the open ones leading to the done ones as a heading moves through them.
+ */
+@Composable
+private fun TodoKeywordsView(keywords: OrgTodoConfig) {
+    @Composable
+    fun Keyword(word: String) {
+        val color = keywords.colorFor(word) ?: MaterialTheme.colorScheme.onSurfaceVariant
+        Surface(color = color.copy(alpha = 0.12f), shape = RoundedCornerShape(4.dp)) {
+            Text(
+                text = word,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                color = color,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
+    }
+    FlowRow(
+        modifier = Modifier.padding(vertical = 2.dp).semantics {
+            contentDescription = "Keywords: " + keywords.todo.joinToString(", ") +
+                if (keywords.done.isEmpty()) "" else ", done: " + keywords.done.joinToString(", ")
+        },
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Filled.Checklist,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(16.dp),
+        )
+        keywords.todo.forEach { Keyword(it) }
+        if (keywords.done.isNotEmpty()) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.size(14.dp),
+            )
+            keywords.done.forEach { Keyword(it) }
+        }
+    }
+}
+
 /** The drawer name as Org writes it, `:NAME:`, whichever way the caller spelled it. */
 internal fun orgDrawerLabel(name: String): String = ":" + name.trim().trim(':') + ":"
 
+/**
+ * A drawer, closed until tapped. With [showId], a `:PROPERTIES:` drawer holding an `:ID:` is labelled
+ * with that ID instead of its name — for the note's own drawer, where the ID is what there is to
+ * know and the name says nothing.
+ */
 @Composable
-private fun OrgDrawerView(name: String, lines: List<String>) {
+private fun OrgDrawerView(name: String, lines: List<String>, showId: Boolean = false) {
     var expanded by remember { mutableStateOf(false) }
+    val id = if (showId) drawerIdOf(name, lines) else null
     Column {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -649,11 +731,25 @@ private fun OrgDrawerView(name: String, lines: List<String>) {
                 tint = OrgColors.drawer,
                 modifier = Modifier.width(16.dp)
             )
-            Text(
-                text = orgDrawerLabel(name),
-                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                color = OrgColors.drawer
-            )
+            if (id != null) {
+                Text(
+                    text = "ID",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = OrgColors.drawer,
+                    modifier = Modifier.padding(end = 6.dp),
+                )
+                Text(
+                    text = id,
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    text = orgDrawerLabel(name),
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                    color = OrgColors.drawer
+                )
+            }
         }
         if (expanded) {
             Text(
