@@ -5,13 +5,6 @@ desktop and the web, and syncs through a server you run yourself.
 
 Your notes stay plain `.org` files in a folder. You can keep using Emacs, org-roam and git on them.
 
-<p align="center">
-  <img src="docs/screenshots/note.png" width="24%" alt="A note with a table and links">
-  <img src="docs/screenshots/agenda.png" width="24%" alt="The agenda">
-  <img src="docs/screenshots/week.png" width="24%" alt="The week view">
-  <img src="docs/screenshots/month.png" width="24%" alt="The month view">
-</p>
-
 ## Why
 
 I keep my notes and tasks in Org files. On my phone, I tried Orgzly and Orgro, but they did not do
@@ -22,24 +15,32 @@ promises about feature requests.
 
 ## Features
 
-**Notes**
+### Notes
+
+![A note with tags, a link, a table with a formula, tasks and a code block](docs/screenshots/note.png)
+
 - Headings, TODO keywords, priorities, tags, checkboxes, tables, drawers and code blocks.
 - Links: `id:`, `file:`, headings and custom IDs, with backlinks.
 - New notes and daily notes are created the same way org-roam creates them.
 - Search by words and tags. Pin the notes you use most.
 
-**Editing**
+### Editing
+
 - Tap a heading to edit it. Long-press to move, promote, demote or delete it.
 - Suggestions above the keyboard for keywords, tags, dates and links.
 - Change TODO states from a menu. Repeating tasks move to their next date when done.
 - Edit tables as a grid. `#+TBLFM` formulas are computed the same way as in Emacs.
 
-**Calendar**
+### Calendar
+
+![The agenda](docs/screenshots/agenda.png) ![The week view](docs/screenshots/week.png) ![The month view](docs/screenshots/month.png)
+
 - Agenda, day, week and month views, built from `SCHEDULED`, `DEADLINE` and timestamps.
 - Times, ranges, repeating events and multi-day events.
 - Reminders and a morning summary on your phone, even offline.
 
-**Sync**
+### Sync
+
 - Works offline. Changes sync when the server is reachable.
 - Edits to the same note on two devices are merged. If they conflict, both versions are kept and you
   choose.
