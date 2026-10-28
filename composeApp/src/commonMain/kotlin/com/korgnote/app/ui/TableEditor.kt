@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -109,7 +110,13 @@ fun TableEditorDialog(
         }
     }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    // Back, pressed to put the keyboard away when it is already gone, would otherwise throw the
+    // whole table away: once something changed, it asks first. The close button does not.
+    var confirmingDiscard by remember { mutableStateOf(false) }
+    Dialog(
+        onDismissRequest = { if (grid == initial) onDismiss() else confirmingDiscard = true },
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
         Surface(modifier = Modifier.fillMaxSize().imePadding(), color = MaterialTheme.colorScheme.surface) {
             Column {
                 Row(
@@ -174,6 +181,15 @@ fun TableEditorDialog(
                 }
             }
         }
+    }
+    if (confirmingDiscard) {
+        AlertDialog(
+            onDismissRequest = { confirmingDiscard = false },
+            title = { Text("Discard this table?") },
+            text = { Text("What was changed in it since it was opened will be lost.") },
+            confirmButton = { TextButton(onClick = { confirmingDiscard = false; onDismiss() }) { Text("Discard") } },
+            dismissButton = { TextButton(onClick = { confirmingDiscard = false }) { Text("Keep editing") } },
+        )
     }
     if (showingFormulas) {
         TableFormulasDialog(
