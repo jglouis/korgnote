@@ -57,7 +57,9 @@ promises about feature requests.
 | Web | Works, on the same computer as the server |
 | iOS | Builds and passes tests; not much tested on a real device |
 
-There is no app store release yet. Build from source as described below.
+There is no app store release yet. Each [release](https://github.com/jglouis/korgnote/releases/latest)
+has the Android app, ready to install, and the server as a Docker image: see [Install](#install).
+The iOS and desktop apps are built from source.
 
 ## How it works
 
@@ -91,22 +93,74 @@ The desktop app and the web app only work on the same computer as the server, an
 
 | For | You need |
 |---|---|
-| The server | The computer with your notes, and either [Docker](https://www.docker.com) or JDK 25 |
-| The Android app | An Android 7.0+ phone, and the Android SDK to build the app ([Android Studio](https://developer.android.com/studio) is the easiest way to get it) |
-| The iOS app | An iPhone, and a Mac with Xcode |
-| The desktop app | JDK 25, on the same computer as the server |
-| The web app | A browser, on the same computer as the server |
+| The server | The computer with your notes, and [Docker](https://www.docker.com). To build it from source instead: JDK 25. |
+| The Android app | An Android 7.0+ phone. To build it from source: the Android SDK ([Android Studio](https://developer.android.com/studio) is the easiest way to get it). |
+| The web app | A browser, on the same computer as the server. The server comes with it. |
+| The iOS app | An iPhone, and a Mac with Xcode to build it |
+| The desktop app | JDK 25 to build it, on the same computer as the server |
 
 The phone must be able to reach the computer: on the same Wi-Fi, or through a VPN such as
 Tailscale or WireGuard. With a VPN, add the computer's VPN address on the Devices page before you
 pair. When the computer is off or asleep, the phone keeps working and syncs later.
 
-## Quick start
+## Install
+
+You do not need the source code: the server is a Docker image, and the Android app is an APK on the
+release page.
+
+1. **Start the server** on the computer that has your notes. Replace `~/notes` with your notes
+   folder:
+
+   ```shell
+   mkdir -p ~/.korgnote-server
+   docker run -d --name korgnote --restart unless-stopped \
+     --user "$(id -u):$(id -g)" \
+     -v ~/notes:/notes -v ~/.korgnote-server:/state \
+     -p 8443:8443 -p 127.0.0.1:8080:8080 \
+     ghcr.io/jglouis/korgnote-server:latest
+   ```
+
+   The image works on Intel and ARM computers (amd64 and arm64). It runs as your user, so new notes
+   belong to you, and keeps its certificate and paired devices in `~/.korgnote-server`.
+
+2. **Open <http://localhost:8080/devices>.** Under *Addresses the phone can reach this computer at*,
+   enter this computer's address on your network, for example `192.168.1.20`. The server cannot
+   find it from inside Docker. To see it, run `ipconfig getifaddr en0` on a Mac or `hostname -I` on
+   Linux. Then click **Show a pairing code**. The address is only needed while you pair a phone, and
+   the server forgets it when it restarts; to give it at startup instead, add
+   `-e KORGNOTE_ADVERTISED_ADDRESSES=192.168.1.20` to the `docker run` command.
+
+3. **Install the app on your phone.** On the phone, open the
+   [latest release](https://github.com/jglouis/korgnote/releases/latest) and download
+   `korgnote-X.Y.Z.apk`. Open it, and allow your browser to install apps when Android asks.
+
+4. **Pair.** In the app, go to **Settings → Pair with a computer** and scan the code.
+
+The web app is at <http://localhost:8080/>, on the same computer as the server.
+
+### Update
+
+- **The app:** download the new APK from the release page and install it. It replaces the old one
+  and keeps your notes.
+- **The server:** get the new image, then start it again with the same `docker run` command as
+  above:
+
+  ```shell
+  docker pull ghcr.io/jglouis/korgnote-server:latest
+  docker rm -f korgnote
+  ```
+
+  Your notes and paired devices are kept, since they are in your folders, not in the container.
+
+To stay on one version, use its number instead of `latest`, for example
+`ghcr.io/jglouis/korgnote-server:1.1.0`. Each release says what changed.
+
+### Build from source instead
 
 1. Start the server on the computer that has your notes:
 
    ```shell
-   scripts/run-server-container.sh ~/notes     # with Docker
+   scripts/run-server-container.sh ~/notes     # with Docker, built from your checkout
    NOTES_DIR=~/notes ./gradlew :server:run      # with Java
    ```
 
@@ -117,10 +171,12 @@ pair. When the computer is off or asleep, the phone keeps working and syncs late
    ./gradlew :androidApp:installDebug
    ```
 
+   This installs *KorgNote Debug*, a separate app from the one on the release page.
+
 4. In the app, go to **Settings → Pair with a computer** and scan the code.
 
 To use the desktop app instead of a phone, run `./gradlew :composeApp:run` on the same computer as
-the server. No pairing is needed.
+the server. No pairing is needed. See [Development](#development) for more.
 
 ## License
 
@@ -283,22 +339,8 @@ stops if the notes folder is missing, and runs as your user so new notes belong 
 the ports, set `KORGNOTE_HOST_PORT` and `KORGNOTE_HTTPS_HOST_PORT`.
 
 The script builds the image from your checkout. Each release also publishes one, for amd64 and
-arm64, at `ghcr.io/jglouis/korgnote-server` (tagged `latest`, and by version, such as `1.1.0`). To
-run it without the source code:
-
-```shell
-mkdir -p ~/.korgnote-server
-docker run -d --name korgnote --restart unless-stopped \
-  --user "$(id -u):$(id -g)" \
-  -v ~/notes:/notes -v ~/.korgnote-server:/state \
-  -p 8443:8443 -p 127.0.0.1:8080:8080 \
-  -e KORGNOTE_ADVERTISED_ADDRESSES=192.168.1.20 \
-  ghcr.io/jglouis/korgnote-server:latest
-```
-
-Replace `~/notes` with your notes folder, and `192.168.1.20` with the addresses your phone can reach
-this computer at (separated by commas). The container cannot find them by itself, and they go in the
-pairing QR code.
+arm64, at `ghcr.io/jglouis/korgnote-server` (tagged `latest`, and by version, such as `1.1.0`); see
+[Install](#install) to run it.
 
 Changes you make to the notes on the computer, for example in Emacs, show up in the app right away.
 
