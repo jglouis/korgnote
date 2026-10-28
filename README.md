@@ -38,7 +38,7 @@ the release one.
 #### Release build
 
 The release key lives in KeePassXC: its keystore attached to an entry (`korgnote-release.jks` on
-*KorgNote release key* unless `KORGNOTE_KDBX_ATTACHMENT` and `KORGNOTE_KDBX_ENTRY` say otherwise),
+*Korgnote keystore* unless `KORGNOTE_KDBX_ATTACHMENT` and `KORGNOTE_KDBX_ENTRY` say otherwise),
 the alias as the entry's username and the keystore password as its password; a database opened with
 a key file as well wants `KORGNOTE_KDBX_KEYFILE`. This asks for the database's password, builds a
 signed APK and prints its certificate's SHA-256:

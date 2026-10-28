@@ -5,7 +5,7 @@
 #
 #   scripts/release.sh [DATABASE.kdbx]     # or set KORGNOTE_KDBX
 #
-#   KORGNOTE_KDBX_ENTRY       the entry; "KorgNote release key" by default, "Group/Entry" in a group
+#   KORGNOTE_KDBX_ENTRY       the entry; "Korgnote keystore" by default, "Group/Entry" in a group
 #   KORGNOTE_KDBX_ATTACHMENT  the keystore's name among its attachments; korgnote-release.jks
 #   KORGNOTE_KDBX_KEYFILE     the database's key file, if it is opened with one besides its password
 #
@@ -14,7 +14,7 @@
 set -euo pipefail
 
 database=${1:-${KORGNOTE_KDBX:-}}
-entry=${KORGNOTE_KDBX_ENTRY:-KorgNote release key}
+entry=${KORGNOTE_KDBX_ENTRY:-Korgnote keystore}
 attachment=${KORGNOTE_KDBX_ATTACHMENT:-korgnote-release.jks}
 key_file=${KORGNOTE_KDBX_KEYFILE:-}
 if [[ -z $database ]]; then
