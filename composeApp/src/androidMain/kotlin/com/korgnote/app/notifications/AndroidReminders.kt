@@ -7,7 +7,11 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.graphics.Typeface
 import android.os.Build
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.StyleSpan
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.edit
@@ -51,6 +55,12 @@ object ReminderAlarms {
     private const val EXTRA_ID = "com.korgnote.app.reminder.ID"
     private const val EXTRA_TITLE = "com.korgnote.app.reminder.TITLE"
     private const val EXTRA_BODY = "com.korgnote.app.reminder.BODY"
+    private const val EXTRA_LEADS = "com.korgnote.app.reminder.LEADS"
+    private const val EXTRA_TEXTS = "com.korgnote.app.reminder.TEXTS"
+    private const val EXTRA_SUMMARY = "com.korgnote.app.reminder.SUMMARY"
+
+    /** As many of the digest's lines as a notification shows before the rest are only counted. */
+    private const val DIGEST_LINES = 6
     private const val PREFS = "korgnote_reminders"
     private const val KEY_COUNT = "count"
     private const val KEY_PLAN = "plan"
@@ -90,6 +100,11 @@ object ReminderAlarms {
             intent.putExtra(EXTRA_ID, reminder.id)
                 .putExtra(EXTRA_TITLE, reminder.title)
                 .putExtra(EXTRA_BODY, reminder.body)
+            if (reminder.lines.isNotEmpty()) {
+                intent.putExtra(EXTRA_LEADS, reminder.lines.map { it.lead }.toTypedArray())
+                    .putExtra(EXTRA_TEXTS, reminder.lines.map { it.text }.toTypedArray())
+            }
+            reminder.summary?.let { intent.putExtra(EXTRA_SUMMARY, it) }
             reminder.file?.let { intent.putExtra(EXTRA_FILE, it) }
             reminder.offset?.let { intent.putExtra(EXTRA_OFFSET, it) }
         }
@@ -115,11 +130,26 @@ object ReminderAlarms {
             if (intent.hasExtra(EXTRA_OFFSET)) putExtra(EXTRA_OFFSET, intent.getIntExtra(EXTRA_OFFSET, 0))
         }
         val body = intent.getStringExtra(EXTRA_BODY).orEmpty()
+        val title = intent.getStringExtra(EXTRA_TITLE)
+        val lines = intent.getStringArrayExtra(EXTRA_LEADS).orEmpty()
+            .zip(intent.getStringArrayExtra(EXTRA_TEXTS).orEmpty()) { lead, text -> ReminderLine(lead, text) }
+        val summary = intent.getStringExtra(EXTRA_SUMMARY)
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(smallIcon(context))
-            .setContentTitle(intent.getStringExtra(EXTRA_TITLE))
-            .setContentText(body.substringBefore('\n'))
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .apply { accentColor(context)?.let(::setColor) }
+            .setContentTitle(title)
+            .apply {
+                if (lines.isEmpty()) {
+                    setContentText(body.substringBefore('\n'))
+                    setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                } else {
+                    // Collapsed, the digest is its count and what is on it, as far as it fits;
+                    // opened, a line per entry with its time in bold, like the day in the calendar.
+                    setContentText(listOfNotNull(summary, lines.joinToString(", ") { it.text }).joinToString(" · "))
+                    setStyle(digestStyle(title, lines, summary))
+                    setNumber(lines.size)
+                }
+            }
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
@@ -140,6 +170,28 @@ object ReminderAlarms {
             // Permission withdrawn between the check and the post.
         }
     }
+
+    private fun digestStyle(title: String?, lines: List<ReminderLine>, summary: String?): NotificationCompat.InboxStyle {
+        val style = NotificationCompat.InboxStyle().setBigContentTitle(title)
+        for (line in lines.take(DIGEST_LINES)) {
+            style.addLine(
+                SpannableStringBuilder()
+                    .append(line.lead, StyleSpan(Typeface.BOLD), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    .append("   ")
+                    .append(line.text),
+            )
+        }
+        val hidden = lines.size - DIGEST_LINES
+        val more = if (hidden > 0) "$hidden more in the calendar" else null
+        listOfNotNull(summary, more).takeIf { it.isNotEmpty() }?.let { style.setSummaryText(it.joinToString(" · ")) }
+        return style
+    }
+
+    /** The app's own colour, for the icon and the app name, when the app module defines it. */
+    @Suppress("DiscouragedApi")
+    private fun accentColor(context: Context): Int? =
+        context.resources.getIdentifier("ic_launcher_background", "color", context.packageName)
+            .takeIf { it != 0 }?.let { context.getColor(it) }
 
     /**
      * The status-bar icon: a monochrome one from the app when it has one — the status bar draws

@@ -121,9 +121,15 @@ class ReminderPlanTest {
             ReminderSettings(enabled = false, digestEnabled = true, digestTime = LocalTime(7, 30)),
         )
         assertEquals(listOf(at(24, 7, 30), at(26, 7, 30)), reminders.map { it.at })
+        assertEquals("1 entry", reminders.last().summary)
         with(reminders.first()) {
-            assertEquals("Today: 2 entries", title)
-            assertEquals("Deadline  TODO Submit the report\n10:00–11:30  Design review", body)
+            assertEquals("Thursday 24 September", title)
+            assertEquals("2 entries", summary)
+            assertEquals(
+                listOf(ReminderLine("Deadline", "TODO Submit the report"), ReminderLine("10:00–11:30", "Design review")),
+                lines,
+            )
+            assertEquals("Deadline · TODO Submit the report\n10:00–11:30 · Design review", body)
             assertEquals(null, file)
         }
     }

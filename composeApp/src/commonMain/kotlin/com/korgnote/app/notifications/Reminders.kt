@@ -57,6 +57,9 @@ data class ReminderSettings(
  * [id] is stable for the same entry at the same time, so a platform can tell a reminder it already
  * holds from a new one. [file] and [offset] are where tapping it opens: the heading of the entry,
  * or nothing for the daily digest.
+ *
+ * [body] is the whole text, for a platform that shows nothing else. The digest also says what it
+ * lists as [lines] and how many as [summary], for a platform that can lay a list out as one.
  */
 @Serializable
 data class Reminder(
@@ -66,7 +69,13 @@ data class Reminder(
     val body: String,
     val file: String? = null,
     val offset: Int? = null,
+    val lines: List<ReminderLine> = emptyList(),
+    val summary: String? = null,
 )
+
+/** One entry of the digest: when it is, or what kind of date — and what it is. */
+@Serializable
+data class ReminderLine(val lead: String, val text: String)
 
 /** How far ahead reminders are planned; the next time the app runs moves the window on. */
 const val REMINDER_HORIZON_DAYS = 14
@@ -116,11 +125,14 @@ fun planReminders(entries: List<AgendaEntry>, now: LocalDateTime, settings: Remi
         for ((date, onDay) in occurrences.groupBy { it.date }) {
             val at = LocalDateTime(date, settings.digestTime)
             if (at <= now) continue
+            val lines = onDay.map { it.digestLine() }
             reminders += Reminder(
                 id = "digest:$date",
                 at = at,
-                title = if (onDay.size == 1) "Today: 1 entry" else "Today: ${onDay.size} entries",
-                body = onDay.joinToString("\n") { it.digestLine() },
+                title = date.digestTitle(),
+                body = lines.joinToString("\n") { "${it.lead} · ${it.text}" },
+                lines = lines,
+                summary = if (onDay.size == 1) "1 entry" else "${onDay.size} entries",
             )
         }
     }
@@ -137,9 +149,13 @@ private fun AgendaKind.word(): String? = when (this) {
     AgendaKind.Timestamp, AgendaKind.Closed -> null
 }
 
-private fun AgendaOccurrence.digestLine(): String {
-    val lead = timeLabel() ?: entry.kind.word() ?: "All day"
-    return "$lead  ${entry.plainHeadline()}"
+private fun AgendaOccurrence.digestLine(): ReminderLine =
+    ReminderLine(lead = timeLabel() ?: entry.kind.word() ?: "All day", text = entry.plainHeadline())
+
+/** "Thursday 24 September": the morning the digest is for, as a heading. */
+private fun LocalDate.digestTitle(): String {
+    fun String.word() = lowercase().replaceFirstChar { it.titlecase() }
+    return "${dayOfWeek.name.word()} $day ${month.name.word()}"
 }
 
 /** Wall-clock arithmetic, in UTC so that no daylight-saving jump moves the result. */
