@@ -1,14 +1,18 @@
 # KorgNote
 
 KorgNote is an [Org-mode](https://orgmode.org) notes app with a calendar. It runs on Android, iOS,
-desktop and the web, and syncs through a server you run yourself.
+desktop and the web, and syncs through a server you run yourself. I personally run my server on my
+laptop, to avoid having to deal with server administration. The mobile will save file modifications
+and sync them as soon as it sees the server. All communication is encrypted, using a self signed TLS
+certificate.
 
 Your notes stay plain `.org` files in a folder. You can keep using Emacs, org-roam and git on them.
 
 ## Why
 
 I keep my notes and tasks in Org files. On my phone, I tried Orgzly and Orgro, but they did not do
-what I needed. I wanted one app where my notes and my calendar are the same thing.
+what I needed. I wanted one app where my notes and my calendar are the same thing. This is what I do
+with emacs and Org Agenda.
 
 This is a personal project that I use every day. Issues and pull requests are welcome, but I make no
 promises about feature requests.
