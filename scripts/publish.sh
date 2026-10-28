@@ -19,6 +19,9 @@
 #
 #   KORGNOTE_CERT_SHA256  the release key's certificate digest; the 1.0.0 key's by default
 #
+# The release notes are docs/releases/X.Y.Z.md when there is one, written for the people using the
+# app; otherwise the titles of the commits since the last release.
+#
 # The version is raised in the Android, desktop, server and iOS build files alike; the iOS app is not
 # released, but built from source shows the same version. Nothing changes until the plan is shown
 # and agreed to. If the tests or the build fail, the version goes back to what it was; once the tag
@@ -124,11 +127,17 @@ trap 'rm -rf "$work"' EXIT
 notes=$work/notes.md
 changes=$(git log --no-merges --format='- %s' ${previous:+"$previous"..}HEAD | grep -v '^- Bump the version to ' || true)
 [[ -n $changes ]] || die "nothing has changed since $previous."
-{
-  echo "Changes since ${previous#v}:"
-  echo
-  echo "$changes"
-} >"$notes"
+# What changed for the people using the app, written for the release; or else the commits' titles.
+written=docs/releases/$next.md
+if [[ -f $written ]]; then
+  cp "$written" "$notes"
+else
+  {
+    echo "Changes since ${previous#v}:"
+    echo
+    echo "$changes"
+  } >"$notes"
+fi
 if $edit_notes; then
   "${VISUAL:-${EDITOR:-vi}}" "$notes"
 fi
@@ -155,6 +164,11 @@ if $push; then
   fi
 else
   echo "  push      nothing (--no-push)"
+fi
+if [[ -f $written ]]; then
+  echo "  notes     from $written"
+else
+  echo "  notes     the commits' titles; write $written to say what changed instead"
 fi
 $tests || echo "  tests     skipped"
 echo
