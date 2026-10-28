@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Publishes a release: raises the version, runs the tests, builds the signed APK with release.sh,
-# commits and tags the new version, pushes them, and puts the APK on a GitHub release.
+# commits and tags the new version, and pushes them. The tag has GitHub build the server's image
+# (.github/workflows/container.yml); the APK goes on a draft GitHub release, which is published once
+# the image is built, with how to pull it.
 #
 #   scripts/publish.sh [options] patch|minor|major|X.Y.Z|current [DATABASE.kdbx]
 #
@@ -10,14 +12,17 @@
 #
 #   -n, --dry-run     say what would happen, and change nothing
 #   --no-push         stop after the commit and the tag, and say how to push and publish them
-#   --draft           make the GitHub release a draft, to look over before it goes out
+#   --draft           leave the GitHub release a draft, to look over and publish by hand
+#   --no-wait         publish the release without waiting for the server image
 #   -e, --edit-notes  edit the release notes before anything changes
 #   --skip-tests      build without running the tests first
 #
 #   KORGNOTE_CERT_SHA256  the release key's certificate digest; the 1.0.0 key's by default
 #
-# Nothing changes until the plan is shown and agreed to. If the tests or the build fail, the version
-# goes back to what it was; once the tag is made, a step that fails says how to carry on by hand.
+# The version is raised in the Android, desktop, server and iOS build files alike; the iOS app is not
+# released, but built from source shows the same version. Nothing changes until the plan is shown
+# and agreed to. If the tests or the build fail, the version goes back to what it was; once the tag
+# is made, a step that fails says how to carry on by hand.
 set -euo pipefail
 
 usage() { sed -n '2,/^set -e/{/^set -e/d;s/^# \{0,1\}//;p;}' "$0"; }
@@ -26,7 +31,7 @@ die() {
   exit 1
 }
 
-dry_run=false push=true draft=false edit_notes=false tests=true
+dry_run=false push=true draft=false wait_image=true edit_notes=false tests=true
 bump='' database=''
 while (($#)); do
   case $1 in
@@ -34,6 +39,7 @@ while (($#)); do
     -n | --dry-run) dry_run=true ;;
     --no-push) push=false ;;
     --draft) draft=true ;;
+    --no-wait) wait_image=false ;;
     -e | --edit-notes) edit_notes=true ;;
     --skip-tests) tests=false ;;
     -*) die "unknown option $1; see --help" ;;
@@ -54,6 +60,8 @@ cd "$(dirname "$0")/.."
 android=androidApp/build.gradle.kts
 desktop=composeApp/build.gradle.kts
 server=server/build.gradle.kts
+ios=iosApp/Configuration/Config.xcconfig
+versioned=("$android" "$desktop" "$server" "$ios")
 
 # --- Is this a state to release from? ----------------------------------------------------------
 
@@ -68,6 +76,11 @@ git fetch -q --tags origin
 behind=$(git rev-list --count HEAD..origin/master)
 ((behind == 0)) || die "master is $behind commit(s) behind origin/master; pull first."
 
+# The image the container workflow pushes: ghcr.io/<owner of origin>/korgnote-server.
+owner=$(git remote get-url origin | sed -n 's#.*github\.com[:/]\([^/]*\)/.*#\1#p' | tr '[:upper:]' '[:lower:]')
+[[ -n $owner ]] || die "origin is not on GitHub, where the server image is built."
+image=ghcr.io/$owner/korgnote-server
+
 # --- The new version ---------------------------------------------------------------------------
 
 current=$(sed -n 's/^ *versionName = "\([0-9.]*\)"$/\1/p' "$android")
@@ -75,6 +88,13 @@ code=$(sed -n 's/^ *versionCode = \([0-9]*\)$/\1/p' "$android")
 [[ $current =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || die "cannot read versionName in $android."
 [[ -n $code ]] || die "cannot read versionCode in $android."
 major=${BASH_REMATCH[1]} minor=${BASH_REMATCH[2]} patch=${BASH_REMATCH[3]}
+
+# The other files must say the same, or raising them would leave some behind.
+grep -q "^ *packageVersion = \"$current\"$" "$desktop" &&
+  grep -q "^version = \"$current\"$" "$server" &&
+  grep -q "^MARKETING_VERSION=$current$" "$ios" &&
+  grep -q "^CURRENT_PROJECT_VERSION=$code$" "$ios" ||
+  die "the version is not $current (build $code) in all of ${versioned[*]}; make them agree first."
 
 raise=true
 case $bump in
@@ -116,7 +136,7 @@ fi
 ahead=$(git rev-list --count origin/master..HEAD)
 echo "Release KorgNote $next"
 if $raise; then
-  echo "  version   $current -> $next, versionCode $code -> $next_code"
+  echo "  version   $current -> $next, versionCode $code -> $next_code (Android, desktop, server, iOS)"
   echo "  tag       $tag, on a new commit that raises it"
   ((ahead += 1))
 else
@@ -125,7 +145,14 @@ else
 fi
 if $push; then
   echo "  push      master ($ahead new commit(s)) and $tag to origin"
-  echo "  GitHub    $($draft && echo "draft release" || echo "release") \"KorgNote $next\" with korgnote-$next.apk"
+  echo "  image     $image:$next, built by GitHub from the tag"
+  if $draft; then
+    echo "  GitHub    draft release \"KorgNote $next\" with korgnote-$next.apk, left for you to publish"
+  elif $wait_image; then
+    echo "  GitHub    release \"KorgNote $next\" with korgnote-$next.apk, published once the image is built"
+  else
+    echo "  GitHub    release \"KorgNote $next\" with korgnote-$next.apk, published at once"
+  fi
 else
   echo "  push      nothing (--no-push)"
 fi
@@ -146,7 +173,7 @@ read -rp "Go ahead? [y/N] " answer
 # Until the commit, a failure puts the files back as they were.
 restore() {
   if $raise; then
-    git checkout -q -- "$android" "$desktop" "$server"
+    git checkout -q -- "${versioned[@]}"
     echo "publish.sh: stopped; the version is back to $current." >&2
   fi
 }
@@ -156,8 +183,9 @@ if $raise; then
   perl -pi -e "s/^(\s*versionCode = )$code\$/\${1}$next_code/; s/^(\s*versionName = )\"$current\"/\${1}\"$next\"/" "$android"
   perl -pi -e "s/^(\s*packageVersion = )\"$current\"/\${1}\"$next\"/" "$desktop"
   perl -pi -e "s/^(version = )\"$current\"/\${1}\"$next\"/" "$server"
-  [[ $(git diff --numstat -- "$android" "$desktop" "$server" | wc -l) -eq 3 ]] ||
-    { restore; die "the version is not $current in all of $android, $desktop and $server."; }
+  perl -pi -e "s/^MARKETING_VERSION=$current\$/MARKETING_VERSION=$next/; s/^CURRENT_PROJECT_VERSION=$code\$/CURRENT_PROJECT_VERSION=$next_code/" "$ios"
+  [[ $(git diff --numstat -- "${versioned[@]}" | wc -l) -eq ${#versioned[@]} ]] ||
+    { restore; die "could not raise the version in all of ${versioned[*]}."; }
 fi
 
 if $tests; then
@@ -186,21 +214,18 @@ fi
 
 # --- Commit and tag ----------------------------------------------------------------------------
 
-$raise && git commit -q -m "Bump the version to $next" -- "$android" "$desktop" "$server"
+$raise && git commit -q -m "Bump the version to $next" -- "${versioned[@]}"
 git tag -a "$tag" -m "KorgNote $next"
 trap - ERR
 cp "$notes" "build/releases/korgnote-$next-notes.md"
 notes=build/releases/korgnote-$next-notes.md
 echo "Tagged $tag. APK: $apk"
 
-release=(gh release create "$tag" "$apk" --verify-tag --title "KorgNote $next" --notes-file "$notes")
-$draft && release+=(--draft)
-
 if ! $push; then
   echo
-  echo "Not pushed. To publish:"
+  echo "Not pushed. To publish, push (which has GitHub build $image:$next), then make the release:"
   echo "  git push --atomic origin master $tag"
-  echo "  ${release[*]}"
+  echo "  gh release create $tag $apk --verify-tag --title \"KorgNote $next\" --notes-file $notes"
   echo "To take it back instead:"
   if $raise; then
     echo "  git tag -d $tag && git reset --hard HEAD~1"
@@ -210,11 +235,47 @@ if ! $push; then
   exit 0
 fi
 
-# --- Push and publish --------------------------------------------------------------------------
+# --- Push, and publish once the image is built -------------------------------------------------
 
 # Both or neither, so the tag never names a commit origin does not have.
 git push --atomic origin master "$tag" ||
   die "the push failed; the commit and $tag are only here. Retry: git push --atomic origin master $tag"
-"${release[@]}" ||
-  die "pushed, but the GitHub release failed. Retry: ${release[*]}"
-echo "Published: $(gh release view "$tag" --json url --jq .url)"
+
+# A draft until everything it points to exists.
+gh release create "$tag" "$apk" --verify-tag --draft --title "KorgNote $next" --notes-file "$notes" ||
+  die "pushed, but the GitHub release failed. Retry: gh release create $tag $apk --verify-tag --draft --title \"KorgNote $next\" --notes-file $notes"
+publish_now="gh release edit $tag --draft=false"
+
+if $wait_image; then
+  # The run the tag started: the container workflow only runs on tags, so its commit names it.
+  sha=$(git rev-parse HEAD)
+  run=''
+  for _ in {1..30}; do
+    run=$(gh run list --workflow container.yml --commit "$sha" --event push --limit 1 \
+      --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
+    [[ -n $run ]] && break
+    sleep 2
+  done
+  [[ -n $run ]] || die "no image build started for $tag; the release is a draft. Once there is an image: $publish_now"
+  echo "Building $image:$next, which takes a few minutes: $(gh run view "$run" --json url --jq .url)"
+  # The notes say how to pull the image, but only reach the release once it is built.
+  {
+    echo
+    echo "Server image, for amd64 and arm64: \`docker pull $image:$next\`"
+  } >>"$notes"
+  if ! gh run watch "$run" --exit-status --compact --interval 20; then
+    die "the image build failed: $(gh run view "$run" --json url --jq .url). The release is a draft.
+  Retry the build: gh run rerun $run --failed
+  Then publish:    gh release edit $tag --notes-file $notes --draft=false"
+  fi
+  gh release edit "$tag" --notes-file "$notes" >/dev/null
+  echo "Built $image:$next."
+fi
+
+if $draft; then
+  echo "Draft: $(gh release view "$tag" --json url --jq .url)"
+  echo "Publish it with: $publish_now"
+else
+  $publish_now >/dev/null || die "the release is still a draft. Publish it with: $publish_now"
+  echo "Published: $(gh release view "$tag" --json url --jq .url)"
+fi

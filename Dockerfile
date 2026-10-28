@@ -5,7 +5,11 @@
 # docker-compose.yml shows how to run it with a notes directory from the host.
 
 # --- Build: the server's distribution and the web client, from the same Gradle build CI uses ---
-FROM eclipse-temurin:25-jdk AS build
+# On the machine's own platform, whatever the image is for: what it makes is bytecode and wasm, the
+# same on any CPU (Netty's QUIC natives come for every platform, and its epoll jar carries none). So
+# an image for amd64 and arm64 builds once, without emulating the other CPU, and only the stage
+# below, which copies files and runs nothing, is made for each.
+FROM --platform=$BUILDPLATFORM eclipse-temurin:25-jdk AS build
 # The Node that the Kotlin plugin downloads for the wasm build links against libatomic.
 RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 && rm -rf /var/lib/apt/lists/*
 WORKDIR /src

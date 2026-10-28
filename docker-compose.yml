@@ -8,8 +8,10 @@
 # on 127.0.0.1, never on the network.
 services:
   korgnote:
+    # The run script builds it from this checkout (`up --build`), under the name of the image each
+    # release publishes; without --build, `docker compose pull` then `up` run the published one.
     build: .
-    image: korgnote-server
+    image: ghcr.io/jglouis/korgnote-server:latest
     # Notes the app creates must belong to you on the host, not to root or to UID 1000.
     user: "${KORGNOTE_UID:-1000}:${KORGNOTE_GID:-1000}"
     environment:

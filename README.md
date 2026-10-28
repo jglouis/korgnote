@@ -196,10 +196,12 @@ which deletes the notes stored in the app, so sync before you do.
 
 Increase `versionCode` in `androidApp/build.gradle.kts` for each release.
 
-To do all of a release in one go, use `scripts/publish.sh`. It raises the version, runs the tests,
-builds the signed APK with `scripts/release.sh`, commits and tags the new version, pushes them, and
-puts the APK on a GitHub release. It shows you the plan, with the release notes, before it changes
-anything:
+To do all of a release in one go, use `scripts/publish.sh`. It raises the version (in the iOS
+project too, though the iOS app is not released), runs the tests, builds the signed APK with
+`scripts/release.sh`, commits and tags the new version, and pushes them. The tag makes GitHub build
+the server's Docker image for amd64 and arm64. The script puts the APK on a draft GitHub release,
+waits for the image, and then publishes the release. It shows you the plan, with the release notes,
+before it changes anything:
 
 ```shell
 scripts/publish.sh --dry-run minor ~/Passwords.kdbx   # see the plan, change nothing
@@ -207,9 +209,11 @@ scripts/publish.sh minor ~/Passwords.kdbx             # patch, minor, major, or 
 scripts/publish.sh current ~/Passwords.kdbx           # the version is already raised by hand
 ```
 
-`--no-push` stops before the push, `--draft` makes a draft release, and `--edit-notes` lets you edit
-the notes first. The script will not publish an APK signed with a key other than the release key,
-which could not update the app. It needs the GitHub CLI, logged in with `gh auth login`.
+`--no-push` stops before the push, `--draft` leaves the release a draft for you to publish,
+`--no-wait` publishes it without waiting for the image, and `--edit-notes` lets you edit the notes
+first. The script will not publish an APK signed with a key other than the release key, which could
+not update the app. If the image build fails, the release stays a draft and the script tells you how
+to retry. It needs the GitHub CLI, logged in with `gh auth login`.
 
 ### Desktop
 
@@ -272,6 +276,24 @@ The script saves the notes folder in `.env` and passes your computer's name and 
 container. Port 8443 is open to the network; port 8080 is only open on `127.0.0.1`. The container
 stops if the notes folder is missing, and runs as your user so new notes belong to you. To change
 the ports, set `KORGNOTE_HOST_PORT` and `KORGNOTE_HTTPS_HOST_PORT`.
+
+The script builds the image from your checkout. Each release also publishes one, for amd64 and
+arm64, at `ghcr.io/jglouis/korgnote-server` (tagged `latest`, and by version, such as `1.1.0`). To
+run it without the source code:
+
+```shell
+mkdir -p ~/.korgnote-server
+docker run -d --name korgnote --restart unless-stopped \
+  --user "$(id -u):$(id -g)" \
+  -v ~/notes:/notes -v ~/.korgnote-server:/state \
+  -p 8443:8443 -p 127.0.0.1:8080:8080 \
+  -e KORGNOTE_ADVERTISED_ADDRESSES=192.168.1.20 \
+  ghcr.io/jglouis/korgnote-server:latest
+```
+
+Replace `~/notes` with your notes folder, and `192.168.1.20` with the addresses your phone can reach
+this computer at (separated by commas). The container cannot find them by itself, and they go in the
+pairing QR code.
 
 Changes you make to the notes on the computer, for example in Emacs, show up in the app right away.
 
