@@ -24,6 +24,7 @@ import com.korgnote.common.org.edit.DraftLink
 import com.korgnote.common.org.edit.FileKeywords
 import com.korgnote.common.org.edit.TableGrid
 import com.korgnote.common.org.edit.replaceOrgTable
+import com.korgnote.common.org.edit.tableFormulaLine
 import com.korgnote.common.org.edit.linkAt
 import com.korgnote.common.org.edit.orgLinkOf
 import com.korgnote.common.org.edit.withLink
@@ -495,7 +496,10 @@ class NotesViewModel(
         saveCurrentFile()
     }
 
-    /** A table of the open note being edited as a grid, as [beginTableEdit] opened it. */
+    /**
+     * A table of the open note being edited as a grid, as [beginTableEdit] opened it: [original] is
+     * its text as it was then, its `#+TBLFM:` line included.
+     */
     data class TableEdit(val path: String, val range: IntRange, val original: String, val grid: TableGrid)
 
     /** The table being edited in its own editor, or null when none is. */
@@ -513,8 +517,11 @@ class NotesViewModel(
             showMessage("Save or discard the element you are editing first.")
             return
         }
-        val table = note.content.toOrgDocument().nodeAt<OrgTable>(offsetInDocument) ?: return
-        tableEdit = TableEdit(path, table.range, note.content.substring(table.range), TableGrid.of(table))
+        val content = note.content
+        val table = content.toOrgDocument().nodeAt<OrgTable>(offsetInDocument) ?: return
+        val formulas = tableFormulaLine(content, table.range.last + 1)
+        val end = formulas?.range?.let { it.last + 1 } ?: (table.range.last + 1)
+        tableEdit = TableEdit(path, table.range, content.substring(table.range.first, end), TableGrid.of(table, formulas?.formulas.orEmpty()))
     }
 
     fun cancelTableEdit() {
@@ -531,8 +538,9 @@ class NotesViewModel(
         tableEdit = null
         if (grid == edit.grid) return
         val content = note.content
-        val unchanged = note.path == edit.path && edit.range.last < content.length &&
-            content.substring(edit.range) == edit.original
+        val end = edit.range.first + edit.original.length
+        val unchanged = note.path == edit.path && end <= content.length &&
+            content.substring(edit.range.first, end) == edit.original
         if (!unchanged) {
             showMessage("The note changed while the table was open, so the table was not saved.")
             return

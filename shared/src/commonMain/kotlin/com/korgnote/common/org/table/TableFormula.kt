@@ -58,6 +58,15 @@ internal class TableFormula(
 /** Why a formula cannot be computed, said so that whoever wrote it can fix it. */
 class FormulaError(message: String) : Exception(message)
 
+/** Why [formula], one entry of a `#+TBLFM:` line, cannot be read, or null when it can be. */
+fun formulaSyntaxProblem(formula: String): String? =
+    try {
+        TableFormula.parse(formula)
+        null
+    } catch (e: FormulaError) {
+        e.message
+    }
+
 /** The entries of a `#+TBLFM:` line's [value] — what follows the keyword — in order. */
 fun formulaEntries(value: String): List<String> =
     value.split(Regex(" *:: *")).map { it.trim() }.filter { it.isNotEmpty() }

@@ -280,12 +280,19 @@ fun columnNames(rows: List<List<String>?>): List<String> {
 
 /**
  * The formula that totals [column] (from 1) of a table at its last row with [function] — `vsum`,
- * `vmean` and the like — reading the rows between the header and the rule above the total: they
- * keep doing so as rows are added.
+ * `vmean` and the like — over [rowsAboveTotal]: they keep being read as rows are added.
  */
-fun summaryFormula(rows: List<List<String>?>, column: Int, function: String): String {
+fun summaryFormula(rows: List<List<String>?>, column: Int, function: String): String =
+    "@>\$$column=$function(${rowsAboveTotal(rows)})"
+
+/**
+ * The rows between a table's header and the rule above the cell being computed, as a total reads
+ * them: `@II..@-I` under a header that rules frame, `@I..@-I` under one that a rule only ends, and
+ * from the first row, `@<..@-I`, in a table with no header.
+ */
+fun rowsAboveTotal(rows: List<List<String>?>): String {
     val header = rows.indexOfFirst { it != null }
     val headerRule = (header + 1 until rows.size).firstOrNull { rows[it] == null }
     val from = if (header < 0 || headerRule == null) "@<" else "@" + "I".repeat(rows.take(headerRule + 1).count { it == null })
-    return "@>\$$column=$function($from..@-I)"
+    return "$from..@-I"
 }

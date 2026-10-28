@@ -1,5 +1,6 @@
 package com.korgnote.app.viewmodel
 
+import com.korgnote.common.org.table.Recalculation
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
@@ -78,6 +79,44 @@ class TableEditingTest {
         viewModel.commitTableEdit(grid.withCell(1, 0, "Oat milk"))
 
         assertEquals("Inserted above.\n" + text, viewModel.note.content)
+    }
+
+    @Test
+    fun aTablesFormulasComeAlongAndAreWrittenBackRecalculated() = runTest {
+        val budget = "budget.org"
+        val source = "| Item | Cost |\n|------+------|\n| Rent |  100 |\n|------+------|\n|      |    0 |\n#+TBLFM: @>$2=vsum(@I..@-I)\nAfter.\n"
+        server.files[budget] = source
+        viewModel.server.load()
+        viewModel.onFileSelected(budget)
+
+        viewModel.beginTableEdit(source.indexOf("Rent"))
+        val grid = viewModel.tableEdit!!.grid
+        assertEquals(listOf("@>$2=vsum(@I..@-I)"), grid.formulas)
+
+        val edited = grid.withRowInserted(3).withCell(3, 0, "Food").withCell(3, 1, "20")
+        val recalculated = edited.recalculated() as Recalculation.Done
+        viewModel.commitTableEdit(edited.copy(rows = recalculated.rows))
+
+        assertEquals(
+            "| Item | Cost |\n|------+------|\n| Rent |  100 |\n| Food |   20 |\n|------+------|\n|      |  120 |\n#+TBLFM: @>$2=vsum(@I..@-I)\nAfter.\n",
+            viewModel.note.content,
+        )
+    }
+
+    @Test
+    fun aFormulaLineChangedMeanwhileIsNotOverwritten() = runTest {
+        val budget = "budget.org"
+        val source = "| Item | Cost |\n| Rent |  100 |\n#+TBLFM: $2=1\n"
+        server.files[budget] = source
+        viewModel.server.load()
+        viewModel.onFileSelected(budget)
+        viewModel.beginTableEdit(source.indexOf("Rent"))
+        val grid = viewModel.tableEdit!!.grid
+
+        viewModel.note.content = source.replace("$2=1", "$2=2")
+        viewModel.commitTableEdit(grid.withCell(1, 0, "Rent!"))
+
+        assertEquals(source.replace("$2=1", "$2=2"), viewModel.note.content)
     }
 
     @Test
