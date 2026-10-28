@@ -1,10 +1,7 @@
 # KorgNote
 
 KorgNote is an [Org-mode](https://orgmode.org) notes app with a calendar. It runs on Android, iOS,
-desktop and the web, and syncs through a server you run yourself. I personally run my server on my
-laptop, to avoid having to deal with server administration. The mobile will save file modifications
-and sync them as soon as it sees the server. All communication is encrypted, using a self signed TLS
-certificate.
+desktop and the web, and syncs through a server you run yourself.
 
 Your notes stay plain `.org` files in a folder. You can keep using Emacs, org-roam and git on them.
 
@@ -62,20 +59,68 @@ promises about feature requests.
 
 There is no app store release yet. Build from source as described below.
 
+## How it works
+
+```
+  Your computer
+  ┌────────────────────────────────────────────────────────────────┐
+  │                                                                │
+  │   notes folder  ◄────►  KorgNote server  ◄────  desktop app    │
+  │   (~/notes/*.org)              ▲                or browser     │
+  │                                │                               │
+  └────────────────────────────────┼───────────────────────────────┘
+                                   │  HTTPS, paired by QR code
+                                   ▼
+                          KorgNote on your phone
+                   (its own copy of the notes, works offline)
+```
+
+KorgNote has two parts:
+
+- **The server** runs on the computer that has your notes folder. It reads and writes the `.org`
+  files directly; there is no database. You can run it with Docker or with Java. I run mine on my
+  laptop, so there is no server to look after.
+- **The apps** show and edit your notes. The phone app keeps its own copy, so it works offline. It
+  saves your changes and syncs them as soon as it can reach the server. All traffic is encrypted with
+  TLS, using a certificate the server creates for itself. The phone trusts it after you pair them
+  with a QR code.
+
+The desktop app and the web app only work on the same computer as the server, and need no pairing.
+
+## What you need
+
+| For | You need |
+|---|---|
+| The server | The computer with your notes, and either [Docker](https://www.docker.com) or JDK 25 |
+| The Android app | An Android 7.0+ phone, and the Android SDK to build the app ([Android Studio](https://developer.android.com/studio) is the easiest way to get it) |
+| The iOS app | An iPhone, and a Mac with Xcode |
+| The desktop app | JDK 25, on the same computer as the server |
+| The web app | A browser, on the same computer as the server |
+
+The phone must be able to reach the computer: on the same Wi-Fi, or through a VPN such as
+Tailscale or WireGuard. With a VPN, add the computer's VPN address on the Devices page before you
+pair. When the computer is off or asleep, the phone keeps working and syncs later.
+
 ## Quick start
 
 1. Start the server on the computer that has your notes:
 
    ```shell
    scripts/run-server-container.sh ~/notes     # with Docker
-   NOTES_DIR=~/notes ./gradlew :server:run      # without Docker
+   NOTES_DIR=~/notes ./gradlew :server:run      # with Java
    ```
 
 2. Open <http://localhost:8080/devices> and click **Show a pairing code**.
-3. Install the Android app with `./gradlew :androidApp:installDebug`.
+3. Connect your phone by USB, with USB debugging turned on, and install the app:
+
+   ```shell
+   ./gradlew :androidApp:installDebug
+   ```
+
 4. In the app, go to **Settings → Pair with a computer** and scan the code.
 
-The phone syncs when it can reach the computer, on the same network or through a VPN.
+To use the desktop app instead of a phone, run `./gradlew :composeApp:run` on the same computer as
+the server. No pairing is needed.
 
 ## License
 
