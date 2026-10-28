@@ -196,6 +196,21 @@ which deletes the notes stored in the app, so sync before you do.
 
 Increase `versionCode` in `androidApp/build.gradle.kts` for each release.
 
+To do all of a release in one go, use `scripts/publish.sh`. It raises the version, runs the tests,
+builds the signed APK with `scripts/release.sh`, commits and tags the new version, pushes them, and
+puts the APK on a GitHub release. It shows you the plan, with the release notes, before it changes
+anything:
+
+```shell
+scripts/publish.sh --dry-run minor ~/Passwords.kdbx   # see the plan, change nothing
+scripts/publish.sh minor ~/Passwords.kdbx             # patch, minor, major, or a version like 1.4.0
+scripts/publish.sh current ~/Passwords.kdbx           # the version is already raised by hand
+```
+
+`--no-push` stops before the push, `--draft` makes a draft release, and `--edit-notes` lets you edit
+the notes first. The script will not publish an APK signed with a key other than the release key,
+which could not update the app. It needs the GitHub CLI, logged in with `gh auth login`.
+
 ### Desktop
 
 ```shell
