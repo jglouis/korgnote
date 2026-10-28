@@ -20,7 +20,9 @@ class PersistentSettingsRepository : SettingsRepository {
     private val hostFlow = MutableStateFlow(
         defaultServerBaseUrl().removePrefix("http://").removePrefix("https://").substringBefore(":")
     )
-    private val portFlow = MutableStateFlow(SERVER_PORT)
+    private val portFlow = MutableStateFlow(
+        defaultServerBaseUrl().substringAfterLast(':').toIntOrNull() ?: SERVER_PORT
+    )
     private var pairedServer: PairedServer? = PairedServer.decode(load(KEY_PAIRED_SERVER))
 
 
