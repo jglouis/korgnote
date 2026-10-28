@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -37,9 +39,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -48,6 +52,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.korgnote.common.org.edit.TableGrid
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * A table edited cell by cell, over the whole screen.
@@ -109,8 +115,7 @@ fun TableEditorDialog(
 @Composable
 private fun TableGridEditor(grid: TableGrid, onChange: (TableGrid) -> Unit) {
     val lineColor = MaterialTheme.colorScheme.outlineVariant
-    // The rows above the first rule are the header, as the reading view draws them.
-    val firstRule = grid.rows.indexOfFirst { it == null }
+    val header = tableHeaderRows(grid)
     Column {
         // A menu above each column, past the space the row menus take.
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -135,16 +140,27 @@ private fun TableGridEditor(grid: TableGrid, onChange: (TableGrid) -> Unit) {
                     )
                 } else {
                     cells.forEachIndexed { column, text ->
+                        // Brought into view once the keyboard is up: focusing the cell scrolls to
+                        // it before the keyboard shrinks the screen, which can leave it underneath.
+                        val requester = remember { BringIntoViewRequester() }
+                        val scope = rememberCoroutineScope()
                         BasicTextField(
                             value = text,
                             onValueChange = { onChange(grid.withCell(row, column, it)) },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyMedium.copy(
                                 color = MaterialTheme.colorScheme.onSurface,
-                                fontWeight = if (firstRule > row) FontWeight.Bold else FontWeight.Normal,
+                                fontWeight = if (row in header) FontWeight.Bold else FontWeight.Normal,
                             ),
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                             modifier = Modifier
+                                .bringIntoViewRequester(requester)
+                                .onFocusEvent { focus ->
+                                    if (focus.isFocused) scope.launch {
+                                        delay(KEYBOARD_SETTLES)
+                                        requester.bringIntoView()
+                                    }
+                                }
                                 .width(CELL_WIDTH)
                                 .border(0.5.dp, lineColor)
                                 .padding(horizontal = 8.dp, vertical = 10.dp)
@@ -205,6 +221,20 @@ private fun ColumnMenu(column: Int, grid: TableGrid, onChange: (TableGrid) -> Un
         }
     }
 }
+
+/**
+ * The rows drawn bold, as the reading view picks them: from the first row of cells to the rule
+ * under it. None when no rule follows, since then nothing sets a header apart.
+ */
+internal fun tableHeaderRows(grid: TableGrid): IntRange {
+    val first = grid.rows.indexOfFirst { it != null }
+    if (first < 0) return IntRange.EMPTY
+    val rule = grid.rows.withIndex().firstOrNull { (i, cells) -> i > first && cells == null }?.index ?: return IntRange.EMPTY
+    return first until rule
+}
+
+/** Long enough for the keyboard to finish sliding in, and the screen to shrink for it. */
+private const val KEYBOARD_SETTLES = 350L
 
 private val CELL_WIDTH = 140.dp
 private val ROW_MENU_WIDTH = 48.dp

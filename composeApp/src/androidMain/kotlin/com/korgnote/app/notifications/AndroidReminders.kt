@@ -143,9 +143,10 @@ object ReminderAlarms {
                     setContentText(body.substringBefore('\n'))
                     setStyle(NotificationCompat.BigTextStyle().bigText(body))
                 } else {
-                    // Collapsed, the digest is its count and what is on it, as far as it fits;
-                    // opened, a line per entry with its time in bold, like the day in the calendar.
-                    setContentText(listOfNotNull(summary, lines.joinToString(", ") { it.text }).joinToString(" · "))
+                    // Collapsed, the digest is what is on it, as far as it fits — the count is
+                    // already in the header, as the summary; opened, a line per entry with its
+                    // time in bold, like the day in the calendar.
+                    setContentText(lines.joinToString(", ") { it.text })
                     setStyle(digestStyle(title, lines, summary))
                     setNumber(lines.size)
                 }
