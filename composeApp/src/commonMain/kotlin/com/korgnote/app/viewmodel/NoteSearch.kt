@@ -5,11 +5,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.korgnote.app.ui.File
 import com.korgnote.app.ui.Folder
-import com.korgnote.app.ui.Node
 import com.korgnote.common.org.search.SearchHit
-import com.korgnote.common.org.search.SearchQuery
 import com.korgnote.common.org.search.searchOrg
-import com.korgnote.common.org.search.searchOrgFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -17,9 +14,9 @@ import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Searching the notes (T14), and the drawer's filter, which speaks the same query language.
+ * Searching the notes (T14), and the drawer's filter, which only looks at file names.
  *
- * Both wait for the typing to stop before scanning; see [TYPING_PAUSE].
+ * Search waits for the typing to stop before scanning; see [TYPING_PAUSE].
  */
 class NoteSearch(
     private val scope: CoroutineScope,
@@ -29,8 +26,8 @@ class NoteSearch(
 ) {
     // --- Filtering the file tree ---
 
-    // Filter query for the file tree, in the same language as search: words match the file name,
-    // and a `tag:` term keeps the files that have a heading carrying it.
+    // Filter query for the file tree: every word has to appear in a file's name. Only the name —
+    // finding what is inside the notes is what search is for.
     var filterQuery by mutableStateOf("")
         private set
 
@@ -38,68 +35,40 @@ class NoteSearch(
     var filteredTree by mutableStateOf(library.tree)
         private set
 
+    /**
+     * Narrows the tree at once: matching names is a walk over the tree, not a scan of the notes, so
+     * there is nothing to wait for the typing to stop for.
+     */
     fun onFilterQueryChanged(query: String) {
         filterQuery = query
-        filterJob?.cancel()
-        // Clearing the box is not a search, so it takes effect at once rather than after a pause
-        // that would leave a filtered tree on screen for no reason.
-        if (query.isBlank()) {
-            filteredTree = library.tree
-            return
-        }
-        filterJob = scope.launch {
-            delay(TYPING_PAUSE)
-            refreshFilteredTree()
-        }
+        refreshFilteredTree()
     }
 
-    /**
-     * Recomputed when the query or the replica changes, rather than on every recomposition: a
-     * `tag:` term has to look inside the files, and the drawer is redrawn far more often than
-     * either of those two things moves.
-     */
+    /** Recomputed when the query or the replica changes, rather than on every recomposition. */
     private fun refreshFilteredTree() {
         val tree = library.tree
-        val query = SearchQuery.parse(filterQuery)
-        if (query.isEmpty) {
+        val words = filterQuery.split(' ', '\t').filter { it.isNotEmpty() }
+        if (words.isEmpty()) {
             filteredTree = tree
             return
         }
-        // Only "does this file have anything to show", so the scan stops at each file's first hit.
-        // The path goes in empty on purpose: whether the *name* matches is decided by [filterNode]
-        // against the node's own name, and passing the real path here would match the file twice.
-        val matching = library.documents
-            .filterValues { searchOrgFile("", it.text, query, limit = 1).isNotEmpty() }
-            .keys
-        filteredTree = when (val filtered = filterNode(tree, query, matching)) {
-            is Folder -> filtered
-            is File -> Folder(name = tree.name, path = tree.path, children = listOf(filtered))
-            else -> Folder(name = tree.name, path = tree.path, children = emptyList())
-        }
+        filteredTree = filterFolder(tree, words) ?: Folder(name = tree.name, path = tree.path, children = emptyList())
     }
 
-    private fun filterNode(node: Node, query: SearchQuery, matchingPaths: Set<String>): Node? {
-        return when (node) {
-            is File -> {
-                val nameMatches = query.tags.isEmpty() &&
-                    query.text.all { node.name.contains(it, ignoreCase = true) }
-                if (nameMatches || node.path in matchingPaths) node else null
+    /**
+     * The folder with only the files whose names hold every word, and the folders holding those. A
+     * folder's own name keeps nothing: a folder that matched would show every note in it, which is
+     * filtering on the folder rather than on the file.
+     */
+    private fun filterFolder(folder: Folder, words: List<String>): Folder? {
+        val children = folder.children.mapNotNull { child ->
+            when (child) {
+                is File -> child.takeIf { file -> words.all { file.name.contains(it, ignoreCase = true) } }
+                is Folder -> filterFolder(child, words)
+                else -> null
             }
-
-            is Folder -> {
-                val childMatches = node.children.mapNotNull { filterNode(it, query, matchingPaths) }
-                // A folder name says nothing about tags, so only words can keep one on its own.
-                val selfMatches = query.tags.isEmpty() &&
-                    query.text.all { node.name.contains(it, ignoreCase = true) }
-                if (selfMatches || childMatches.isNotEmpty()) Folder(
-                    name = node.name,
-                    path = node.path,
-                    children = childMatches
-                ) else null
-            }
-
-            else -> null
         }
+        return if (children.isEmpty()) null else Folder(name = folder.name, path = folder.path, children = children)
     }
 
     // --- Search over the whole replica ---
@@ -136,7 +105,6 @@ class NoteSearch(
 
     /** In flight or pending; a new keystroke cancels it rather than queueing another. */
     private var searchJob: Job? = null
-    private var filterJob: Job? = null
 
     /**
      * Runs the search over text already in memory.

@@ -20,17 +20,18 @@ data class TreeRow(
 /**
  * The rows to draw, top to bottom, skipping everything inside a closed folder.
  *
- * Folders are open unless [collapsed] names them, so a tree that has never been touched shows
- * everything — and [expandAll] overrides the lot, which is what a filter needs: a match inside a
- * folder somebody closed last week is still a match, and hiding it would look like the filter was
- * broken.
+ * Folders below the root are closed unless [opened] names them, so an untouched tree shows the
+ * notes at the top and a row per folder rather than every note at once. The root is open unless
+ * [opened] names it, which is what closing it records. [expandAll] overrides the lot, which is what
+ * a filter needs: the folders left in a filtered tree are the ones holding a match, and a match
+ * hidden in a closed folder would look like a filter that does not work.
  *
- * [collapsed] holds **paths**, not nodes. The tree is rebuilt from scratch whenever the filter or
- * the replica changes, so anything keyed by node identity is thrown away on every keystroke —
- * which is what used to re-open every folder and restart every animation while typing.
+ * [opened] holds **paths**, not nodes. The tree is rebuilt from scratch whenever the filter or the
+ * replica changes, so anything keyed by node identity is thrown away on every keystroke — which is
+ * what used to reset every folder and restart every animation while typing.
  */
 fun Folder.visibleRows(
-    collapsed: Set<String>,
+    opened: Set<String>,
     expandAll: Boolean = false,
     /**
      * Notes with conflict copies, as `NoteLibrary.conflicts` holds them. Each copy is drawn under
@@ -42,7 +43,8 @@ fun Folder.visibleRows(
     val rows = mutableListOf<TreeRow>()
 
     fun walk(folder: Folder, depth: Int) {
-        val expanded = expandAll || folder.path !in collapsed
+        // The root's entry in [opened] is a toggle like any other, flipped the other way round.
+        val expanded = expandAll || (folder.path in opened) != (depth == 0)
         rows += TreeRow(folder, depth, expanded)
         if (!expanded) return
         val files = folder.children.filterIsInstance<File>().associateBy { it.path }

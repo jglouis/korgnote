@@ -28,7 +28,7 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * The engine itself is covered by `OrgSearchTests` in `shared`; what is at stake here is the part
  * that only the app has — that a result opens its file at the element holding the match, the way a
- * calendar entry does, and that the drawer's filter speaks the same query language.
+ * calendar entry does, and that the drawer's filter looks at file names and nothing else.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchTest {
@@ -81,11 +81,6 @@ class SearchTest {
         advanceUntilIdle()
     }
 
-    private fun TestScope.filterFiles(query: String) {
-        viewModel.search.onFilterQueryChanged(query)
-        advanceUntilIdle()
-    }
-
     @Test
     fun searchesEveryFileInTheReplica() = runTest {
         viewModel.server.load()
@@ -135,30 +130,32 @@ class SearchTest {
     }
 
     @Test
-    fun theDrawerFilterStillMatchesFileNames() = runTest {
+    fun theDrawerFilterMatchesFileNames() = runTest {
         viewModel.server.load()
 
-        filterFiles("home")
+        // No waiting for the typing to stop: names are not a scan of the notes.
+        viewModel.search.onFilterQueryChanged("home")
 
         assertEquals(listOf(home), viewModel.search.filteredTree.filePaths())
     }
 
+    /** "kitchen" is in home.org's text, not its name; finding it is what search is for. */
     @Test
-    fun theDrawerFilterUnderstandsTags() = runTest {
+    fun theDrawerFilterDoesNotLookInsideTheNotes() = runTest {
         viewModel.server.load()
 
-        filterFiles("tag:work")
+        viewModel.search.onFilterQueryChanged("kitchen")
+        assertEquals(emptyList<String>(), viewModel.search.filteredTree.filePaths())
 
-        // Only the file with a heading carrying the tag, even though neither file is named "work"
-        // in a way the tag query looks at.
-        assertEquals(listOf(work), viewModel.search.filteredTree.filePaths())
+        viewModel.search.onFilterQueryChanged("tag:work")
+        assertEquals(emptyList<String>(), viewModel.search.filteredTree.filePaths())
     }
 
     @Test
     fun anEmptyFilterKeepsTheWholeTree() = runTest {
         viewModel.server.load()
 
-        filterFiles("tag:work")
+        viewModel.search.onFilterQueryChanged("home")
         viewModel.search.onFilterQueryChanged("")
 
         assertEquals(listOf(home, work), viewModel.search.filteredTree.filePaths().sorted())
@@ -209,17 +206,6 @@ class SearchTest {
 
         // No waiting: an empty box means an empty list, now.
         assertTrue(viewModel.search.results.isEmpty())
-    }
-
-    @Test
-    fun clearingTheFilterRestoresTheTreeAtOnce() = runTest {
-        viewModel.server.load()
-        filterFiles("tag:work")
-        assertEquals(listOf(work), viewModel.search.filteredTree.filePaths())
-
-        viewModel.search.onFilterQueryChanged("")
-
-        assertEquals(listOf(home, work), viewModel.search.filteredTree.filePaths().sorted())
     }
 
     /** Stale results beat a blank list that flickers on every letter. */

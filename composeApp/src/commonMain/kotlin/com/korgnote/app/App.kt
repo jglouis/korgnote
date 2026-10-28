@@ -277,14 +277,14 @@ fun App() {
                                 value = vm.search.filterQuery,
                                 onValueChange = { vm.search.onFilterQueryChanged(it) },
                                 label = { Text("Filter files") },
-                                placeholder = { Text("name, or tag:work") },
+                                placeholder = { Text("Part of a file name") },
                                 singleLine = true
                             )
                             Spacer(Modifier.width(8.dp))
                             FileTree(
                                 root = vm.search.filteredTree,
-                                // While filtering, show what matched even inside folders the reader
-                                // had closed: a hidden match looks like a filter that does not work.
+                                // While filtering, open the folders holding a match, closed or not:
+                                // a hidden match looks like a filter that does not work.
                                 expandAll = vm.search.filterQuery.isNotBlank(),
                                 onFileSelected = { name ->
                                     // The filter had the keyboard open; the note is to be read.

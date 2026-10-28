@@ -6,6 +6,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** Clicking a row in the drawer must open that file. */
 @OptIn(ExperimentalTestApi::class)
@@ -35,20 +36,32 @@ class FileTreeClickTest {
         val opened = mutableListOf<String>()
         setContent { FileTree(root = tree, onFileSelected = { opened += it }) }
 
+        onNodeWithText("journal").performClick()
         onNodeWithText("2025-01-01.org").performClick()
 
         assertEquals(listOf("journal/2025-01-01.org"), opened)
     }
 
     @Test
-    fun clickingAFolderOpensAndClosesItWithoutSelectingAnything() = runComposeUiTest {
+    fun aFolderStartsClosedAndAClickOpensAndClosesItWithoutSelectingAnything() = runComposeUiTest {
         val opened = mutableListOf<String>()
         setContent { FileTree(root = tree, onFileSelected = { opened += it }) }
 
+        onNodeWithText("2025-01-01.org").assertDoesNotExist()
+        onNodeWithText("journal").performClick()
+        onNodeWithText("2025-01-01.org").assertExists()
         onNodeWithText("journal").performClick()
         onNodeWithText("2025-01-01.org").assertDoesNotExist()
 
-        onNodeWithText("journal").performClick()
+        assertTrue(opened.isEmpty())
+    }
+
+    /** What the drawer passes while filtering: the folders left hold a match, so they show it. */
+    @Test
+    fun expandAllShowsFilesInsideFolders() = runComposeUiTest {
+        val opened = mutableListOf<String>()
+        setContent { FileTree(root = tree, onFileSelected = { opened += it }, expandAll = true) }
+
         onNodeWithText("2025-01-01.org").performClick()
 
         assertEquals(listOf("journal/2025-01-01.org"), opened)

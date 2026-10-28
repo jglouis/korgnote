@@ -63,8 +63,8 @@ data class File(
  * compose, which matters because the drawer holds a row per note — 366 of them here — and the tree
  * is rebuilt on every keystroke of the filter.
  *
- * [expandAll] opens everything regardless of what the reader has closed, which is what the filter
- * passes while it is narrowing the tree.
+ * Folders start closed. [expandAll] opens everything regardless, which is what the filter passes
+ * while it is narrowing the tree to the folders that hold a match.
  */
 @Composable
 fun FileTree(
@@ -83,10 +83,10 @@ fun FileTree(
     onTogglePin: ((path: String) -> Unit)? = null,
 ) {
     // Keyed by path, not by node: the tree is a new object graph after every filter keystroke and
-    // every sync, so identity-keyed state would be lost each time — re-opening every folder the
-    // reader had closed, and restarting every animation along with it.
-    val collapsed = remember { mutableStateMapOf<String, Boolean>() }
-    val rows = root.visibleRows(collapsed.keys.toSet(), expandAll, conflicts)
+    // every sync, so identity-keyed state would be lost each time — closing every folder the
+    // reader had opened, and restarting every animation along with it.
+    val toggled = remember { mutableStateMapOf<String, Boolean>() }
+    val rows = root.visibleRows(toggled.keys.toSet(), expandAll, conflicts)
 
     LazyColumn(modifier = modifier) {
         items(rows, key = { it.node.path }) { row ->
@@ -95,10 +95,10 @@ fun FileTree(
                     folder = node,
                     depth = row.depth,
                     expanded = row.expanded,
-                    // A folder opened by [expandAll] is not really open, so closing it has to
-                    // record the collapse rather than toggle from what is on screen.
+                    // Flips what the reader chose, not what is on screen: a folder [expandAll]
+                    // opened is open only while the filter holds it.
                     onToggle = {
-                        if (collapsed.remove(node.path) == null) collapsed[node.path] = true
+                        if (toggled.remove(node.path) == null) toggled[node.path] = true
                     },
                     modifier = Modifier.animateItem(),
                 )

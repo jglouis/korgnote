@@ -57,22 +57,27 @@ class DrawerOpensFileTest {
             FileTree(root = viewModel.search.filteredTree, onFileSelected = { viewModel.onFileSelected(it) })
         }
 
+        onNodeWithText("journal").performClick()
         onNodeWithText("2025-01-01.org").performClick()
 
         assertEquals(journalText, viewModel.note.content)
         assertEquals("Selected: $journal", viewModel.note.label)
     }
 
-    // There is deliberately no test here for clicking a row while the tree is filtered.
-    //
-    // The filter waits for a pause in the typing, and that pause is virtual time on the dispatcher
-    // installed as Main, while this test body runs on the UI test's own clock. Waiting for it in
-    // real time blocks the thread that would advance the virtual one, so the debounce never fires
-    // and the wait for an idle composition never ends; advancing the scheduler by hand instead
-    // risks the opposite hang, since Compose's frame clock keeps scheduling work and "idle" never
-    // arrives. Either way the test spins rather than fails, which is worse than not having it.
-    //
-    // A test that owns the clock can do this properly, and `SearchTest` does: it drives the same
-    // debounce through `runTest`. What is left here is what only a UI test can say — that a click
-    // on a row opens that document.
+    @Test
+    fun clickingARowOfTheFilteredTreeOpensThatDocument() = runComposeUiTest {
+        viewModel.search.onFilterQueryChanged("2025")
+        setContent {
+            FileTree(
+                root = viewModel.search.filteredTree,
+                onFileSelected = { viewModel.onFileSelected(it) },
+                expandAll = viewModel.search.filterQuery.isNotBlank(),
+            )
+        }
+
+        onNodeWithText("inbox.org").assertDoesNotExist()
+        onNodeWithText("2025-01-01.org").performClick()
+
+        assertEquals(journalText, viewModel.note.content)
+    }
 }

@@ -32,28 +32,18 @@ class FileTreeRowsTest {
     )
 
     @Test
-    fun everythingIsOpenUntilSomethingIsClosed() {
-        val rows = tree.visibleRows(collapsed = emptySet())
-
-        assertContentEquals(
-            listOf("", "journal", "journal/2025", "journal/2025/2025-01-01.org", "journal/index.org", "inbox.org"),
-            rows.map { it.node.path },
-        )
-        assertContentEquals(listOf(0, 1, 2, 3, 2, 1), rows.map { it.depth })
-    }
-
-    @Test
-    fun aClosedFolderHidesItsWholeSubtree() {
-        val rows = tree.visibleRows(collapsed = setOf("journal"))
+    fun foldersBelowTheRootStartClosed() {
+        val rows = tree.visibleRows(opened = emptySet())
 
         assertContentEquals(listOf("", "journal", "inbox.org"), rows.map { it.node.path })
+        assertContentEquals(listOf(0, 1, 1), rows.map { it.depth })
         // The folder itself still shows, and says it is closed.
         assertEquals(false, rows.single { it.node.path == "journal" }.expanded)
     }
 
     @Test
-    fun closingAFolderDeeperDownLeavesItsAncestorsAlone() {
-        val rows = tree.visibleRows(collapsed = setOf("journal/2025"))
+    fun anOpenedFolderShowsItsChildrenButNotItsClosedSubfolders() {
+        val rows = tree.visibleRows(opened = setOf("journal"))
 
         assertContentEquals(
             listOf("", "journal", "journal/2025", "journal/index.org", "inbox.org"),
@@ -62,16 +52,35 @@ class FileTreeRowsTest {
     }
 
     @Test
+    fun openingEveryFolderShowsEverything() {
+        val rows = tree.visibleRows(opened = setOf("journal", "journal/2025"))
+
+        assertContentEquals(
+            listOf("", "journal", "journal/2025", "journal/2025/2025-01-01.org", "journal/index.org", "inbox.org"),
+            rows.map { it.node.path },
+        )
+        assertContentEquals(listOf(0, 1, 2, 3, 2, 1), rows.map { it.depth })
+    }
+
+    /** Opening a folder inside a closed one shows nothing until its parent is opened too. */
+    @Test
+    fun aClosedFolderHidesItsWholeSubtree() {
+        val rows = tree.visibleRows(opened = setOf("journal/2025"))
+
+        assertContentEquals(listOf("", "journal", "inbox.org"), rows.map { it.node.path })
+    }
+
+    @Test
     fun closingTheRootLeavesOnlyTheRoot() {
-        val rows = tree.visibleRows(collapsed = setOf(""))
+        val rows = tree.visibleRows(opened = setOf(""))
 
         assertContentEquals(listOf(""), rows.map { it.node.path })
     }
 
-    /** What the filter passes: a match inside a folder somebody closed is still a match. */
+    /** What the filter passes: a match inside a closed folder is still a match. */
     @Test
-    fun expandAllOverridesWhatWasClosed() {
-        val rows = tree.visibleRows(collapsed = setOf("", "journal", "journal/2025"), expandAll = true)
+    fun expandAllOpensEveryFolder() {
+        val rows = tree.visibleRows(opened = setOf(""), expandAll = true)
 
         assertEquals(6, rows.size)
         assertTrue(rows.filter { it.node is Folder }.all { it.expanded })
@@ -80,14 +89,14 @@ class FileTreeRowsTest {
     /** Every row is a lazy-list key, so two rows sharing one would drop a note from the drawer. */
     @Test
     fun rowPathsAreUnique() {
-        val paths = tree.visibleRows(collapsed = emptySet()).map { it.node.path }
+        val paths = tree.visibleRows(opened = emptySet(), expandAll = true).map { it.node.path }
 
         assertEquals(paths.size, paths.toSet().size)
     }
 
     @Test
     fun filesAreNeverReportedAsOpen() {
-        val rows = tree.visibleRows(collapsed = emptySet())
+        val rows = tree.visibleRows(opened = emptySet(), expandAll = true)
 
         assertTrue(rows.filter { it.node is File }.none { it.expanded })
     }
@@ -110,7 +119,7 @@ class FileTreeRowsTest {
 
     @Test
     fun conflictCopiesAreDrawnUnderTheirNoteNewestFirst() {
-        val rows = withCopies.visibleRows(collapsed = emptySet(), conflicts = copies)
+        val rows = withCopies.visibleRows(opened = emptySet(), conflicts = copies)
 
         assertContentEquals(
             listOf(
@@ -132,7 +141,7 @@ class FileTreeRowsTest {
     fun aCopyWhoseNoteIsNotShownStaysWhereItIs() {
         val filtered = Folder("Documents", "", listOf(File("a.sync-conflict-20260921-101500.org", "a.sync-conflict-20260921-101500.org")))
 
-        val rows = filtered.visibleRows(collapsed = emptySet(), conflicts = copies)
+        val rows = filtered.visibleRows(opened = emptySet(), conflicts = copies)
 
         assertContentEquals(listOf("", "a.sync-conflict-20260921-101500.org"), rows.map { it.node.path })
         assertEquals(listOf<String?>(null, null), rows.map { it.copyOf })
