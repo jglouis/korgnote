@@ -121,6 +121,34 @@ The entry's username is the key alias and its password is the keystore password.
 set `KORGNOTE_KDBX_ENTRY` and `KORGNOTE_KDBX_ATTACHMENT`. If the database also needs a key file, set
 `KORGNOTE_KDBX_KEYFILE`.
 
+#### Release build without KeePassXC
+
+Create a keystore once, and keep it and its password safe. Every update must be signed with the
+same key:
+
+```shell
+keytool -genkeypair -v -keystore ~/korgnote-release.jks -alias korgnote \
+  -keyalg RSA -keysize 4096 -validity 10000
+```
+
+Then build, giving Gradle the keystore and its password:
+
+```shell
+read -rs "pw?Keystore password: "; echo      # in bash: read -rsp "Keystore password: " pw
+ORG_GRADLE_PROJECT_KORGNOTE_STORE_FILE=~/korgnote-release.jks \
+ORG_GRADLE_PROJECT_KORGNOTE_STORE_PASSWORD="$pw" \
+ORG_GRADLE_PROJECT_KORGNOTE_KEY_ALIAS=korgnote \
+ORG_GRADLE_PROJECT_KORGNOTE_KEY_PASSWORD="$pw" \
+  ./gradlew :androidApp:assembleRelease --no-configuration-cache
+```
+
+The APK is at `androidApp/build/outputs/apk/release/androidApp-release.apk`. Keep
+`--no-configuration-cache`, or Gradle saves the passwords in its cache. Without a keystore, the build
+makes an unsigned APK that Android will not install.
+
+An APK signed with a different key cannot update an installed app. You must uninstall it first,
+which deletes the notes stored in the app, so sync before you do.
+
 Increase `versionCode` in `androidApp/build.gradle.kts` for each release.
 
 ### Desktop
