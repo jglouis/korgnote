@@ -18,9 +18,11 @@ import com.korgnote.common.org.complete.applyTo
 import com.korgnote.common.org.complete.complete
 import com.korgnote.common.org.complete.restamp
 import com.korgnote.common.org.edit.DraftInsert
+import com.korgnote.common.org.edit.TableGrid
 import com.korgnote.common.org.edit.allNodes
 import com.korgnote.common.org.edit.fitsIn
 import com.korgnote.common.org.edit.insertInto
+import com.korgnote.common.org.edit.insertTable
 import com.korgnote.common.org.search.fileTagsOf
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.org.todoKeywordsOf
@@ -164,6 +166,12 @@ class CompletionController(
     fun insert(what: DraftInsert) {
         val value = draft() ?: return
         insertInto(value.text, value.selection.start, what)?.let(::apply)
+    }
+
+    /** The table button's result: [grid] written as a table at the caret, on lines of its own. */
+    fun insertTable(grid: TableGrid) {
+        val value = draft() ?: return
+        apply(insertTable(value.text, value.selection.start, grid))
     }
 
     /** The date button: the picker, writing its date at the caret. */

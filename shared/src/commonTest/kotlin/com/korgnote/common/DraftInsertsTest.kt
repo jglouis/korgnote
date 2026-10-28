@@ -1,8 +1,10 @@
 package com.korgnote.common
 
 import com.korgnote.common.org.edit.DraftInsert
+import com.korgnote.common.org.edit.TableGrid
 import com.korgnote.common.org.edit.fitsIn
 import com.korgnote.common.org.edit.insertInto
+import com.korgnote.common.org.edit.insertTable
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -58,6 +60,35 @@ class DraftInsertsTest {
         assertEquals("* List\n- [ ] |\n", insert("* List\n|\n", DraftInsert.CHECKBOX))
         assertEquals("* List\n  - [ ] a\n  - [ ] |\nmore", insert("* List\n  - [ ] a|\nmore", DraftInsert.CHECKBOX))
         assertEquals("* List\nSCHEDULED: <x>\n- [ ] |", insert("* List|\nSCHEDULED: <x>\n", DraftInsert.CHECKBOX))
+    }
+
+    /** [grid] inserted with the caret at `|` in [marked], as the Table button does once it is saved. */
+    private fun table(marked: String, grid: TableGrid): String {
+        val caret = marked.indexOf('|')
+        val result = insertTable(marked.removeRange(caret, caret + 1), caret, grid)
+        return result.text.substring(0, result.caret) + "^" + result.text.substring(result.caret)
+    }
+
+    private val budget = TableGrid(listOf(listOf("Item", "Cost"), null, listOf("Rent", "100")), listOf("@>$2=vsum(@I..@-I)"))
+
+    @Test
+    fun aTableTakesAnEmptyLineOrGoesUnderTheCaretsLineAtItsIndentation() {
+        assertEquals(
+            "* Budget\n| Item | Cost |\n|------+------|\n| Rent |  100 |\n#+TBLFM: @>$2=vsum(@I..@-I)^\nAfter",
+            table("* Budget\n|\nAfter", budget),
+        )
+        assertEquals(
+            "* Budget\n  Costs:\n  | Item | Cost |\n  |------+------|\n  | Rent |  100 |\n  #+TBLFM: @>$2=vsum(@I..@-I)^",
+            table("* Budget\n  Cos|ts:", budget),
+        )
+    }
+
+    @Test
+    fun aTableNeverSplitsTheHead() {
+        assertEquals(
+            "* Budget\nSCHEDULED: <x>\n|   |   |\n|---+---|\n|   |   |^",
+            table("* Bud|get\nSCHEDULED: <x>\n", TableGrid.starter()),
+        )
     }
 
     @Test

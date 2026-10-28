@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.Icon
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -104,6 +105,8 @@ fun CompletionStrip(
      * front of the suggestions, which the caret in a link's target brings up in place of the inserts.
      */
     onEditLink: (() -> Unit)? = null,
+    /** The table button, which opens the grid editor on a new table rather than typing pipes. */
+    onInsertTable: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val listState = rememberLazyListState()
@@ -132,6 +135,7 @@ fun CompletionStrip(
                                 // On a link, the link button is for that link.
                                 what == DraftInsert.LINK && onEditLink != null -> add(Triple("Edit link", what.icon(), onEditLink))
                                 what == DraftInsert.LINK && onPickLink != null -> add(Triple(what.label(), what.icon(), onPickLink))
+                                what == DraftInsert.TABLE && onInsertTable != null -> add(Triple(what.label(), what.icon(), onInsertTable))
                                 else -> add(Triple(what.label(), what.icon()) { onInsert(what) })
                             }
                             if (what == DraftInsert.LINK && onPickDate != null) add(Triple("Date", Icons.Filled.Event, onPickDate))
@@ -218,6 +222,7 @@ private fun DraftInsert.label(): String = when (this) {
     DraftInsert.SCHEDULE -> "Schedule"
     DraftInsert.LOCATION -> "Place"
     DraftInsert.CHECKBOX -> "Checkbox"
+    DraftInsert.TABLE -> "Table"
 }
 
 private fun DraftInsert.icon(): ImageVector = when (this) {
@@ -226,6 +231,7 @@ private fun DraftInsert.icon(): ImageVector = when (this) {
     DraftInsert.SCHEDULE -> Icons.Filled.EditCalendar
     DraftInsert.LOCATION -> Icons.Filled.Place
     DraftInsert.CHECKBOX -> Icons.Filled.CheckBox
+    DraftInsert.TABLE -> Icons.Filled.TableChart
 }
 
 /**

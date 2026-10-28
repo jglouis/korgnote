@@ -76,6 +76,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun TableEditorDialog(
     initial: TableGrid,
+    title: String = "Edit table",
     onSave: (TableGrid) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -116,7 +117,7 @@ fun TableEditorDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, contentDescription = "Discard changes") }
-                    Text("Edit table", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                     if (grid.formulas.isNotEmpty()) TextButton(onClick = ::recalculate) { Text("Recalculate") }
                     TextButton(onClick = { onSave(grid) }) { Text("Save") }
                 }

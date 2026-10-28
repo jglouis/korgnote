@@ -17,11 +17,14 @@ enum class DraftInsert {
     SCHEDULE,
     LOCATION,
     CHECKBOX,
+
+    /** A table, made in the grid editor rather than typed: see [insertTable]. */
+    TABLE,
 }
 
 /** Whether [what] has somewhere to go in [text]: the heading's own things need a heading. */
 fun DraftInsert.fitsIn(text: String): Boolean = when (this) {
-    DraftInsert.LINK, DraftInsert.CHECKBOX -> true
+    DraftInsert.LINK, DraftInsert.CHECKBOX, DraftInsert.TABLE -> true
     DraftInsert.TAG, DraftInsert.SCHEDULE, DraftInsert.LOCATION -> OrgSyntax.heading.containsMatchIn(firstLine(text))
 }
 
@@ -35,6 +38,35 @@ fun insertInto(text: String, caret: Int, what: DraftInsert): CompletionResult? {
         DraftInsert.SCHEDULE -> startSchedule(text)
         DraftInsert.LOCATION -> startLocation(text)
         DraftInsert.CHECKBOX -> startCheckbox(text, at)
+        DraftInsert.TABLE -> insertTable(text, at, TableGrid.starter())
+    }
+}
+
+/**
+ * [text] with [grid] written as a table — and its `#+TBLFM:` line, when it has formulas — on lines
+ * of its own at [caret]: in place of the caret's line when that is blank, otherwise after it, at its
+ * indentation; after the body when the caret is in the heading's own lines. The caret goes after it.
+ */
+fun insertTable(text: String, caret: Int, grid: TableGrid): CompletionResult {
+    val at = caret.coerceIn(0, text.length)
+    val lineStart = text.lastIndexOf('\n', at - 1) + 1
+    val end = lineEnd(text, lineStart)
+    val line = text.substring(lineStart, end)
+    val inHead = lineStart == 0 && OrgSyntax.heading.containsMatchIn(line) ||
+        OrgSyntax.planning.containsMatchIn(line) ||
+        OrgSyntax.property.containsMatchIn(line) ||
+        OrgSyntax.drawerBegin.containsMatchIn(line)
+    val indent = if (inHead) "" else line.takeWhile { it == ' ' || it == '\t' }
+    val lines = grid.toOrgLines(indent) +
+        if (grid.formulas.isEmpty()) emptyList() else listOf("$indent#+TBLFM: " + grid.formulas.joinToString("::"))
+    val block = lines.joinToString("\n")
+    return when {
+        line.isBlank() && !inHead -> splice(text, lineStart, end, block)
+        !inHead -> splice(text, end, end, "\n$block")
+        else -> {
+            val body = text.trimEnd('\n')
+            splice(text, body.length, text.length, "\n$block")
+        }
     }
 }
 

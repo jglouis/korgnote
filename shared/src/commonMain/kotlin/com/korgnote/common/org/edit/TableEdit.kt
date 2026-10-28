@@ -143,6 +143,9 @@ data class TableGrid(val rows: List<List<String>?>, val formulas: List<String> =
     }
 
     companion object {
+        /** A table to start from: a header and a row under it, two columns, all empty. */
+        fun starter(): TableGrid = TableGrid(listOf(listOf("", ""), null, listOf("", "")))
+
         fun of(table: OrgTable, formulas: List<String> = emptyList()): TableGrid {
             val raw = table.rows.map { row ->
                 if (row.isRule) null else row.cells.map { ((it as? OrgRaw)?.content ?: "").replace(VERT, "|") }

@@ -45,6 +45,7 @@ import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import com.korgnote.app.notifications.ReminderTaps
+import com.korgnote.common.org.edit.TableGrid
 import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -89,6 +90,8 @@ fun App() {
         // The notes and headings a link can go to, while the link picker is open.
         var pickingLink by remember { mutableStateOf<List<LinkTarget>?>(null) }
         var editingLink by remember { mutableStateOf<LinkEdit?>(null) }
+        // A table being made from the editor's Table button, before it goes into the element.
+        var insertingTable by remember { mutableStateOf(false) }
         var renamingNote by remember { mutableStateOf<String?>(null) }
         var deletingNote by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
         // The day a tapped SCHEDULED or DEADLINE date opens the calendar on; null for the calendar's
@@ -164,6 +167,17 @@ fun App() {
                     scope.launch { vm.setOpenNoteKeywords(keywords) }
                 },
                 onDismiss = { editingDetails = false },
+            )
+        }
+        if (insertingTable) {
+            TableEditorDialog(
+                initial = TableGrid.starter(),
+                title = "New table",
+                onSave = { grid ->
+                    insertingTable = false
+                    vm.completion.insertTable(grid)
+                },
+                onDismiss = { insertingTable = false },
             )
         }
         vm.tableEdit?.let { edit ->
@@ -467,6 +481,7 @@ fun App() {
                                     onPickDate = { vm.completion.pickDate() },
                                     onPickLink = { pickingLink = vm.linkTargets() },
                                     onEditLink = vm.linkToEdit()?.takeUnless { it.isNew }?.let { edit -> { editingLink = edit } },
+                                    onInsertTable = { insertingTable = true },
                                 ) {
                                     // Saving an element is explicit: edits stay local until this is pressed.
                                     IconButton(onClick = { vm.editor.cancel() }) {

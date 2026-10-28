@@ -253,6 +253,6 @@ class CompletionEditingTest {
 
         viewModel.editor.cancel()
         viewModel.editor.beginEdit(0)
-        assertEquals(listOf(DraftInsert.LINK, DraftInsert.CHECKBOX), viewModel.completion.inserts)
+        assertEquals(listOf(DraftInsert.LINK, DraftInsert.CHECKBOX, DraftInsert.TABLE), viewModel.completion.inserts)
     }
 }

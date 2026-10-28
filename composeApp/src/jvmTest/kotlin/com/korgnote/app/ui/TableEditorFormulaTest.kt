@@ -3,14 +3,18 @@ package com.korgnote.app.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
+import com.korgnote.common.org.edit.DraftInsert
 import com.korgnote.common.org.edit.TableGrid
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** The table editor with formulas: computed on demand only, and only when every formula can be. */
 @OptIn(ExperimentalTestApi::class)
@@ -81,5 +85,25 @@ class TableEditorFormulaTest {
         onNodeWithText("Gives 6, 20").assertExists()
         onNodeWithText("Cancel").performClick()
         assertNull(saved)
+    }
+
+    @Test
+    fun theEditorsTableButtonOpensANewTableRatherThanTypingPipes() = runComposeUiTest {
+        var opened = false
+        setContent {
+            MaterialTheme {
+                CompletionStrip(
+                    items = emptyList(),
+                    selectedIndex = -1,
+                    onAccept = {},
+                    inserts = listOf(DraftInsert.LINK, DraftInsert.TABLE),
+                    onInsertTable = { opened = true },
+                )
+            }
+        }
+
+        onNode(hasText("Table") or hasContentDescription("Table")).performClick()
+
+        assertTrue(opened)
     }
 }
