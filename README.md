@@ -1,22 +1,113 @@
-This is a Kotlin Multiplatform project targeting Android, iOS, Web, Desktop (JVM), Server.
+# KorgNote
 
-* [/composeApp](./composeApp/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-    - [commonMain](./composeApp/src/commonMain/kotlin) is for code that’s common for all targets.
-    - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-      For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-      the [iosMain](./composeApp/src/iosMain/kotlin) folder would be the right place for such calls.
-      Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./composeApp/src/jvmMain/kotlin)
-      folder is the appropriate location.
+Your [Org-mode](https://orgmode.org) notes and their calendar, on your phone and your computer,
+synced through a server you run yourself.
 
-* [/iosApp](./iosApp/iosApp) contains iOS applications. Even if you’re sharing your UI with Compose Multiplatform,
-  you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
+The `.org` files are the product; KorgNote is a view onto them. They stay plain files in a folder you
+choose, so Emacs, org-roam, git and your backups keep working on them as before, and an edit made in
+Emacs shows up in the app while it is open.
 
-* [/server](./server/src/main/kotlin) is for the Ktor server application.
+<p align="center">
+  <img src="docs/screenshots/note.png" width="24%" alt="A note in reading mode, with a table and links">
+  <img src="docs/screenshots/agenda.png" width="24%" alt="The agenda: the days ahead, with times and tags">
+  <img src="docs/screenshots/week.png" width="24%" alt="The week view, with a trip drawn as one bar across its days">
+  <img src="docs/screenshots/month.png" width="24%" alt="The month view: every dated entry, and ranges across their days">
+</p>
 
-* [/shared](./shared/src) is for the code that will be shared between all targets in the project.
-  The most important subfolder is [commonMain](./shared/src/commonMain/kotlin). If preferred, you
-  can add code to the platform-specific folders here too.
+## Why
+
+I keep my life in Org files, and on a phone none of the apps I tried was one I enjoyed using every day,
+or knew org-roam's links, or turned the dates in my notes into a calendar I could actually plan a
+week with. KorgNote is the app I wanted: a calendar and notes that are the same thing.
+
+It is a personal project, built for my own workflow and used daily. It may well suit yours — issues
+and pull requests are welcome, with no promise about feature requests.
+
+## What it does
+
+**Notes**
+- Reads Org as Org: headings that fold, TODO keywords as the file declares them, priorities, tags in
+  colour, checkboxes with their `[2/5]` cookies, tables, drawers, and code blocks highlighted by
+  language.
+- Links of every kind: `id:`, `file:`, `*Heading`, `#custom-id` and fuzzy ones, with backlinks and Back.
+  Notes and dailies start the way org-roam starts them.
+- A `:LOCATION:` opens in your maps app; `[[file:~/Sync/plan.pdf]]` opens in the phone's app for
+  it, with each synced folder mapped to where it is on that device.
+- Search over every note, by words and `tag:`. Pinned notes above the file tree.
+
+**Editing**
+- Tap a heading to edit just that heading; long-press to move, promote, demote or delete it.
+- A strip of suggestions above the keyboard for keywords, tags, places, dates and links, and buttons
+  for a link, date, schedule or checkbox, so a phone keyboard is enough.
+- TODO keywords change from a menu and are logged as Org logs them; a repeating task moves to its next
+  date when done.
+- Tables open as a grid. `#+TBLFM` formulas are computed as Emacs does — field and range references,
+  `vsum`, `vmean` and many more of Calc's functions, dates included — and columns align by what their
+  cells show.
+
+**Calendar**
+- Agenda, day, week and month, built from `SCHEDULED`, `DEADLINE` and plain timestamps: times and
+  time ranges, repeaters, warning delays, and multi-day ranges drawn as one bar across their days.
+- Reminders on the phone, and a morning digest of the day, delivered with the app closed and offline.
+
+**Sync**
+- Local first: the app holds a copy of every note and works offline; changes sync when the server can
+  be reached.
+- Edits on two devices to the same note are merged. When they cannot be, both versions are kept and
+  the app shows you the difference to settle it — never conflict markers in your file.
+- Devices pair by scanning a QR code, then talk to the server over TLS with its certificate pinned.
+  No account, domain or cloud service involved; a lost phone is revoked from the Devices page.
+
+## Status
+
+| Part | State |
+|---|---|
+| Android | Used daily. |
+| Server (JVM or Docker) | Used daily, on macOS. |
+| Desktop (JVM) | Works; talks to a server on the same computer. |
+| Web | Served by the server to the computer it runs on. |
+| iOS | Builds and is tested in CI; less tried on a device, and reminders not yet seen on one. |
+
+There is no app store release yet: build it from source as below.
+
+## Quick start
+
+1. **Run the server** on the computer that holds your notes, with Docker:
+
+   ```shell
+   scripts/run-server-container.sh ~/notes
+   ```
+
+   or without Docker, `NOTES_DIR=~/notes ./gradlew :server:run`.
+2. **Open the Devices page**, <http://localhost:8080/devices>, and press **Show a pairing code**.
+3. **Install the Android app** (`./gradlew :androidApp:installDebug`, or a signed release as below),
+   then **Settings → Pair with a computer** and scan the code.
+
+The phone keeps its copy of the notes and syncs whenever it can reach the computer — on the same
+network, or over a VPN such as Tailscale or WireGuard.
+
+The design documents behind all this are in [docs/](docs/README.md).
+
+## License
+
+KorgNote is free software: you can redistribute it and/or modify it under the terms of the
+[GNU General Public License](LICENSE) as published by the Free Software Foundation, either version 3
+of the License, or (at your option) any later version.
+
+---
+
+## Development
+
+This is a [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)
+project: one Compose Multiplatform UI for Android, iOS, desktop and the web, and a Ktor server.
+
+| Module | What it holds |
+|---|---|
+| [shared/](shared/src) | The Org model and parser, the agenda engine and table formulas, for every target. |
+| [composeApp/](composeApp/src) | The app's UI and sync client, shared across Android, iOS, desktop (JVM) and web (wasm). |
+| [androidApp/](androidApp) | The Android application shell. |
+| [iosApp/](iosApp/iosApp) | The iOS application shell, opened in Xcode. |
+| [server/](server/src/main/kotlin) | The Ktor sync server, which also serves the web client. |
 
 ### Build and Run Android Application
 
@@ -25,11 +116,11 @@ in your IDE’s toolbar or build it directly from the terminal:
 
 - on macOS/Linux
   ```shell
-  ./gradlew :composeApp:assembleDebug
+  ./gradlew :androidApp:assembleDebug
   ```
 - on Windows
   ```shell
-  .\gradlew.bat :composeApp:assembleDebug
+  .\gradlew.bat :androidApp:assembleDebug
   ```
 
 A debug build installs as its own app, *KorgNote Debug* (`com.korgnote.androidapp.debug`), beside
@@ -241,13 +332,3 @@ instead of running the tests. You can put `clean` in front of any task name to c
 
 The heavy option is `--rerun-tasks`. It reruns every task in the build, including all compilation for
 every target, so it takes minutes instead of seconds. Only use it if you suspect the build itself.
-
----
-
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html),
-[Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform/#compose-multiplatform),
-[Kotlin/Wasm](https://kotl.in/wasm/)…
-
-We would appreciate your feedback on Compose/Web and Kotlin/Wasm in the public Slack
-channel [#compose-web](https://slack-chats.kotlinlang.org/c/compose-web).
-If you face any issues, please report them on [YouTrack](https://youtrack.jetbrains.com/newIssue?project=CMP).
