@@ -1,11 +1,9 @@
 # Screenshots
 
-The pictures in the main README are of the web client at a phone's width, showing the made-up notes
-in [notes/](notes). Its dates are around the end of October 2026, so the calendar shows them on the
-screen it opens on only in that week.
+These screenshots show the web app at phone width, using the sample notes in [notes/](notes).
+The notes are dated around late October 2026.
 
-To take them again, serve these notes from a server of their own, on ports and a state directory
-that leave a real one alone:
+To take them again, run a separate server with these notes, so your real server is not touched:
 
 ```shell
 ./gradlew :composeApp:wasmJsBrowserDistribution :server:installDist
@@ -14,4 +12,4 @@ KORGNOTE_PORT=18080 KORGNOTE_HTTPS_PORT=18443 KORGNOTE_STATE_DIR=$(mktemp -d) \
 WASM_DIR=$PWD/composeApp/build/dist/wasmJs/productionExecutable server/build/install/server/bin/server
 ```
 
-then open <http://127.0.0.1:18080/> in a browser 400 px wide.
+Then open <http://127.0.0.1:18080/> in a browser window 400 px wide.
