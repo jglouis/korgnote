@@ -1,0 +1,4 @@
+<resources>
+    <!-- Told apart from the release build, which a phone can have installed beside it. -->
+    <string name="app_name">KorgNote Debug</string>
+</resources>

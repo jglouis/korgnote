@@ -32,6 +32,24 @@ in your IDE’s toolbar or build it directly from the terminal:
   .\gradlew.bat :composeApp:assembleDebug
   ```
 
+A debug build installs as its own app, *KorgNote Debug* (`com.korgnote.androidapp.debug`), beside
+the release one.
+
+#### Release build
+
+The release key lives in KeePassXC: its keystore attached to an entry (`korgnote-release.jks` on
+*KorgNote release key* unless `KORGNOTE_KDBX_ATTACHMENT` and `KORGNOTE_KDBX_ENTRY` say otherwise),
+the alias as the entry's username and the keystore password as its password. This asks for the
+database's password, builds a signed APK and prints its certificate's SHA-256:
+
+```shell
+scripts/release.sh ~/path/to/database.kdbx      # or set KORGNOTE_KDBX
+adb -s <serial> install -r androidApp/build/outputs/apk/release/androidApp-release.apk
+```
+
+Raise `versionCode` in `androidApp/build.gradle.kts` for each release: Android refuses to install a
+lower one over a higher one, and Google Play wants every upload higher than the last.
+
 ### Build and Run Desktop (JVM) Application
 
 To build and run the development version of the desktop app, use the run configuration from the run widget

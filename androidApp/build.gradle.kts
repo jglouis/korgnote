@@ -19,11 +19,36 @@ extensions.configure<ApplicationExtension> {
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
 
+        // Raise versionCode on every release: Android refuses a lower one over a higher one.
+        versionCode = 1
+        versionName = "1.0.0"
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // The release key lives in KeePassXC, and scripts/release.sh hands it over as these properties;
+    // without them a release build comes out unsigned, as before.
+    val releaseStoreFile = providers.gradleProperty("KORGNOTE_STORE_FILE").orNull
+    if (releaseStoreFile != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = providers.gradleProperty("KORGNOTE_STORE_PASSWORD").orNull
+                keyAlias = providers.gradleProperty("KORGNOTE_KEY_ALIAS").orNull ?: "korgnote"
+                keyPassword = providers.gradleProperty("KORGNOTE_KEY_PASSWORD").orNull
+            }
+        }
+    }
+
     buildTypes {
+        // A debug build is its own app beside the release one: signed with another key, it could
+        // not be installed over it.
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
+            if (releaseStoreFile != null) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
