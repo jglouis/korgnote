@@ -210,8 +210,9 @@ scripts/publish.sh current ~/Passwords.kdbx           # the version is already r
 ```
 
 Before a release, write what changed for the people using the app in `docs/releases/X.Y.Z.md`
-(see [1.1.0](docs/releases/1.1.0.md)). The script uses it as the release notes; without it, the notes
-are the titles of the commits since the last release.
+(see [1.1.0](docs/releases/1.1.0.md)), one line per paragraph or item, since GitHub shows each line
+break. The script uses it as the release notes; without it, the notes are the titles of the commits
+since the last release.
 
 `--no-push` stops before the push, `--draft` leaves the release a draft for you to publish,
 `--no-wait` publishes it without waiting for the image, and `--edit-notes` lets you edit the notes
