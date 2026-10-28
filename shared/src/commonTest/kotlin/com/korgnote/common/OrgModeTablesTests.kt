@@ -58,6 +58,74 @@ class OrgModeTablesTests {
         assertEquals(expected, aligned.joinToString("\n"))
     }
 
+    private fun aligned(text: String) = parseOrgTable(text.trimIndent().split('\n')).toAlignedLines().joinToString("\n")
+
+    // Each expected table below is what Emacs 31.1's `org-table-align` made of the same cells.
+
+    @Test
+    fun linksTakeTheWidthOfWhatTheyShow() {
+        assertEquals(
+            """
+            | who  | link          |
+            |------+---------------|
+            | [[id:abc][Name]] | [[Plain link]]    |
+            | x    | [[https://example.org/a/long/path][Site]] and more |
+            """.trimIndent(),
+            aligned(
+                """
+                | who | link |
+                |-|-|
+                | [[id:abc][Name]] | [[Plain link]] |
+                | x | [[https://example.org/a/long/path][Site]] and more |
+                """,
+            ),
+        )
+    }
+
+    @Test
+    fun wideCharactersTakeTwoColumnsAndAccentsNone() {
+        assertEquals(
+            "| 日本 | é | 😀 | ❤️ | 👍🏽 | ☕ |\n| x    | y | z  | w | v    | t  |",
+            aligned("| 日本 | é | 😀 | ❤️ | 👍🏽 | ☕ |\n| x | y | z | w | v | t |"),
+        )
+    }
+
+    @Test
+    fun aColumnOfMostlyNumbersIsAlignedRightAsAWhole() {
+        assertEquals(
+            """
+            |     a | b |    c | d |
+            |-------+---+------+---|
+            |     1 | x |    1 |   |
+            |     2 | y | text |   |
+            | three | 3 | 1:30 |   |
+            |   Nan | 4 | 0x1F |   |
+            """.trimIndent(),
+            aligned(
+                """
+                | a | b | c | d |
+                |-+-+-+-|
+                | 1 | x | 1 | |
+                | 2 | y | text | |
+                | three | 3 | 1:30 | |
+                | Nan | 4 | 0x1F | |
+                """,
+            ),
+        )
+    }
+
+    @Test
+    fun cookiesSetAColumnsAlignmentAndShortRowsAreFilled() {
+        assertEquals(
+            "|  <c>   | <r> | <l> |\n|   ab   |   x | 12  |\n| abcdef |  yy | 3   |",
+            aligned("| <c> | <r> | <l> |\n| ab | x | 12 |\n| abcdef | yy | 3 |"),
+        )
+        assertEquals(
+            "| a              | b | c |\n| 1              |   |   |\n|----------------+---+---|\n| long cell here | 2 |   |",
+            aligned("| a | b | c |\n| 1 |\n|---|\n| long cell here | 2 |"),
+        )
+    }
+
     @Test
     fun numericDetection() {
         assertTrue("42".isNumeric())

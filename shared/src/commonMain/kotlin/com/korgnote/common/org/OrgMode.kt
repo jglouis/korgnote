@@ -539,27 +539,65 @@ fun String.toOrgDocument(): OrgDocument {
 
 private fun OrgNode.cellText(): String = (this as? OrgRaw)?.content ?: this.toOrgString()
 
-// Renders the table as Org text with every column padded to the widest cell (like Emacs does),
-// so the result is aligned when displayed in a monospace font.
+/**
+ * The table as Org text, aligned as Emacs aligns it (`org-table-align`), so that a table saved here
+ * comes out as Emacs would have left it, byte for byte, and editing it on either side does not
+ * re-pad it on the other.
+ *
+ * Every column is as wide as its widest cell *as displayed* — a link shows only its description, a
+ * CJK character or an emoji takes two columns — and at least one. A whole column is aligned the same
+ * way: to the right when at least half of its cells that are not empty look like numbers, unless a
+ * `<l>`, `<c>` or `<r>` cookie in it says otherwise.
+ */
 fun OrgTable.toAlignedLines(): List<String> {
-    val cols = columnCount
-    if (cols == 0) return rows.map { "|-|" }
-    val widths = IntArray(cols)
-    for (row in rows) {
-        if (row.isRule) continue
-        row.cells.forEachIndexed { c, cell -> widths[c] = maxOf(widths[c], cell.cellText().length) }
-    }
-    return rows.map { row ->
-        if (row.isRule) {
-            widths.joinToString(separator = "+", prefix = "|", postfix = "|") { "-".repeat(it + 2) }
-        } else {
-            (0 until cols).joinToString(separator = "|", prefix = "|", postfix = "|") { c ->
-                val text = row.cells.getOrNull(c)?.cellText().orEmpty()
-                if (text.isNumeric()) " " + text.padStart(widths[c]) + " " else " " + text.padEnd(widths[c]) + " "
+    val cells = rows.filterNot { it.isRule }.map { row -> row.cells.map { it.cellText().trim() } }
+    // A table of rules only keeps a single column: the parser does not keep their `+`s.
+    if (cells.isEmpty()) return rows.map { "|---|" }
+    val columns = cells.maxOf { it.size }
+    val widths = IntArray(columns) { 1 }
+    val alignments = Array(columns) { column ->
+        var cookie: Char? = null
+        var numbers = 0
+        var nonEmpty = 0
+        for (row in cells) {
+            val cell = row.getOrElse(column) { "" }
+            widths[column] = maxOf(widths[column], orgDisplayWidth(cell))
+            when {
+                cookie != null || cell.isEmpty() -> {}
+                alignmentCookie.matches(cell) -> cookie = cell[1]
+                else -> {
+                    nonEmpty++
+                    if (orgTableNumber.matches(cell)) numbers++
+                }
             }
+        }
+        cookie ?: if (numbers >= 0.5 * nonEmpty) 'r' else 'l'
+    }
+    val rule = widths.joinToString(separator = "+", prefix = "|", postfix = "|") { "-".repeat(it + 2) }
+    var data = 0
+    return rows.map { row ->
+        if (row.isRule) return@map rule
+        val fields = cells[data++]
+        (0 until columns).joinToString(separator = "|", prefix = "|", postfix = "|") { column ->
+            val field = fields.getOrElse(column) { "" }
+            val spaces = widths[column] - orgDisplayWidth(field)
+            val before = when (alignments[column]) {
+                'r' -> spaces
+                'c' -> spaces / 2
+                else -> 0
+            }
+            " " + " ".repeat(before) + field + " ".repeat(spaces - before) + " "
         }
     }
 }
+
+private val alignmentCookie = Regex("""<[lrc][0-9]*>""")
+
+// `org-table-number-regexp`, as Emacs matches it: without regard to case.
+private val orgTableNumber = Regex(
+    """[<>]?[-+^.0-9]*[0-9][-+^.0-9eEdDx()%:]*|[<>]?[-+]?0[xX][0-9a-fA-F.]+|[<>]?[-+]?[0-9]+#[0-9a-zA-Z.]+|nan|[-+u]?inf""",
+    RegexOption.IGNORE_CASE,
+)
 
 // Emacs right-aligns cells that look like numbers.
 private val numericCellRegex = Regex("^[-+]?(\\d+([.,]\\d*)?|[.,]\\d+)([eE][-+]?\\d+)?%?$")
