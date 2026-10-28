@@ -10,6 +10,11 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
@@ -157,6 +162,41 @@ class CalendarScreenTest {
         assertShown("Thu 24 Sep 2026")
         onNodeWithText("Today").performClick()
         assertShown("Wed 23 Sep 2026")
+    }
+
+    @Test
+    fun aSwipeTurnsToTheNextDayAndBack() = runComposeUiTest {
+        show(CalendarMode.Day)
+
+        onRoot().performTouchInput { swipeLeft(startX = 350f, endX = 40f) }
+        assertShown("Thu 24 Sep 2026")
+
+        onRoot().performTouchInput { swipeRight(startX = 40f, endX = 350f) }
+        assertShown("Wed 23 Sep 2026")
+    }
+
+    /** The page follows the finger, so a slow drag let go short of halfway goes back where it was. */
+    @Test
+    fun aShortSlowDragSettlesBackOnTheSameDay() = runComposeUiTest {
+        show(CalendarMode.Day)
+
+        onRoot().performTouchInput {
+            // On the calendar, which is narrower than the test window.
+            down(Offset(300f, 400f))
+            repeat(6) { moveBy(Offset(-10f, 0f), delayMillis = 100) }
+            up()
+        }
+
+        assertShown("Wed 23 Sep 2026")
+        onAllNodesWithText("Thu 24 Sep 2026").assertCountEquals(0)
+
+        // The same slow drag, taken past halfway, turns the page: where it is let go is what counts.
+        onRoot().performTouchInput {
+            down(Offset(350f, 400f))
+            repeat(25) { moveBy(Offset(-10f, 0f), delayMillis = 100) }
+            up()
+        }
+        assertShown("Thu 24 Sep 2026")
     }
 
     /** A day of the week or month is too narrow for `TODO` and the title both: the title stays. */

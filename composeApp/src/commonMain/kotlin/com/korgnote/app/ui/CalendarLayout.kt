@@ -32,6 +32,17 @@ enum class CalendarMode {
         Agenda, Week -> date.minus(7, DateTimeUnit.DAY)
         Month -> date.minus(1, DateTimeUnit.MONTH)
     }
+
+    /**
+     * [periods] steps of [next] from [date], or of [prev] when negative — counted from [date] in one
+     * go, so the 31st three months on is the 31st again where that month has one, not wherever
+     * stepping through a shorter month in between left it.
+     */
+    fun shift(date: LocalDate, periods: Int): LocalDate = when (this) {
+        Day -> date.plus(periods, DateTimeUnit.DAY)
+        Agenda, Week -> date.plus(7 * periods, DateTimeUnit.DAY)
+        Month -> date.plus(periods, DateTimeUnit.MONTH)
+    }
 }
 
 /** How many days the agenda list shows from its first day: a week, as `org-agenda` does. */

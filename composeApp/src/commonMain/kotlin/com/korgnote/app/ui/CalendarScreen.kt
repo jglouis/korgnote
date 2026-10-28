@@ -1,14 +1,7 @@
 package com.korgnote.app.ui
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,10 +9,13 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -34,15 +30,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -52,6 +49,7 @@ import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.AgendaOptions
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -61,8 +59,6 @@ import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 
-const val SLIDE_DURATION_MS = 100
-const val FADE_DURATION_MS = 100
 
 /**
  * The calendar: an agenda list, a day, a week or a month, all drawn from the same [agenda].
@@ -90,16 +86,21 @@ fun CalendarScreen(
     val today = clock.date
     // Saved, as is the tab: turning the phone recreates the activity, and turning it to see more of
     // the calendar should not lose the place in it.
-    var anchorDate by rememberSaveable(stateSaver = LocalDateSaver) { mutableStateOf(initialAnchorDate ?: today) }
     var mode by rememberSaveable { mutableStateOf(initialMode ?: CalendarMode.Agenda) }
+    // The period on the pager's middle page. Pages either side are the periods before and after it,
+    // so a swipe moves under the finger and settles on whichever page it is let go nearest, as any
+    // pager does; this only moves when the mode changes or Today jumps somewhere far.
+    var base by rememberSaveable(stateSaver = LocalDateSaver) { mutableStateOf(initialAnchorDate ?: today) }
     // Finished entries are history, and a year of them buries what is still to do.
     var showDone by rememberSaveable { mutableStateOf(false) }
-    var slideDirection by remember { mutableStateOf(0) } // -1 for left (next), +1 for right (prev)
+    val pager = key(mode, base) { rememberPagerState(initialPage = CALENDAR_MIDDLE_PAGE) { CALENDAR_PAGES } }
+    val scope = rememberCoroutineScope()
+    fun dateOf(page: Int) = mode.shift(base, page - CALENDAR_MIDDLE_PAGE)
+    val anchorDate = dateOf(pager.currentPage)
 
     fun show(newMode: CalendarMode, date: LocalDate = anchorDate) {
-        slideDirection = 0
         mode = newMode
-        anchorDate = date
+        base = date
     }
 
     Column(modifier = modifier.background(MaterialTheme.colorScheme.surface).padding(8.dp)) {
@@ -107,9 +108,20 @@ fun CalendarScreen(
             title = mode.title(anchorDate),
             mode = mode,
             showDone = showDone,
-            onToday = { slideDirection = 0; anchorDate = today },
-            onPrevious = { slideDirection = 1; anchorDate = mode.prev(anchorDate) },
-            onNext = { slideDirection = -1; anchorDate = mode.next(anchorDate) },
+            onToday = {
+                // Slid to when today is a page away, or back to the middle; jumped to otherwise.
+                val near = (CALENDAR_MIDDLE_PAGE - 1..CALENDAR_MIDDLE_PAGE + 1).firstOrNull { page ->
+                    val first = dateOf(page)
+                    today >= first && today < mode.next(first)
+                }
+                when {
+                    base == today -> scope.launch { pager.animateScrollToPage(CALENDAR_MIDDLE_PAGE) }
+                    near != null -> scope.launch { pager.animateScrollToPage(near) }
+                    else -> base = today
+                }
+            },
+            onPrevious = { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } },
+            onNext = { scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } },
             onMode = { show(it) },
             onToggleDone = { showDone = !showDone },
             actions = headerActions,
@@ -117,68 +129,14 @@ fun CalendarScreen(
 
         Spacer(Modifier.height(8.dp))
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .pointerInput(mode, anchorDate) {
-                    var triggered = false
-                    var totalDx = 0f
-                    val threshold = 60f
-                    detectHorizontalDragGestures(
-                        onHorizontalDrag = { _, dragAmount ->
-                            if (triggered) return@detectHorizontalDragGestures
-                            totalDx += dragAmount
-                            if (totalDx <= -threshold) {
-                                slideDirection = -1
-                                anchorDate = mode.next(anchorDate)
-                                triggered = true
-                            } else if (totalDx >= threshold) {
-                                slideDirection = 1
-                                anchorDate = mode.prev(anchorDate)
-                                triggered = true
-                            }
-                        },
-                        onDragEnd = {
-                            triggered = false
-                            totalDx = 0f
-                        },
-                        onDragCancel = {
-                            triggered = false
-                            totalDx = 0f
-                        }
-                    )
-                }
-        ) {
-            AnimatedContent(
-                targetState = Pair(mode, anchorDate),
-                transitionSpec = {
-                    val dir = slideDirection
-                    if (dir < 0) {
-                        slideIntoContainer(
-                            AnimatedContentTransitionScope.SlideDirection.Left,
-                            animationSpec = tween(SLIDE_DURATION_MS)
-                        ) + fadeIn(animationSpec = tween(SLIDE_DURATION_MS)) togetherWith
-                                slideOutOfContainer(
-                                    AnimatedContentTransitionScope.SlideDirection.Left,
-                                    animationSpec = tween(SLIDE_DURATION_MS)
-                                ) + fadeOut(animationSpec = tween(SLIDE_DURATION_MS))
-                    } else if (dir > 0) {
-                        slideIntoContainer(
-                            AnimatedContentTransitionScope.SlideDirection.Right,
-                            animationSpec = tween(SLIDE_DURATION_MS)
-                        ) + fadeIn(animationSpec = tween(SLIDE_DURATION_MS)) togetherWith
-                                slideOutOfContainer(
-                                    AnimatedContentTransitionScope.SlideDirection.Right,
-                                    animationSpec = tween(SLIDE_DURATION_MS)
-                                ) + fadeOut(animationSpec = tween(SLIDE_DURATION_MS))
-                    } else {
-                        fadeIn(animationSpec = tween(FADE_DURATION_MS)) togetherWith fadeOut(
-                            animationSpec = tween(FADE_DURATION_MS)
-                        )
-                    }
-                }, label = "calendarPager"
-            ) { (calendarMode, aDate) ->
+        HorizontalPager(
+            state = pager,
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            verticalAlignment = Alignment.Top,
+        ) { page ->
+            val calendarMode = mode
+            val aDate = dateOf(page)
+            Box(Modifier.fillMaxSize()) {
                 val open = { occurrence: AgendaOccurrence -> onOpenEntry(occurrence.entry) }
                 when (calendarMode) {
                     CalendarMode.Agenda -> AgendaListView(
@@ -219,6 +177,10 @@ fun CalendarScreen(
         }
     }
 }
+
+/** Pages either way of the middle one: further than anyone swipes, so the pager never seems to end. */
+private const val CALENDAR_PAGES = 20_001
+private const val CALENDAR_MIDDLE_PAGE = CALENDAR_PAGES / 2
 
 /**
  * The period shown and the way through it, the mode switcher, and whether done entries show. Two
