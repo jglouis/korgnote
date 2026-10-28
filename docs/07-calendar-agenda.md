@@ -102,9 +102,9 @@ replaces `scheduledByDate` and decouples the calendar from raw `OrgPlanning` nod
 
 | View | Contents | Why |
 |---|---|---|
-| **Day** | hour grid (configurable day start/end), timed events as blocks, all-day strip on top, "now" line | the missing piece; where Google Calendar beats org-agenda |
-| **Week** | 7 columns, all-day strip, hour grid, drag horizon | planning the week |
-| **Month** | existing grid, but with per-day chips: count, deadline vs scheduled colours, DONE de-emphasised | overview; keep the current swipe/animation work |
+| **Day** | hour grid (configurable day start/end), timed events as blocks, all-day strip on top (scrolling past a third of the screen), "now" line | the missing piece; where Google Calendar beats org-agenda |
+| **Week** | 7 columns, all-day strip, hour grid, drag horizon; on a phone held upright the days scroll sideways, three and a bit on screen | planning the week |
+| **Month** | existing grid, but with per-day chips: count, deadline vs scheduled colours, DONE de-emphasised; each week as tall as its busiest day, scrolling when they need more than the screen | overview; keep the current swipe/animation work |
 | **Agenda list** | grouped by day, `TODO`-keyword and tag chips, overdue section on top | the closest thing to `org-agenda`, and probably your daily driver |
 
 Rendering rules worth fixing early: deadlines and scheduled items must be visually distinct

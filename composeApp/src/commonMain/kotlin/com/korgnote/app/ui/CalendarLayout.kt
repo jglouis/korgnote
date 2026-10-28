@@ -139,6 +139,26 @@ fun layoutTimed(occurrences: List<AgendaOccurrence>): List<TimedBlock> {
     return blocks
 }
 
+// --- The month's weeks -------------------------------------------------------------------------
+
+/**
+ * The heights of rows that need [natural] heights, to fill [total] between them: each as tall as it
+ * needs, and the shorter ones raised to one level, as water fills a tray, until together they fill
+ * it. Rows that need more than [total] already keep what they need, and whatever holds them scrolls.
+ */
+fun fillHeights(natural: List<Int>, total: Int): List<Int> {
+    var room = total
+    var rest = natural.size
+    // The tallest keep their own height while it is over the level the rest would share.
+    for (height in natural.sortedDescending()) {
+        if (height <= room / rest) break
+        room -= height
+        rest--
+    }
+    val level = if (rest > 0) room / rest else 0
+    return natural.map { maxOf(it, level) }
+}
+
 // --- Multi-day ranges --------------------------------------------------------------------------
 
 /**

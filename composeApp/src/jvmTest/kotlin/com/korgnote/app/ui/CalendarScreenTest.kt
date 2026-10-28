@@ -5,6 +5,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -217,6 +220,67 @@ class CalendarScreenTest {
             show(mode)
             assertShown("TODO Submit the grant proposal")
         }
+    }
+
+    /** Seven days do not fit across a phone: they scroll sideways, from today, and then on to the next week. */
+    @Test
+    fun theWeekScrollsSidewaysBeforeItTurns() = runComposeUiTest {
+        show(CalendarMode.Week)
+        onNodeWithTag("weekDay-2026-09-23").assertIsDisplayed()
+        onNodeWithTag("weekDay-2026-09-21").assertIsNotDisplayed()
+
+        // A long drag right brings Monday into view and stops there: the week stays where it is,
+        // though the finger went further than half the width.
+        onRoot().performTouchInput {
+            down(Offset(100f, 500f))
+            repeat(27) { moveBy(Offset(10f, 0f), delayMillis = 50) }
+            up()
+        }
+        onNodeWithTag("weekDay-2026-09-21").assertIsDisplayed()
+        assertShown("21–27 Sep 2026")
+
+        // From its start, the next swipe turns to the week before.
+        onRoot().performTouchInput { swipeRight(startX = 60f, endX = 380f) }
+        assertShown("14–20 Sep 2026")
+    }
+
+    /** The same the other way: past Sunday, the next swipe turns to the week after. */
+    @Test
+    fun theWeekTurnsForwardFromItsEnd() = runComposeUiTest {
+        show(CalendarMode.Week)
+        onRoot().performTouchInput { swipeLeft(startX = 380f, endX = 60f) }
+        onNodeWithTag("weekDay-2026-09-27").assertIsDisplayed()
+        assertShown("21–27 Sep 2026")
+
+        onRoot().performTouchInput { swipeLeft(startX = 380f, endX = 60f) }
+        assertShown("28 Sep – 4 Oct 2026")
+    }
+
+    @Test
+    fun aDayFullOfUntimedEntriesLeavesTheHoursOnScreen() = runComposeUiTest {
+        val busy = AgendaIndex.of(
+            mapOf("todo.org" to (1..20).joinToString("\n") { "* TODO Chore $it.\nSCHEDULED: <2026-09-23 Wed>" }),
+            AgendaOptions(today = today),
+        )
+        setContent {
+            MaterialTheme {
+                CalendarScreen(Modifier.size(390.dp, 800.dp), agenda = busy, initialMode = CalendarMode.Day, now = now)
+            }
+        }
+        onNodeWithText("TODO Chore 1.", substring = true).assertIsDisplayed()
+        onNodeWithText("TODO Chore 20.", substring = true).assertIsNotDisplayed()
+        onNodeWithText("12:00").assertIsDisplayed()
+
+        onNodeWithTag("allDay").performTouchInput { swipeUp() }
+        onNodeWithText("TODO Chore 20.", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun theMonthShowsOnlyItsOwnWeeks() = runComposeUiTest {
+        show(CalendarMode.Month)
+        onNodeWithTag("monthDay-2026-08-31").assertExists()
+        onNodeWithTag("monthDay-2026-10-04").assertExists()
+        onNodeWithTag("monthDay-2026-10-05").assertDoesNotExist()
     }
 
     @Test

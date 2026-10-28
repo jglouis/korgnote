@@ -25,6 +25,24 @@ class CalendarLayoutTest {
 
     private fun List<TimedBlock>.byTitle() = associate { it.occurrence.entry.title to (it.column to it.columns) }
 
+    // --- The month's weeks ---
+
+    @Test
+    fun quietWeeksShareTheScreenEvenly() {
+        assertEquals(listOf(100, 100, 100), fillHeights(listOf(40, 60, 100), 300))
+    }
+
+    @Test
+    fun aBusyWeekKeepsWhatItNeedsAndTheRestShareWhatIsLeft() {
+        assertEquals(listOf(50, 200, 50), fillHeights(listOf(40, 200, 30), 300))
+    }
+
+    @Test
+    fun weeksThatNeedMoreThanTheScreenKeepItAndScroll() {
+        assertEquals(listOf(200, 150), fillHeights(listOf(200, 150), 300))
+        assertEquals(emptyList(), fillHeights(emptyList(), 300))
+    }
+
     // --- Multi-day ranges ---
 
     /** Each bar as `title first..last lane`, with `<` or `>` where it goes on past the row. */

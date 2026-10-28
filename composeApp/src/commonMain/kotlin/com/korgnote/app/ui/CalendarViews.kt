@@ -2,6 +2,7 @@ package com.korgnote.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -39,10 +41,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -53,7 +60,9 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.korgnote.common.org.agenda.AgendaEntry
@@ -64,6 +73,9 @@ import com.korgnote.common.org.agenda.DaySpan
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.Month
+import kotlinx.datetime.daysUntil
+import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 
 // --- How each kind looks -----------------------------------------------------------------------
@@ -268,16 +280,26 @@ private fun AgendaRow(occurrence: AgendaOccurrence, today: LocalDate, leading: D
 
 // --- Day and week: all-day strip and hour grid -------------------------------------------------
 
-private val HOUR_HEIGHT = 48.dp
+/** An hour of the grid: a minute a dp, which leaves a half-hour meeting room for its title and time. */
+private val HOUR_HEIGHT = 60.dp
 private val TIME_LABEL_SIZE = 9.sp
+private val TIME_LABEL_LINE = 11.sp
 private val GUTTER_WIDTH = 44.dp
+
+/**
+ * The narrowest a day of the week is drawn. Seven days on a phone held upright are a word wide
+ * each, too narrow for a title; there the days scroll sideways instead, three and a bit on screen,
+ * the bit saying there are more.
+ */
+private val MIN_DAY_WIDTH = 96.dp
 
 /**
  * One or more days side by side: a header per day when there is more than one, an all-day strip,
  * and an hour grid with timed entries as blocks and a line at the current time.
  *
  * The grid opens scrolled to an hour before now, or to [dayStartHour] on other days, rather than at
- * midnight, which is rarely where anything is.
+ * midnight, which is rarely where anything is. Where the days do not all fit across, they scroll
+ * sideways together with their headers and all-day strip, and open on today.
  */
 @Composable
 fun TimeGridView(
@@ -293,101 +315,125 @@ fun TimeGridView(
     val today = now.date
     val byDate = remember(agenda, dates, today, showDone) { dates.associateWith { agenda.shownOn(it, today, showDone) } }
     val keywordColors = rememberKeywordColors(agenda)
-    Column(modifier.fillMaxSize()) {
-        if (dates.size > 1) {
-            BoxWithConstraints(Modifier.fillMaxWidth()) {
-                // Where the columns are wide enough, as on a phone on its side, the weekday goes
-                // beside the date: there the height is better spent on the hours.
-                val inline = (maxWidth - GUTTER_WIDTH) / dates.size >= 72.dp
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val dayWidth = maxOf((maxWidth - GUTTER_WIDTH) / dates.size, MIN_DAY_WIDTH)
+        val daysWidth = dayWidth * dates.size
+        // One scroll for the headers, the all-day strip and the grid, so that they stay in line. A
+        // swipe that starts at either end goes on to the pager, and so to the week before or after.
+        val sideways = rememberScrollState(with(LocalDensity.current) { (dayWidth * dates.indexOf(today).coerceAtLeast(0)).roundToPx() })
+        val days = if (daysWidth > maxWidth - GUTTER_WIDTH) Modifier.horizontalScroll(sideways).width(daysWidth) else Modifier
+        val allDayMax = maxHeight / 3
+        Column(Modifier.fillMaxSize().nestedScroll(remember { StopAtTheEdge() })) {
+            if (dates.size > 1) {
                 Row(Modifier.fillMaxWidth()) {
                     Spacer(Modifier.width(GUTTER_WIDTH))
-                    for (date in dates) {
-                        val modifier = Modifier.weight(1f).clickable { onDayClick(date) }.padding(vertical = 4.dp)
-                        val weekday = @Composable {
-                            Text(date.shortWeekday, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                        }
-                        if (inline) {
+                    // The weekday beside the date rather than over it: the height is better spent on the hours.
+                    Row(Modifier.weight(1f).then(days)) {
+                        for (date in dates) {
                             Row(
-                                modifier,
+                                Modifier.weight(1f).clickable { onDayClick(date) }.padding(vertical = 4.dp).testTag("weekDay-$date"),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                weekday()
-                                DayNumber(date, isToday = date == today)
-                            }
-                        } else {
-                            Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-                                weekday()
+                                Text(date.shortWeekday, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                                 DayNumber(date, isToday = date == today)
                             }
                         }
                     }
                 }
             }
-        }
 
-        // All-day strip: untimed entries, deadlines, and the days of multi-day ranges.
-        // Multi-day ranges first, in the same order on every day, so that each one keeps its row
-        // and reads as one bar across the columns.
-        val allDay = dates.map { date ->
-            byDate.getValue(date).filter { it.isAllDay }.sortedWith(chipOrder)
-        }
-        val compact = dates.size > 1
-        if (allDay.any { it.isNotEmpty() }) {
-            Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                Text(
-                    "all day",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.width(GUTTER_WIDTH).padding(top = 2.dp),
-                )
-                if (compact) {
-                    WeekAllDay(dates, allDay, today, keywordColors, onOpen, onDayClick, Modifier.weight(1f))
-                } else {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        allDay.single().forEach {
-                            EventChip(it, today, keywordColors.of(it.entry), onOpen = { onOpen(it) })
+            // All-day strip: untimed entries, deadlines, and the days of multi-day ranges.
+            // Multi-day ranges first, in the same order on every day, so that each one keeps its row
+            // and reads as one bar across the columns.
+            val allDay = dates.map { date ->
+                byDate.getValue(date).filter { it.isAllDay }.sortedWith(chipOrder)
+            }
+            val compact = dates.size > 1
+            if (allDay.any { it.isNotEmpty() }) {
+                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                    Text(
+                        "all day",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.width(GUTTER_WIDTH).padding(top = 2.dp),
+                    )
+                    if (compact) {
+                        WeekAllDay(dates, allDay, today, keywordColors, onOpen, onDayClick, Modifier.weight(1f).then(days))
+                    } else {
+                        // A day with a dozen things to do and no time to them would otherwise push the
+                        // hours off the screen: past a third of it, the strip scrolls.
+                        Column(
+                            Modifier.weight(1f).heightIn(max = allDayMax).verticalScroll(rememberScrollState()).testTag("allDay"),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            allDay.single().forEach {
+                                EventChip(it, today, keywordColors.of(it.entry), onOpen = { onOpen(it) })
+                            }
                         }
                     }
                 }
+                HorizontalDivider()
             }
-            HorizontalDivider()
-        }
 
-        // Opens an hour before now on today, or at the day's start, but never below the first
-        // timed entry on screen: an early meeting scrolled out of sight is a meeting missed.
-        val firstEvent = dates.flatMap { byDate.getValue(it) }.filter { !it.isAllDay }.minOfOrNull { it.time!!.hour }
-        val preferred = if (today in dates) (now.hour - 1).coerceAtLeast(0) else dayStartHour
-        val initialHour = minOf(preferred, firstEvent ?: preferred)
-        // A little above the hour, so its label is not cut in half.
-        val initialScroll = with(LocalDensity.current) { (HOUR_HEIGHT * initialHour - 8.dp).coerceAtLeast(0.dp).roundToPx() }
-        val scroll = rememberScrollState(initialScroll)
-        Row(Modifier.fillMaxWidth().weight(1f).verticalScroll(scroll).testTag("hourGrid")) {
-            Column(Modifier.width(GUTTER_WIDTH)) {
-                for (hour in 0 until 24) {
-                    Box(Modifier.height(HOUR_HEIGHT)) {
-                        if (hour > 0) {
-                            Text(
-                                "${hour.toString().padStart(2, '0')}:00",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.offset(y = (-7).dp),
-                            )
+            // Opens an hour before now on today, or at the day's start, but never below the first
+            // timed entry on screen: an early meeting scrolled out of sight is a meeting missed.
+            val firstEvent = dates.flatMap { byDate.getValue(it) }.filter { !it.isAllDay }.minOfOrNull { it.time!!.hour }
+            val preferred = if (today in dates) (now.hour - 1).coerceAtLeast(0) else dayStartHour
+            val initialHour = minOf(preferred, firstEvent ?: preferred)
+            // A little above the hour, so its label is not cut in half.
+            val initialScroll = with(LocalDensity.current) { (HOUR_HEIGHT * initialHour - 8.dp).coerceAtLeast(0.dp).roundToPx() }
+            val scroll = rememberScrollState(initialScroll)
+            Row(Modifier.fillMaxWidth().weight(1f).verticalScroll(scroll).testTag("hourGrid")) {
+                Column(Modifier.width(GUTTER_WIDTH)) {
+                    for (hour in 0 until 24) {
+                        Box(Modifier.height(HOUR_HEIGHT)) {
+                            if (hour > 0) {
+                                Text(
+                                    "${hour.toString().padStart(2, '0')}:00",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.offset(y = (-7).dp),
+                                )
+                            }
                         }
                     }
                 }
-            }
-            for (date in dates) {
-                DayColumn(
-                    blocks = remember(byDate, date) { layoutTimed(byDate.getValue(date)) },
-                    nowMinute = if (date == today) now.hour * 60 + now.minute else null,
-                    keywordColors = keywordColors,
-                    compact = compact,
-                    onOpen = onOpen,
-                    modifier = Modifier.weight(1f),
-                )
+                Row(Modifier.weight(1f).then(days)) {
+                    for (date in dates) {
+                        DayColumn(
+                            blocks = remember(byDate, date) { layoutTimed(byDate.getValue(date)) },
+                            nowMinute = if (date == today) now.hour * 60 + now.minute else null,
+                            keywordColors = keywordColors,
+                            compact = compact,
+                            onOpen = onOpen,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+/**
+ * Keeps a swipe that scrolled the days from also turning the week: what is left of it at the end of
+ * the days stops there, and only a swipe that starts at the end goes on to the pager. The pager
+ * judges a swipe by how far the finger went, so without this a long one that mostly scrolled the
+ * days would turn the week as well.
+ */
+private class StopAtTheEdge : NestedScrollConnection {
+    private var scrolledDays = false
+
+    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+        if (consumed.x != 0f) scrolledDays = true
+        return if (scrolledDays) Offset(available.x, 0f) else Offset.Zero
+    }
+
+    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+        val stopped = if (scrolledDays) Velocity(available.x, 0f) else Velocity.Zero
+        scrolledDays = false
+        return stopped
     }
 }
 
@@ -401,9 +447,8 @@ private fun DayColumn(
     modifier: Modifier,
 ) {
     val lineColor = MaterialTheme.colorScheme.outlineVariant
-    // Seven columns on a phone are a word or so wide: a size smaller keeps more words whole.
-    val titleStyle = MaterialTheme.typography.labelSmall.let { if (compact) it.copy(fontSize = 10.sp, lineHeight = 13.sp) else it }
-    val (titleLine, timeLine) = with(LocalDensity.current) { titleStyle.lineHeight.toDp() to TIME_LABEL_SIZE.toDp() + 2.dp }
+    val titleStyle = MaterialTheme.typography.labelSmall
+    val (titleLine, timeLine) = with(LocalDensity.current) { titleStyle.lineHeight.toDp() to TIME_LABEL_LINE.toDp() }
     BoxWithConstraints(modifier.height(HOUR_HEIGHT * 24)) {
         // Hour lines.
         for (hour in 0 until 24) {
@@ -417,9 +462,12 @@ private fun DayColumn(
             val keywordColor = keywordColors.of(occurrence.entry)
             val width = maxWidth / block.columns
             val height = HOUR_HEIGHT * (block.endMinute - block.startMinute) / 60
+            // The time under the title where there is room for both, rather than half of it cut off:
+            // where a block sits on the grid already says roughly when it is.
+            val time = occurrence.timeLabel()?.takeIf { height - 4.dp >= titleLine + timeLine }
             // As many lines of title as the block is tall, less its time; a long meeting in a
             // narrow column is otherwise two lines of title and a long empty block under them.
-            val lines = ((height - 4.dp - timeLine) / titleLine).toInt().coerceAtLeast(1)
+            val lines = ((height - 4.dp - (if (time != null) timeLine else 0.dp)) / titleLine).toInt().coerceAtLeast(1)
             val inset = if (compact) 1.dp else 3.dp
             Column(
                 Modifier
@@ -449,8 +497,8 @@ private fun DayColumn(
                     maxLines = lines,
                     overflow = TextOverflow.Ellipsis,
                 )
-                occurrence.timeLabel()?.let {
-                    Text(it, fontSize = TIME_LABEL_SIZE, color = accent, maxLines = 1)
+                time?.let {
+                    Text(it, fontSize = TIME_LABEL_SIZE, lineHeight = TIME_LABEL_LINE, color = accent, maxLines = 1)
                 }
             }
         }
@@ -565,8 +613,8 @@ private fun RangeBarChip(
         Text(
             text = occurrence.headline(keywordColor = keywordColor, titleOnly = true),
             modifier = Modifier.keywordDescription(occurrence, titleOnly = true),
-            fontSize = 9.sp,
-            lineHeight = 11.sp,
+            fontSize = CHIP_FONT,
+            lineHeight = CHIP_LINE,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = maxLines,
             overflow = TextOverflow.Ellipsis,
@@ -626,8 +674,8 @@ private fun EventChip(
                 else -> occurrence.headline(keywordColor = keywordColor, titleOnly = compact)
             },
             modifier = Modifier.keywordDescription(occurrence, compact),
-            fontSize = if (compact) 9.sp else 11.sp,
-            lineHeight = if (compact) 11.sp else 13.sp,
+            fontSize = if (compact) CHIP_FONT else 11.sp,
+            lineHeight = if (compact) CHIP_LINE else 13.sp,
             color = MaterialTheme.colorScheme.onSurface,
             // A range is one line on every day it crosses, so its bar stays straight.
             maxLines = if (occurrence.span == DaySpan.Single) maxLines else 1,
@@ -668,7 +716,11 @@ private fun DayNumber(date: LocalDate, isToday: Boolean, dim: Boolean = false) {
 
 /**
  * The month grid, with a chip per entry on each day — coloured by kind, done ones faded — as many
- * as fit and a count of the rest. Tapping a day opens it in the day view.
+ * as [MONTH_MAX_ENTRIES] allows and a count of the rest. Tapping a day opens it in the day view.
+ *
+ * Each week is as tall as its busiest day needs, and the weeks share out what is left of the
+ * screen, so a quiet week does not take the room a busy one would cut its titles short for. When
+ * the weeks need more than the screen, the month scrolls.
  */
 @Composable
 fun MonthView(
@@ -681,6 +733,9 @@ fun MonthView(
 ) {
     val firstOfMonth = LocalDate(anchorDate.year, anchorDate.month, 1)
     val start = firstOfMonth.startOfWeek()
+    // The weeks with a day of the month in them and no more: a week of next month's days only
+    // would take room from the month's own.
+    val weeks = start.daysUntil(firstOfMonth.plus(1, DateTimeUnit.MONTH).minus(1, DateTimeUnit.DAY)) / 7 + 1
     val keywordColors = rememberKeywordColors(agenda)
     Column(modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth()) {
@@ -691,92 +746,120 @@ fun MonthView(
             }
         }
         Spacer(Modifier.height(4.dp))
-        // The six weeks share the height, but a week too short to show an entry under its day
-        // numbers is no use, as on a phone on its side: there the month scrolls instead.
         BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
-            val rowHeight = maxOf(maxHeight / 6, MONTH_ROW_MIN_HEIGHT)
-            // A compact chip or the "+n" line under the day number, with the gap above it.
-            val line = with(LocalDensity.current) { 11.sp.toDp() } + 1.dp
-            val lines = ((rowHeight - 26.dp) / line).toInt().coerceIn(1, MONTH_MAX_LINES)
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                for (row in 0 until 6) {
+            WeekRows(maxHeight, Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).testTag("monthWeeks")) {
+                for (row in 0 until weeks) {
                     val dates = (0 until 7).map { col -> start.plus(row * 7 + col, DateTimeUnit.DAY) }
-                    val days = dates.map { agenda.monthDay(it, showDone).sortedWith(chipOrder) }
-                    // Each range as one bar across its days in the week, its title as wide as the bar.
-                    val bars = remember(days) { layoutRangeBars(days) }
-                    val lanes = (bars.maxOfOrNull { it.lane } ?: -1) + 1
-                    // A line is kept for the count of the rest wherever a lane is left out.
-                    val shownLanes = if (lanes > lines) lines - 1 else lanes
-                    Box(Modifier.fillMaxWidth().height(rowHeight)) {
-                        Row(Modifier.fillMaxSize()) {
-                            dates.forEachIndexed { col, date ->
-                                val singles = days[col].filter { it.span == DaySpan.Single }
-                                val crossing = bars.count { it.lane >= shownLanes && col in it.columns }
-                                Column(
-                                    Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .padding(vertical = 1.dp)
-                                        .clickable { onDayClick(date) }
-                                        .testTag("monthDay-$date"),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                ) {
-                                    DayNumber(date, isToday = date == today, dim = date.month != anchorDate.month)
-                                    // Under the lanes the bars are drawn in, over the cells.
-                                    Spacer(Modifier.height(line * shownLanes))
-                                    val room = lines - shownLanes
-                                    val rest = singles.size + crossing
-                                    // The count of the rest takes a line too, unless there are none.
-                                    val fits = if (rest > room) (room - 1).coerceAtLeast(0) else room
-                                    // The lines the entries leave over give their titles a second one,
-                                    // the first entries' first: a cell is narrow, but often tall.
-                                    var spare = (room - singles.size).coerceAtLeast(0)
-                                    singles.take(fits).forEach {
-                                        val twoLines = spare > 0
-                                        if (twoLines) spare--
-                                        Spacer(Modifier.height(1.dp))
-                                        EventChip(
-                                            it,
-                                            today,
-                                            keywordColors.of(it.entry),
-                                            onOpen = { onDayClick(date) },
-                                            compact = true,
-                                            maxLines = if (twoLines) 2 else 1,
-                                        )
-                                    }
-                                    val hidden = rest - singles.take(fits).size
-                                    if (hidden > 0) {
-                                        Text("+$hidden", fontSize = 9.sp, lineHeight = 11.sp, color = MaterialTheme.colorScheme.outline)
-                                    }
-                                }
-                            }
-                        }
-                        // Drawn over the cells, below the day numbers, at the height their spacers keep.
-                        Column(Modifier.fillMaxWidth().padding(top = 1.dp + DAY_NUMBER_SIZE)) {
-                            for (lane in 0 until shownLanes) {
-                                Spacer(Modifier.height(1.dp))
-                                BarLane(bars.filter { it.lane == lane }, days = 7, modifier = Modifier.height(line - 1.dp)) { bar ->
-                                    RangeBarChip(
-                                        bar,
-                                        keywordColors.of(bar.occurrence.entry),
-                                        maxLines = 1,
-                                        onOpen = { onDayClick(dates[bar.first]) },
-                                        modifier = Modifier.fillMaxHeight(),
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    MonthWeek(
+                        dates = dates,
+                        days = dates.map { agenda.monthDay(it, showDone).sortedWith(chipOrder) },
+                        month = anchorDate.month,
+                        today = today,
+                        keywordColors = keywordColors,
+                        onDayClick = onDayClick,
+                    )
                 }
             }
         }
     }
 }
 
-private val MONTH_ROW_MIN_HEIGHT = 52.dp
+/** A week of the month: the days' numbers, the ranges as bars across them, and each day's entries. */
+@Composable
+private fun MonthWeek(
+    dates: List<LocalDate>,
+    days: List<List<AgendaOccurrence>>,
+    month: Month,
+    today: LocalDate,
+    keywordColors: KeywordColors,
+    onDayClick: (LocalDate) -> Unit,
+) {
+    // Each range as one bar across its days in the week, its title as wide as the bar.
+    val bars = remember(days) { layoutRangeBars(days) }
+    val lanes = (bars.maxOfOrNull { it.lane } ?: -1) + 1
+    // A line is kept for the count of the rest wherever a lane is left out.
+    val shownLanes = if (lanes > MONTH_MAX_ENTRIES) MONTH_MAX_ENTRIES - 1 else lanes
+    // A bar under the day numbers, with the gap above it.
+    val line = with(LocalDensity.current) { CHIP_LINE.toDp() } + 1.dp
+    Box(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxSize()) {
+            dates.forEachIndexed { col, date ->
+                val singles = days[col].filter { it.span == DaySpan.Single }
+                val crossing = bars.count { it.lane >= shownLanes && col in it.columns }
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .padding(vertical = 1.dp)
+                        .clickable { onDayClick(date) }
+                        .testTag("monthDay-$date"),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    DayNumber(date, isToday = date == today, dim = date.month != month)
+                    // Under the lanes the bars are drawn in, over the cells.
+                    Spacer(Modifier.height(line * shownLanes))
+                    val room = MONTH_MAX_ENTRIES - shownLanes
+                    val rest = singles.size + crossing
+                    // The count of the rest takes a line too, unless there are none.
+                    val fits = if (rest > room) (room - 1).coerceAtLeast(0) else room
+                    // A day with little on it lets each title run on to a third line.
+                    val lines = if (singles.size <= 2) 3 else 2
+                    val shown = singles.take(fits)
+                    shown.forEach {
+                        Spacer(Modifier.height(1.dp))
+                        EventChip(it, today, keywordColors.of(it.entry), onOpen = { onDayClick(date) }, compact = true, maxLines = lines)
+                    }
+                    val hidden = rest - shown.size
+                    if (hidden > 0) {
+                        Text("+$hidden", fontSize = CHIP_FONT, lineHeight = CHIP_LINE, color = MaterialTheme.colorScheme.outline)
+                    }
+                }
+            }
+        }
+        // Drawn over the cells, below the day numbers, at the height their spacers keep.
+        Column(Modifier.fillMaxWidth().padding(top = 1.dp + DAY_NUMBER_SIZE)) {
+            for (lane in 0 until shownLanes) {
+                Spacer(Modifier.height(1.dp))
+                BarLane(bars.filter { it.lane == lane }, days = 7, modifier = Modifier.height(line - 1.dp)) { bar ->
+                    RangeBarChip(
+                        bar,
+                        keywordColors.of(bar.occurrence.entry),
+                        maxLines = 1,
+                        onOpen = { onDayClick(dates[bar.first]) },
+                        modifier = Modifier.fillMaxHeight(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Weeks one under the other, each as tall as it needs and the shorter ones raised to fill [height]
+ * between them, as [fillHeights] shares it out.
+ */
+@Composable
+private fun WeekRows(height: Dp, modifier: Modifier, content: @Composable () -> Unit) {
+    Layout(content, modifier) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val heights = fillHeights(measurables.map { it.minIntrinsicHeight(width) }, height.roundToPx())
+        val placeables = measurables.zip(heights) { week, h -> week.measure(Constraints.fixed(width, h)) }
+        layout(width, heights.sum()) {
+            var y = 0
+            placeables.forEach {
+                it.place(0, y)
+                y += it.height
+            }
+        }
+    }
+}
 
 /** The circle a day's number sits in. */
 private val DAY_NUMBER_SIZE = 24.dp
 
-/** Lines of entries under a day's number, on a screen tall enough for them. */
-private const val MONTH_MAX_LINES = 6
+/** Lines of entries under a day's number, bars included, before the rest are counted. */
+private const val MONTH_MAX_ENTRIES = 5
+
+/** The text of an entry in the week's all-day strip and in the month, where a day is narrow. */
+private val CHIP_FONT = 10.sp
+private val CHIP_LINE = 12.sp
