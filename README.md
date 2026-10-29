@@ -1,131 +1,78 @@
-# KorgNote
+<p align="center">
+  <img src="docs/icon.png" alt="" width="112">
+</p>
 
-KorgNote is an [Org-mode](https://orgmode.org) notes app with a calendar. It runs on Android, iOS,
-desktop and the web, and syncs through a server you run yourself.
+<h1 align="center">KorgNote</h1>
 
-Your notes stay plain `.org` files in a folder. You can keep using Emacs, org-roam and git on them.
+<p align="center">
+  <a href="https://orgmode.org">Org-mode</a> notes and a calendar on your phone.<br>
+  Your notes stay plain <code>.org</code> files: Emacs, org-roam and git keep working on them.
+</p>
 
-## Why
+<p align="center">
+  <a href="https://github.com/jglouis/korgnote/releases/latest"><b>Download the Android app</b></a>
+</p>
 
-I keep my notes and tasks in Org files. On my phone, I tried Orgzly and Orgro, but they did not do
-what I needed. I wanted one app where my notes and my calendar are the same thing. This is what I do
-with emacs and Org Agenda.
+![KorgNote on a phone: a note with a table and tasks, then the agenda, the week and the month](docs/screenshots/overview.png)
 
-This is a personal project that I use every day. Issues and pull requests are welcome, but I make no
-promises about feature requests.
+## Get started
 
-## How it's built
+1. **Install the app.** On an Android phone (7.0 or later), open the
+   [latest release](https://github.com/jglouis/korgnote/releases/latest), download
+   `korgnote-X.Y.Z.apk` and open it. Allow your browser to install apps when Android asks.
+2. **Open it and choose where your notes are.** There are three ways:
 
-I started KorgNote by hand in 2025, to learn Compose Multiplatform. Since September 2026, most of
-the code has been written with [Claude Code](https://claude.com/claude-code), an AI coding agent,
-and it has rewritten much of the earlier code too. I decide what gets built, and I use it every day
-on my own notes. The parser, sync and editor are covered by automated tests. Commits written with
-Claude say so in a `Co-Authored-By` line.
+|  | [A folder on the phone](#a-folder-on-the-phone) | [A WebDAV server](#a-webdav-server-experimental) (experimental) | [Your computer, with the KorgNote server](#your-computer-with-the-korgnote-server) |
+|---|---|---|---|
+| **Pick it if** | you want to try the app, or already sync a folder | you have Nextcloud, a NAS or a hosting service | your notes live on your computer |
+| **You need** | nothing else | the server's address, a user name and a password | Docker on the computer, and the phone on its Wi-Fi or a VPN |
+| **A note edited on two devices** | the syncing app keeps a conflict copy | merged | merged |
 
-## Features
+All three work offline, and you can change your mind later in **Settings → Change where notes
+are**.
 
-### Notes
+### A folder on the phone
 
-![A note with tags, a link, a table with a formula, tasks and a code block](docs/screenshots/note.png)
+Choose **A folder on this device** and pick the folder your `.org` files are in, or an empty one.
 
-- Headings, TODO keywords, priorities, tags, checkboxes, tables, drawers and code blocks.
-- Links: `id:`, `file:`, headings and custom IDs, with backlinks.
-- New notes and daily notes are created the same way org-roam creates them.
-- Search by words and tags. Pin the notes you use most.
+- On Android, keep it in sync with Syncthing, or with Dropbox and others through an app like
+  FolderSync.
+- On an iPhone, the folder can be in iCloud Drive, or in Dropbox and other apps that show in Files.
+- Or sync it with nothing, if the phone is the only place you take notes.
 
-### Editing
+### A WebDAV server (experimental)
 
-- Tap a heading to edit it. Long-press to move, promote, demote or delete it.
-- Suggestions above the keyboard for keywords, tags, dates and links.
-- Change TODO states from a menu. Repeating tasks move to their next date when done.
-- Edit tables as a grid. `#+TBLFM` formulas are computed the same way as in Emacs.
+1. On the server, make a folder for your notes, or use the one they are in.
+2. In the app, choose **A WebDAV server (experimental)** and fill in:
 
-### Calendar
+   | Field | What to enter |
+   |---|---|
+   | Folder address | The folder's WebDAV address, starting with `https://`. On Nextcloud: `https://your.cloud/remote.php/dav/files/USER/notes`. The start of it is under **Files → Files settings → WebDAV**; add your folder's name. |
+   | User name | Your user name on the server. |
+   | Password | An app password, if the server offers them. On Nextcloud: **Personal settings → Security → Devices & sessions → Create new app password**. |
 
-![The agenda](docs/screenshots/agenda.png) ![The week view](docs/screenshots/week.png) ![The month view](docs/screenshots/month.png)
+3. Tap **Check the server**, then **Use this server**.
 
-- Agenda, day, week and month views, built from `SCHEDULED`, `DEADLINE` and timestamps.
-- Times, ranges, repeating events and multi-day events.
-- Reminders and a morning summary on your phone, even offline.
-- Agenda and month widgets for the Android home screen, with a button to sync from there.
+The check writes a hidden file, `.korgnote-check`, and deletes it again. It makes sure the server
+refuses a write over a newer version of a file, which is what stops one device from overwriting
+another's edit. A server that does not, such as `rclone serve webdav`, is refused.
 
-### Sync
+Good to know:
 
-- Works offline. Changes sync when the server is reachable.
-- Edits to the same note on two devices are merged. If they conflict, both versions are kept and you
-  choose.
-- Pair a phone by scanning a QR code. The connection uses TLS. No account or cloud service needed.
-- Or skip the server: on a phone, keep the notes in a folder that Syncthing, Dropbox or iCloud
-  Drive syncs, or that nothing does. The app asks which on its first start.
-- Experimental: on a phone, sync with a WebDAV server you already have, such as Nextcloud, instead
-  of the KorgNote server. See [WebDAV](#with-a-webdav-server-experimental).
-- The app's copy of your notes stays on the phone: it is in no Android or iPhone backup, and is not
-  moved to a new phone, nor is the pairing. On a new phone, pair again, or give the WebDAV password
-  again, and the notes sync. Notes in a folder of yours are wherever that folder is.
+- **Experimental:** tested with Nextcloud and Apache, not yet with NAS or hosting services. Please
+  [report](https://github.com/jglouis/korgnote/issues) what works and what does not.
+- **HTTPS only**, with a certificate the phone already trusts: not a self-signed one.
+- **User name and password only** (Basic sign-in). If the server asks for another way, such as
+  Digest, the app says which.
+- The password is kept in the Android Keystore or the iPhone's Keychain, and is in no backup.
+- Changes made elsewhere show up within about 30 seconds while the app is open.
 
-## Status
+### Your computer, with the KorgNote server
 
-| Platform | Status |
-|---|---|
-| Android | Used every day |
-| Server | Used every day (macOS, Docker) |
-| Desktop | Works |
-| Web | Works, on the same computer as the server |
-| iOS | Builds and passes tests; not much tested on a real device |
+The server runs on the computer that has your notes folder. It reads and writes the `.org` files
+directly; there is no database. The phone pairs with it by QR code, and they talk over TLS.
 
-There is no app store release yet. Each [release](https://github.com/jglouis/korgnote/releases/latest)
-has the Android app, ready to install, and the server as a Docker image: see [Install](#install).
-The iOS and desktop apps are built from source.
-
-## How it works
-
-```
-  Your computer
-  ┌────────────────────────────────────────────────────────────────┐
-  │                                                                │
-  │   notes folder  ◄────►  KorgNote server  ◄────  desktop app    │
-  │   (~/notes/*.org)              ▲                or browser     │
-  │                                │                               │
-  └────────────────────────────────┼───────────────────────────────┘
-                                   │  HTTPS, paired by QR code
-                                   ▼
-                          KorgNote on your phone
-                   (its own copy of the notes, works offline)
-```
-
-KorgNote has two parts:
-
-- **The server** runs on the computer that has your notes folder. It reads and writes the `.org`
-  files directly; there is no database. You can run it with Docker or with Java. I run mine on my
-  laptop, so there is no server to look after.
-- **The apps** show and edit your notes. The phone app keeps its own copy, so it works offline. It
-  saves your changes and syncs them as soon as it can reach the server. All traffic is encrypted with
-  TLS, using a certificate the server creates for itself. The phone trusts it after you pair them
-  with a QR code.
-
-The desktop app and the web app only work on the same computer as the server, and need no pairing.
-
-## What you need
-
-| For | You need |
-|---|---|
-| The server | The computer with your notes, and [Docker](https://www.docker.com). To build it from source instead: JDK 25. |
-| The Android app | An Android 7.0+ phone. To build it from source: the Android SDK ([Android Studio](https://developer.android.com/studio) is the easiest way to get it). |
-| The web app | A browser, on the same computer as the server. The server comes with it. |
-| The iOS app | An iPhone, and a Mac with Xcode to build it |
-| The desktop app | JDK 25 to build it, on the same computer as the server |
-
-The phone must be able to reach the computer: on the same Wi-Fi, or through a VPN such as
-Tailscale or WireGuard. With a VPN, add the computer's VPN address on the Devices page before you
-pair. When the computer is off or asleep, the phone keeps working and syncs later.
-
-## Install
-
-You do not need the source code: the server is a Docker image, and the Android app is an APK on the
-release page.
-
-1. **Start the server** on the computer that has your notes. Replace `~/notes` with your notes
-   folder:
+1. **Start the server.** Replace `~/notes` with your notes folder:
 
    ```shell
    mkdir -p ~/.korgnote-server
@@ -136,86 +83,84 @@ release page.
      ghcr.io/jglouis/korgnote-server:latest
    ```
 
-   The image works on Intel and ARM computers (amd64 and arm64). It runs as your user, so new notes
-   belong to you, and keeps its certificate and paired devices in `~/.korgnote-server`.
+   It works on Intel and ARM computers, runs as your user so new notes belong to you, and keeps its
+   certificate and paired devices in `~/.korgnote-server`.
 
 2. **Open <http://localhost:8080/devices>.** Under *Addresses the phone can reach this computer at*,
-   enter this computer's address on your network, for example `192.168.1.20`. The server cannot
-   find it from inside Docker. To see it, run `ipconfig getifaddr en0` on a Mac or `hostname -I` on
-   Linux. Then click **Show a pairing code**. The address is only needed while you pair a phone, and
-   the server forgets it when it restarts; to give it at startup instead, add
-   `-e KORGNOTE_ADVERTISED_ADDRESSES=192.168.1.20` to the `docker run` command.
+   enter this computer's address, for example `192.168.1.20` (run `ipconfig getifaddr en0` on a Mac,
+   `hostname -I` on Linux). Then click **Show a pairing code**.
+3. **In the app,** choose **My computer, with the KorgNote server** and scan the code.
 
-3. **Install the app on your phone.** On the phone, open the
-   [latest release](https://github.com/jglouis/korgnote/releases/latest) and download
-   `korgnote-X.Y.Z.apk`. Open it, and allow your browser to install apps when Android asks.
+The phone must reach the computer: on the same Wi-Fi, or through a VPN such as Tailscale or
+WireGuard, whose address you add on the Devices page before pairing. When the computer is off or
+asleep, the phone keeps working and syncs later.
 
-4. **Pair.** Open the app, choose **My computer, with the KorgNote server**, and scan the code.
+The server also gives you the **web app**, at <http://localhost:8080/>, and the **desktop app**
+(built from source, see [Development](#development)) on the same computer.
 
-The web app is at <http://localhost:8080/>, on the same computer as the server.
+To give the address at startup rather than on the Devices page, add
+`-e KORGNOTE_ADVERTISED_ADDRESSES=192.168.1.20` to the `docker run` command.
 
-**Without a server:** skip steps 1 and 2. Open the app, choose **A folder on this device**, and pick
-the folder your `.org` files are in. Another app such as Syncthing can keep that folder in sync with
-your computer, or nothing does.
+## What it does
 
-### With a WebDAV server (experimental)
+- **Notes:** headings, TODO keywords, priorities, tags, checkboxes, tables, drawers and code blocks.
+- **Links:** `id:`, `file:`, headings and custom IDs, with backlinks. New notes and daily notes are
+  made the way org-roam makes them.
+- **Editing:** tap a heading to edit it, long-press to move, promote, demote or delete it.
+  Suggestions above the keyboard for keywords, tags, dates and links.
+- **Tasks:** change TODO states from a menu. Repeating tasks move to their next date when done.
+- **Tables:** edit them as a grid. `#+TBLFM` formulas are computed the same way as in Emacs.
+- **Calendar:** agenda, day, week and month, from `SCHEDULED`, `DEADLINE` and timestamps, with
+  times, ranges, repeats and events over several days.
+- **Reminders** and a morning summary, even offline. Agenda and month **widgets** on the Android
+  home screen.
+- **Search** by words and tags, save searches by name, and pin the notes you use most.
+- **Offline first:** the app keeps working without a connection and syncs when it can.
 
-On Android and iOS, the app can sync with a folder on a WebDAV server instead: Nextcloud, a NAS, or
-a hosting service. Nothing needs to run on your computer. Choose **A WebDAV server** on the first
-start, or in Settings under *Change where notes are*, and give the folder's address, your user name
-and a password. On Nextcloud, the address is under *Files settings*, *WebDAV*, with your notes
-folder's name added, and an app password is better than your own.
+## Updating
 
-It works like the KorgNote server: the app keeps its own copy, edits on two devices are merged, and
-a conflict keeps both versions. Before the server is used, the app checks that it refuses a write
-over a newer version of a file, which is what stops one device from overwriting another's edit. A
-server that does not, such as `rclone serve webdav`, is refused.
-
-This is new. It has been tested with Nextcloud and Apache, not with NAS or hosting services. The
-address must use HTTPS, with a certificate the phone already trusts, and the app signs in with a
-user name and password only (Basic sign-in): a server that asks for another way, such as Digest,
-is refused, and the app says which way it asked for. Changes made elsewhere show up
-within about 30 seconds while the app is open. Please report what works and what does not.
-
-### Update
-
-- **The app:** download the new APK from the release page and install it. It replaces the old one
-  and keeps your notes.
-- **The server:** get the new image, then start it again with the same `docker run` command as
-  above:
+- **The app:** download the new APK from the [release page](https://github.com/jglouis/korgnote/releases/latest)
+  and install it over the old one. Your notes are kept.
+- **The server:** get the new image, then run the same `docker run` command again:
 
   ```shell
   docker pull ghcr.io/jglouis/korgnote-server:latest
   docker rm -f korgnote
   ```
 
-  Your notes and paired devices are kept, since they are in your folders, not in the container.
+  Your notes and paired devices are kept. To stay on one version, use its number instead of
+  `latest`, for example `ghcr.io/jglouis/korgnote-server:1.1.0`.
 
-To stay on one version, use its number instead of `latest`, for example
-`ghcr.io/jglouis/korgnote-server:1.1.0`. Each release says what changed.
+## A new phone, and backups
 
-### Build from source instead
+The app's copy of your notes stays on the phone: it is in no Android or iPhone backup, and is not
+moved to a new phone, nor are the pairing and the WebDAV password. On a new phone, choose again
+where your notes are, and they sync. Notes in a folder of yours are wherever that folder is.
 
-1. Start the server on the computer that has your notes:
+## Status
 
-   ```shell
-   scripts/run-server-container.sh ~/notes     # with Docker, built from your checkout
-   NOTES_DIR=~/notes ./gradlew :server:run      # with Java
-   ```
+| Platform | Status |
+|---|---|
+| Android | Used every day. The APK is on each [release](https://github.com/jglouis/korgnote/releases/latest). |
+| Server | Used every day (macOS, Docker). The image is `ghcr.io/jglouis/korgnote-server`. |
+| Desktop | Works, on the same computer as the server. Built from source. |
+| Web | Works, on the same computer as the server. |
+| iOS | Builds and passes tests; not much tested on a real iPhone. Built from source. |
 
-2. Open <http://localhost:8080/devices> and click **Show a pairing code**.
-3. Connect your phone by USB, with USB debugging turned on, and install the app:
+There is no app store release yet.
 
-   ```shell
-   ./gradlew :androidApp:installDebug
-   ```
+## About
 
-   This installs *KorgNote Debug*, a separate app from the one on the release page.
+I keep my notes and tasks in Org files. On my phone, I tried Orgzly and Orgro, but they did not do
+what I needed: one app where my notes and my calendar are the same thing, as they are in Emacs with
+Org Agenda. This is a personal project that I use every day. Issues and pull requests are welcome,
+but I make no promises about feature requests.
 
-4. Open the app, choose **My computer, with the KorgNote server**, and scan the code.
-
-To use the desktop app instead of a phone, run `./gradlew :composeApp:run` on the same computer as
-the server. No pairing is needed. See [Development](#development) for more.
+I started KorgNote by hand in 2025, to learn Compose Multiplatform. Since September 2026, most of
+the code has been written with [Claude Code](https://claude.com/claude-code), an AI coding agent,
+and it has rewritten much of the earlier code too. I decide what gets built, and I use it every day
+on my own notes. The parser, sync and editor are covered by automated tests. Commits written with
+Claude say so in a `Co-Authored-By` line.
 
 ## License
 
@@ -236,7 +181,37 @@ project with a Compose Multiplatform UI and a Ktor server. Design notes are in [
 | [iosApp/](iosApp/iosApp) | iOS app (open in Xcode) |
 | [server/](server/src/main/kotlin) | Sync server, also serves the web app |
 
+| To build | You need |
+|---|---|
+| The Android app | The Android SDK ([Android Studio](https://developer.android.com/studio) is the easiest way to get it) |
+| The server | JDK 25, or Docker |
+| The iOS app | A Mac with Xcode |
+| The desktop app | JDK 25 |
+
 On Windows, use `gradlew.bat` instead of `./gradlew`.
+
+### Run it from your checkout
+
+1. Start the server on the computer that has your notes:
+
+   ```shell
+   scripts/run-server-container.sh ~/notes     # with Docker, built from your checkout
+   NOTES_DIR=~/notes ./gradlew :server:run      # with Java
+   ```
+
+2. Open <http://localhost:8080/devices> and click **Show a pairing code**.
+3. Connect your phone by USB, with USB debugging turned on, and install the app:
+
+   ```shell
+   ./gradlew :androidApp:installDebug
+   ```
+
+   This installs *KorgNote Debug*, a separate app from the one on the release page.
+
+4. Open the app, choose **My computer, with the KorgNote server**, and scan the code.
+
+To use the desktop app instead of a phone, run `./gradlew :composeApp:run` on the same computer as
+the server. No pairing is needed.
 
 ### Android
 
@@ -379,9 +354,20 @@ the ports, set `KORGNOTE_HOST_PORT` and `KORGNOTE_HTTPS_HOST_PORT`.
 
 The script builds the image from your checkout. Each release also publishes one, for amd64 and
 arm64, at `ghcr.io/jglouis/korgnote-server` (tagged `latest`, and by version, such as `1.1.0`); see
-[Install](#install) to run it.
+[Your computer, with the KorgNote server](#your-computer-with-the-korgnote-server) to run it.
 
 Changes you make to the notes on the computer, for example in Emacs, show up in the app right away.
+
+### WebDAV test servers
+
+`scripts/webdav-test-servers.sh` starts the servers the WebDAV sync is tested against, in Docker:
+Apache, rclone and Nextcloud. It prints the line that runs the tests against them:
+
+```shell
+eval "$(scripts/webdav-test-servers.sh)"
+./gradlew :composeApp:jvmTest --tests '*WebDavServersTest*'
+scripts/webdav-test-servers.sh stop
+```
 
 ### Tests
 
