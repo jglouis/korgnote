@@ -25,6 +25,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.utils.io.readLine
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 @Serializable
 private data class WireEntry(val path: String, val size: Long, val mtime: Long, val etag: String)
@@ -36,6 +37,17 @@ private data class WireManifest(
     val entries: List<WireEntry>,
     val deleted: List<String> = emptyList(),
 )
+
+/** A line of `GET /bundle`: a file, or the marker that the server stopped short. */
+@Serializable
+private data class WireBundleLine(
+    val path: String? = null,
+    val etag: String? = null,
+    val text: String? = null,
+    val truncated: Boolean = false,
+)
+
+private val bundleJson = Json { ignoreUnknownKeys = true }
 
 /**
  * The sync API v1 over HTTP.
@@ -111,6 +123,22 @@ class KtorSyncApi(
         if (response.status != HttpStatusCode.OK) return null
         val etag = response.headers[HttpHeaders.ETag]?.trim('"') ?: return null
         return RemoteFile(path, etag, response.bodyAsText())
+    }
+
+    /**
+     * `GET /bundle`: one JSON line per file, until the server's size cap, where a line saying
+     * `truncated` ends it. What it leaves out the engine fetches one by one.
+     */
+    override suspend fun bundle(since: Long?): List<RemoteFile> {
+        val suffix = if (since != null) "/bundle?since=$since" else "/bundle"
+        val body = reach { api, token -> client.get(api + suffix) { authorize(token) }.unlessRefused() }
+            .takeIf { it.status == HttpStatusCode.OK }?.bodyAsText() ?: return emptyList()
+        return body.lineSequence()
+            .filter { it.isNotBlank() }
+            .map { bundleJson.decodeFromString<WireBundleLine>(it) }
+            .takeWhile { !it.truncated }
+            .mapNotNull { line -> line.path?.let { path -> RemoteFile(path, line.etag ?: return@let null, line.text ?: return@let null) } }
+            .toList()
     }
 
     override suspend fun push(

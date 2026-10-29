@@ -9,6 +9,9 @@ import com.korgnote.common.replica.RemoteFile
 import com.korgnote.common.replica.RemoteManifest
 import com.korgnote.common.replica.SyncApi
 import com.korgnote.common.replica.SyncEngine
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -73,6 +76,17 @@ class SyncEngineTests {
             return RemoteFile(path, etag, text)
         }
 
+        /** Whether this server bundles, and how many files a bundle stops at, as the real one caps it. */
+        var bundles = false
+        var bundleCap = Int.MAX_VALUE
+        var bundleRequests = 0
+
+        override suspend fun bundle(since: Long?): List<RemoteFile>? {
+            if (!bundles) return null
+            bundleRequests++
+            return files.entries.sortedBy { it.key }.take(bundleCap).map { (path, value) -> RemoteFile(path, value.first, value.second) }
+        }
+
         /** Every write in the order it arrived, as `PUT path` or `DELETE path`. */
         val log = mutableListOf<String>()
 
@@ -94,7 +108,13 @@ class SyncEngineTests {
             return PushResult.Pushed(etag)
         }
 
+        /** A delete takes this long to answer, as over a network: long enough for cycles to overlap. */
+        var deleteLatency = 0L
+        var deleteRequests = 0
+
         override suspend fun delete(path: String, ifMatch: String): DeleteResult {
+            deleteRequests++
+            if (deleteLatency > 0) delay(deleteLatency)
             val current = files[path] ?: return DeleteResult.Gone
             if (current.first != ifMatch) return DeleteResult.Conflict(current.first)
             deleted.add(path)
@@ -128,6 +148,68 @@ class SyncEngineTests {
         assertEquals(emptyList(), server.fetched, "an unchanged file must not be re-fetched")
         assertFalse(second.changedAnything)
         assertEquals("* A\n", store.read("a.org"))
+    }
+
+    /**
+     * Found on a phone: settling a conflict sent the copy's DELETE three times, a save, the change
+     * stream and a retry each starting a cycle while the others were still waiting on the network.
+     */
+    @Test
+    fun cyclesThatOverlapSendEachChangeOnce() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("copy.org", "* Copy\n")
+        engine.sync()
+        store.delete("copy.org")
+        server.deleteLatency = 100
+
+        listOf(async { engine.sync() }, async { engine.sync() }, async { engine.sync() }).awaitAll()
+
+        assertEquals(1, server.deleteRequests)
+        assertEquals(listOf("DELETE copy.org"), server.log)
+        assertEquals(emptyList(), store.tombstones())
+    }
+
+    @Test
+    fun aColdStartOfManyNotesTakesThemInOneBundle() = runTest {
+        val (server, store, engine) = setUp()
+        server.bundles = true
+        repeat(10) { server.put("n$it.org", "* Note $it\n") }
+
+        val report = engine.sync()
+
+        assertEquals(1, server.bundleRequests)
+        assertEquals(emptyList(), server.fetched)
+        assertEquals(10, report.pulled.size)
+        assertEquals("* Note 3\n", store.read("n3.org"))
+        assertFalse(store.isDirty("n3.org"))
+        // Synced, so the next cycle has nothing to take.
+        assertFalse(engine.sync().changedAnything)
+        assertEquals(1, server.bundleRequests)
+    }
+
+    @Test
+    fun whatABundleLeavesOutIsFetchedOneByOne() = runTest {
+        val (server, store, engine) = setUp()
+        server.bundles = true
+        server.bundleCap = 6
+        repeat(10) { server.put("n$it.org", "* Note $it\n") }
+
+        engine.sync()
+
+        assertEquals(4, server.fetched.size)
+        assertEquals(10, store.paths().size)
+    }
+
+    @Test
+    fun aFewNotesAreFetchedWithoutABundle() = runTest {
+        val (server, _, engine) = setUp()
+        server.bundles = true
+        repeat(3) { server.put("n$it.org", "* Note $it\n") }
+
+        engine.sync()
+
+        assertEquals(0, server.bundleRequests)
+        assertEquals(3, server.fetched.size)
     }
 
     @Test

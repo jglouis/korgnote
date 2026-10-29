@@ -38,6 +38,13 @@ sealed interface DeleteResult {
 interface SyncApi {
     suspend fun manifest(since: Long? = null): RemoteManifest
     suspend fun fetch(path: String): RemoteFile?
+
+    /**
+     * Many files in one request: every file the server holds, or what changed since [since]. It may
+     * stop short of some, as the server caps its size; those are fetched one by one. Null where the
+     * transport has no such call, which leaves every file to [fetch].
+     */
+    suspend fun bundle(since: Long? = null): List<RemoteFile>? = null
     /**
      * Writes [path]. With [ifMatch], only over that version; with [mustNotExist] (`If-None-Match: *`),
      * only when the server has nothing there, so a new note never replaces one made elsewhere.

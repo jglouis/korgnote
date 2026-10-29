@@ -2,6 +2,8 @@ package com.korgnote.common.replica
 
 import com.korgnote.common.sync.MergeResult
 import com.korgnote.common.sync.merge
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** What one sync cycle did, mostly so tests and the UI can say something specific. */
 data class SyncReport(
@@ -50,8 +52,19 @@ class SyncEngine(
     private val timestamp: () -> String = { "00000000-000000" },
 ) {
 
-    /** One full cycle: diff the manifest, pull what is stale, push what is dirty. */
-    suspend fun sync(): SyncReport {
+    /** Lets one cycle run at a time; see [sync]. */
+    private val cycle = Mutex()
+
+    /**
+     * One full cycle: diff the manifest, pull what is stale, push what is dirty.
+     *
+     * One at a time: a save, the change stream and a retry each start one, and two running together
+     * both sent what was pending — a deletion three times, an edit twice, the second time against a
+     * version the first had already replaced. One that waits finds that work done.
+     */
+    suspend fun sync(): SyncReport = cycle.withLock { syncLocked() }
+
+    private suspend fun syncLocked(): SyncReport {
         val since = store.generation().takeIf { it > 0 }
         val manifest = api.manifest(since)
 
@@ -66,6 +79,15 @@ class SyncEngine(
         val remote = manifest.entries.associateBy { it.path }
         val localPaths = store.paths().toSet()
         val tombstones = store.tombstones().associateBy { it.path }
+        val bundled = bundleFor(manifest, since, localPaths, tombstones.keys)
+
+        // Takes the server's copy of [path], from the bundle when it holds it.
+        suspend fun pullOne(path: String): Boolean {
+            val file = bundled[path] ?: return pull(path)
+            if (store.meta(path)?.let { it.dirty || it.deleted } == true) return false
+            store.acceptFromServer(path, file.text, file.etag)
+            return true
+        }
         // Deletions wait until everything else is pushed: a rename is a new note and a tombstone,
         // and another device must never catch the old one gone before the new one exists.
         val pendingDeletes = mutableListOf<FileMeta>()
@@ -87,7 +109,7 @@ class SyncEngine(
                     // Edited elsewhere after the version deleted here: the edit wins, and the note
                     // comes back rather than taking someone's work with it.
                     store.forgetTombstone(entry.path)
-                    if (pull(entry.path)) pulled.add(entry.path)
+                    if (pullOne(entry.path)) pulled.add(entry.path)
                 }
                 continue
             }
@@ -97,13 +119,13 @@ class SyncEngine(
 
             when {
                 // Never seen it, or the copy went missing: take the server's.
-                !haveLocally || meta == null -> if (pull(entry.path)) pulled.add(entry.path)
+                !haveLocally || meta == null -> if (pullOne(entry.path)) pulled.add(entry.path)
 
                 // Untouched locally and unchanged remotely: nothing to do.
                 !dirty && meta.etag == entry.etag -> Unit
 
                 // Untouched locally, moved remotely: take theirs.
-                !dirty -> if (pull(entry.path)) pulled.add(entry.path)
+                !dirty -> if (pullOne(entry.path)) pulled.add(entry.path)
 
                 // Edited locally, server unchanged since we synced: push.
                 meta.etag == entry.etag -> record(pushLocal(entry.path, meta.etag), entry.path)
@@ -185,6 +207,26 @@ class SyncEngine(
             failed = failed,
             generation = manifest.generation,
         )
+    }
+
+    /**
+     * The files this cycle will pull, in one request, when there are enough of them to be worth it:
+     * one at a time, the first sync of a few hundred notes took over a minute on a phone. Empty when
+     * there are few, or the server cannot bundle.
+     */
+    private suspend fun bundleFor(
+        manifest: RemoteManifest,
+        since: Long?,
+        localPaths: Set<String>,
+        tombstones: Set<String>,
+    ): Map<String, RemoteFile> {
+        val wanted = manifest.entries.count { entry ->
+            if (entry.path in tombstones) return@count false
+            val meta = store.meta(entry.path)
+            entry.path !in localPaths || meta == null || (!meta.dirty && meta.etag != entry.etag)
+        }
+        if (wanted < BUNDLE_FROM) return emptyMap()
+        return api.bundle(since)?.associateBy { it.path }.orEmpty()
     }
 
     /**
@@ -296,5 +338,10 @@ class SyncEngine(
             }
             is PushResult.Failed -> PushOutcome.FAILED
         }
+    }
+
+    private companion object {
+        /** How many files a cycle pulls before one bundle beats asking for each. */
+        const val BUNDLE_FROM = 8
     }
 }
