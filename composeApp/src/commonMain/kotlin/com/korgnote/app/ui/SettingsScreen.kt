@@ -274,6 +274,17 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.outline,
             )
             Spacer(Modifier.height(8.dp))
+            // Turned down on the welcome screens, or never asked: this is where to change one's mind.
+            val notifications = rememberNotificationPermission()
+            if (notifications != null && !notifications.granted && (remindersOn || digestOn)) {
+                Text(
+                    "KorgNote may not show notifications, so reminders stay silent.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                OutlinedButton(onClick = { notifications.request { } }) { Text("Allow notifications") }
+                Spacer(Modifier.height(8.dp))
+            }
             LabelledSwitch("Remind me before timed entries", remindersOn) { remindersOn = it }
             if (remindersOn) {
                 OutlinedTextField(

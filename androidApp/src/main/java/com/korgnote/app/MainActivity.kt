@@ -22,10 +22,9 @@ import com.korgnote.app.notifications.ReminderTaps
 import com.korgnote.app.notifications.ReminderTarget
 
 class MainActivity : ComponentActivity() {
-    // The answers need no handling: reminders are scheduled either way and are shown once
-    // notifications are granted, and sync retries on its own once local network access is. Both can
-    // also be granted later in the system settings. On the first start the welcome screens ask
-    // instead, each when it is needed.
+    // The answer needs no handling: sync retries on its own once local network access is granted,
+    // which can also be done later in the system settings. On the first start the welcome screens
+    // ask instead.
     private val askForPermissions =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 
@@ -35,11 +34,11 @@ class MainActivity : ComponentActivity() {
         openReminderFrom(intent)
         // Not on a rotation, which recreates the activity with the link it was opened with.
         if (savedInstanceState == null) PairingLinks.offer(intent?.dataString)
-        // Not before the welcome screens; and the local network only for the server on it.
+        // The local network, for the server on it, which sync cannot do without. Notifications are
+        // not asked for here: the welcome screens ask, and Settings, and "Not now" there must not be
+        // followed by the same question at the next start.
         val source = KoinPlatform.getKoin().get<SettingsRepository>().chosenNotesSource()
         val missing = buildList {
-            if (source == null) return@buildList
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.CINNAMON_BUN && source == NotesSource.Server) {
                 add(Manifest.permission.ACCESS_LOCAL_NETWORK)
             }

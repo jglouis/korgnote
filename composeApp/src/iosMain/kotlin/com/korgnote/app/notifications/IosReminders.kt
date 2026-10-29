@@ -2,8 +2,7 @@ package com.korgnote.app.notifications
 
 import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.Foundation.NSDateComponents
-import platform.UserNotifications.UNAuthorizationOptionAlert
-import platform.UserNotifications.UNAuthorizationOptionSound
+import platform.UserNotifications.UNAuthorizationStatusAuthorized
 import platform.UserNotifications.UNCalendarNotificationTrigger
 import platform.UserNotifications.UNMutableNotificationContent
 import platform.UserNotifications.UNNotification
@@ -31,8 +30,9 @@ class IosNotificationScheduler : NotificationScheduler {
     private val center get() = UNUserNotificationCenter.currentNotificationCenter()
 
     override suspend fun replaceAll(reminders: List<Reminder>) {
-        // Asks the first time, answers at once every time after.
-        val allowed = requestAuthorization()
+        // Only asks whether they are allowed: the welcome screens and Settings ask the user, when
+        // that is what the screen is about. Asked from here, the prompt came right after "Not now".
+        val allowed = isAuthorized()
         center.removeAllPendingNotificationRequests()
         if (!allowed) return
         for (reminder in reminders) {
@@ -61,9 +61,9 @@ class IosNotificationScheduler : NotificationScheduler {
         }
     }
 
-    private suspend fun requestAuthorization(): Boolean = suspendCancellableCoroutine { continuation ->
-        center.requestAuthorizationWithOptions(UNAuthorizationOptionAlert or UNAuthorizationOptionSound) { granted, _ ->
-            continuation.resume(granted)
+    private suspend fun isAuthorized(): Boolean = suspendCancellableCoroutine { continuation ->
+        center.getNotificationSettingsWithCompletionHandler { settings ->
+            continuation.resume(settings?.authorizationStatus == UNAuthorizationStatusAuthorized)
         }
     }
 }
