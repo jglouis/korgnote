@@ -90,6 +90,11 @@ class WebDavSyncApi(
         val response = client.request(account.urlOf(path, folder)) {
             this.method = method
             signIn(account)
+            // Never compressed: Apache, under Nextcloud, gives a gzipped answer an etag of its own,
+            // `"…-gzip"`, which no listing shows and no If-Match matches, and nginx weakens it. OkHttp
+            // asks for gzip unless told otherwise, so on Android every note looked changed, and no
+            // edit could be pushed. Notes are small.
+            header(HttpHeaders.AcceptEncoding, "identity")
             configure()
         }
         if (response.status == HttpStatusCode.Unauthorized) {

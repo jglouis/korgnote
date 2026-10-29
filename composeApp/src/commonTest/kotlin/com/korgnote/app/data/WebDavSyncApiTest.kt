@@ -143,6 +143,13 @@ class WebDavSyncApiTest {
     }
 
     @Test
+    fun answersAreAskedForUncompressedSoTheirEtagsAreTheListedOnes() = runTest {
+        val api = apiWith { respond("* Note\n", HttpStatusCode.OK, headersOf(HttpHeaders.ETag, "\"e1\"")) }
+        api.fetch("note.org")
+        assertEquals("identity", requests.single().headers[HttpHeaders.AcceptEncoding])
+    }
+
+    @Test
     fun aWriteOverAnotherVersionIsAConflict() = runTest {
         val api = apiWith { respond("", HttpStatusCode.PreconditionFailed) }
         assertEquals(PushResult.Conflict(null), api.push("a.org", "x", ifMatch = "old"))
