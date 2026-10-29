@@ -11,6 +11,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.IconButton
@@ -124,7 +125,10 @@ fun CompletionStrip(
         color = MaterialTheme.colorScheme.surfaceContainer,
         tonalElevation = 3.dp,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // Clear of the system's navigation bar, as the navigation bar it replaces is: edge to edge,
+        // three-button navigation drew over the save button whenever the keyboard was down. With
+        // the keyboard up, its padding has taken that space already, and this adds nothing.
+        Row(Modifier.navigationBarsPadding(), verticalAlignment = Alignment.CenterVertically) {
             // The chips scroll in what the actions leave, so the actions never scroll away.
             BoxWithConstraints(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 if (items.isEmpty()) {
