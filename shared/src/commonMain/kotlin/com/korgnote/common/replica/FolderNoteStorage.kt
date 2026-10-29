@@ -117,8 +117,12 @@ class FolderNoteStorage(
      */
     private suspend fun writeLocked(path: String, content: String): Boolean {
         val current = reach { Present(folder.stamp(path)) } ?: return false
-        val target = if (changedOutside(path, current.stamp)) {
+        val outside = current.stamp?.let { changedOutside(path, it) }
+        val target = if (outside != null) {
             conflicts += path
+            // The note now holds what was written elsewhere: that is what to show, and to save over next.
+            known = (known ?: emptyMap()) + (path to current.stamp)
+            texts[path] = current.stamp to outside
             freeCopyName(path) ?: return false
         } else {
             path
@@ -130,16 +134,16 @@ class FolderNoteStorage(
     }
 
     /**
-     * Whether [path], which now has [current], holds something other than what was read from it. A
-     * stamp alone is not enough: a sync app may write a file back unchanged, which moves its stamp.
+     * What [path], which now has [current], holds when that is something other than what was read
+     * from it; null when it holds what was read. A stamp alone is not enough: a sync app may write a
+     * file back unchanged, which moves its stamp.
      */
-    private suspend fun changedOutside(path: String, current: FileStamp?): Boolean {
-        if (current == null) return false
+    private suspend fun changedOutside(path: String, current: FileStamp): String? {
         val read = texts[path]
-        if (read != null && read.first == current) return false
-        if (read == null && known?.get(path) == current) return false
-        val now = reach { folder.read(path) } ?: return false
-        return read?.second != now
+        if (read != null && read.first == current) return null
+        if (read == null && known?.get(path) == current) return null
+        val now = reach { folder.read(path) } ?: return null
+        return now.takeIf { it != read?.second }
     }
 
     /** A conflict copy name for [path] that the folder has no file under; null when it cannot say. */

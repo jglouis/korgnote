@@ -101,6 +101,8 @@ class FolderNotesTest {
         assertEquals("* TODO Call the bank, from the laptop\n", folder.files["inbox.org"]?.first)
         assertEquals(listOf("inbox.sync-conflict-20261029-120000.org"), vm.library.conflicts["inbox.org"])
         assertTrue(vm.lastErrorMessage.contains("inbox.org changed in the folder"))
+        // On screen at once is the folder's version, which the banner says the note holds.
+        assertEquals("* TODO Call the bank, from the laptop\n", vm.note.content)
     }
 
     @Test

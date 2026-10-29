@@ -133,6 +133,8 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     var noteDialogError by remember { mutableStateOf<String?>(null) }
     // The conflict copy being compared with its note.
     var comparingCopy by remember { mutableStateOf<String?>(null) }
+    // Whose version a note in conflict holds, for the banner and the comparison to say.
+    val keptSide = if (source is NotesSource.Folder) "folder" else "server"
     // Opens or starts today's daily, from the drawer.
     val openToday = {
         scope.launch {
@@ -250,6 +252,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                 onKeepNote = { comparingCopy = null; scope.launch { vm.discardConflictCopy(copy) } },
                 onUseCopy = { comparingCopy = null; scope.launch { vm.useConflictCopy(copy) } },
                 onDismiss = { comparingCopy = null },
+                keptSide = keptSide,
             )
         }
     }
@@ -636,6 +639,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                         onCompare = { comparingCopy = conflict.copy },
                                         onKeepNote = { scope.launch { vm.discardConflictCopy(conflict.copy) } },
                                         onUseCopy = { scope.launch { vm.useConflictCopy(conflict.copy) } },
+                                        keptSide = keptSide,
                                     )
                                     Spacer(modifier = Modifier.height(12.dp))
                                 }

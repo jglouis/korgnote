@@ -125,6 +125,12 @@ class FolderNoteStorageTest {
         assertEquals("* A, from the phone\n", folder.files["a.sync-conflict-20261029-120000.org"]?.first)
         assertEquals(listOf("a.org"), storage.takeConflicts())
         assertTrue(storage.takeConflicts().isEmpty())
+        // What is shown now is what was written elsewhere, without waiting for a rescan; and a
+        // save made on it goes in place.
+        assertEquals("* A, from the laptop\n", storage.read("a.org"))
+        storage.write("a.org", "* A, from the laptop, then the phone\n")
+        assertEquals("* A, from the laptop, then the phone\n", folder.files["a.org"]?.first)
+        assertTrue(storage.takeConflicts().isEmpty())
     }
 
     @Test

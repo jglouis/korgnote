@@ -113,6 +113,8 @@ fun ConflictBanner(
     onKeepNote: () -> Unit,
     onUseCopy: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Whose version the note holds: the server's, or the folder's when the notes are a folder. */
+    keptSide: String = "server",
 ) {
     val (original, copy, viewingCopy, moreCopies) = conflict
     Surface(
@@ -133,9 +135,9 @@ fun ConflictBanner(
             Spacer(Modifier.height(4.dp))
             Text(
                 if (viewingCopy) {
-                    "It could not be merged with the note, which holds the server's version."
+                    "It could not be merged with the note, which holds the $keptSide's version."
                 } else {
-                    "This is the server's version. The one that could not be merged is kept as " +
+                    "This is the $keptSide's version. The one that could not be merged is kept as " +
                         copy.substringAfterLast('/') +
                         if (moreCopies > 0) " (and $moreCopies more)." else "."
                 },
@@ -167,6 +169,8 @@ fun ConflictCompareDialog(
     onKeepNote: () -> Unit,
     onUseCopy: () -> Unit,
     onDismiss: () -> Unit,
+    /** As in [ConflictBanner]. */
+    keptSide: String = "server",
 ) {
     val removed = MaterialTheme.colorScheme.errorContainer
     val added = MaterialTheme.colorScheme.tertiaryContainer
@@ -175,7 +179,7 @@ fun ConflictCompareDialog(
         title = { Text("Compare versions") },
         text = {
             Column {
-                Text("− only in ${original.substringAfterLast('/')} (the server's)", style = MaterialTheme.typography.bodySmall)
+                Text("− only in ${original.substringAfterLast('/')} (the $keptSide's)", style = MaterialTheme.typography.bodySmall)
                 Text("+ only in ${copy.substringAfterLast('/')}", style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(8.dp))
                 if (hunks.isEmpty()) {
