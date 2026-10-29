@@ -48,8 +48,8 @@ class MainActivity : ComponentActivity() {
         // Koin is started once in KorgNoteApplication; the Activity is recreated on rotation.
         setContent {
             // Edge-to-edge means the window no longer shrinks for the soft keyboard: without this
-            // the keyboard is drawn over the editor and its save buttons. Android only — on iOS,
-            // ComposeUIViewController already lifts the focused field above the keyboard.
+            // the keyboard is drawn over the editor and its save buttons. iOS does the same in
+            // MainViewController.
             Box(Modifier.imePadding()) {
                 App()
             }

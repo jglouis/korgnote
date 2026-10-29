@@ -1,5 +1,9 @@
 package com.korgnote.app
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.uikit.OnFocusBehavior
 import androidx.compose.ui.window.ComposeUIViewController
 import com.korgnote.app.data.PairingLinks
 import com.korgnote.app.data.PersistentSettingsRepository
@@ -27,7 +31,13 @@ fun MainViewController(): UIViewController {
     initKoin(extraModules = listOf(iosModule))
     installReminderTapHandler()
 
-    return ComposeUIViewController { App() }
+    // The keyboard takes room from the app, as on Android: by default the whole view only slid up
+    // until the focused field cleared it, which left the editing strip and its save button under it.
+    return ComposeUIViewController(configure = { onFocusBehavior = OnFocusBehavior.DoNothing }) {
+        Box(Modifier.imePadding()) {
+            App()
+        }
+    }
 }
 
 /**

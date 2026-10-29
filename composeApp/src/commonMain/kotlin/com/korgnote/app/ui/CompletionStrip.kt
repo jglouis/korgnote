@@ -71,9 +71,9 @@ enum class CompletionKey { ACCEPT, DISMISS, NEXT, PREVIOUS }
  * The suggestions, as a strip of chips **pinned to the bottom of the screen** while an element is
  * being edited.
  *
- * Pinned rather than placed next to the field, because the field is inside a scrolling list: both
- * Android's `imePadding` and iOS's lifting bring *the field* into view when the keyboard opens, so
- * anything laid out after it lands in the region the keyboard just took. Position it against the
+ * Pinned rather than placed next to the field, because the field is inside a scrolling list: the
+ * `imePadding` around the app brings *the field* into view when the keyboard opens, so anything
+ * laid out after it lands in the region the keyboard just took. Position it against the
  * screen and that cannot happen, whatever the element's height or where the caret is in it.
  *
  * A strip rather than a floating popup, on every platform: the popup the design sketched suits a
