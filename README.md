@@ -14,6 +14,14 @@ with emacs and Org Agenda.
 This is a personal project that I use every day. Issues and pull requests are welcome, but I make no
 promises about feature requests.
 
+## How it's built
+
+I started KorgNote by hand in 2025, to learn Compose Multiplatform. Since September 2026, most of
+the code has been written with [Claude Code](https://claude.com/claude-code), an AI coding agent,
+and it has rewritten much of the earlier code too. I decide what gets built, and I use it every day
+on my own notes. The parser, sync and editor are covered by automated tests. Commits written with
+Claude say so in a `Co-Authored-By` line.
+
 ## Features
 
 ### Notes
