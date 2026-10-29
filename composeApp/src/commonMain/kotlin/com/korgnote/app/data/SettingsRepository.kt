@@ -48,6 +48,11 @@ interface SettingsRepository {
 
     fun setPinnedNotes(paths: List<String>)
 
+    /** Searches kept by name to run again, in the order they are listed. Kept per device, like the pins. */
+    fun getSavedSearches(): List<SavedSearch>
+
+    fun setSavedSearches(searches: List<SavedSearch>)
+
     /**
      * Where the folders file links name are on this device, as [FileLinkMapping]s. Kept per device,
      * like the pins: `~/Sync` is one place on the laptop the notes were written on, another on a phone.

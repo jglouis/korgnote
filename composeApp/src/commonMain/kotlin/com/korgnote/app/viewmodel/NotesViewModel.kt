@@ -14,6 +14,7 @@ import com.korgnote.app.notifications.NoopNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
 import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.app.data.NoteTemplateSettings
+import com.korgnote.app.data.SavedSearch
 import com.korgnote.common.fs.NotePaths
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgDocument
@@ -70,7 +71,7 @@ import kotlin.uuid.Uuid
  * The app's notes, and everything shown about them.
  *
  * Each concern is its own state holder — [library], [note], [folds], [pins], [editor],
- * [completion], [search], [links], [files], [agenda], [server] — and the UI talks to them directly. What stays here is what
+ * [completion], [search], [savedSearches], [links], [files], [agenda], [server] — and the UI talks to them directly. What stays here is what
  * crosses them: opening a note, which every one of them follows; rebuilding what is derived from the
  * notes when they change; and the operations that change the notes as files — saving, creating,
  * renaming, deleting, and settling a conflict between a note and its copy.
@@ -111,6 +112,9 @@ class NotesViewModel(
     /** The notes pinned on this device, read once; and where a change to them is kept. */
     pinnedNotes: () -> List<String> = { emptyList() },
     savePinnedNotes: (List<String>) -> Unit = {},
+    /** The searches saved on this device, read once; and where a change to them is kept. */
+    savedSearches: () -> List<SavedSearch> = { emptyList() },
+    saveSavedSearches: (List<SavedSearch>) -> Unit = {},
     /** Where linked folders are on this device, read on each tap; and what opens a linked file. */
     fileLinkMappings: () -> List<FileLinkMapping> = { emptyList() },
     fileOpener: FileOpener = NoFileOpener,
@@ -175,6 +179,8 @@ class NotesViewModel(
     )
 
     val search: NoteSearch = NoteSearch(viewModelScope, library, open = ::open)
+
+    val savedSearches: SavedSearches = SavedSearches(savedSearches, saveSavedSearches)
 
     val agenda: NoteAgenda = NoteAgenda(viewModelScope, library, today, notifications, reminderSettings, now, open = ::open)
 

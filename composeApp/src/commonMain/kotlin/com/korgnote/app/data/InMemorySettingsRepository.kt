@@ -60,6 +60,12 @@ class InMemorySettingsRepository(
         pinnedNotes = paths
     }
 
+    private var savedSearches = emptyList<SavedSearch>()
+    override fun getSavedSearches(): List<SavedSearch> = savedSearches
+    override fun setSavedSearches(searches: List<SavedSearch>) {
+        savedSearches = searches
+    }
+
     private var fileLinkMappings = emptyList<FileLinkMapping>()
     override fun getFileLinkMappings(): List<FileLinkMapping> = fileLinkMappings
     override fun setFileLinkMappings(mappings: List<FileLinkMapping>) {

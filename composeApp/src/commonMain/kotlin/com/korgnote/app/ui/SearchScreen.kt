@@ -12,9 +12,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -49,14 +53,26 @@ fun SearchScreen(
     onQueryChange: (String) -> Unit,
     onOpen: (SearchHit) -> Unit,
     modifier: Modifier = Modifier,
+    /** Whether [query] is one of the saved searches, which the field's bookmark shows. */
+    saved: Boolean = false,
+    /** Saves [query], or forgets it when [saved]; null hides the bookmark. */
+    onToggleSaved: (() -> Unit)? = null,
+    /** Opens the saved searches; null hides the button that does. */
+    onShowSaved: (() -> Unit)? = null,
     actions: @Composable () -> Unit = {},
 ) {
     // Opening the tab is opening it to type; coming back to results already there is not.
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { if (query.isBlank()) focus.requestFocus() }
     Column(modifier = modifier.fillMaxSize()) {
-        // [actions] beside the field: there is no bar above it for them.
+        // [actions] beside the field: there is no bar above it for them. The saved searches open
+        // from the start of the row, where the note's bar opens its drawer.
         Row(verticalAlignment = Alignment.CenterVertically) {
+            if (onShowSaved != null) {
+                IconButton(onClick = onShowSaved) {
+                    Icon(Icons.Filled.Bookmarks, contentDescription = "Saved searches")
+                }
+            }
             OutlinedTextField(
                 value = query,
                 onValueChange = onQueryChange,
@@ -64,6 +80,19 @@ fun SearchScreen(
                 label = { Text("Search notes") },
                 placeholder = { Text("words, or tag:work") },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                trailingIcon = if (onToggleSaved != null && query.isNotBlank()) {
+                    {
+                        IconButton(onClick = onToggleSaved) {
+                            if (saved) {
+                                Icon(Icons.Filled.Bookmark, contentDescription = "Remove saved search")
+                            } else {
+                                Icon(Icons.Filled.BookmarkBorder, contentDescription = "Save search")
+                            }
+                        }
+                    }
+                } else {
+                    null
+                },
                 singleLine = true,
             )
             actions()
@@ -75,7 +104,8 @@ fun SearchScreen(
                 "Type to search every note. Words match anywhere — body text, headings and file " +
                     "names. `tag:work` keeps only headings carrying that tag, and tags are " +
                     "inherited, so a tag on a parent heading counts for everything under it. " +
-                    "Quote a phrase to search for it whole."
+                    "Quote a phrase to search for it whole. The bookmark in the field keeps a " +
+                    "search to run again from the saved searches."
             )
 
             results.isEmpty() -> Hint("Nothing matched \"$query\".")

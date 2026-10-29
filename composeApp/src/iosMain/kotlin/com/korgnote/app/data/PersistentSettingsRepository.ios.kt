@@ -61,6 +61,12 @@ class PersistentSettingsRepository : SettingsRepository {
         defaults.setObject(encodePinnedNotes(paths), forKey = KEY_PINNED_NOTES)
     }
 
+    override fun getSavedSearches(): List<SavedSearch> = decodeSavedSearches(defaults.stringForKey(KEY_SAVED_SEARCHES))
+
+    override fun setSavedSearches(searches: List<SavedSearch>) {
+        defaults.setObject(encodeSavedSearches(searches), forKey = KEY_SAVED_SEARCHES)
+    }
+
     override fun getFileLinkMappings(): List<FileLinkMapping> =
         decodeFileLinkMappings(defaults.stringForKey(KEY_FILE_LINK_MAPPINGS))
 
@@ -104,6 +110,7 @@ class PersistentSettingsRepository : SettingsRepository {
         private const val KEY_REMINDERS = "reminders"
         private const val KEY_NEW_NOTES_FOLDER = "new_notes_folder"
         private const val KEY_PINNED_NOTES = "pinned_notes"
+        private const val KEY_SAVED_SEARCHES = "saved_searches"
         private const val KEY_FILE_LINK_MAPPINGS = "file_link_mappings"
         private const val KEY_NOTE_TEMPLATE = "note_template"
         private const val KEY_TAG_COLORS = "tag_colors"

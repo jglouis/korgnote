@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.NotesSource
+import com.korgnote.app.data.SavedSearch
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.data.offersNotesFolder
 import com.korgnote.app.ui.*
@@ -133,6 +134,8 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     var insertingTable by remember { mutableStateOf(false) }
     var renamingNote by remember { mutableStateOf<String?>(null) }
     var deletingNote by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+    // A search being named: one about to be saved, or (true) a saved one being renamed.
+    var namingSearch by remember { mutableStateOf<Pair<SavedSearch, Boolean>?>(null) }
     // The day a tapped SCHEDULED or DEADLINE date opens the calendar on; null for the calendar's
     // own starting view, as when it is opened from the bottom bar.
     var calendarDay by rememberSaveable(stateSaver = OptionalLocalDateSaver) { mutableStateOf<LocalDate?>(null) }
@@ -273,6 +276,18 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
             },
         )
     }
+    namingSearch?.let { (search, renaming) ->
+        SaveSearchDialog(
+            query = search.query,
+            name = search.name,
+            renaming = renaming,
+            onDismiss = { namingSearch = null },
+            onSave = { name ->
+                namingSearch = null
+                vm.savedSearches.save(search.query, name)
+            },
+        )
+    }
 
     // A tapped link into the notes arrives here as a `korgnote-link:` URI, from a note, the
     // calendar or search alike, a link to a file outside them as a `korgnote-file:` one, and a
@@ -305,11 +320,25 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     CompositionLocalProvider(LocalUriHandler provides uriHandler) {
         ModalNavigationDrawer(
             drawerState = drawerState,
-            // The drawer opens files, so it belongs to the note's tab, as its button does.
-            gesturesEnabled = selectedScreen == BottomItem.FILE,
+            // The drawer belongs to the tab whose button opens it: the note's opens the files, the
+            // search's its saved searches. The other tabs have none.
+            gesturesEnabled = selectedScreen == BottomItem.FILE || selectedScreen == BottomItem.SEARCH,
             drawerContent = {
                 ModalDrawerSheet(modifier = Modifier.width(280.dp)) {
-                    Column(modifier = Modifier.padding(8.dp)) {
+                    if (selectedScreen == BottomItem.SEARCH) {
+                        SavedSearchList(
+                            searches = vm.savedSearches.all,
+                            onRun = { search ->
+                                // The results are to be read, not typed over.
+                                focusManager.clearFocus()
+                                vm.search.run(search.query)
+                                scope.launch { drawerState.close() }
+                            },
+                            onRename = { namingSearch = it to true },
+                            onRemove = { vm.savedSearches.remove(it.query) },
+                            modifier = Modifier.padding(8.dp),
+                        )
+                    } else Column(modifier = Modifier.padding(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 "Files",
@@ -715,6 +744,19 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                         // the place once the file's text has arrived.
                                         vm.search.openHit(hit)
                                         selectedScreen = BottomItem.FILE
+                                    },
+                                    saved = vm.savedSearches.find(vm.search.query) != null,
+                                    onToggleSaved = {
+                                        val query = vm.search.query.trim()
+                                        if (vm.savedSearches.find(query) != null) {
+                                            vm.savedSearches.remove(query)
+                                        } else {
+                                            namingSearch = SavedSearch(name = query, query = query) to false
+                                        }
+                                    },
+                                    onShowSaved = {
+                                        focusManager.clearFocus()
+                                        scope.launch { drawerState.open() }
                                     },
                                     actions = statusIcons,
                                 )

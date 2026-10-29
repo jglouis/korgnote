@@ -103,6 +103,16 @@ class NoteSearch(
         }
     }
 
+    /**
+     * Searches for [query] at once, as when a saved search is run: it arrives whole, so there is no
+     * typing to wait out.
+     */
+    fun run(query: String) {
+        searchJob?.cancel()
+        this.query = query
+        if (query.isBlank()) results = emptyList() else refreshSearch()
+    }
+
     /** In flight or pending; a new keystroke cancels it rather than queueing another. */
     private var searchJob: Job? = null
 

@@ -57,6 +57,7 @@ Updated 2026-09-25.
 | ✅ | T25 Pinned notes | Done — pin from a note's long-press menu; pins sit above the file tree and the first opens at launch |
 | ✅ | T26 Linked files | Done — `[[file:~/Sync/x.pdf]]` opens in the device's app for it; Settings maps `~/Sync` to where it is on a phone |
 | ✅ | T28 Links without syntax | Done — a pasted address becomes a link; a form edits a link's label and target, a file chosen through File links in reverse |
+| ✅ | T29 Saved searches | Done — the search field's bookmark names and keeps a query; the Search tab's drawer runs it again |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -542,7 +543,8 @@ describing a document as it used to be.
 **Scope** Linear-scan full-text search over the replica with heading breadcrumbs and jump-to-offset;
 `filterQuery` becomes a special case.
 **Done when** Searching the whole corpus returns results in well under a second offline.
-**Not included** The structured query grammar (`todo:NEXT`, `deadline:<=7d`) and saved searches.
+**Not included** The structured query grammar (`todo:NEXT`, `deadline:<=7d`) and saved searches
+(since landed as T29).
 The parser has one prefix today; adding another is a case in `SearchQuery.parse` and a predicate in
 `searchOrgFile`, which is where agenda filters should meet it (T16).
 
@@ -1022,6 +1024,24 @@ from the text menu, the form on note and web links, a PDF chosen in `Sync/board_
 `~/Sync/board_game/…`, every edit discarded and the replica compared byte for byte afterwards.
 **Not included** Fetching a page's title for the label (it would mean a request to the site from
 the phone); editing a link from reading mode without opening the element; iOS's picker.
+
+### T29 · Saved searches — ✅ **done**
+**Why** Asked for by a prospective user. The same few searches — `tag:work TODO`, a project's name
+— get typed again and again; what is worth keeping is the query, not its results, which are
+whatever the notes hold when it is run.
+**Landed** With something typed, the search field shows a bookmark: a tap names the search (the
+query itself by default) and saves it; on a saved query the bookmark is filled and a tap forgets
+it. A button at the start of the search row opens the app's drawer, which on the Search tab lists
+the saved searches instead of the files, by name with the query beneath. A tap runs one at once —
+no typing pause to wait out — and closes the drawer; a long-press renames or removes it.
+**Where they live** In settings, per device, as JSON, the same way the pins do: nothing in the notes
+changes and nothing syncs. A search is known by its query, so saving a query already saved renames
+it rather than listing it twice.
+**Verified** `SavedSearchesTest` (6: order, persistence, rename by re-saving, blank names, remove,
+running at once, encoding) and `SavedSearchesUiTest` (2: saving and running through the real shell;
+forgetting from the bookmark).
+**Not included** Reordering, syncing them between devices (an Org file of queries would do that and
+is worth considering if they are wanted on every device), and the structured query grammar.
 
 ---
 
