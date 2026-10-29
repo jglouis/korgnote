@@ -47,7 +47,7 @@ internal fun parseDavXml(xml: String): DavElement {
                 val gt = tagEnd(xml, lt)
                 val tag = xml.substring(lt + 1, gt).trim()
                 if (tag.startsWith("/")) {
-                    if (open.size > 1) open.removeLast()
+                    if (open.size > 1) open.removeAt(open.lastIndex)
                 } else {
                     val element = DavElement(tag.removeSuffix("/").trim().takeWhile { !it.isWhitespace() }.substringAfter(':'))
                     open.last().children += element

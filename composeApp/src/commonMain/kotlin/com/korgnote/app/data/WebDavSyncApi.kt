@@ -147,7 +147,7 @@ class WebDavSyncApi(
         val entries = mutableListOf<RemoteEntry>()
         val folders = ArrayDeque(listOf(""))
         while (folders.isNotEmpty()) {
-            val folder = folders.removeFirst()
+            val folder = folders.removeAt(0)
             for (item in propfind(folder, depth = "1")) {
                 if (item.path == folder || item.path.isEmpty()) continue
                 if (item.folder) {
