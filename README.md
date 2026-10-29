@@ -144,9 +144,13 @@ release page.
    [latest release](https://github.com/jglouis/korgnote/releases/latest) and download
    `korgnote-X.Y.Z.apk`. Open it, and allow your browser to install apps when Android asks.
 
-4. **Pair.** In the app, go to **Settings → Pair with a computer** and scan the code.
+4. **Pair.** Open the app, choose **My computer, with the KorgNote server**, and scan the code.
 
 The web app is at <http://localhost:8080/>, on the same computer as the server.
+
+**Without a server:** skip steps 1 and 2. Open the app, choose **A folder on this device**, and pick
+the folder your `.org` files are in. Another app such as Syncthing can keep that folder in sync with
+your computer, or nothing does.
 
 ### Update
 
@@ -183,7 +187,7 @@ To stay on one version, use its number instead of `latest`, for example
 
    This installs *KorgNote Debug*, a separate app from the one on the release page.
 
-4. In the app, go to **Settings → Pair with a computer** and scan the code.
+4. Open the app, choose **My computer, with the KorgNote server**, and scan the code.
 
 To use the desktop app instead of a phone, run `./gradlew :composeApp:run` on the same computer as
 the server. No pairing is needed. See [Development](#development) for more.
@@ -318,8 +322,8 @@ The server uses two ports:
   devices trust it by its fingerprint.
 
 To pair a device, open <http://localhost:8080/devices>, click **Show a pairing code** and scan it in
-the app under **Settings → Pair with a computer**. `scripts/pair.sh` shows the same code in the
-terminal. You can also revoke devices from the Devices page.
+the app, on its first start or later under **Settings → Pair with a computer**. `scripts/pair.sh`
+shows the same code in the terminal. You can also revoke devices from the Devices page.
 
 The certificate and the list of paired devices are stored in `~/.korgnote-server`. If you delete
 this folder, every device must pair again.
