@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What leaves the phone in a backup or a move to a new phone, from Android 12 on; backup_rules.xml
+  says the same for the versions before.
+
+  Nothing of the notes: not the copies the app keeps of them, nor the agenda the widgets show, nor
+  the reminders, which name their headings. The notes are kept where the user chose: the computer,
+  the WebDAV server, or a folder. On a new phone the app syncs them again, once paired; the pairing
+  token itself never travels, its key being in the Keystore. The settings do travel.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="KorgNote" />
+        <exclude domain="file" path="KorgNote-webdav" />
+        <exclude domain="file" path="agenda-widget.json" />
+        <exclude domain="sharedpref" path="korgnote_reminders.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="KorgNote" />
+        <exclude domain="file" path="KorgNote-webdav" />
+        <exclude domain="file" path="agenda-widget.json" />
+        <exclude domain="sharedpref" path="korgnote_reminders.xml" />
+    </device-transfer>
+</data-extraction-rules>

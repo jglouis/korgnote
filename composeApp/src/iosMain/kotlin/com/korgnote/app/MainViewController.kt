@@ -15,7 +15,11 @@ import com.korgnote.app.files.NoteFolderAccess
 import com.korgnote.app.notifications.IosNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
 import com.korgnote.app.notifications.installReminderTapHandler
+import kotlinx.cinterop.ExperimentalForeignApi
 import org.koin.dsl.module
+import platform.Foundation.NSFileManager
+import platform.Foundation.NSURL
+import platform.Foundation.NSURLIsExcludedFromBackupKey
 import platform.UIKit.UIViewController
 import com.korgnote.common.replica.FileSystemReplicaStorage
 import com.korgnote.common.replica.ReplicaStorage
@@ -23,11 +27,17 @@ import com.korgnote.common.replica.defaultReplicaRoot
 
 @Suppress("unused")
 fun MainViewController(): UIViewController {
+    val replica = defaultReplicaRoot()
+    val webDavReplica = "$replica-webdav"
+    // Nothing of the notes leaves the iPhone in a backup, as on Android: they are kept where the
+    // user chose, and a new iPhone syncs them again.
+    keepOutOfBackups(replica)
+    keepOutOfBackups(webDavReplica)
     val iosModule = module {
         single<SettingsRepository> { PersistentSettingsRepository() }
-        single<ReplicaStorage> { FileSystemReplicaStorage(defaultReplicaRoot()) }
+        single<ReplicaStorage> { FileSystemReplicaStorage(replica) }
         // The WebDAV sync's, beside it and never mixed with it.
-        single<ReplicaStorage>(WEBDAV) { FileSystemReplicaStorage(defaultReplicaRoot() + "-webdav") }
+        single<ReplicaStorage>(WEBDAV) { FileSystemReplicaStorage(webDavReplica) }
         single<NotificationScheduler> { IosNotificationScheduler() }
         single<NoteFolderAccess> { NoteFolderAccess(::IosNoteFolder) }
     }
@@ -49,3 +59,15 @@ fun MainViewController(): UIViewController {
  */
 @Suppress("unused")
 fun openUrl(url: String): Boolean = PairingLinks.offer(url)
+
+/**
+ * Marks the folder at [path], made if missing, as left out of iCloud and computer backups. Logged
+ * and left as it was when that fails: the notes stay readable either way.
+ */
+@OptIn(ExperimentalForeignApi::class)
+private fun keepOutOfBackups(path: String) {
+    NSFileManager.defaultManager.createDirectoryAtPath(path, withIntermediateDirectories = true, attributes = null, error = null)
+    if (!NSURL.fileURLWithPath(path).setResourceValue(true, forKey = NSURLIsExcludedFromBackupKey, error = null)) {
+        println("[DEBUG_LOG][Backups] Could not keep $path out of backups")
+    }
+}

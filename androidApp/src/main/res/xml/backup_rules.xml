@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The same as data_extraction_rules.xml, for Android 11 and before, where one set of rules covers
+  both the backup and the move to a new phone: nothing of the notes leaves the phone.
+-->
+<full-backup-content>
+    <exclude domain="file" path="KorgNote" />
+    <exclude domain="file" path="KorgNote-webdav" />
+    <exclude domain="file" path="agenda-widget.json" />
+    <exclude domain="sharedpref" path="korgnote_reminders.xml" />
+</full-backup-content>

@@ -12,8 +12,9 @@ import java.io.File
  * Binds the Android replica, so the app module does not need to depend on `shared` just to name a
  * storage type.
  *
- * `filesDir` is private to the app and included in Android's backup, which is what you want for
- * notes that may hold unsynced edits.
+ * `filesDir` is private to the app. Neither replica is in Android's backups, nor in the move to a
+ * new phone: see `data_extraction_rules.xml` in the app. The notes are kept where the user chose,
+ * and a new phone syncs them again.
  */
 fun Module.androidReplica(context: Context) {
     single<ReplicaStorage> { FileSystemReplicaStorage(File(context.filesDir, "KorgNote")) }

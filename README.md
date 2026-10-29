@@ -59,6 +59,9 @@ Claude say so in a `Co-Authored-By` line.
   Drive syncs, or that nothing does. The app asks which on its first start.
 - Experimental: on a phone, sync with a WebDAV server you already have, such as Nextcloud, instead
   of the KorgNote server. See [WebDAV](#with-a-webdav-server-experimental).
+- The app's copy of your notes stays on the phone: it is in no Android or iPhone backup, and is not
+  moved to a new phone, nor is the pairing. On a new phone, pair again, or give the WebDAV password
+  again, and the notes sync. Notes in a folder of yours are wherever that folder is.
 
 ## Status
 

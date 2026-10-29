@@ -24,7 +24,7 @@ import io.ktor.http.decodeURLPart
 import io.ktor.http.encodeURLPathPart
 import io.ktor.http.isSuccess
 import io.ktor.http.withCharset
-import io.ktor.util.encodeBase64
+import kotlin.io.encoding.Base64
 import io.ktor.utils.io.charsets.Charsets
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -81,7 +81,7 @@ class WebDavSyncApi(
 
     private fun HttpRequestBuilder.signIn(account: WebDavAccount) {
         if (account.username.isNotEmpty() || account.password.isNotEmpty()) {
-            header(HttpHeaders.Authorization, "Basic " + "${account.username}:${account.password}".encodeBase64())
+            header(HttpHeaders.Authorization, "Basic " + Base64.Default.encode("${account.username}:${account.password}".encodeToByteArray()))
         }
     }
 
