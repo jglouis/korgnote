@@ -10,12 +10,30 @@ import com.korgnote.common.SERVER_PORT
 import kotlinx.coroutines.flow.MutableStateFlow
 import androidx.core.content.edit
 
-class PersistentSettingsRepository(appContext: Context) : SettingsRepository {
+class PersistentSettingsRepository(
+    appContext: Context,
+    /** Seals the paired server's token and the WebDAV password; see [SecretCipher]. */
+    private val cipher: SecretCipher = KeystoreCipher(),
+) : SettingsRepository {
     private val prefs: SharedPreferences = appContext.getSharedPreferences("korgnote_settings", Context.MODE_PRIVATE)
+
+    init {
+        // The shared token from before pairing, which nothing reads: a secret in the clear, and in
+        // every backup, for nothing.
+        if (prefs.contains(KEY_TOKEN)) prefs.edit { remove(KEY_TOKEN) }
+    }
 
     private val hostFlow = MutableStateFlow(loadHost())
     private val portFlow = MutableStateFlow(loadPort())
-    private var pairedServer: PairedServer? = PairedServer.decode(prefs.getString(KEY_PAIRED_SERVER, null))
+    private var pairedServer: PairedServer? = PairedServer.decode(readSecret(KEY_PAIRED_SERVER))
+
+    /** The secret kept at [key], opened; one an older version kept in the clear is sealed on the way. */
+    private fun readSecret(key: String): String? =
+        openSecret(prefs.getString(key, null), cipher) { sealed -> prefs.edit { putString(key, sealed) } }
+
+    private fun SharedPreferences.Editor.putSecret(key: String, value: String?) {
+        if (value == null) remove(key) else putString(key, sealSecret(value, cipher))
+    }
 
 
     override fun getServerHost(): String = hostFlow.value
@@ -34,11 +52,7 @@ class PersistentSettingsRepository(appContext: Context) : SettingsRepository {
 
     override fun setPairedServer(server: PairedServer?) {
         pairedServer = server
-        prefs.edit {
-            if (server == null) remove(KEY_PAIRED_SERVER) else putString(KEY_PAIRED_SERVER, server.encode())
-            // The shared token from before pairing, which nothing reads any more.
-            remove(KEY_TOKEN)
-        }
+        prefs.edit { putSecret(KEY_PAIRED_SERVER, server?.encode()) }
     }
 
     override fun getNotesSource(): NotesSource? = NotesSource.decode(prefs.getString(KEY_NOTES_SOURCE, null))
@@ -47,10 +61,14 @@ class PersistentSettingsRepository(appContext: Context) : SettingsRepository {
         prefs.edit { putString(KEY_NOTES_SOURCE, source.encode()) }
     }
 
-    override fun getWebDavAccount(): WebDavAccount? = WebDavAccount.decode(prefs.getString(KEY_WEBDAV_ACCOUNT, null))
+    // Opened once and kept, as the paired server is: every WebDAV request reads it.
+    private var webDavAccount: WebDavAccount? = WebDavAccount.decode(readSecret(KEY_WEBDAV_ACCOUNT))
+
+    override fun getWebDavAccount(): WebDavAccount? = webDavAccount
 
     override fun setWebDavAccount(account: WebDavAccount?) {
-        prefs.edit { if (account == null) remove(KEY_WEBDAV_ACCOUNT) else putString(KEY_WEBDAV_ACCOUNT, account.encode()) }
+        webDavAccount = account
+        prefs.edit { putSecret(KEY_WEBDAV_ACCOUNT, account?.encode()) }
     }
 
     override fun getReminderSettings(): ReminderSettings = ReminderSettings.decode(prefs.getString(KEY_REMINDERS, null))

@@ -11,9 +11,33 @@ import platform.Foundation.NSUserDefaults
 class PersistentSettingsRepository : SettingsRepository {
     private val defaults = NSUserDefaults.standardUserDefaults()
 
+    init {
+        // The shared token from before pairing, which nothing reads: a secret in the clear, and in
+        // every backup, for nothing.
+        defaults.removeObjectForKey(KEY_TOKEN)
+    }
+
     private val hostFlow = MutableStateFlow(loadHost())
     private val portFlow = MutableStateFlow(loadPort())
-    private var pairedServer: PairedServer? = PairedServer.decode(defaults.stringForKey(KEY_PAIRED_SERVER))
+    private var pairedServer: PairedServer? = PairedServer.decode(readSecret(KEY_PAIRED_SERVER))
+
+    /**
+     * The secret kept at [key], from the Keychain. One an older version kept in the user defaults is
+     * moved there on the way — and only taken out of them once the Keychain has it.
+     */
+    private fun readSecret(key: String): String? {
+        Keychain.read(key)?.let { return it }
+        val legacy = defaults.stringForKey(key) ?: return null
+        if (Keychain.write(key, legacy)) defaults.removeObjectForKey(key)
+        return legacy
+    }
+
+    /** Keeps [value] in the Keychain; in the user defaults, as before, only if the Keychain refuses it. */
+    private fun writeSecret(key: String, value: String?) {
+        if (Keychain.write(key, value)) defaults.removeObjectForKey(key)
+        else if (value == null) defaults.removeObjectForKey(key)
+        else defaults.setObject(value, forKey = key)
+    }
 
 
     override fun getServerHost(): String = hostFlow.value
@@ -32,9 +56,7 @@ class PersistentSettingsRepository : SettingsRepository {
 
     override fun setPairedServer(server: PairedServer?) {
         pairedServer = server
-        if (server == null) defaults.removeObjectForKey(KEY_PAIRED_SERVER) else defaults.setObject(server.encode(), forKey = KEY_PAIRED_SERVER)
-        // The shared token from before pairing, which nothing reads any more.
-        defaults.removeObjectForKey(KEY_TOKEN)
+        writeSecret(KEY_PAIRED_SERVER, server?.encode())
     }
 
     override fun getNotesSource(): NotesSource? = NotesSource.decode(defaults.stringForKey(KEY_NOTES_SOURCE))
@@ -43,10 +65,14 @@ class PersistentSettingsRepository : SettingsRepository {
         defaults.setObject(source.encode(), forKey = KEY_NOTES_SOURCE)
     }
 
-    override fun getWebDavAccount(): WebDavAccount? = WebDavAccount.decode(defaults.stringForKey(KEY_WEBDAV_ACCOUNT))
+    // Read once and kept, as the paired server is: every WebDAV request reads it.
+    private var webDavAccount: WebDavAccount? = WebDavAccount.decode(readSecret(KEY_WEBDAV_ACCOUNT))
+
+    override fun getWebDavAccount(): WebDavAccount? = webDavAccount
 
     override fun setWebDavAccount(account: WebDavAccount?) {
-        if (account == null) defaults.removeObjectForKey(KEY_WEBDAV_ACCOUNT) else defaults.setObject(account.encode(), forKey = KEY_WEBDAV_ACCOUNT)
+        webDavAccount = account
+        writeSecret(KEY_WEBDAV_ACCOUNT, account?.encode())
     }
 
     override fun getReminderSettings(): ReminderSettings = ReminderSettings.decode(defaults.stringForKey(KEY_REMINDERS))
