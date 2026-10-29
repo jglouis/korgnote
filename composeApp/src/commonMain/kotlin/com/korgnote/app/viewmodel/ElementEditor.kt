@@ -17,6 +17,8 @@ import com.korgnote.common.org.withNewOrgElement
 import com.korgnote.common.org.withOrgSubtreeShifted
 import com.korgnote.common.org.withOrgSubtreesSwapped
 import com.korgnote.common.org.withoutOrgSubtree
+import com.korgnote.common.sync.MergeResult
+import com.korgnote.common.sync.merge
 
 /**
  * Editing a single element of the open note — a heading and its own body — as a draft that is
@@ -69,6 +71,21 @@ class ElementEditor(
     internal var textBeforeInsertion: String? = null
         private set
 
+    /** Where in [textBeforeInsertion] the heading being edited was inserted. */
+    private var insertedAt: Int? = null
+
+    /**
+     * The note as a sync brought it while the edit was open, or null. The screen keeps the note the
+     * edit began on, so that the element does not move or vanish under the caret; [commit] makes
+     * the edit on this text instead, and [cancel] shows it.
+     */
+    private var newer: String? = null
+
+    /** A sync brought [text] for the note being edited: see [newer]. */
+    fun noteChangedElsewhere(text: String) {
+        newer = text
+    }
+
     fun beginEdit(index: Int) {
         val element = note.content.orgElements().getOrNull(index) ?: return
         val text = element.sliceOf(note.content)
@@ -115,6 +132,7 @@ class ElementEditor(
         note.content = insertion.text
         // Nothing is written to disk yet, and cancelling must not leave an empty heading behind.
         textBeforeInsertion = previousText
+        insertedAt = at
         original = element.sliceOf(insertion.text)
         editingIndex = index
         folds.unfoldAncestorsOf(index)
@@ -155,9 +173,9 @@ class ElementEditor(
     }
 
     fun cancel() {
-        // A heading that was inserted for this edit never made it to disk, so discarding the edit
-        // discards the heading too.
-        textBeforeInsertion?.let { note.content = it }
+        // What a sync brought meanwhile, now that nothing is open on the note; otherwise, a heading
+        // inserted for this edit never made it to disk, so discarding the edit discards it too.
+        (newer ?: textBeforeInsertion)?.let { note.content = it }
         clear()
     }
 
@@ -169,6 +187,8 @@ class ElementEditor(
      */
     private fun clear() {
         textBeforeInsertion = null
+        insertedAt = null
+        newer = null
         editingIndex = null
         original = null
         draftValue = TextFieldValue("")
@@ -181,15 +201,57 @@ class ElementEditor(
         val original = original ?: return
         val content = note.content
         val element = content.orgElements().getOrNull(index)
-        val updated = element?.let { content.replaceOrgElement(it, original, draft) }
+        val edited = element?.let { content.replaceOrgElement(it, original, draft) }
+        val updated = newer.let { if (edited == null || it == null) edited else rebased(edited, it) }
         if (updated == null) {
-            showMessage("The document changed while you were editing; nothing was written.")
+            showMessage("This part of the note also changed elsewhere while you were editing it; nothing was written.")
             return
         }
         note.content = updated
         clear()
         save()
     }
+
+    /**
+     * [edited] — the note the edit began on, with the edit made — made instead on [newer], what a
+     * sync brought meanwhile; null when the two changed the same lines.
+     *
+     * A heading added for this edit is a whole new element, and goes into [newer] where it went in
+     * the note: at the end, or before the line that followed it. Merged line by line, a heading
+     * added at the end conflicted with any change to the last line. Anything else is merged as a
+     * save is merged with the server, over the note before this edit touched it.
+     */
+    private fun rebased(edited: String, newer: String): String? {
+        val before = textBeforeInsertion
+        if (before != null) inserted(newer, before)?.let { return it }
+        return (merge(before ?: note.content, edited, newer) as? MergeResult.Merged)?.text
+    }
+
+    /**
+     * [newer] with the heading being added inserted where it went in [before]; null when that place
+     * cannot be found again, or the note was changed here around the heading too.
+     */
+    private fun inserted(newer: String, before: String): String? {
+        val at = insertedAt ?: return null
+        // Anything else changed here while the heading was being written would be lost.
+        val element = note.content.orgElements().getOrNull(editingIndex ?: return null) ?: return null
+        val around = note.content.removeRange(element.start, element.endExclusive)
+        if (around != before && around != before.replaceRange(at, at, "\n")) return null
+        val position = if (at >= before.length) {
+            newer.length
+        } else {
+            val following = before.substring(at).lineSequence().first()
+            if (following.isBlank()) return null
+            newer.lineStarts().filter { newer.startsWith(following, it) }.singleOrNull() ?: return null
+        }
+        val heading = if (draft.endsWith("\n")) draft else draft + "\n"
+        val separator = if (position > 0 && newer[position - 1] != '\n') "\n" else ""
+        return newer.replaceRange(position, position, separator + heading)
+    }
+
+    /** Where each line of this text begins. */
+    private fun String.lineStarts(): List<Int> =
+        listOf(0) + indices.filter { this[it] == '\n' && it + 1 < length }.map { it + 1 }
 
     /**
      * Deletes the heading at [index] with its body and every sub-heading, then saves.

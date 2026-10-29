@@ -14,6 +14,9 @@ import com.korgnote.common.org.corpusTodoKeywords
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.sync.conflictsIn
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.korgnote.common.fs.File as SharedFile
 import com.korgnote.common.fs.Folder as SharedFolder
 import com.korgnote.common.fs.Node as SharedNode
@@ -74,13 +77,24 @@ class NoteLibrary(private val store: DocumentStore) {
     /** [corpusKeywords] as last worked out; null since the notes changed. */
     private var keywords: OrgTodoConfig? = DEFAULT_TODO_KEYWORDS
 
-    /** Rereads every note from the replica. */
-    suspend fun reload() {
+    /**
+     * Rereads every note from the replica, on [parseOn]. A note whose text has not changed keeps its
+     * parse: a sync usually brings one note, and parsing all of them again took seconds on a phone,
+     * with the screen frozen while the main thread did it.
+     */
+    suspend fun reload(parseOn: CoroutineDispatcher = Dispatchers.Default) {
+        val previous = parsed.toMap()
         val paths = store.paths()
-        parsed.clear()
-        for (path in paths) {
-            store.read(path)?.let { parsed[path] = it.toOrgDocument() }
+        val fresh = withContext(parseOn) {
+            buildMap {
+                for (path in paths) {
+                    val text = store.read(path) ?: continue
+                    put(path, previous[path]?.takeIf { it.text == text } ?: text.toOrgDocument())
+                }
+            }
         }
+        parsed.clear()
+        parsed.putAll(fresh)
         this.paths = parsed.keys.toSet()
         tree = mapRootToUiFolder(TreeUtils.buildFromPaths(paths, rootName = "Documents"))
         conflicts = conflictsIn(paths)

@@ -284,10 +284,23 @@ class NotesViewModel(
         }
     }
 
-    /** Rebuilds everything the UI shows out of the replica. */
+    /**
+     * Rebuilds everything the UI shows out of the replica, the scans of every note away from the
+     * main thread: run on each sync, they held the screen still for seconds on a slow phone. Returns
+     * once everything is shown, as [refreshDerivedViews] does.
+     */
     private suspend fun showFromReplica() {
-        library.reload()
-        refreshDerivedViews()
+        library.reload(parseOn = background)
+        pendingRefresh?.cancel()
+        pendingRefresh = null
+        val texts = library.texts()
+        val keywords = withContext(background) { library.corpusKeywords }
+        val linkTables = withContext(background) { LinkNavigator.Tables(texts) }
+        val agendaIndex = withContext(background) { agenda.build(texts, keywords) }
+        links.show(linkTables)
+        agenda.show(agendaIndex)
+        search.refresh()
+        completion.refreshContext()
 
         // The open note may be gone: deleted here, or on another device. With nothing open — at
         // launch, say — the first pinned note opens: it was pinned to be at hand.
@@ -298,11 +311,13 @@ class NotesViewModel(
             if (first != null) onFileSelected(first) else note.close()
         } else {
             store.read(current)?.let { fresh ->
-                // A heading being inserted is not in the replica until it is saved. When the note
-                // is otherwise unchanged — a sync that only pushed it — keep it on screen, or the
-                // editor would be left pointing at a heading that is gone.
-                val beforeInsertion = editor.textBeforeInsertion
-                if (beforeInsertion != null && fresh == beforeInsertion) return@let
+                // An element is open: the note stays as it is under it, or the element would move
+                // or vanish under the caret — a heading being added is not in the replica until it
+                // is saved. The editor makes its edit on what came in, when it saves.
+                if (editor.editingIndex != null) {
+                    if (fresh != editor.textBeforeInsertion && fresh != note.content) editor.noteChangedElsewhere(fresh)
+                    return@let
+                }
                 note.content = fresh
             }
         }
