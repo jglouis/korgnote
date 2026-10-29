@@ -27,6 +27,14 @@ interface SettingsRepository {
 
     fun setNotesSource(source: NotesSource)
 
+    /**
+     * The WebDAV folder the notes sync with when they are kept there (experimental); null until one
+     * is set up. Where WebDAV is not offered there is never one, which is what the defaults say.
+     */
+    fun getWebDavAccount(): WebDavAccount? = null
+
+    fun setWebDavAccount(account: WebDavAccount?) {}
+
     /** Reminder lead time and daily digest (T18). */
     fun getReminderSettings(): ReminderSettings
 

@@ -39,6 +39,8 @@ class OnboardingTest {
         onNodeWithText("A folder on this device").assertExists()
         onNodeWithText("My computer, with the KorgNote server").assertExists()
         onNodeWithText("A note edited on both sides is merged.").assertExists()
+        // Not WebDAV: there is no replica for it here, as on the desktop and the web.
+        onNodeWithText("A WebDAV server (experimental)").assertDoesNotExist()
         // Nothing to go back to on the first start.
         onNodeWithContentDescription("Back").assertDoesNotExist()
     }

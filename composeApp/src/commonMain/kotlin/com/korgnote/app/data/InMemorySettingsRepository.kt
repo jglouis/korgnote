@@ -42,6 +42,12 @@ class InMemorySettingsRepository(
         notesSource = source
     }
 
+    private var webDavAccount: WebDavAccount? = null
+    override fun getWebDavAccount(): WebDavAccount? = webDavAccount
+    override fun setWebDavAccount(account: WebDavAccount?) {
+        webDavAccount = account
+    }
+
     private var reminders = ReminderSettings()
     override fun getReminderSettings(): ReminderSettings = reminders
     override fun setReminderSettings(settings: ReminderSettings) {

@@ -8,6 +8,7 @@ import androidx.compose.ui.window.ComposeUIViewController
 import com.korgnote.app.data.PairingLinks
 import com.korgnote.app.data.PersistentSettingsRepository
 import com.korgnote.app.data.SettingsRepository
+import com.korgnote.app.di.WEBDAV
 import com.korgnote.app.di.initKoin
 import com.korgnote.app.files.IosNoteFolder
 import com.korgnote.app.files.NoteFolderAccess
@@ -25,6 +26,8 @@ fun MainViewController(): UIViewController {
     val iosModule = module {
         single<SettingsRepository> { PersistentSettingsRepository() }
         single<ReplicaStorage> { FileSystemReplicaStorage(defaultReplicaRoot()) }
+        // The WebDAV sync's, beside it and never mixed with it.
+        single<ReplicaStorage>(WEBDAV) { FileSystemReplicaStorage(defaultReplicaRoot() + "-webdav") }
         single<NotificationScheduler> { IosNotificationScheduler() }
         single<NoteFolderAccess> { NoteFolderAccess(::IosNoteFolder) }
     }

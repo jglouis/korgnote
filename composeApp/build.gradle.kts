@@ -63,6 +63,8 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             // Ktor Android engine (choose exactly one)
             implementation(libs.ktor.client.android)
+            // WebDAV's PROPFIND and MKCOL, which HttpURLConnection, under the Android engine, refuses.
+            implementation(libs.ktor.client.okhttp)
             // Ktor client logging (debug diagnostics)
             implementation(libs.ktor.client.logging)
             // Scans the pairing QR code on the device itself, without Play services.

@@ -201,34 +201,39 @@ fun SettingsScreen(
 
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            val inFolder = notesSource is NotesSource.Folder
+            // The server's settings and pairing are only for the server; a folder or a WebDAV
+            // server shows its state beside where the notes are.
+            val onServer = notesSource == NotesSource.Server
             if (onChangeNotesSource != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Notes", modifier = Modifier.weight(1f))
-                    if (inFolder) serverStatus()
+                    if (!onServer) serverStatus()
                 }
                 Text(
                     when (notesSource) {
                         is NotesSource.Folder -> "In the folder ${notesFolderLabel(notesSource.location)}."
                         NotesSource.Server -> "Synced with the KorgNote server on your computer."
+                        NotesSource.WebDav -> repo.getWebDavAccount()
+                            ?.let { "Synced with the WebDAV folder ${it.url}, as ${it.username}. Experimental." }
+                            ?: "Synced with a WebDAV server. Experimental."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline,
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = onChangeNotesSource) { Text("Change where notes are") }
-                if (!inFolder) Spacer(Modifier.height(24.dp))
+                if (onServer) Spacer(Modifier.height(24.dp))
             }
             // Whether the server can be reached, and what conflicts syncing left, next to its
             // settings: there is no bar above them.
-            if (!inFolder) {
+            if (onServer) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Server", modifier = Modifier.weight(1f))
                     serverStatus()
                 }
                 Spacer(Modifier.height(8.dp))
             }
-            if (canPair && !inFolder) {
+            if (canPair && onServer) {
                 val incomingLink by PairingLinks.pending.collectAsState()
                 PairingSettings(
                     repo,

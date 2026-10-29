@@ -43,6 +43,12 @@ class PersistentSettingsRepository : SettingsRepository {
         defaults.setObject(source.encode(), forKey = KEY_NOTES_SOURCE)
     }
 
+    override fun getWebDavAccount(): WebDavAccount? = WebDavAccount.decode(defaults.stringForKey(KEY_WEBDAV_ACCOUNT))
+
+    override fun setWebDavAccount(account: WebDavAccount?) {
+        if (account == null) defaults.removeObjectForKey(KEY_WEBDAV_ACCOUNT) else defaults.setObject(account.encode(), forKey = KEY_WEBDAV_ACCOUNT)
+    }
+
     override fun getReminderSettings(): ReminderSettings = ReminderSettings.decode(defaults.stringForKey(KEY_REMINDERS))
 
     override fun setReminderSettings(settings: ReminderSettings) {
@@ -107,6 +113,7 @@ class PersistentSettingsRepository : SettingsRepository {
         private const val KEY_TOKEN = "server_token"
         private const val KEY_PAIRED_SERVER = "paired_server"
         private const val KEY_NOTES_SOURCE = "notes_source"
+        private const val KEY_WEBDAV_ACCOUNT = "webdav_account"
         private const val KEY_REMINDERS = "reminders"
         private const val KEY_NEW_NOTES_FOLDER = "new_notes_folder"
         private const val KEY_PINNED_NOTES = "pinned_notes"

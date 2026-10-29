@@ -32,6 +32,7 @@ class NotesSourceTest {
         assertEquals(NotesSource.Server, NotesSource.decode(NotesSource.Server.encode()))
         val folder = NotesSource.Folder("content://com.android.externalstorage.documents/tree/primary%3ASync")
         assertEquals(folder, NotesSource.decode(folder.encode()))
+        assertEquals(NotesSource.WebDav, NotesSource.decode(NotesSource.WebDav.encode()))
         assertNull(NotesSource.decode(null))
         assertNull(NotesSource.decode("folder:"))
     }

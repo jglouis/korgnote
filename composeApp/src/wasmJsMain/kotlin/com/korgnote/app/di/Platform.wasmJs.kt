@@ -21,3 +21,6 @@ actual fun platformBuildHttpClient(pins: CertificatePins): HttpClient = HttpClie
     }
     expectSuccess = false
 }
+
+// WebDAV is not offered on the web: a browser would need the server to allow this page, which few do.
+actual fun platformBuildWebDavClient(): HttpClient = HttpClient(Js) { expectSuccess = false }

@@ -6,6 +6,7 @@ import com.korgnote.app.data.KtorSyncApi
 import com.korgnote.app.data.endpointsFor
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.data.NotesSource
+import com.korgnote.app.data.WebDavSyncApi
 import com.korgnote.app.files.FileOpener
 import com.korgnote.app.files.NoteFolderAccess
 import com.korgnote.app.viewmodel.NotesSourceChoice
@@ -20,8 +21,11 @@ import io.ktor.client.HttpClient
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.context.startKoin
 import org.koin.core.module.Module
+import org.koin.core.qualifier.Qualifier
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import com.korgnote.common.replica.DocumentStore
+import com.korgnote.common.replica.ReplicaStorage
 import com.korgnote.common.replica.SyncApi
 import com.korgnote.common.replica.SyncEngine
 import kotlinx.datetime.TimeZone
@@ -52,7 +56,17 @@ val appModule = module {
     // definition and reloads from the server anyway.
     single { DocumentStore(get()) }
 
-    // Which of the two the notes are in: the replica above, or a folder of the user's.
+    // The experimental WebDAV sync, apart from all of the above: a client of its own, trusting the
+    // certificates the platform trusts rather than the paired computer's, a replica of its own and
+    // an engine of its own, so nothing synced with a WebDAV folder lands in the server's replica,
+    // nor the other way round. Its replica comes from the platforms that offer WebDAV, Android and
+    // iOS: the welcome screens offer it wherever there is one.
+    single<WebDavSyncApi>(WEBDAV) { WebDavSyncApi(platformBuildWebDavClient(), account = { get<SettingsRepository>().getWebDavAccount() }) }
+    single<DocumentStore>(WEBDAV) { DocumentStore(get<ReplicaStorage>(WEBDAV)) }
+    single<SyncEngine>(WEBDAV) { SyncEngine(get(WEBDAV), get<WebDavSyncApi>(WEBDAV), ::conflictTimestamp) }
+
+    // Which of the sources the notes are in: the server's replica, the WebDAV one, or a folder of
+    // the user's.
     single { NotesSourceChoice(get(), get()) }
 
     // ViewModel reads and writes the replica; the repository only refreshes it. Reminders go to
@@ -67,9 +81,10 @@ val appModule = module {
         val folder = (source as? NotesSource.Folder)?.let {
             FolderNoteStorage(get<NoteFolderAccess>().open(it.location), ::conflictTimestamp)
         }
+        val webDav = source == NotesSource.WebDav
         NotesViewModel(
-            get<SyncEngine>(),
-            folder?.let(::DocumentStore) ?: get<DocumentStore>(),
+            if (webDav) get<SyncEngine>(WEBDAV) else get<SyncEngine>(),
+            folder?.let(::DocumentStore) ?: if (webDav) get<DocumentStore>(WEBDAV) else get<DocumentStore>(),
             notifications = getOrNull<NotificationScheduler>() ?: NoopNotificationScheduler,
             widgets = getOrNull<AgendaWidgets>() ?: NoAgendaWidgets,
             reminderSettings = settings::getReminderSettings,
@@ -95,6 +110,22 @@ fun initKoin(extraModules: List<Module> = emptyList()) {
 // Platform-specific client builder (Android adds Logging, others are minimal). Over TLS it trusts
 // what [pins] accepts and nothing else.
 expect fun platformBuildHttpClient(pins: CertificatePins): HttpClient
+
+/**
+ * The client for a WebDAV server: one that can send `PROPFIND` and `MKCOL`, and trusts what the
+ * platform trusts, as a browser would. Never the paired computer's client, whose trust is that one
+ * certificate and nothing else.
+ */
+expect fun platformBuildWebDavClient(): HttpClient
+
+/**
+ * Names the WebDAV sync's own client, replica and engine; see [appModule].
+ *
+ * A getter, not a stored value: [appModule] is built while this file's properties are still being
+ * set, in order, and a stored one declared below it was still null then — which bound the WebDAV
+ * replica and engine as the server's own.
+ */
+val WEBDAV: Qualifier get() = named("webdav")
 
 /**
  * Stamp for conflict copies: `yyyyMMdd-HHmmss` in local time, matching Syncthing's naming so the

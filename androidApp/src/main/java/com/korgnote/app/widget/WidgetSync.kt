@@ -12,6 +12,7 @@ import androidx.work.WorkerParameters
 import com.korgnote.app.data.NotesSource
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.data.chosenNotesSource
+import com.korgnote.app.di.WEBDAV
 import com.korgnote.app.files.NoteFolderAccess
 import com.korgnote.app.widgets.WidgetSyncs
 import com.korgnote.common.org.agenda.agendaEntries
@@ -93,6 +94,19 @@ private suspend fun syncNotes(context: Context): String? {
                 problem = "Server unreachable"
             }
             koin.get<DocumentStore>()
+        }
+        // The same, with the WebDAV sync's own engine and replica.
+        NotesSource.WebDav -> {
+            try {
+                koin.get<SyncEngine>(WEBDAV).sync()
+                synced = Clock.System.now()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                println("[DEBUG_LOG][WidgetSync] WebDAV sync failed: ${t.message}")
+                problem = "Server unreachable"
+            }
+            koin.get<DocumentStore>(WEBDAV)
         }
         is NotesSource.Folder -> {
             // Only read here, never written, so it never makes a conflict copy to name.

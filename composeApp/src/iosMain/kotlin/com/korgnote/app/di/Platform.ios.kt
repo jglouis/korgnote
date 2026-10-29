@@ -70,3 +70,12 @@ private fun leafFingerprint(trust: SecTrustRef): String? {
         CFRelease(data)
     }
 }
+
+actual fun platformBuildWebDavClient(): HttpClient = HttpClient(Darwin) {
+    install(HttpTimeout) {
+        requestTimeoutMillis = 30_000
+        connectTimeoutMillis = 10_000
+        socketTimeoutMillis = 30_000
+    }
+    expectSuccess = false
+}

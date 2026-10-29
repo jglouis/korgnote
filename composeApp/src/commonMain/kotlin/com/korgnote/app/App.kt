@@ -66,11 +66,12 @@ fun App() {
         LaunchedEffect(choice) { choice.settle() }
         var changingSource by rememberSaveable { mutableStateOf(false) }
         val source = choice.current
-        // A pairing link, from the camera, while the notes are a folder: pairing is for the server,
-        // which the welcome screens move the notes to. They pair with it on their server step.
+        // A pairing link, from the camera, while the notes are a folder or on a WebDAV server:
+        // pairing is for the KorgNote server, which the welcome screens move the notes to. They
+        // pair with it on their server step.
         val incomingLink by PairingLinks.pending.collectAsState()
         LaunchedEffect(incomingLink, source) {
-            if (incomingLink != null && source is NotesSource.Folder) changingSource = true
+            if (incomingLink != null && source != null && source != NotesSource.Server) changingSource = true
         }
         when {
             !choice.settled -> Surface(Modifier.fillMaxSize()) {}

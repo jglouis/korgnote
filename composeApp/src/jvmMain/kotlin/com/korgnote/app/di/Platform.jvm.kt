@@ -23,3 +23,12 @@ actual fun platformBuildHttpClient(pins: CertificatePins): HttpClient = HttpClie
     }
     expectSuccess = false
 }
+
+actual fun platformBuildWebDavClient(): HttpClient = HttpClient(Java) {
+    install(HttpTimeout) {
+        requestTimeoutMillis = 30_000
+        connectTimeoutMillis = 10_000
+        socketTimeoutMillis = 30_000
+    }
+    expectSuccess = false
+}

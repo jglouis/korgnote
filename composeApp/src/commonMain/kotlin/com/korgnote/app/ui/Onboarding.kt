@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -30,6 +31,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,12 +41,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
@@ -53,12 +57,18 @@ import com.korgnote.app.data.DevicePairing
 import com.korgnote.app.data.NotesSource
 import com.korgnote.app.data.PairingLinks
 import com.korgnote.app.data.SettingsRepository
+import com.korgnote.app.data.WebDavAccount
+import com.korgnote.app.data.WebDavCheck
+import com.korgnote.app.data.WebDavSyncApi
+import com.korgnote.app.di.WEBDAV
 import com.korgnote.app.files.NoteFolderAccess
 import com.korgnote.app.files.notesFolderLabel
 import com.korgnote.app.files.notesFolderPickingHint
 import com.korgnote.app.files.notesFolderPlaces
 import com.korgnote.app.files.rememberNotesFolderPicker
+import com.korgnote.common.replica.ReplicaStorage
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.mp.KoinPlatform
 
@@ -66,8 +76,9 @@ import org.koin.mp.KoinPlatform
  * The welcome screens: where the notes are, and the permissions that choice needs, one step at a
  * time. Shown on the first start, and again from Settings to keep the notes somewhere else.
  *
- * The two choices are set side by side with what each costs, since the README is not where anyone
- * starts: a folder another app syncs, or the KorgNote server on the computer with the notes.
+ * The choices are set side by side with what each costs, since the README is not where anyone
+ * starts: a folder another app syncs, the KorgNote server on the computer with the notes, or, where
+ * it is offered, a WebDAV server (experimental).
  */
 @Composable
 fun Onboarding(
@@ -80,6 +91,10 @@ fun Onboarding(
     val repo = koinInject<SettingsRepository>()
     val pairing = remember { KoinPlatform.getKoin().getOrNull<DevicePairing>() }
     val folders = remember { KoinPlatform.getKoin().getOrNull<NoteFolderAccess>() }
+    // Offered where the platform gives the WebDAV sync a replica of its own.
+    val webDav = remember {
+        KoinPlatform.getKoin().run { getOrNull<ReplicaStorage>(WEBDAV)?.let { get<WebDavSyncApi>(WEBDAV) } }
+    }
     val notifications = rememberNotificationPermission()
     var step by rememberSaveable { mutableStateOf(OnboardingStep.CHOOSE) }
     // Chosen, waiting for the last step: kept encoded, so that it survives a rotation.
@@ -101,11 +116,11 @@ fun Onboarding(
                 onCancel?.invoke()
                 return
             }
-            OnboardingStep.FOLDER, OnboardingStep.SERVER -> OnboardingStep.CHOOSE
-            OnboardingStep.REMINDERS -> if (chosen?.let(NotesSource::decode) is NotesSource.Folder) {
-                OnboardingStep.FOLDER
-            } else {
-                OnboardingStep.SERVER
+            OnboardingStep.FOLDER, OnboardingStep.SERVER, OnboardingStep.WEBDAV -> OnboardingStep.CHOOSE
+            OnboardingStep.REMINDERS -> when (chosen?.let(NotesSource::decode)) {
+                is NotesSource.Folder -> OnboardingStep.FOLDER
+                NotesSource.WebDav -> OnboardingStep.WEBDAV
+                else -> OnboardingStep.SERVER
             }
         }
     }
@@ -143,6 +158,7 @@ fun Onboarding(
                         changing = current != null,
                         onFolder = { step = OnboardingStep.FOLDER },
                         onServer = { step = OnboardingStep.SERVER },
+                        onWebDav = webDav?.let { { step = OnboardingStep.WEBDAV } },
                     )
                     OnboardingStep.FOLDER -> FolderStep(
                         initial = (current as? NotesSource.Folder)?.location,
@@ -155,6 +171,9 @@ fun Onboarding(
                         incomingLink = incomingLink,
                         onDone = { finish(NotesSource.Server) },
                     )
+                    OnboardingStep.WEBDAV -> webDav?.let { api ->
+                        WebDavStep(repo = repo, api = api, onDone = { finish(NotesSource.WebDav) })
+                    }
                     OnboardingStep.REMINDERS -> RemindersStep(
                         permission = notifications,
                         onDone = { chosen?.let(NotesSource::decode)?.let(onChosen) },
@@ -165,10 +184,10 @@ fun Onboarding(
     }
 }
 
-internal enum class OnboardingStep { CHOOSE, FOLDER, SERVER, REMINDERS }
+internal enum class OnboardingStep { CHOOSE, FOLDER, SERVER, WEBDAV, REMINDERS }
 
 @Composable
-private fun ChooseStep(changing: Boolean, onFolder: () -> Unit, onServer: () -> Unit) {
+private fun ChooseStep(changing: Boolean, onFolder: () -> Unit, onServer: () -> Unit, onWebDav: (() -> Unit)? = null) {
     Text(
         if (changing) "Where are your notes?" else "Welcome to KorgNote",
         style = MaterialTheme.typography.headlineSmall,
@@ -188,7 +207,22 @@ private fun ChooseStep(changing: Boolean, onFolder: () -> Unit, onServer: () -> 
         cons = listOf("The server runs on that computer, and this device must reach it: same Wi-Fi, or a VPN."),
         onClick = onServer,
     )
-    Hint("Both work offline. You can change this later in Settings.")
+    if (onWebDav != null) {
+        SourceOption(
+            icon = Icons.Filled.Cloud,
+            title = "A WebDAV server (experimental)",
+            pros = listOf(
+                "Nextcloud, a NAS or a hosting service you already have, so no computer needs to stay on.",
+                "A note edited on both sides is merged.",
+            ),
+            cons = listOf("New, and tried with Nextcloud and Apache only. Over HTTPS, and only with a server that passes a safety check."),
+            onClick = onWebDav,
+        )
+    }
+    Hint(
+        if (onWebDav != null) "All of them work offline. You can change this later in Settings."
+        else "Both work offline. You can change this later in Settings."
+    )
 }
 
 @Composable
@@ -321,6 +355,118 @@ private fun ServerStep(repo: SettingsRepository, pairing: DevicePairing?, incomi
         if (!paired) TextButton(onClick = onDone) { Text("Pair later") }
     }
     if (!paired) Hint("Without pairing, KorgNote starts empty and syncs once you pair in Settings.")
+}
+
+/**
+ * Where the WebDAV folder is and how to sign in there, checked before anything is saved: a server
+ * that would let two devices overwrite each other's edits is refused here, with why.
+ */
+@Composable
+private fun WebDavStep(repo: SettingsRepository, api: WebDavSyncApi, onDone: () -> Unit) {
+    val saved = remember { repo.getWebDavAccount() }
+    var url by rememberSaveable { mutableStateOf(saved?.url.orEmpty()) }
+    var username by rememberSaveable { mutableStateOf(saved?.username.orEmpty()) }
+    var password by rememberSaveable { mutableStateOf(saved?.password.orEmpty()) }
+    // What the check found for the account as typed, forgotten as soon as any of it changes.
+    var checked by remember { mutableStateOf<Pair<WebDavAccount, WebDavCheck>?>(null) }
+    var checking by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val localNetwork = rememberLocalNetworkPermission()
+    val account = WebDavAccount(url.trim(), username.trim(), password)
+    val result = checked?.takeIf { it.first == account }?.second
+    val secure = account.url.startsWith("https://", ignoreCase = true)
+
+    Text("Connect to a WebDAV server", style = MaterialTheme.typography.headlineSmall)
+    Text(
+        "Experimental. KorgNote keeps its own copy of the notes and syncs it with a folder on the " +
+            "server, as it does with the KorgNote server.",
+    )
+    OutlinedTextField(
+        value = url,
+        onValueChange = { url = it },
+        label = { Text("Folder address") },
+        placeholder = { Text("https://cloud.example.com/remote.php/dav/files/you/notes") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Hint("On Nextcloud, it is under Files settings, WebDAV, with the notes folder's name added.")
+    OutlinedTextField(
+        value = username,
+        onValueChange = { username = it },
+        label = { Text("User name") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    OutlinedTextField(
+        value = password,
+        onValueChange = { password = it },
+        label = { Text("Password") },
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Hint("Nextcloud and most hosting services give an app password for this, apart from your own.")
+    if (localNetwork != null && !localNetwork.granted) {
+        OutlinedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Icon(Icons.Filled.Wifi, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Text("If the server is on your local network, Android asks before an app may reach it.")
+                }
+                Button(onClick = { localNetwork.request { } }) { Text("Allow local network") }
+            }
+        }
+    }
+    if (account.url.isNotEmpty() && !secure) {
+        Text(
+            "The address must start with https://, or the password would cross the network as it is.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+    when (result) {
+        null -> if (checking) Text("Checking the server…", style = MaterialTheme.typography.bodySmall)
+        is WebDavCheck.Usable -> Text(
+            when (result.notes) {
+                0 -> "The server can be used. No notes there yet: new notes will go there."
+                1 -> "The server can be used. 1 note there."
+                else -> "The server can be used. ${result.notes} notes there."
+            },
+            style = MaterialTheme.typography.bodySmall,
+        )
+        is WebDavCheck.Unusable -> Text(
+            "KorgNote cannot use this server. ${result.reason}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (result is WebDavCheck.Usable) {
+            Button(onClick = {
+                repo.setWebDavAccount(account)
+                onDone()
+            }) { Text("Use this server") }
+        } else {
+            Button(
+                onClick = {
+                    val trying = account
+                    checking = true
+                    scope.launch {
+                        try {
+                            checked = trying to api.trying(trying).check()
+                        } finally {
+                            checking = false
+                        }
+                    }
+                },
+                enabled = secure && !checking,
+            ) { Text("Check the server") }
+        }
+    }
+    Hint(
+        "The check writes a hidden file, .korgnote-check, and deletes it again. It makes sure the server " +
+            "refuses a write over a newer version, which is what keeps one device from overwriting another's edits.",
+    )
 }
 
 @Composable

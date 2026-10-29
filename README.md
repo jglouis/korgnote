@@ -57,6 +57,8 @@ Claude say so in a `Co-Authored-By` line.
 - Pair a phone by scanning a QR code. The connection uses TLS. No account or cloud service needed.
 - Or skip the server: on a phone, keep the notes in a folder that Syncthing, Dropbox or iCloud
   Drive syncs, or that nothing does. The app asks which on its first start.
+- Experimental: on a phone, sync with a WebDAV server you already have, such as Nextcloud, instead
+  of the KorgNote server. See [WebDAV](#with-a-webdav-server-experimental).
 
 ## Status
 
@@ -152,6 +154,23 @@ The web app is at <http://localhost:8080/>, on the same computer as the server.
 **Without a server:** skip steps 1 and 2. Open the app, choose **A folder on this device**, and pick
 the folder your `.org` files are in. Another app such as Syncthing can keep that folder in sync with
 your computer, or nothing does.
+
+### With a WebDAV server (experimental)
+
+On Android and iOS, the app can sync with a folder on a WebDAV server instead: Nextcloud, a NAS, or
+a hosting service. Nothing needs to run on your computer. Choose **A WebDAV server** on the first
+start, or in Settings under *Change where notes are*, and give the folder's address, your user name
+and a password. On Nextcloud, the address is under *Files settings*, *WebDAV*, with your notes
+folder's name added, and an app password is better than your own.
+
+It works like the KorgNote server: the app keeps its own copy, edits on two devices are merged, and
+a conflict keeps both versions. Before the server is used, the app checks that it refuses a write
+over a newer version of a file, which is what stops one device from overwriting another's edit. A
+server that does not, such as `rclone serve webdav`, is refused.
+
+This is new. It has been tested with Nextcloud and Apache, not with NAS or hosting services. The
+address must use HTTPS, with a certificate the phone already trusts. Changes made elsewhere show up
+within about 30 seconds while the app is open. Please report what works and what does not.
 
 ### Update
 

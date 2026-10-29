@@ -17,6 +17,8 @@ import java.io.File
  */
 fun Module.androidReplica(context: Context) {
     single<ReplicaStorage> { FileSystemReplicaStorage(File(context.filesDir, "KorgNote")) }
+    // The WebDAV sync's, beside it and never mixed with it.
+    single<ReplicaStorage>(WEBDAV) { FileSystemReplicaStorage(File(context.filesDir, "KorgNote-webdav")) }
 }
 
 /** Binds how a notes folder in shared storage is reached, for the same reason as [androidReplica]. */

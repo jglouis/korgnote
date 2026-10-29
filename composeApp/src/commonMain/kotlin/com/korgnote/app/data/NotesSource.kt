@@ -14,17 +14,26 @@ sealed interface NotesSource {
      */
     data class Folder(val location: String) : NotesSource
 
+    /**
+     * A replica of its own, kept in step with a WebDAV folder (experimental). Where that folder is,
+     * and how to sign in there, is [SettingsRepository.getWebDavAccount].
+     */
+    data object WebDav : NotesSource
+
     fun encode(): String = when (this) {
         Server -> SERVER
         is Folder -> FOLDER_PREFIX + location
+        WebDav -> WEBDAV
     }
 
     companion object {
         private const val SERVER = "server"
         private const val FOLDER_PREFIX = "folder:"
+        private const val WEBDAV = "webdav"
 
         fun decode(stored: String?): NotesSource? = when {
             stored == SERVER -> Server
+            stored == WEBDAV -> WebDav
             stored != null && stored.startsWith(FOLDER_PREFIX) && stored.length > FOLDER_PREFIX.length ->
                 Folder(stored.removePrefix(FOLDER_PREFIX))
             else -> null
