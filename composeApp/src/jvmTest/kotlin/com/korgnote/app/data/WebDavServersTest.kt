@@ -84,9 +84,19 @@ class WebDavServersTest {
 
     @Test
     fun aWrongPasswordIsSaidToBeOne() = runBlocking {
-        for ((name, url) in servers) {
+        for ((name, url) in servers.filterKeys { !it.endsWith("-digest") }) {
             val result = WebDavSyncApi(client, { WebDavAccount(url, "korg", "wrong") }).check()
-            assertTrue(result is WebDavCheck.Unusable && "password" in result.reason, "$name: $result")
+            assertTrue(result is WebDavCheck.Unusable && "refused the user name or password" in result.reason, "$name: $result")
+        }
+    }
+
+    @Test
+    fun aServerAskingForDigestSaysSoRatherThanBlameThePassword() = runBlocking {
+        // The right password, even: what is refused is the way of signing in.
+        for ((name, url) in servers.filterKeys { it.endsWith("-digest") }) {
+            val result = WebDavSyncApi(client, { WebDavAccount(url, "korg", "korgnote-test") }).check()
+            println("$name: $result")
+            assertTrue(result is WebDavCheck.Unusable && "with Digest" in result.reason && "refused" !in result.reason, "$name: $result")
         }
     }
 

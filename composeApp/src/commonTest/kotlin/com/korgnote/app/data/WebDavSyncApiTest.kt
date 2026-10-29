@@ -122,6 +122,29 @@ class WebDavSyncApiTest {
     }
 
     @Test
+    fun aServerThatWantsAnotherWayToSignInSaysWhichNotThatThePasswordIsWrong() = runTest {
+        val api = apiWith {
+            respond("", HttpStatusCode.Unauthorized, headersOf(HttpHeaders.WWWAuthenticate, """Digest realm="notes", nonce="abc", qop="auth""""))
+        }
+        val refused = assertFailsWith<WebDavRefusedException> { api.manifest() }
+        assertTrue("Digest" in refused.message.orEmpty() && "refused" !in refused.message.orEmpty(), refused.message)
+    }
+
+    @Test
+    fun theWaysToSignInAreReadFromEveryShapeOfChallenge() {
+        val wrongPassword = "The WebDAV server refused the user name or password. Check them in Settings."
+        // Basic among others, in one header or several: the password is what was refused.
+        assertEquals(wrongPassword, refusal(listOf("""Digest realm="a", nonce="n", Basic realm="a"""")))
+        assertEquals(wrongPassword, refusal(listOf("Negotiate", """Basic realm="a"""")))
+        // No challenge at all says nothing better.
+        assertEquals(wrongPassword, refusal(emptyList()))
+        // Without Basic, the ways asked for are named, once each; a quoted comma is no scheme.
+        assertTrue("Windows sign-in (NTLM or Kerberos)" in refusal(listOf("Negotiate", "NTLM")))
+        val digest = refusal(listOf("""Digest realm="Acme, Inc", nonce="n", algorithm=MD5"""))
+        assertTrue("with Digest," in digest && "Inc" !in digest, digest)
+    }
+
+    @Test
     fun aWriteIntoAMissingFolderMakesItAndTriesAgain() = runTest {
         val folders = mutableSetOf<String>()
         val api = apiWith { request ->

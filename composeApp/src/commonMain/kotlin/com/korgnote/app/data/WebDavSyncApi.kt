@@ -98,7 +98,7 @@ class WebDavSyncApi(
             configure()
         }
         if (response.status == HttpStatusCode.Unauthorized) {
-            throw WebDavRefusedException("The WebDAV server refused the user name or password. Check them in Settings.")
+            throw WebDavRefusedException(refusal(response.headers.getAll(HttpHeaders.WWWAuthenticate).orEmpty()))
         }
         return response
     }
@@ -337,6 +337,40 @@ class WebDavSyncApi(
 }
 
 private fun isWeak(etag: String) = etag.startsWith("W/")
+
+/**
+ * Why a server answered 401, from the ways to sign in its [challenges] — its `WWW-Authenticate`
+ * headers — offer. KorgNote signs in with Basic only. A server that does not offer it refused the
+ * way of signing in, not the password, and saying "wrong password" there sent people looking for a
+ * typo that was not there.
+ */
+internal fun refusal(challenges: List<String>): String {
+    // Quoted values blanked first: a realm such as "Acme, Inc" must not read as a scheme called Inc.
+    val schemes = challenges.flatMap { header ->
+        SCHEME.findAll(header.replace(QUOTED, "\"\"")).map { it.groupValues[1] }
+    }
+    if (schemes.isEmpty() || schemes.any { it.equals("Basic", ignoreCase = true) }) {
+        return "The WebDAV server refused the user name or password. Check them in Settings."
+    }
+    val names = schemes.map { scheme ->
+        when (scheme.lowercase()) {
+            "digest" -> "Digest"
+            "ntlm", "negotiate" -> "Windows sign-in (NTLM or Kerberos)"
+            "bearer" -> "a token (OAuth)"
+            else -> scheme
+        }
+    }.distinct()
+    return "The WebDAV server asks to sign in with ${names.joinToString(" or ")}, which KorgNote cannot do " +
+        "yet: it signs in with a user name and password (Basic sign-in) only."
+}
+
+/**
+ * A scheme in a `WWW-Authenticate` header: a token at its start or after a comma, followed by its
+ * parameters or nothing — not a parameter's name, which an `=` follows.
+ */
+private val SCHEME = Regex("""(?:^|,)\s*([A-Za-z][A-Za-z0-9!#$%&'*+.^_`|~-]*)(?=\s+[^\s=,]|\s*,|\s*$)""")
+
+private val QUOTED = Regex(""""(?:[^"\\]|\\.)*"""")
 
 /** A WebDAV server answered, with something sync cannot go on with. */
 class WebDavException(message: String) : Exception(message)

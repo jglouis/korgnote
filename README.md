@@ -169,7 +169,9 @@ over a newer version of a file, which is what stops one device from overwriting 
 server that does not, such as `rclone serve webdav`, is refused.
 
 This is new. It has been tested with Nextcloud and Apache, not with NAS or hosting services. The
-address must use HTTPS, with a certificate the phone already trusts. Changes made elsewhere show up
+address must use HTTPS, with a certificate the phone already trusts, and the app signs in with a
+user name and password only (Basic sign-in): a server that asks for another way, such as Digest,
+is refused, and the app says which way it asked for. Changes made elsewhere show up
 within about 30 seconds while the app is open. Please report what works and what does not.
 
 ### Update

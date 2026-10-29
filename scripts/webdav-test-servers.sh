@@ -7,6 +7,7 @@
 #   scripts/webdav-test-servers.sh stop
 #
 # - Apache mod_dav, a plain file server          http://localhost:18081/notes
+#   the same, asking for Digest sign-in only     http://localhost:18081/digest
 # - rclone serve webdav                          http://localhost:18082/notes
 # - Nextcloud                                    http://localhost:18083/remote.php/dav/files/korg/notes
 #
@@ -29,8 +30,10 @@ if ! running korgnote-dav-apache; then
   docker rm -f korgnote-dav-apache >/dev/null 2>&1 || true
   docker run -d --name korgnote-dav-apache -p 18081:80 \
     -v "$PWD/scripts/webdav/apache.conf:/usr/local/apache2/conf/dav.conf:ro" \
-    httpd:2.4 sh -c "htpasswd -cb conf/dav.passwd $user $pass && mkdir -p var /dav/notes &&
-      chown -R daemon:daemon var /dav && exec httpd-foreground -f conf/dav.conf" >/dev/null
+    httpd:2.4 sh -c "htpasswd -cb conf/dav.passwd $user $pass &&
+      echo \"$user:KorgNote test:\$(printf '%s' '$user:KorgNote test:$pass' | md5sum | cut -d' ' -f1)\" > conf/dav.digest &&
+      mkdir -p var /dav/notes /dav/digest && chown -R daemon:daemon var /dav &&
+      exec httpd-foreground -f conf/dav.conf" >/dev/null
 fi
 
 if ! running korgnote-dav-rclone; then
@@ -65,4 +68,4 @@ ready http://localhost:18081/ http://localhost:18081/notes/
 ready http://localhost:18082/ http://localhost:18082/notes/
 ready "http://localhost:18083/remote.php/dav/files/$user/" "http://localhost:18083/remote.php/dav/files/$user/notes/"
 
-echo "export KORGNOTE_WEBDAV_SERVERS='apache=http://localhost:18081/notes;rclone=http://localhost:18082/notes;nextcloud=http://localhost:18083/remote.php/dav/files/$user/notes'"
+echo "export KORGNOTE_WEBDAV_SERVERS='apache=http://localhost:18081/notes;apache-digest=http://localhost:18081/digest;rclone=http://localhost:18082/notes;nextcloud=http://localhost:18083/remote.php/dav/files/$user/notes'"
