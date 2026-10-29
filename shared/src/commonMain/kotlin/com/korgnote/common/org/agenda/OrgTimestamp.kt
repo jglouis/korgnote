@@ -3,11 +3,18 @@ package com.korgnote.common.org.agenda
 import com.korgnote.common.org.OrgSyntax
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.IntArraySerializer
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 
 /** The units Org counts repeaters and delays in: `h`, `d`, `w`, `m`, `y`. */
 enum class OrgTimeUnit { HOUR, DAY, WEEK, MONTH, YEAR }
 
 /** An amount of [unit]s, such as the `1w` in `+1w`. */
+@Serializable
 data class OrgDuration(val amount: Int, val unit: OrgTimeUnit)
 
 /**
@@ -28,6 +35,7 @@ enum class RepeatKind {
     Restart,
 }
 
+@Serializable
 data class OrgRepeater(val kind: RepeatKind, val every: OrgDuration)
 
 /**
@@ -38,6 +46,7 @@ data class OrgRepeater(val kind: RepeatKind, val every: OrgDuration)
  * do not show the entry until this long after its date. [firstOnly] is the `--2d` form, which on a
  * repeating stamp applies to the first occurrence only.
  */
+@Serializable
 data class OrgDelay(val by: OrgDuration, val firstOnly: Boolean)
 
 /**
@@ -49,7 +58,10 @@ data class OrgDelay(val by: OrgDuration, val firstOnly: Boolean)
  *
  * [range] is where the stamp sits in the text it was found in, so that rescheduling an entry is a
  * replacement over exactly those characters.
+ *
+ * Serializable, as the entries it dates are, for a home-screen widget that keeps them between runs.
  */
+@Serializable
 data class OrgTimestamp(
     val start: LocalDate,
     val startTime: LocalTime? = null,
@@ -58,8 +70,19 @@ data class OrgTimestamp(
     val active: Boolean = true,
     val repeater: OrgRepeater? = null,
     val delay: OrgDelay? = null,
+    @Serializable(with = IntRangeSerializer::class)
     val range: IntRange = IntRange.EMPTY,
 )
+
+/** An [IntRange] as its first and last: the standard library gives it no serializer of its own. */
+internal object IntRangeSerializer : KSerializer<IntRange> {
+    private val pair = IntArraySerializer()
+    override val descriptor: SerialDescriptor = SerialDescriptor("com.korgnote.IntRange", pair.descriptor)
+    override fun serialize(encoder: Encoder, value: IntRange) =
+        encoder.encodeSerializableValue(pair, intArrayOf(value.first, value.last))
+    override fun deserialize(decoder: Decoder): IntRange =
+        decoder.decodeSerializableValue(pair).let { (first, last) -> first..last }
+}
 
 /**
  * Parses [text] when all of it is one timestamp or one `<a>--<b>` range, else returns null.

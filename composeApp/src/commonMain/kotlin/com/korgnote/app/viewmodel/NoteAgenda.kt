@@ -8,6 +8,8 @@ import com.korgnote.app.notifications.Reminder
 import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.app.notifications.ReminderTarget
 import com.korgnote.app.notifications.planReminders
+import com.korgnote.app.widgets.AgendaWidgets
+import com.korgnote.app.widgets.NoAgendaWidgets
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.org.agenda.AgendaIndex
@@ -19,6 +21,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlin.time.Instant
 
 /** Every dated entry in the notes, for the calendar, and the reminders planned from them. */
 class NoteAgenda(
@@ -33,6 +36,10 @@ class NoteAgenda(
     private val now: () -> LocalDateTime,
     /** Opens a note at a character offset in it. */
     private val open: (path: String, offset: Int) -> Unit,
+    /** The home-screen widgets showing the agenda, where the platform has them. */
+    private val widgets: AgendaWidgets = NoAgendaWidgets,
+    /** When the notes last matched where they are kept, for the widgets to say how fresh they are. */
+    private val lastSynced: () -> Instant? = { null },
 ) {
     /** Every dated entry in the notes, which the calendar asks for a day at a time. */
     var index by mutableStateOf(build(library.texts(), library.corpusKeywords))
@@ -45,6 +52,7 @@ class NoteAgenda(
     fun show(built: AgendaIndex) {
         index = built
         refreshReminders()
+        refreshWidgets()
     }
 
     /**
@@ -86,6 +94,22 @@ class NoteAgenda(
                     .onFailure { println("[DEBUG_LOG][NoteAgenda] Scheduling reminders failed: ${it.message}") }
             }
         }
+    }
+
+    /** The entries and sync time last handed to [widgets]. */
+    private var shownOnWidgets: Pair<List<AgendaEntry>, Instant?>? = null
+
+    /**
+     * Hands the agenda to the widgets, when it or the sync time changed: a save that moves no date
+     * leaves them alone. Not before the notes have been read, for the same reason as reminders: the
+     * empty agenda would blank every widget until they arrive.
+     */
+    private fun refreshWidgets() {
+        if (!library.loaded) return
+        val shown = index.entries to lastSynced()
+        if (shown == shownOnWidgets) return
+        shownOnWidgets = shown
+        widgets.show(shown.first, shown.second)
     }
 
     /** A tapped reminder that arrived before the notes were read, opened once they are. */

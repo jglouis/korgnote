@@ -52,6 +52,17 @@ const val AGENDA_LIST_DAYS = 7
 fun LocalDate.startOfWeek(): LocalDate = minus(dayOfWeek.isoDayNumber - 1, DateTimeUnit.DAY)
 
 /**
+ * The weeks a month grid shows for [date]'s month, Monday first: those with a day of the month in
+ * them and no more, since a week of next month's days only would take room from the month's own.
+ */
+fun monthWeeks(date: LocalDate): List<List<LocalDate>> {
+    val first = LocalDate(date.year, date.month, 1)
+    val start = first.startOfWeek()
+    val weeks = start.daysUntil(first.plus(1, DateTimeUnit.MONTH).minus(1, DateTimeUnit.DAY)) / 7 + 1
+    return (0 until weeks).map { week -> (0 until 7).map { start.plus(week * 7 + it, DateTimeUnit.DAY) } }
+}
+
+/**
  * The occurrences a day view, a week column or the agenda list shows on [date].
  *
  * A deadline's advance warning is shown on today only, as in `org-agenda`: the engine gives one

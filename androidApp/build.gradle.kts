@@ -79,4 +79,11 @@ dependencies {
     implementation(libs.koin.core)
     implementation(libs.koin.compose)
     implementation(libs.koin.compose.viewmodel)
+
+    // The home-screen widgets, which read the agenda and sync the notes with the app closed.
+    implementation(projects.shared)
+    implementation(libs.kotlinx.datetime)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.work.runtime)
 }

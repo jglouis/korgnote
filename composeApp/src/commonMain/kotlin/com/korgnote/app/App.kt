@@ -43,13 +43,15 @@ import com.korgnote.app.viewmodel.OpenNote
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
-import kotlinx.datetime.LocalDate
 import org.koin.compose.koinInject
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import com.korgnote.app.notifications.ReminderTaps
+import com.korgnote.app.widgets.CalendarTaps
+import com.korgnote.app.widgets.CalendarTarget
+import com.korgnote.app.widgets.WidgetSyncs
 import com.korgnote.common.org.edit.TableGrid
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -136,9 +138,31 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     var deletingNote by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     // A search being named: one about to be saved, or (true) a saved one being renamed.
     var namingSearch by remember { mutableStateOf<Pair<SavedSearch, Boolean>?>(null) }
-    // The day a tapped SCHEDULED or DEADLINE date opens the calendar on; null for the calendar's
-    // own starting view, as when it is opened from the bottom bar.
-    var calendarDay by rememberSaveable(stateSaver = OptionalLocalDateSaver) { mutableStateOf<LocalDate?>(null) }
+    // The view and day the calendar opens on when asked from elsewhere — a tapped SCHEDULED or
+    // DEADLINE date opens its day, a widget the view it shows — and null for the calendar's own
+    // starting view, as when it is opened from the bottom bar. Each such request is counted, so
+    // asking for the same day again starts there again, wherever the calendar was moved since.
+    var calendarTarget by rememberSaveable(stateSaver = OptionalCalendarTargetSaver) { mutableStateOf<CalendarTarget?>(null) }
+    var calendarRequests by rememberSaveable { mutableIntStateOf(0) }
+    val openCalendar = { target: CalendarTarget ->
+        calendarTarget = target
+        calendarRequests++
+        selectedScreen = BottomItem.CALENDAR
+    }
+    // A widget's calendar, tapped, opens the app's at the same place.
+    LaunchedEffect(Unit) {
+        CalendarTaps.pending.collect { target ->
+            if (target != null) {
+                CalendarTaps.pending.value = null
+                openCalendar(target)
+            }
+        }
+    }
+    // A widget synced the replica under the notes on screen: read them again, as when the server
+    // says they changed, so nothing showing what they held before is saved back over them.
+    LaunchedEffect(vm) {
+        WidgetSyncs.finished.collect { vm.server.load() }
+    }
     var noteDialogError by remember { mutableStateOf<String?>(null) }
     // The conflict copy being compared with its note.
     var comparingCopy by remember { mutableStateOf<String?>(null) }
@@ -303,10 +327,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                         if (vm.links.follow(uri.removePrefix(NOTE_LINK_URI_PREFIX))) selectedScreen = BottomItem.FILE
                     }
                     uri.startsWith(FILE_LINK_URI_PREFIX) -> vm.files.open(uri.removePrefix(FILE_LINK_URI_PREFIX))
-                    day != null -> {
-                        calendarDay = day
-                        selectedScreen = BottomItem.CALENDAR
-                    }
+                    day != null -> openCalendar(CalendarTarget(CalendarMode.Day, day))
                     // Android throws when no app takes the link, and the tap would do nothing.
                     else -> try {
                         platformUriHandler.openUri(uri)
@@ -438,7 +459,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
             // rail keeps the start one clear and the screen beside it the rest.
             val safeInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
             val selectTab = { item: BottomItem ->
-                if (item == BottomItem.CALENDAR) calendarDay = null
+                if (item == BottomItem.CALENDAR) calendarTarget = null
                 selectedScreen = item
             }
             Row {
@@ -762,12 +783,12 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                 )
                             }
 
-                            BottomItem.CALENDAR -> key(calendarDay) {
+                            BottomItem.CALENDAR -> key(calendarTarget, calendarRequests) {
                                 CalendarScreen(
                                     modifier = Modifier.fillMaxSize(),
                                     agenda = vm.agenda.index,
-                                    initialMode = calendarDay?.let { CalendarMode.Day },
-                                    initialAnchorDate = calendarDay,
+                                    initialMode = calendarTarget?.mode,
+                                    initialAnchorDate = calendarTarget?.date,
                                     onOpenEntry = { entry ->
                                         // The heading is resolved by the view model once the file's text
                                         // has loaded: that text arrives asynchronously, so working it out

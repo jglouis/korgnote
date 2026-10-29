@@ -143,6 +143,26 @@ plus an optional daily digest in the morning listing today's agenda. Reschedulin
 idempotent — always "cancel all, schedule the next N" — so a sync that changes nothing
 leaves notifications untouched.
 
+## Home-screen widgets (Android)
+
+Two Glance widgets in `androidApp/.../widget`: the **agenda** (overdue, then the week from today,
+as the app's agenda list) and the **month** (a dot per entry on its own day, up to three; arrows
+move the widget's own month). A tapped entry opens its note at its heading, as a reminder does;
+a tapped day or title opens the app's calendar there (`CalendarTaps`).
+
+- **What they draw from.** The app hands over the `AgendaEntry` list, not occurrences, whenever
+  the agenda is rebuilt (`AgendaWidgets`, called from `NoteAgenda.show`), with when the notes
+  last synced. It is kept as JSON in the app's files (`WidgetStore`). The widgets work out the
+  days when they draw, so overdue items and deadline warnings are right on a new day without
+  the app; a non-waking alarm redraws them around midnight, and on a clock or zone change.
+- **Sync button.** Starts a one-off `WorkManager` job that syncs as the app does on opening (the
+  replica with the server, or a look at the folder), rebuilds the entries and redraws. No
+  periodic background sync: the widget says how fresh it is ("Updated 14:32") instead. If the
+  app is open meanwhile it reads the notes again (`WidgetSyncs`), so nothing on screen is saved
+  back over what the sync brought.
+- **Not yet:** ticking off a TODO from the widget, a picker preview image, iOS (WidgetKit would
+  read the same entries from an App Group).
+
 ## Later, if it earns its place
 
 - **CalDAV export** so the same agenda appears in your phone's native calendar app. This is

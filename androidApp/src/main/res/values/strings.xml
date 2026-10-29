@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">KorgNote</string>
+    <!-- The home-screen widgets, as the launcher's widget picker names and describes them. -->
+    <string name="agenda_widget_label">Agenda</string>
+    <string name="agenda_widget_description">What is overdue and the week ahead, from your notes</string>
+    <string name="calendar_widget_label">Calendar</string>
+    <string name="calendar_widget_description">The month, with the days your notes have something on</string>
 </resources>

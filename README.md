@@ -47,6 +47,7 @@ Claude say so in a `Co-Authored-By` line.
 - Agenda, day, week and month views, built from `SCHEDULED`, `DEADLINE` and timestamps.
 - Times, ranges, repeating events and multi-day events.
 - Reminders and a morning summary on your phone, even offline.
+- Agenda and month widgets for the Android home screen, with a button to sync from there.
 
 ### Sync
 

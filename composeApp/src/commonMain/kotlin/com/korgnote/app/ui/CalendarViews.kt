@@ -77,13 +77,9 @@ import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaKind
 import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.DaySpan
-import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.Month
-import kotlinx.datetime.daysUntil
-import kotlinx.datetime.minus
-import kotlinx.datetime.plus
 import kotlin.math.abs
 import kotlin.math.pow
 
@@ -794,11 +790,7 @@ fun MonthView(
     onDayClick: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val firstOfMonth = LocalDate(anchorDate.year, anchorDate.month, 1)
-    val start = firstOfMonth.startOfWeek()
-    // The weeks with a day of the month in them and no more: a week of next month's days only
-    // would take room from the month's own.
-    val weeks = start.daysUntil(firstOfMonth.plus(1, DateTimeUnit.MONTH).minus(1, DateTimeUnit.DAY)) / 7 + 1
+    val weeks = remember(anchorDate.year, anchorDate.month) { monthWeeks(anchorDate) }
     val keywordColors = rememberKeywordColors(agenda)
     Column(modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth()) {
@@ -811,8 +803,7 @@ fun MonthView(
         Spacer(Modifier.height(4.dp))
         BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
             WeekRows(maxHeight, Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).testTag("monthWeeks")) {
-                for (row in 0 until weeks) {
-                    val dates = (0 until 7).map { col -> start.plus(row * 7 + col, DateTimeUnit.DAY) }
+                for (dates in weeks) {
                     MonthWeek(
                         dates = dates,
                         days = dates.map { agenda.monthDay(it, showDone).sortedWith(chipOrder) },

@@ -10,6 +10,8 @@ import com.korgnote.app.files.FileOpener
 import com.korgnote.app.di.initKoin
 import com.korgnote.app.notifications.AndroidNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
+import com.korgnote.app.widget.AndroidAgendaWidgets
+import com.korgnote.app.widgets.AgendaWidgets
 import org.koin.dsl.module
 
 // Koin must be started exactly once per process. Doing it here (instead of in the Activity) survives
@@ -22,6 +24,7 @@ class KorgNoteApplication : Application() {
             androidReplica(this@KorgNoteApplication)
             androidNotesFolders(this@KorgNoteApplication)
             single<NotificationScheduler> { AndroidNotificationScheduler(this@KorgNoteApplication) }
+            single<AgendaWidgets> { AndroidAgendaWidgets(this@KorgNoteApplication) }
             single<FileOpener> { AndroidFileOpener(this@KorgNoteApplication) }
         }
         initKoin(extraModules = listOf(androidModule))

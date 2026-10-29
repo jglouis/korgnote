@@ -21,6 +21,7 @@ import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Duration.Companion.minutes
+import kotlinx.serialization.Serializable
 
 /** Where an entry's date came from. */
 enum class AgendaKind {
@@ -46,6 +47,7 @@ enum class AgendaKind {
  * [headingOffset] is where the heading starts in its file, which is the coordinate the rest of the
  * app opens a document at — the same one a search hit carries.
  */
+@Serializable
 data class AgendaEntry(
     val file: String,
     val headingOffset: Int,

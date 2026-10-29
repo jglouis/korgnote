@@ -13,6 +13,8 @@ import com.korgnote.app.files.NoFileOpener
 import com.korgnote.app.notifications.NoopNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
 import com.korgnote.app.notifications.ReminderSettings
+import com.korgnote.app.widgets.AgendaWidgets
+import com.korgnote.app.widgets.NoAgendaWidgets
 import com.korgnote.app.data.NoteTemplateSettings
 import com.korgnote.app.data.SavedSearch
 import com.korgnote.common.fs.NotePaths
@@ -96,6 +98,8 @@ class NotesViewModel(
     notifications: NotificationScheduler = NoopNotificationScheduler,
     /** Read each time reminders are planned, so a change in Settings applies on the next plan. */
     reminderSettings: () -> ReminderSettings = { ReminderSettings() },
+    /** The home-screen widgets showing the agenda: Android's, or none. */
+    widgets: AgendaWidgets = NoAgendaWidgets,
     /**
      * The wall-clock time reminders are planned from and state changes are stamped with; a parameter
      * for the same reason as [today].
@@ -182,7 +186,12 @@ class NotesViewModel(
 
     val savedSearches: SavedSearches = SavedSearches(savedSearches, saveSavedSearches)
 
-    val agenda: NoteAgenda = NoteAgenda(viewModelScope, library, today, notifications, reminderSettings, now, open = ::open)
+    val agenda: NoteAgenda = NoteAgenda(
+        viewModelScope, library, today, notifications, reminderSettings, now, open = ::open,
+        widgets = widgets,
+        // Read when the agenda is shown, by which time [server] is there.
+        lastSynced = { server.lastSynced },
+    )
 
     /** Where the notes are kept, kept in step with the screen: the server, or the folder. */
     val server: NotesSync = if (folder != null) {

@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.korgnote.app.widgets.CalendarTarget
 import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOccurrence
@@ -292,7 +293,11 @@ private fun CalendarHeader(
 
 /** A date kept across the activity being recreated: what is saved is its text. */
 internal val LocalDateSaver = Saver<LocalDate, String>(save = { it.toString() }, restore = { LocalDate.parse(it) })
-internal val OptionalLocalDateSaver = Saver<LocalDate?, String>(save = { it?.toString() }, restore = { LocalDate.parse(it) })
+/** Where the calendar was asked to open, kept the same way: `Month 2026-09-01`. */
+internal val OptionalCalendarTargetSaver = Saver<CalendarTarget?, String>(
+    save = { it?.let { target -> "${target.mode.name} ${target.date}" } },
+    restore = { it.split(' ').let { (mode, date) -> CalendarTarget(CalendarMode.valueOf(mode), LocalDate.parse(date)) } },
+)
 
 private fun currentDateTime(): LocalDateTime = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
 

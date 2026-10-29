@@ -20,6 +20,7 @@ import org.koin.mp.KoinPlatform
 import com.korgnote.app.notifications.ReminderAlarms
 import com.korgnote.app.notifications.ReminderTaps
 import com.korgnote.app.notifications.ReminderTarget
+import com.korgnote.app.widget.WidgetIntents
 
 class MainActivity : ComponentActivity() {
     // The answer needs no handling: sync retries on its own once local network access is granted,
@@ -32,6 +33,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         openReminderFrom(intent)
+        WidgetIntents.deliver(intent)
         // Not on a rotation, which recreates the activity with the link it was opened with.
         if (savedInstanceState == null) PairingLinks.offer(intent?.dataString)
         // The local network, for the server on it, which sync cannot do without. Notifications are
@@ -56,11 +58,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // A tap on a reminder, or a pairing link, while the app is already open arrives here rather
-    // than in onCreate.
+    // A tap on a reminder or a widget, or a pairing link, while the app is already open arrives
+    // here rather than in onCreate.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         openReminderFrom(intent)
+        WidgetIntents.deliver(intent)
         PairingLinks.offer(intent.dataString)
     }
 

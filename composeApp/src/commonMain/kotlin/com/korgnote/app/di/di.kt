@@ -14,6 +14,8 @@ import com.korgnote.app.files.NoFileOpener
 import com.korgnote.app.notifications.NoopNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
 import com.korgnote.app.viewmodel.NotesViewModel
+import com.korgnote.app.widgets.AgendaWidgets
+import com.korgnote.app.widgets.NoAgendaWidgets
 import io.ktor.client.HttpClient
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.context.startKoin
@@ -54,7 +56,8 @@ val appModule = module {
     single { NotesSourceChoice(get(), get()) }
 
     // ViewModel reads and writes the replica; the repository only refreshes it. Reminders go to
-    // the platform's scheduler where there is one (Android, iOS) and nowhere otherwise; linked
+    // the platform's scheduler where there is one (Android, iOS) and nowhere otherwise, and the
+    // agenda to the home-screen widgets where there are some (Android); linked
     // files, likewise, open where the platform can open them (Android, desktop). There is one for
     // each source, given as a parameter: a folder's notes get a store of their own, which the sync
     // engine never sees, so nothing it pulls can land in the user's folder.
@@ -68,6 +71,7 @@ val appModule = module {
             get<SyncEngine>(),
             folder?.let(::DocumentStore) ?: get<DocumentStore>(),
             notifications = getOrNull<NotificationScheduler>() ?: NoopNotificationScheduler,
+            widgets = getOrNull<AgendaWidgets>() ?: NoAgendaWidgets,
             reminderSettings = settings::getReminderSettings,
             newNotesFolder = settings::getNewNotesFolder,
             noteTemplate = settings::getNoteTemplate,
