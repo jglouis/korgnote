@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import com.korgnote.common.replica.SyncEngine
 import com.korgnote.common.replica.SyncReport
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -33,7 +34,7 @@ class ServerSync(
     /** Shows a message to the user; an empty one clears it. */
     private val showMessage: (String) -> Unit,
     private val now: () -> Instant = { Clock.System.now() },
-) {
+) : NotesSync {
     /**
      * Why the server could not be reached on the last attempt, or null when it answered.
      *
@@ -41,25 +42,25 @@ class ServerSync(
      * an error about what the user just did, so it gets a quiet indicator rather than a sentence on
      * top of the note.
      */
-    var unreachable by mutableStateOf<String?>(null)
+    override var unreachable by mutableStateOf<String?>(null)
         private set
 
     /** True while a [retry] the user asked for is in flight. */
-    var retrying by mutableStateOf(false)
+    override var retrying by mutableStateOf(false)
         private set
 
     /**
      * When the replica last matched the server: the end of the last sync that got through, or the
      * last change the stream delivered. Null until the first one, this run.
      */
-    var lastSynced by mutableStateOf<Instant?>(null)
+    override var lastSynced by mutableStateOf<Instant?>(null)
         private set
 
     /** Syncs in flight, of any kind: a save's push as well as a retry or the stream's catch-up. */
     private var inFlight by mutableIntStateOf(0)
 
     /** True while any sync is talking to the server, for the status icon to show it working. */
-    val syncing: Boolean get() = inFlight > 0
+    override val syncing: Boolean get() = inFlight > 0
 
     /** Cuts the change stream's backoff short, so a retry that got through reconnects it at once. */
     private val wake = Channel<Unit>(Channel.CONFLATED)
@@ -70,7 +71,7 @@ class ServerSync(
      * A network failure is not fatal: the replica *is* the content, so being offline costs
      * freshness, not access. It sets [unreachable] instead of a message.
      */
-    suspend fun load() {
+    override suspend fun load() {
         try {
             val report = syncOnce()
             unreachable = null
@@ -88,7 +89,7 @@ class ServerSync(
      * Syncs now, because the user asked to; on success the change stream reconnects at once
      * instead of waiting out its backoff.
      */
-    suspend fun retry() {
+    override suspend fun retry() {
         if (retrying) return
         retrying = true
         try {
@@ -102,6 +103,19 @@ class ServerSync(
     /** Guards against starting a second event stream on recomposition. */
     private var watching = false
 
+    /** The change stream being followed, for [stop] to end. */
+    private var watchJob: Job? = null
+
+    /**
+     * Ends the change stream. A sync already under way is left to finish: it only ever writes the
+     * replica, never the folder the notes may now be kept in instead.
+     */
+    override fun stop() {
+        watchJob?.cancel()
+        watchJob = null
+        watching = false
+    }
+
     /**
      * Follows the server's change stream for as long as the app runs, so an edit made in Emacs shows
      * up without a refresh.
@@ -109,10 +123,10 @@ class ServerSync(
      * Reconnects with a backoff, and re-syncs after each reconnection: the stream is a hint, so a
      * gap in it costs latency, never an edit.
      */
-    fun watch() {
+    override fun watch() {
         if (watching) return
         watching = true
-        scope.launch {
+        watchJob = scope.launch {
             var backoff = 1.seconds
             while (isActive) {
                 try {
@@ -158,7 +172,7 @@ class ServerSync(
      * push fails the file simply stays dirty and the next sync carries it. [writeFirst] runs under
      * the same guard, for a caller that makes its local write in this coroutine.
      */
-    suspend fun push(writeFirst: suspend () -> Unit = {}) {
+    override suspend fun push(writeFirst: suspend () -> Unit) {
         try {
             writeFirst()
             val report = syncOnce()
@@ -182,7 +196,7 @@ class ServerSync(
      * Pushes what just changed, if the server can be reached; offline, it waits for the next sync.
      * No message either way: a created, renamed or deleted note needs none to say it was sent.
      */
-    suspend fun pushQuietly() {
+    override suspend fun pushQuietly() {
         try {
             reportConflicts(syncOnce())
             unreachable = null

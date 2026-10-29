@@ -15,3 +15,6 @@ internal actual val usesLocalServer: Boolean = true
 // A page cannot choose which certificate to trust, so it cannot pair; it is served by the server
 // it talks to, on the computer that runs it.
 internal actual val canPair: Boolean = false
+
+// A page has no folder of its own to keep notes in.
+internal actual val offersNotesFolder: Boolean = false

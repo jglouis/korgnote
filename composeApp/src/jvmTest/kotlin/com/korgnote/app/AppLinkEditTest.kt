@@ -1,5 +1,6 @@
 package com.korgnote.app
 
+import com.korgnote.app.viewmodel.NotesSourceChoice
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -44,6 +45,7 @@ class AppLinkEditTest {
             modules(
                 module {
                     single<SettingsRepository> { InMemorySettingsRepository() }
+                    single { NotesSourceChoice(get(), DocumentStore(InMemoryReplicaStorage())) }
                     viewModel { viewModel }
                 },
             )

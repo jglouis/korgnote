@@ -19,6 +19,14 @@ interface SettingsRepository {
 
     fun setPairedServer(server: PairedServer?)
 
+    /**
+     * Where the notes are: the server's replica, or a folder of the user's. Null until chosen; see
+     * [chosenNotesSource], which is what to read.
+     */
+    fun getNotesSource(): NotesSource?
+
+    fun setNotesSource(source: NotesSource)
+
     /** Reminder lead time and daily digest (T18). */
     fun getReminderSettings(): ReminderSettings
 

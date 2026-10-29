@@ -8,3 +8,5 @@ internal actual fun defaultServerBaseUrl(): String = "http://localhost:$SERVER_P
 internal actual val usesLocalServer: Boolean = false
 
 internal actual val canPair: Boolean = true
+
+internal actual val offersNotesFolder: Boolean = true

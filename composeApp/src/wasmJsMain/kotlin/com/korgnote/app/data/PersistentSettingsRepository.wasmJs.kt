@@ -45,6 +45,11 @@ class PersistentSettingsRepository : SettingsRepository {
         store(KEY_TOKEN, "")
     }
 
+    // A browser has no folder of notes to offer: the server this page comes from is the only source.
+    override fun getNotesSource(): NotesSource = NotesSource.Server
+
+    override fun setNotesSource(source: NotesSource) {}
+
     override fun getReminderSettings(): ReminderSettings = ReminderSettings.decode(load(KEY_REMINDERS))
 
     override fun setReminderSettings(settings: ReminderSettings) {

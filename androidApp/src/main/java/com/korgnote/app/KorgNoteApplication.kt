@@ -3,6 +3,7 @@ package com.korgnote.app
 import android.app.Application
 import com.korgnote.app.data.PersistentSettingsRepository
 import com.korgnote.app.data.SettingsRepository
+import com.korgnote.app.di.androidNotesFolders
 import com.korgnote.app.di.androidReplica
 import com.korgnote.app.files.AndroidFileOpener
 import com.korgnote.app.files.FileOpener
@@ -19,6 +20,7 @@ class KorgNoteApplication : Application() {
         val androidModule = module {
             single<SettingsRepository> { PersistentSettingsRepository(this@KorgNoteApplication) }
             androidReplica(this@KorgNoteApplication)
+            androidNotesFolders(this@KorgNoteApplication)
             single<NotificationScheduler> { AndroidNotificationScheduler(this@KorgNoteApplication) }
             single<FileOpener> { AndroidFileOpener(this@KorgNoteApplication) }
         }

@@ -54,6 +54,8 @@ Claude say so in a `Co-Authored-By` line.
 - Edits to the same note on two devices are merged. If they conflict, both versions are kept and you
   choose.
 - Pair a phone by scanning a QR code. The connection uses TLS. No account or cloud service needed.
+- Or skip the server: on a phone, keep the notes in a folder that Syncthing, Dropbox or iCloud
+  Drive syncs, or that nothing does. The app asks which on its first start.
 
 ## Status
 

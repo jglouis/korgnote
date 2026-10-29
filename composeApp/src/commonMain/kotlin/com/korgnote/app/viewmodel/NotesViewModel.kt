@@ -44,6 +44,7 @@ import com.korgnote.common.org.template.dailyTitle
 import com.korgnote.common.org.template.newNoteText
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.replica.DocumentStore
+import com.korgnote.common.replica.FolderNoteStorage
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
 import com.korgnote.common.sync.DiffHunk
@@ -115,6 +116,11 @@ class NotesViewModel(
     fileOpener: FileOpener = NoFileOpener,
     /** Where scans of every note run when they need not hold up the screen; see [refreshDerivedViewsSoon]. */
     private val background: CoroutineDispatcher = Dispatchers.Default,
+    /**
+     * The folder [store] keeps the notes in, when they are a folder of the user's rather than the
+     * replica: there is then no server to sync with, only the folder to keep looking at.
+     */
+    folder: FolderNoteStorage? = null,
 ) : ViewModel() {
 
     /** The one message line: why something could not be done, or what was done instead. */
@@ -172,7 +178,12 @@ class NotesViewModel(
 
     val agenda: NoteAgenda = NoteAgenda(viewModelScope, library, today, notifications, reminderSettings, now, open = ::open)
 
-    val server: ServerSync = ServerSync(viewModelScope, sync, onReplicaChanged = ::showFromReplica, showMessage = ::showMessage)
+    /** Where the notes are kept, kept in step with the screen: the server, or the folder. */
+    val server: NotesSync = if (folder != null) {
+        FolderSync(viewModelScope, folder, onReplicaChanged = ::showFromReplica, showMessage = ::showMessage)
+    } else {
+        ServerSync(viewModelScope, sync, onReplicaChanged = ::showFromReplica, showMessage = ::showMessage)
+    }
 
     /**
      * The open file's TODO keywords — its own `#+TODO:`, or what the notes declare when it has

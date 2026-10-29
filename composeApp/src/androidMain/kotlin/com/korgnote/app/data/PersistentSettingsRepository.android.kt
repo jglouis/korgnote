@@ -41,6 +41,12 @@ class PersistentSettingsRepository(appContext: Context) : SettingsRepository {
         }
     }
 
+    override fun getNotesSource(): NotesSource? = NotesSource.decode(prefs.getString(KEY_NOTES_SOURCE, null))
+
+    override fun setNotesSource(source: NotesSource) {
+        prefs.edit { putString(KEY_NOTES_SOURCE, source.encode()) }
+    }
+
     override fun getReminderSettings(): ReminderSettings = ReminderSettings.decode(prefs.getString(KEY_REMINDERS, null))
 
     override fun setReminderSettings(settings: ReminderSettings) {
@@ -96,6 +102,7 @@ class PersistentSettingsRepository(appContext: Context) : SettingsRepository {
         private const val KEY_PORT = "server_port"
         private const val KEY_TOKEN = "server_token"
         private const val KEY_PAIRED_SERVER = "paired_server"
+        private const val KEY_NOTES_SOURCE = "notes_source"
         private const val KEY_REMINDERS = "reminders"
         private const val KEY_PINNED_NOTES = "pinned_notes"
         private const val KEY_FILE_LINK_MAPPINGS = "file_link_mappings"

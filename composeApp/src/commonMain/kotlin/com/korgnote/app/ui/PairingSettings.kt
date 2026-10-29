@@ -45,6 +45,8 @@ fun PairingSettings(
     /** A link that arrived from outside — another app opened one — to pair with at once. */
     incomingLink: String? = null,
     onIncomingLinkUsed: () -> Unit = {},
+    /** Says where the code is shown; off where the screen around it already says so. */
+    showHowTo: Boolean = true,
 ) {
     val scope = rememberCoroutineScope()
     var paired by remember { mutableStateOf(repo.getPairedServer()) }
@@ -114,7 +116,7 @@ fun PairingSettings(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
             )
-        } else {
+        } else if (showHowTo) {
             Text(
                 "On the computer the server runs on, open http://localhost:8080/devices, " +
                     "press Show a pairing code, and scan it here.",

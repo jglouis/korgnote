@@ -43,6 +43,8 @@ import com.korgnote.app.data.PairingLinks
 import com.korgnote.app.data.canPair
 import com.korgnote.app.data.usesLocalServer
 import com.korgnote.app.data.NoteTemplateSettings
+import com.korgnote.app.data.NotesSource
+import com.korgnote.app.files.notesFolderLabel
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.files.FileLinkMapping
 import com.korgnote.app.notifications.ReminderSettings
@@ -68,6 +70,10 @@ fun SettingsScreen(
     knownTags: List<String> = emptyList(),
     /** Pairs this device with a computer; null where nothing can, as in tests. */
     pairing: DevicePairing? = null,
+    /** Where the notes are: pairing is only for the server. */
+    notesSource: NotesSource = NotesSource.Server,
+    /** Opens the welcome screens again, to keep the notes elsewhere; null where there is no choice. */
+    onChangeNotesSource: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     var host by remember { mutableStateOf("") }
@@ -195,14 +201,34 @@ fun SettingsScreen(
 
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            val inFolder = notesSource is NotesSource.Folder
+            if (onChangeNotesSource != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Notes", modifier = Modifier.weight(1f))
+                    if (inFolder) serverStatus()
+                }
+                Text(
+                    when (notesSource) {
+                        is NotesSource.Folder -> "In the folder ${notesFolderLabel(notesSource.location)}."
+                        NotesSource.Server -> "Synced with the KorgNote server on your computer."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = onChangeNotesSource) { Text("Change where notes are") }
+                if (!inFolder) Spacer(Modifier.height(24.dp))
+            }
             // Whether the server can be reached, and what conflicts syncing left, next to its
             // settings: there is no bar above them.
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Server", modifier = Modifier.weight(1f))
-                serverStatus()
+            if (!inFolder) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Server", modifier = Modifier.weight(1f))
+                    serverStatus()
+                }
+                Spacer(Modifier.height(8.dp))
             }
-            Spacer(Modifier.height(8.dp))
-            if (canPair) {
+            if (canPair && !inFolder) {
                 val incomingLink by PairingLinks.pending.collectAsState()
                 PairingSettings(
                     repo,

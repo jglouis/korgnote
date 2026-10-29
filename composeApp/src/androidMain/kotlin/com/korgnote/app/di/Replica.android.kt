@@ -1,6 +1,8 @@
 package com.korgnote.app.di
 
 import android.content.Context
+import com.korgnote.app.files.NoteFolderAccess
+import com.korgnote.app.files.SafNoteFolder
 import com.korgnote.common.replica.FileSystemReplicaStorage
 import com.korgnote.common.replica.ReplicaStorage
 import org.koin.core.module.Module
@@ -15,4 +17,9 @@ import java.io.File
  */
 fun Module.androidReplica(context: Context) {
     single<ReplicaStorage> { FileSystemReplicaStorage(File(context.filesDir, "KorgNote")) }
+}
+
+/** Binds how a notes folder in shared storage is reached, for the same reason as [androidReplica]. */
+fun Module.androidNotesFolders(context: Context) {
+    single<NoteFolderAccess> { NoteFolderAccess { SafNoteFolder(context, it) } }
 }

@@ -1,5 +1,6 @@
 package com.korgnote.app
 
+import com.korgnote.app.viewmodel.NotesSourceChoice
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -62,6 +63,7 @@ class AppTodoKeywordsTest {
             modules(
                 module {
                     single<SettingsRepository> { InMemorySettingsRepository() }
+                    single { NotesSourceChoice(get(), DocumentStore(InMemoryReplicaStorage())) }
                     viewModel { viewModel }
                 },
             )

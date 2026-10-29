@@ -1,5 +1,6 @@
 package com.korgnote.app
 
+import com.korgnote.app.viewmodel.NotesSourceChoice
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -72,6 +73,7 @@ class AppBackTest {
             modules(
                 module {
                     single<SettingsRepository> { InMemorySettingsRepository() }
+                    single { NotesSourceChoice(get(), DocumentStore(InMemoryReplicaStorage())) }
                     viewModel { viewModel }
                 },
             )

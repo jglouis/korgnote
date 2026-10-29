@@ -12,6 +12,8 @@ class InMemorySettingsRepository(
         .substringBefore(":"),
     initialPort: Int = SERVER_PORT,
     initialPairedServer: PairedServer? = null,
+    /** The server unless told otherwise, so a test sees the notes rather than the welcome screens. */
+    initialNotesSource: NotesSource? = NotesSource.Server,
 ) : SettingsRepository {
     private val host = MutableStateFlow(initialHost)
     private val port = MutableStateFlow(initialPort)
@@ -32,6 +34,12 @@ class InMemorySettingsRepository(
 
     override fun setPairedServer(server: PairedServer?) {
         pairedServer = server
+    }
+
+    private var notesSource = initialNotesSource
+    override fun getNotesSource(): NotesSource? = notesSource
+    override fun setNotesSource(source: NotesSource) {
+        notesSource = source
     }
 
     private var reminders = ReminderSettings()

@@ -5,6 +5,8 @@ import com.korgnote.app.data.PairingLinks
 import com.korgnote.app.data.PersistentSettingsRepository
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.di.initKoin
+import com.korgnote.app.files.IosNoteFolder
+import com.korgnote.app.files.NoteFolderAccess
 import com.korgnote.app.notifications.IosNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
 import com.korgnote.app.notifications.installReminderTapHandler
@@ -20,6 +22,7 @@ fun MainViewController(): UIViewController {
         single<SettingsRepository> { PersistentSettingsRepository() }
         single<ReplicaStorage> { FileSystemReplicaStorage(defaultReplicaRoot()) }
         single<NotificationScheduler> { IosNotificationScheduler() }
+        single<NoteFolderAccess> { NoteFolderAccess(::IosNoteFolder) }
     }
     initKoin(extraModules = listOf(iosModule))
     installReminderTapHandler()

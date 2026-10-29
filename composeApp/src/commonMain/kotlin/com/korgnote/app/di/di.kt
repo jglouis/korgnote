@@ -5,7 +5,11 @@ import com.korgnote.app.data.DevicePairing
 import com.korgnote.app.data.KtorSyncApi
 import com.korgnote.app.data.endpointsFor
 import com.korgnote.app.data.SettingsRepository
+import com.korgnote.app.data.NotesSource
 import com.korgnote.app.files.FileOpener
+import com.korgnote.app.files.NoteFolderAccess
+import com.korgnote.app.viewmodel.NotesSourceChoice
+import com.korgnote.common.replica.FolderNoteStorage
 import com.korgnote.app.files.NoFileOpener
 import com.korgnote.app.notifications.NoopNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
@@ -46,14 +50,23 @@ val appModule = module {
     // definition and reloads from the server anyway.
     single { DocumentStore(get()) }
 
+    // Which of the two the notes are in: the replica above, or a folder of the user's.
+    single { NotesSourceChoice(get(), get()) }
+
     // ViewModel reads and writes the replica; the repository only refreshes it. Reminders go to
     // the platform's scheduler where there is one (Android, iOS) and nowhere otherwise; linked
-    // files, likewise, open where the platform can open them (Android, desktop).
-    viewModel {
+    // files, likewise, open where the platform can open them (Android, desktop). There is one for
+    // each source, given as a parameter: a folder's notes get a store of their own, which the sync
+    // engine never sees, so nothing it pulls can land in the user's folder.
+    viewModel { params ->
         val settings = get<SettingsRepository>()
+        val source = params.getOrNull<NotesSource>() ?: NotesSource.Server
+        val folder = (source as? NotesSource.Folder)?.let {
+            FolderNoteStorage(get<NoteFolderAccess>().open(it.location), ::conflictTimestamp)
+        }
         NotesViewModel(
             get<SyncEngine>(),
-            get<DocumentStore>(),
+            folder?.let(::DocumentStore) ?: get<DocumentStore>(),
             notifications = getOrNull<NotificationScheduler>() ?: NoopNotificationScheduler,
             reminderSettings = settings::getReminderSettings,
             newNotesFolder = settings::getNewNotesFolder,
@@ -62,6 +75,7 @@ val appModule = module {
             savePinnedNotes = settings::setPinnedNotes,
             fileLinkMappings = settings::getFileLinkMappings,
             fileOpener = getOrNull<FileOpener>() ?: NoFileOpener,
+            folder = folder,
         )
     }
 }

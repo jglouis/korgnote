@@ -1,5 +1,6 @@
 package com.korgnote.app
 
+import com.korgnote.app.viewmodel.NotesSourceChoice
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -44,6 +45,7 @@ class AppCalendarTest {
             modules(
                 module {
                     single<SettingsRepository> { InMemorySettingsRepository() }
+                    single { NotesSourceChoice(get(), DocumentStore(InMemoryReplicaStorage())) }
                     viewModel { NotesViewModel(SyncEngine(store, api), store) }
                 },
             )
