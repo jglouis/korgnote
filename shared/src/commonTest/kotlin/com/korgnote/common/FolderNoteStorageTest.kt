@@ -71,7 +71,23 @@ class FolderNoteStorageTest {
         assertEquals(listOf("a.org", "sub/b.org"), storage.list())
         assertEquals("* A\n", storage.read("a.org"))
         assertEquals("* A\n", storage.read("a.org"))
-        assertEquals(1, folder.reads)
+        assertEquals("* B\n", storage.read("sub/b.org"))
+        // Both were read with the listing, and neither again since.
+        assertEquals(2, folder.reads)
+    }
+
+    @Test
+    fun aRescanReadsOnlyWhatMoved() = runTest {
+        val folder = FakeFolder("a.org" to "* A\n", "b.org" to "* B\n", "c.org" to "* C\n")
+        val storage = storage(folder)
+        storage.list()
+        folder.writeOutside("b.org", "* B, edited\n")
+
+        storage.rescan()
+
+        assertEquals(4, folder.reads)
+        assertEquals("* B, edited\n", storage.read("b.org"))
+        assertEquals(4, folder.reads)
     }
 
     @Test

@@ -2,8 +2,13 @@ package com.korgnote.common.replica
 
 import com.korgnote.common.sync.conflictCopyName
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 
 /**
  * The notes as files in a folder the user chose, with no server: what other apps sync — Syncthing,
@@ -14,9 +19,10 @@ import kotlinx.coroutines.sync.withLock
  * itself is the only copy, which the rest of the app does not have to know: it reads and writes
  * through [DocumentStore] as it does the replica.
  *
- * The folder is slow to reach, so what it holds is listed once and each text read once, then kept
- * by its [FileStamp]; [rescan] lists again, and a file whose stamp moved is read again when asked
- * for. Others write to the folder too, and nothing says when: a save over a file that changed since
+ * The folder is slow to reach — a tenth of a second a call on some phones — so what it holds is
+ * listed once and each text read once, then kept by its [FileStamp]. Each listing reads at once,
+ * several at a time, every note it has no text for at its stamp: the first one reads them all, a
+ * [rescan] reads what moved, and whatever reads the notes afterwards finds them here. Others write to the folder too, and nothing says when: a save over a file that changed since
  * it was read goes to a conflict copy beside it, as Syncthing would make, rather than over that
  * change. The app already shows such copies, and settles them.
  *
@@ -59,6 +65,7 @@ class FolderNoteStorage(
         val now = reach { folder.list().associate { it.path to it.stamp } } ?: return@withLock false
         known = now
         texts.keys.retainAll(now.keys)
+        readAhead(now)
         before != now
     }
 
@@ -108,7 +115,20 @@ class FolderNoteStorage(
         known?.let { return it }
         val listed = reach { folder.list().associate { it.path to it.stamp } } ?: return emptyMap()
         known = listed
+        readAhead(listed)
         return listed
+    }
+
+    /**
+     * Reads every note in [listed] whose text is missing or older than its stamp, [PARALLEL_READS]
+     * at a time: one after another, the first listing of a few hundred notes took most of a minute.
+     */
+    private suspend fun readAhead(listed: Map<String, FileStamp>) = coroutineScope {
+        val limit = Semaphore(PARALLEL_READS)
+        listed.filter { (path, stamp) -> texts[path]?.first != stamp }
+            .map { (path, stamp) -> async { limit.withPermit { reach { folder.read(path) } }?.let { path to (stamp to it) } } }
+            .awaitAll()
+            .forEach { found -> if (found != null) texts[found.first] = found.second }
     }
 
     /**
@@ -179,4 +199,9 @@ class FolderNoteStorage(
 
     /** A value that may itself be null, told apart from [reach] failing. */
     private class Present(val stamp: FileStamp?)
+
+    private companion object {
+        /** How many notes are read at once: enough to hide each call's wait, not so many as to queue. */
+        const val PARALLEL_READS = 8
+    }
 }

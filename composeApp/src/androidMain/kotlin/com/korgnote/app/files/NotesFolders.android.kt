@@ -17,9 +17,14 @@ import com.korgnote.common.replica.NoteFolder
 import com.korgnote.common.replica.isListedNotePath
 import com.korgnote.common.replica.requireSafeNotePath
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.FileNotFoundException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
  * A folder of notes in shared storage, reached through the document tree the user granted in
@@ -38,17 +43,23 @@ class SafNoteFolder(private val context: Context, location: String) : NoteFolder
     /** Document ids by path, files and folders alike, as last found. */
     private val ids = ConcurrentHashMap<String, String>()
 
+    /**
+     * Lists the folders under the tree several at a time: a listing is a query per folder, a tenth
+     * of a second each on a slow phone, and one after another they added up to seconds.
+     */
     override suspend fun list(): List<FolderEntry> = withContext(Dispatchers.IO) {
         requireAccess()
-        val found = mutableListOf<FolderEntry>()
-        val seen = HashMap<String, String>()
-        fun walk(parentId: String, prefix: String) {
-            for (child in children(parentId)) {
+        val found = ConcurrentLinkedQueue<FolderEntry>()
+        val seen = ConcurrentHashMap<String, String>()
+        val queries = Semaphore(PARALLEL_QUERIES)
+        suspend fun walk(parentId: String, prefix: String): Unit = coroutineScope {
+            // The permit covers the query only: a folder waiting on its subfolders holds none.
+            for (child in queries.withPermit { children(parentId) }) {
                 if (child.name.startsWith('.')) continue
                 val path = prefix + child.name
                 if (child.isFolder) {
                     seen[path] = child.id
-                    walk(child.id, "$path/")
+                    launch { walk(child.id, "$path/") }
                 } else if (isListedNotePath(path)) {
                     seen[path] = child.id
                     found += FolderEntry(path, child.stamp)
@@ -181,6 +192,8 @@ class SafNoteFolder(private val context: Context, location: String) : NoteFolder
     }
 
     private companion object {
+        const val PARALLEL_QUERIES = 8
+
         val COLUMNS = arrayOf(
             Document.COLUMN_DOCUMENT_ID,
             Document.COLUMN_DISPLAY_NAME,

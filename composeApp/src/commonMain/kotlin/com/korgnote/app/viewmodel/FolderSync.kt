@@ -14,6 +14,8 @@ import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 /**
  * Keeping the screen in step with a folder of notes that other apps write to.
@@ -53,6 +55,13 @@ class FolderSync(
     /** The looks taken while the app is in front; null while it is not. */
     private var looking: Job? = null
 
+    /**
+     * When the last look began, so that two do not run back to back: a look costs a second on some
+     * phones. Set from the start, since the first [load] looks: the app comes to the front at the
+     * same moment, and both would otherwise read every note.
+     */
+    private var lastLook: TimeMark? = TimeSource.Monotonic.markNow()
+
     private var stopped = false
 
     override suspend fun load() {
@@ -84,9 +93,10 @@ class FolderSync(
         if (stopped || looking != null) return
         looking = scope.launch {
             // Changes made while the app was away first, then every so often while it is here.
+            // At start the first load has just looked, or is looking: this waits its turn.
             while (isActive) {
+                lastLook?.let { delay(every - it.elapsedNow()) }
                 if (look()) onReplicaChanged()
-                delay(every)
             }
         }
     }
@@ -120,6 +130,7 @@ class FolderSync(
 
     /** Lists the folder again. True when it changed. */
     private suspend fun look(): Boolean {
+        lastLook = TimeSource.Monotonic.markNow()
         inFlight++
         try {
             val changed = storage.rescan()
