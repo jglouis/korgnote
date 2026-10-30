@@ -334,6 +334,42 @@ fun String.toOrgDocument(): OrgDocument {
     }
 
     /**
+     * True when the main loop below would take [line] as part of a paragraph: it starts no other
+     * construct. The two have to agree, or a line folded into an item would be a heading or a block.
+     */
+    fun isPlainLine(line: String): Boolean =
+        line.isNotBlank() &&
+            !OrgSyntax.blockBegin.containsMatchIn(line) &&
+            !OrgSyntax.keyword.containsMatchIn(line) &&
+            !OrgSyntax.comment.containsMatchIn(line) &&
+            !OrgSyntax.drawerBegin.matches(line) &&
+            !OrgSyntax.horizontalRule.matches(line) &&
+            !OrgSyntax.footnoteDefinition.containsMatchIn(line) &&
+            !line.isOrgTableLine() &&
+            !OrgSyntax.heading.containsMatchIn(line) &&
+            !OrgSyntax.planning.containsMatchIn(line) &&
+            !OrgSyntax.listItem.containsMatchIn(line)
+
+    /**
+     * The lines from [start] that carry on the text above them, trimmed, and the index after them.
+     *
+     * Filling (`M-q`, `auto-fill-mode`) breaks a long item or footnote over several lines; Org reads
+     * them as one, and so does this. [minIndent] is the indentation a line needs to belong: an item's
+     * text continues only on lines indented past its bullet.
+     */
+    fun continuationOf(start: Int, minIndent: Int): Pair<List<String>, Int> {
+        var idx = start
+        val more = mutableListOf<String>()
+        while (idx < lines.size) {
+            val line = lines[idx].trimEnd()
+            if (!isPlainLine(line) || line.length - line.trimStart().length < minIndent) break
+            more.add(line.trim())
+            idx++
+        }
+        return more to idx
+    }
+
+    /**
      * A list starting at [start], together with any lists nested under its items.
      *
      * Indentation is what separates a nested list from a new one: an item indented further than the
@@ -366,8 +402,11 @@ fun String.toOrgDocument(): OrgDocument {
 
             // The checkbox group ends before its trailing space (the regex only looks ahead), so
             // trim it rather than carrying it into the item's text.
-            val text = lines[idx].substring(m.value.length).trimStart()
+            val firstLine = lines[idx].substring(m.value.length).trimStart()
             idx++
+            val (more, afterText) = continuationOf(idx, minIndent = indent + 1)
+            idx = afterText
+            val text = (listOf(firstLine) + more).joinToString("\n")
 
             // Continuation: a deeper list directly under this item is nested inside it.
             val nested = mutableListOf<OrgNode>()
@@ -477,9 +516,10 @@ fun String.toOrgDocument(): OrgDocument {
         }
         OrgSyntax.footnoteDefinition.find(line)?.let { fn ->
             flushParagraph()
-            val node = OrgFootnoteDefinition(fn.groupValues[1], fn.groupValues[2].trim())
-            sink().add(node.spanning(i, i + 1))
-            i++
+            val (more, next) = continuationOf(i + 1, minIndent = 0)
+            val node = OrgFootnoteDefinition(fn.groupValues[1], (listOf(fn.groupValues[2].trim()) + more).joinToString("\n"))
+            sink().add(node.spanning(i, next))
+            i = next
             continue@mainLoop
         }
         if (line.trimStart().startsWith("|")) {
@@ -688,7 +728,7 @@ fun OrgNode.toOrgString(): String = when (this) {
     is OrgRaw -> this.content
     is OrgComment -> text
     is OrgHorizontalRule -> "-----"
-    is OrgDescriptionItem -> "- $term :: $description"
+    is OrgDescriptionItem -> "- $term :: " + description.indentedBy(2)
     is OrgFootnoteDefinition -> "[fn:$label] $text"
     is OrgBlock -> buildString {
         append("#+BEGIN_").append(type)
@@ -702,11 +742,11 @@ fun OrgNode.toOrgString(): String = when (this) {
         if (!unterminated) { appendLine(); append(":END:") }
     }
     is OrgCheckboxItem -> buildString {
-        append("- [").append(if (checked) "X" else if (partial) "-" else " ").append("] ").append(text)
+        append("- [").append(if (checked) "X" else if (partial) "-" else " ").append("] ").append(text.indentedBy(2))
         children.forEach { appendLine(); append(it.toOrgString()) }
     }
     is OrgListItem -> buildString {
-        append("- ").append(text)
+        append("- ").append(text.indentedBy(2))
         children.forEach { appendLine(); append(it.toOrgString()) }
     }
     is OrgList -> children.mapIndexed { index, child ->
@@ -720,7 +760,8 @@ fun OrgNode.toOrgString(): String = when (this) {
             else -> child.toOrgString()
         }
         val nested = child.children.joinToString("") { "\n" + it.toOrgString() }
-        "$pad$marker $body$nested"
+        // Continuation lines go back under the text, past the bullet, or they would end the list.
+        "$pad$marker ${body.indentedBy(pad.length + marker.length + 1)}$nested"
     }.joinToString("\n")
     is OrgSection -> buildString {
         append("*".repeat(level.coerceAtLeast(1))).append(' ')
@@ -738,3 +779,28 @@ fun OrgNode.toOrgString(): String = when (this) {
     is OrgTableRow -> if (isRule) "|-|" else "| " + cells.joinToString(" | ") { it.cellText() } + " |"
     is OrgPlanning -> if (planType.isBlank()) timestamp else "$planType: $timestamp"
 }
+
+/** Every line of a multi-line item's text after the first, indented by [columns]. */
+private fun String.indentedBy(columns: Int): String = replace("\n", "\n" + " ".repeat(columns))
+
+/**
+ * [text] — a paragraph, or an item's or footnote's lines — as Org displays it: one run of text, its
+ * line breaks read as spaces, so it wraps to whatever width shows it rather than to the
+ * `fill-column` it was filled to.
+ *
+ * The exception is a line ending in `\\`, Org's way of asking for a line break: that one stays a
+ * break, and the `\\` is not shown.
+ */
+fun joinOrgLines(text: String): String {
+    val lines = text.split('\n')
+    return buildString {
+        lines.forEachIndexed { index, raw ->
+            val line = raw.trim()
+            val forced = forcedLineBreak.find(line)
+            append(if (forced != null) line.substring(0, forced.range.first).trimEnd() else line)
+            if (index < lines.lastIndex) append(if (forced != null) '\n' else ' ')
+        }
+    }
+}
+
+private val forcedLineBreak = Regex("\\\\\\\\\\s*$")

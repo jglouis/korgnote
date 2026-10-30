@@ -84,6 +84,7 @@ import com.korgnote.common.org.OrgTable
 import com.korgnote.common.org.OrgTableRow
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.isNumeric
+import com.korgnote.common.org.joinOrgLines
 import com.korgnote.common.org.parseOrgTable
 import com.korgnote.common.org.parseTodoConfigFrom
 import com.korgnote.common.org.srcLanguageOf
@@ -220,12 +221,12 @@ private fun RenderNode(
 
         is OrgHorizontalRule -> HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 
-        is OrgDescriptionItem -> OrgLine("${node.term} :: ${node.description}", todoConfig)
+        is OrgDescriptionItem -> OrgLine("${node.term} :: ${joinOrgLines(node.description)}", todoConfig)
 
-        is OrgFootnoteDefinition -> OrgLine("[fn:${node.label}] ${node.text}", todoConfig)
+        is OrgFootnoteDefinition -> OrgLine("[fn:${node.label}] ${joinOrgLines(node.text)}", todoConfig)
 
         is OrgListItem -> {
-            OrgLine(node.text, todoConfig)
+            OrgLine(joinOrgLines(node.text), todoConfig)
             node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox) }
         }
 
@@ -255,12 +256,12 @@ private fun RenderNode(
                         }
 
                         is OrgListItem -> {
-                            OrgLine("$marker ${child.text}", todoConfig)
+                            OrgLine("$marker ${joinOrgLines(child.text)}", todoConfig)
                             child.children.forEach { RenderNode(it, todoConfig, onToggleCheckbox) }
                         }
 
                         is OrgDescriptionItem ->
-                            OrgLine("$marker ${child.term} :: ${child.description}", todoConfig)
+                            OrgLine("$marker ${child.term} :: ${joinOrgLines(child.description)}", todoConfig)
 
                         is OrgRaw -> OrgLine("$marker ${child.content}", todoConfig)
 
@@ -607,7 +608,7 @@ fun OrgBody(text: String, todoConfig: OrgTodoConfig = DefaultOrgTodoConfig) {
                     // Paragraph: consecutive plain lines are joined into one wrapped text
                     var j = i + 1
                     while (j < lines.size && !isSpecialLine(lines[j])) j++
-                    val paragraph = lines.subList(i, j).joinToString(" ") { it.trim() }
+                    val paragraph = joinOrgLines(lines.subList(i, j).joinToString("\n"))
                     Text(text = buildOrgInlineString(paragraph), style = MaterialTheme.typography.bodyMedium)
                     i = j
                 }
@@ -640,7 +641,7 @@ private fun OrgBlockView(type: String, params: String, lines: List<String>) {
                 )
 
                 "quote", "verse" -> Text(
-                    text = buildOrgInlineString(if (type == "verse") body else body.replace('\n', ' ')),
+                    text = buildOrgInlineString(if (type == "verse") body else joinOrgLines(body)),
                     style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic)
                 )
 
@@ -888,7 +889,7 @@ private fun RenderCheckboxItem(
 ) {
     // Keyed by where the item came from: two items with the same text are still different items.
     key(item.range.first) {
-        CheckboxLine(checked = item.checked, partial = item.partial, text = item.text, onCheckedChange = {
+        CheckboxLine(checked = item.checked, partial = item.partial, text = joinOrgLines(item.text), onCheckedChange = {
             onToggleCheckbox?.invoke(item)
         })
     }
