@@ -11,6 +11,8 @@
 
 <p align="center">
   <a href="https://github.com/jglouis/korgnote/releases/latest"><b>Download the Android app</b></a>
+  <br>
+  <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/jglouis/korgnote"><img src="docs/obtainium-badge.png" alt="Get it on Obtainium" width="161"></a>
 </p>
 
 ![KorgNote on a phone: a note with a table and tasks, then the agenda, the week and the month](docs/screenshots/overview.png)
@@ -40,6 +42,10 @@ phone: there is no calendar to keep apart from your notes, and nothing to copy b
 1. **Install the app.** On an Android phone (7.0 or later), open the
    [latest release](https://github.com/jglouis/korgnote/releases/latest), download
    `korgnote-X.Y.Z.apk` and open it. Allow your browser to install apps when Android asks.
+
+   Or, to be told of each new version and install it in a tap, use
+   [Obtainium](https://github.com/ImranR98/Obtainium): tap the badge above on the phone, or in
+   Obtainium tap **Add app** and enter `https://github.com/jglouis/korgnote`.
 2. **Open it and choose where your notes are.** There are three ways:
 
 |  | [A folder on the phone](#a-folder-on-the-phone) | [A WebDAV server](#a-webdav-server-experimental) (experimental) | [Your computer, with the KorgNote server](#your-computer-with-the-korgnote-server) |
@@ -139,7 +145,7 @@ To give the address at startup rather than on the Devices page, add
 ## Updating
 
 - **The app:** download the new APK from the [release page](https://github.com/jglouis/korgnote/releases/latest)
-  and install it over the old one. Your notes are kept.
+  and install it over the old one, or let Obtainium do it. Your notes are kept.
 - **The server:** get the new image, then run the same `docker run` command again:
 
   ```shell
@@ -304,9 +310,9 @@ break. The script uses it as the release notes; without it, the notes are the ti
 since the last release.
 
 Also write a short version, at most 500 characters, in
-`fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`: F-Droid and IzzyOnDroid show it as
-the release's changes. The rest of what they show, the description, icon and screenshots, is in the
-same `fastlane/` folder.
+`fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`. With the description, icon and
+screenshots beside it, this folder is the store listing, in the layout fastlane's `supply` uploads to
+the Play Store.
 
 `--no-push` stops before the push, `--draft` leaves the release a draft for you to publish,
 `--no-wait` publishes it without waiting for the image, and `--edit-notes` lets you edit the notes

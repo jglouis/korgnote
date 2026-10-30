@@ -17,7 +17,7 @@ Then open <http://127.0.0.1:18080/> in a browser window 400 px wide.
 
 ## Store screenshots
 
-The screenshots F-Droid and IzzyOnDroid show, in
+The store listing's screenshots, in
 [fastlane/…/phoneScreenshots](../../fastlane/metadata/android/en-US/images/phoneScreenshots), are of
 the Android app on a 1080×2400 phone, with the same notes. Use a phone without your own notes:
 

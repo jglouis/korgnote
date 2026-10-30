@@ -1,4 +1,3 @@
 * The whole app in French when your phone is in French, months and weekdays included. On Android 13 and later, choose its language in the phone's Settings, under Apps.
 * Settings is now in sections.
 * Widgets: the month's arrows respond at once, the agenda colours TODO keywords, and both show a preview in the widget list.
-* Ready for F-Droid and IzzyOnDroid.
