@@ -1,0 +1,11 @@
+:PROPERTIES:
+:ID:       3f9a7c21-5b8e-4d0a-b6c4-8e2d1f0a9b55
+:END:
+#+title: Compost
+#+filetags: :garden:
+
+Two bins behind the [[id:7b1c2e4a-0d5f-4c1e-9a77-2f3e8c9d1a01][Garden shed]], turned every few weeks.
+
+- [X] Greens: peelings, coffee grounds, grass
+- [X] Browns: cardboard, dry leaves
+- [ ] Turn the left bin

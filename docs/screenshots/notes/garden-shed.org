@@ -1,0 +1,37 @@
+:PROPERTIES:
+:ID:       7b1c2e4a-0d5f-4c1e-9a77-2f3e8c9d1a01
+:END:
+#+title: Garden shed
+#+filetags: :project:diy:
+
+A small timber shed at the back of the garden, for the bikes and the tools. See [[id:3f9a7c21-5b8e-4d0a-b6c4-8e2d1f0a9b55][Compost]] for where the bins go.
+
+* Materials
+| Item           | Qty | Unit price |  Total |
+|----------------+-----+------------+--------|
+| Timber 2.4 m   |  18 |       6.50 | 117.00 |
+| Roof felt roll |   2 |      24.90 |  49.80 |
+| Screws (box)   |   3 |       8.20 |  24.60 |
+| Hinges         |   2 |       5.75 |  11.50 |
+|----------------+-----+------------+--------|
+| Total          |     |            | 202.90 |
+#+TBLFM: @2$4..@5$4=$2*$3;%.2f::@6$4=vsum(@2..@5);%.2f
+
+* TODO Level the ground                                            :weekend:
+SCHEDULED: <2026-10-31 Sat 10:00-13:00>
+
+* TODO Pick up the timber
+SCHEDULED: <2026-11-02 Mon 17:30>
+:PROPERTIES:
+:LOCATION: Timber yard, Route de Lyon
+:END:
+
+* Cutting list
+#+begin_src python
+cuts = [2.4] * 18
+waste = 0.05 * sum(cuts)
+print(f"{waste:.1f} m spare")
+#+end_src
+
+* DONE Draw the plans
+CLOSED: [2026-10-24 Sat 16:12]

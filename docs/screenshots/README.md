@@ -14,3 +14,19 @@ WASM_DIR=$PWD/composeApp/build/dist/wasmJs/productionExecutable server/build/ins
 ```
 
 Then open <http://127.0.0.1:18080/> in a browser window 400 px wide.
+
+## Store screenshots
+
+The screenshots F-Droid and IzzyOnDroid show, in
+[fastlane/…/phoneScreenshots](../../fastlane/metadata/android/en-US/images/phoneScreenshots), are of
+the Android app on a 1080×2400 phone, with the same notes. Use a phone without your own notes:
+
+```shell
+adb push docs/screenshots/notes/. /sdcard/Documents/Notes/
+adb install androidApp/build/outputs/apk/release/androidApp-release.apk
+```
+
+Choose **A folder on this device**, then `Documents/Notes`, and **Not now** for notifications. Take
+each view with `adb exec-out screencap -p > shot.png`, and crop off the status and navigation bars:
+`sips -c 2152 1080 --cropOffset 110 0 shot.png`. The code block's lines are kept short so they fit
+the phone's width.

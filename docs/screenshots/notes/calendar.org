@@ -1,0 +1,21 @@
+#+title: Calendar
+#+TODO: EVENT | FINISHED
+
+* EVENT Swim
+<2026-10-27 Tue 07:00-08:00 +1w>
+* EVENT Market with Paul
+<2026-10-31 Sat 09:00>
+* EVENT Lunch with Sam
+<2026-11-03 Tue 12:00-13:30>
+* EVENT Bike to the farm shop
+<2026-11-04 Wed 11:00-12:30>
+* EVENT Concert at the Halle
+<2026-11-03 Tue 20:30-23:00>
+* EVENT Book club: The Overstory
+<2026-11-04 Wed 19:30-21:30>
+* EVENT Weekend in Annecy                                           :travel:
+<2026-11-06 Fri>--<2026-11-08 Sun>
+* EVENT Lucie's birthday
+<2026-11-14 Sat +1y>
+* EVENT Board games night
+<2026-11-21 Sat 20:00>
