@@ -16,8 +16,5 @@ captures
 !*.xcodeproj/project.xcworkspace/
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
-notes/
-# Except the made-up notes the screenshots are taken with.
-!docs/screenshots/notes/
-# Local docker compose settings (holds KORGNOTE_TOKEN)
+# Local docker compose settings: the notes and state folders, ports and user scripts/run-server-container.sh saved
 .env

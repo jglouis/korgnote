@@ -9,7 +9,8 @@ import kotlinx.browser.localStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
- * Settings kept in the page's `localStorage`, so the token and pinned notes survive a reload.
+ * Settings kept in the page's `localStorage`, so pinned notes, saved searches and the rest of
+ * Settings survive a reload.
  *
  * Host and port are not stored: the web app is served by the server it talks to, so they always
  * come from the page origin, and a stored pair would outlive a move to another address. Storage

@@ -1,7 +1,7 @@
 # T19 — a gate, not a pipeline: every push to master runs every test that can run on Linux and
-# compiles every target that has none. The iOS simulator tests need macOS, whose minutes count 10x on
-# a private repository, so they run nightly — and only on nights when master actually changed. So
-# does the long sweep of random sync sessions, of which every push plays only a few.
+# compiles every target that has none. The iOS simulator tests need macOS and take long, so they run
+# nightly — and only on nights when master actually changed. So does the long sweep of random sync
+# sessions, of which every push plays only a few.
 name: CI
 
 on:
