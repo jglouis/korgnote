@@ -1,6 +1,7 @@
 # T19 — a gate, not a pipeline: every push to master runs every test that can run on Linux and
 # compiles every target that has none. The iOS simulator tests need macOS, whose minutes count 10x on
-# a private repository, so they run nightly — and only on nights when master actually changed.
+# a private repository, so they run nightly — and only on nights when master actually changed. So
+# does the long sweep of random sync sessions, of which every push plays only a few.
 name: CI
 
 on:
@@ -13,8 +14,14 @@ on:
         description: Also run the iOS simulator tests
         type: boolean
         default: true
+      sweep:
+        description: Also run the long sweep of random sync sessions
+        type: boolean
+        default: true
+  # GitHub starts scheduled runs late when it is busy, and busiest on the hour: "0 3" ran at 08:00
+  # to 10:00. An odd minute gets there sooner. The nightly jobs only.
   schedule:
-    - cron: "0 3 * * *" # 03:00 UTC, iOS only
+    - cron: "37 1 * * *"
 
 concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name }}
@@ -55,24 +62,62 @@ jobs:
           path: "**/build/reports/tests/"
           retention-days: 14
 
-  # Scheduled runs only: is there anything on master the iOS job has not seen yet?
+  # Scheduled runs only: is there anything on master the nightly jobs have not passed on yet? Asked
+  # of the last scheduled run that passed rather than of the last 25 hours, which a run starting
+  # later than the one before could skip a commit through — and a failed night is tried again.
   changed:
-    name: Master changed in the last day?
+    name: Master changed since the last good night?
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
     outputs:
       recent: ${{ steps.check.outputs.recent }}
     steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 50
       - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -n "$(git log --since='25 hours ago' --format=%H -1)" ]; then
+          last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event schedule \
+            --branch master --status success --limit 1 --json headSha --jq '.[0].headSha // ""')
+          if [ "$last" != "$GITHUB_SHA" ]; then
             echo "recent=true" >> "$GITHUB_OUTPUT"
           else
             echo "recent=false" >> "$GITHUB_OUTPUT"
           fi
+
+  sweep:
+    name: Random sync sessions, long sweep
+    needs: changed
+    if: >
+      always() && (
+        (github.event_name == 'schedule' && needs.changed.outputs.recent == 'true') ||
+        (github.event_name == 'workflow_dispatch' && inputs.sweep)
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Random sync sessions
+        run: >
+          ./gradlew :shared:jvmTest --tests com.korgnote.common.SyncEngineRandomTests
+          -PrandomSeeds=10000
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports-sweep
+          path: "**/build/reports/tests/"
+          retention-days: 14
 
   ios:
     name: iOS simulator tests

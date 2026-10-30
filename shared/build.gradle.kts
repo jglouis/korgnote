@@ -50,3 +50,8 @@ kotlin {
         }
     }
 }
+
+// How many random sync sessions SyncEngineRandomTests plays: a few on every push, many nightly.
+tasks.named<Test>("jvmTest") {
+    providers.gradleProperty("randomSeeds").orNull?.let { systemProperty("korgnote.randomSeeds", it) }
+}

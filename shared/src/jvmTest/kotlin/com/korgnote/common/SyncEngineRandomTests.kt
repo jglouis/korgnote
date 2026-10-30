@@ -27,6 +27,9 @@ import kotlin.test.fail
  *
  * Each note is an `:ID:` line and lines `t<n>`, every one unique, so that "still somewhere" can be
  * checked exactly. A failure names its seed and the steps that led there; [SEEDS] runs them all.
+ *
+ * Every push runs a few sessions; the nightly run sweeps many more, with `-PrandomSeeds=<n>`. The
+ * engine is common code, so the JVM alone runs them: wasm and iOS would only repeat the same paths.
  */
 class SyncEngineRandomTests {
 
@@ -295,7 +298,7 @@ class SyncEngineRandomTests {
         /** A map as text, keys in order, for comparing states and for failure messages. */
         fun Map<String, *>.inOrder(): String = toList().sortedBy { it.first }.toString()
 
-        const val SEEDS = 400
+        val SEEDS = System.getProperty("korgnote.randomSeeds")?.toInt() ?: 30
         const val STEPS = 60
         /** Few names, so that creating, renaming and deleting keep landing on each other. */
         val POOL = listOf("n0.org", "n1.org", "n2.org", "n3.org", "daily.org")
