@@ -1,0 +1,4 @@
+* Syncs while the app is closed: hourly, and when the network is back after an edit could not be sent.
+* No longer misses changes after the server restarts (needs the 1.4.2 server).
+* A missed repeating deadline shows as overdue.
+* Saving a note only updates the progress counts over your edit.
