@@ -5,8 +5,8 @@
 <h1 align="center">KorgNote</h1>
 
 <p align="center">
-  <a href="https://orgmode.org">Org-mode</a> notes and a calendar on your phone.<br>
-  Your notes stay plain <code>.org</code> files: Emacs, org-roam and git keep working on them.
+  The power of <a href="https://orgmode.org">Org-mode</a> on your phone.<br>
+  Text edition, agenda and calendar view.
 </p>
 
 <p align="center">
@@ -14,6 +14,26 @@
 </p>
 
 ![KorgNote on a phone: a note with a table and tasks, then the agenda, the week and the month](docs/screenshots/overview.png)
+
+## Your notes are your calendar
+
+In Emacs, Org Agenda makes your notes and your calendar the same thing. KorgNote does that on the
+phone: there is no calendar to keep apart from your notes, and nothing to copy between them.
+
+- **From a heading to its day, and back.** Tap the `SCHEDULED` or `DEADLINE` date of a heading to
+  open that day in the calendar. Tap any entry in the calendar to open its note at that heading,
+  to read it, edit it or mark it done.
+- **A real calendar, not just a list.** The agenda, with what is overdue on top, then a day and a
+  week on an hour grid you can pinch to zoom, and a month. Built from `SCHEDULED`, `DEADLINE` and
+  plain timestamps, with times, ranges, repeats, deadline warnings and events over several days.
+- **Reminders** before each timed entry, 10 minutes ahead or as long as you choose. Tap one to open
+  its heading.
+- **A morning digest:** one notification, at the time you choose, with the day's agenda. Turn it on
+  in **Settings → Reminders**.
+- **Home-screen widgets** on Android: the agenda, and the month. Tap an entry to open its heading,
+  or a day to open the calendar there.
+- **Even offline:** reminders and the digest are scheduled on the phone, from your notes. Nothing
+  goes through a server, so they come with no network and the app closed.
 
 ## Get started
 
@@ -101,8 +121,11 @@ The server also gives you the **web app**, at <http://localhost:8080/>, and the 
 To give the address at startup rather than on the Devices page, add
 `-e KORGNOTE_ADVERTISED_ADDRESSES=192.168.1.20` to the `docker run` command.
 
-## What it does
+## What else it does
 
+- **Your files stay yours:** the app reads and writes plain `.org` files and nothing else. An edit
+  rewrites only what you changed and leaves the rest of the file as it was, so Emacs, org-roam and
+  git keep working on your notes.
 - **Notes:** headings, TODO keywords, priorities, tags, checkboxes, tables, drawers and code blocks.
 - **Links:** `id:`, `file:`, headings and custom IDs, with backlinks. New notes and daily notes are
   made the way org-roam makes them.
@@ -110,10 +133,6 @@ To give the address at startup rather than on the Devices page, add
   Suggestions above the keyboard for keywords, tags, dates and links.
 - **Tasks:** change TODO states from a menu. Repeating tasks move to their next date when done.
 - **Tables:** edit them as a grid. `#+TBLFM` formulas are computed the same way as in Emacs.
-- **Calendar:** agenda, day, week and month, from `SCHEDULED`, `DEADLINE` and timestamps, with
-  times, ranges, repeats and events over several days.
-- **Reminders** and a morning summary, even offline. Agenda and month **widgets** on the Android
-  home screen.
 - **Search** by words and tags, save searches by name, and pin the notes you use most.
 - **Offline first:** the app keeps working without a connection and syncs when it can.
 
