@@ -27,9 +27,13 @@ import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.data_not_paired
 import korgnote.composeapp.generated.resources.data_pairing_revoked
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jetbrains.compose.resources.getString
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 @Serializable
 private data class WireEntry(val path: String, val size: Long, val mtime: Long, val etag: String)
@@ -64,6 +68,11 @@ private val bundleJson = Json { ignoreUnknownKeys = true }
  */
 class KtorSyncApi(
     private val client: HttpClient,
+    /**
+     * How long a change stream that has been sending heartbeats may stay silent before it is taken
+     * for dead: three of the server's 30-second beats.
+     */
+    private val silenceLimit: Duration = 90.seconds,
     /** Read on every request, so that pairing or a change in Settings applies at once. */
     private val endpoints: () -> List<Endpoint>,
 ) : SyncApi {
@@ -85,6 +94,10 @@ class KtorSyncApi(
                 throw e
             } catch (e: NotPairedException) {
                 // Reached, and refused: another address is the same server, and would refuse too.
+                throw e
+            } catch (e: StreamLostException) {
+                // Reached, and then lost: the caller must catch up on what the stream missed, which
+                // a new stream at another address would leave it believing it had not.
                 throw e
             } catch (e: Exception) {
                 failure = e
@@ -171,6 +184,22 @@ class KtorSyncApi(
     }
 
     override suspend fun events(onChange: suspend (path: String, deleted: Boolean) -> Unit) = reach { api, token ->
+        var opened = false
+        try {
+            streamEvents(api, token, onOpened = { opened = true }, onChange)
+        } catch (e: Exception) {
+            // Once open, a failure is the server lost, not an address it is not at: see reach.
+            if (!opened || e is CancellationException || e is NotPairedException || e is StreamLostException) throw e
+            throw StreamLostException("The change stream was cut: ${e.message}", e)
+        }
+    }
+
+    private suspend fun streamEvents(
+        api: String,
+        token: String?,
+        onOpened: () -> Unit,
+        onChange: suspend (path: String, deleted: Boolean) -> Unit,
+    ) {
         client.prepareGet("$api/events") {
             authorize(token)
             // The stream is meant to stay open. Without this the client's request timeout kills it
@@ -182,9 +211,19 @@ class KtorSyncApi(
             }
         }.execute { response ->
             val channel = response.unlessRefused().bodyAsChannel()
+            onOpened()
             var deleted = false
+            // A connection can die without a word, and then a read waits forever: the app would
+            // show stale notes until something else made it sync. A server that sends heartbeats
+            // makes that silence detectable; one too old to send them is waited on as before.
+            var heartbeats = false
             while (true) {
-                val line = channel.readLine() ?: break
+                val line = try {
+                    withTimeout(if (heartbeats) silenceLimit else Duration.INFINITE) { channel.readLine() }
+                } catch (_: TimeoutCancellationException) {
+                    throw StreamLostException("No heartbeat on the change stream for $silenceLimit")
+                } ?: break
+                if (line.startsWith(": ping")) heartbeats = true
                 when {
                     line.startsWith("event:") -> deleted = line.contains("deleted")
                     line.startsWith("data:") -> {
@@ -216,6 +255,13 @@ class KtorSyncApi(
 
 /** This device is not paired: it never was, or the server answered and refused it, having revoked it. */
 class NotPairedException(message: String) : Exception(message)
+
+/**
+ * The change stream was open, and then failed or fell silent, its heartbeats stopping: the server was
+ * reached and is presumed lost. Not a cancellation, so that the caller reconnects, and catches up on
+ * what the stream missed meanwhile.
+ */
+class StreamLostException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 private val PATH_IN_FRAME =Regex("\"path\"\\s*:\\s*\"([^\"]+)\"")
 

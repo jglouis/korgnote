@@ -15,9 +15,16 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 @Serializable
 data class ManifestEntry(val path: String, val size: Long, val mtime: Long, val etag: String)
@@ -54,7 +61,16 @@ private const val BUNDLE_BYTE_BUDGET = 8 * 1024 * 1024
  * push with the etag they edited. The old endpoints stay alongside until the client cuts over
  * in T10.
  */
-fun Route.syncApiV1(store: FileStore, journal: ChangeJournal) {
+fun Route.syncApiV1(
+    store: FileStore,
+    journal: ChangeJournal,
+    /**
+     * How often a quiet change stream says it is still there. A connection that died without a word
+     * (a phone asleep, or moved to another network) looks exactly like one with nothing to say; the
+     * client takes three missed beats as the former, and reconnects.
+     */
+    heartbeatEvery: Duration = 30.seconds,
+) {
     val json = Json { encodeDefaults = true }
 
     route("/v1") {
@@ -124,17 +140,31 @@ fun Route.syncApiV1(store: FileStore, journal: ChangeJournal) {
             call.respondTextWriter(ContentType.Text.EventStream) {
                 // Each frame is built in memory and then written on the IO dispatcher: writing to a
                 // slow client blocks, and that must not happen on a thread serving other requests.
-                suspend fun send(frame: String) = withContext(Dispatchers.IO) {
-                    write(frame)
-                    flush()
+                // One frame at a time, since the heartbeat writes from its own coroutine.
+                val writing = Mutex()
+                suspend fun send(frame: String) = writing.withLock {
+                    withContext(Dispatchers.IO) {
+                        write(frame)
+                        flush()
+                    }
                 }
 
                 // A hint stream: clients reconcile with the manifest, so a missed event is a delay,
                 // never a lost edit.
                 send(": connected\n\n")
-                journal.events.collect { entry ->
-                    val name = if (entry.deleted) "deleted" else "changed"
-                    send("event: $name\ndata: ${json.encodeToString(entry)}\n\n")
+                coroutineScope {
+                    // A comment line, which SSE clients skip; ending with the stream, as the client
+                    // leaving fails the next write.
+                    launch {
+                        while (true) {
+                            delay(heartbeatEvery)
+                            send(": ping\n\n")
+                        }
+                    }
+                    journal.events.collect { entry ->
+                        val name = if (entry.deleted) "deleted" else "changed"
+                        send("event: $name\ndata: ${json.encodeToString(entry)}\n\n")
+                    }
                 }
             }
         }

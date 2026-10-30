@@ -1,15 +1,21 @@
 package com.korgnote.server
 
 import io.ktor.client.request.delete
+import io.ktor.client.request.prepareGet
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.routing.route
+import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
+import io.ktor.utils.io.readLine
+import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -17,6 +23,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * The sync API's contract, as `docs/05-sync-protocol.md` defines it.
@@ -256,5 +264,27 @@ class SyncApiV1Test {
 
         assertEquals(HttpStatusCode.Conflict, response.status)
         assertEquals("* A, edited in Emacs\n", File(dir, "a.org").readText())
+    }
+
+    /** A quiet stream still says it is there, so that a client can tell it from a dead connection. */
+    @Test
+    fun aQuietChangeStreamSendsHeartbeats() = testApplication {
+        val dir = notesDir("a.org" to "* A\n")
+        application {
+            routing {
+                route("/api") { syncApiV1(FileStore(dir.toPath()), ChangeJournal(), heartbeatEvery = 100.milliseconds) }
+            }
+        }
+
+        val lines = mutableListOf<String>()
+        client.prepareGet("/api/v1/events").execute { response ->
+            val body = response.bodyAsChannel()
+            withTimeout(5.seconds) {
+                while (lines.count { it == ": ping" } < 2) lines += body.readLine() ?: break
+            }
+        }
+
+        assertEquals(": connected", lines.first())
+        assertEquals(2, lines.count { it == ": ping" }, lines.toString())
     }
 }
