@@ -4,6 +4,7 @@ import com.korgnote.common.SERVER_PORT
 import com.korgnote.common.pairing.SECURE_PORT
 import java.io.File
 import java.net.Inet4Address
+import java.net.InetAddress
 import java.net.NetworkInterface
 
 /**
@@ -11,8 +12,9 @@ import java.net.NetworkInterface
  *
  * Two ports. The plain one ([httpPort]) is for the computer the server runs on: the web client, the
  * desktop app, the Devices page where devices are paired and revoked. It listens on loopback, so
- * nothing else can reach it — in the container it listens everywhere inside, and the compose file
- * publishes it on the host's loopback only. The secure one ([httpsPort]) is for the network: TLS
+ * nothing else can reach it — in the container it listens everywhere inside, the compose file
+ * publishes it on the host's loopback only, and a connection from anywhere but the host is refused
+ * by its address ([ServerAccess.thisComputer]). The secure one ([httpsPort]) is for the network: TLS
  * with the server's own certificate, and nothing but the sync API, for paired devices only.
  */
 data class ServerConfig(
@@ -79,6 +81,11 @@ class ServerAccess(
     val securePort: Int?,
     /** What a pairing QR code says about this server; null where devices cannot pair. */
     val pairing: PairingDetails?,
+    /**
+     * Addresses besides loopback that the plain port takes as this computer: in a container, the
+     * network's gateway, which is where the host's published port arrives from.
+     */
+    val thisComputer: Set<String> = emptySet(),
 ) {
     companion object {
         /** No network side at all: what the test host and the API tests want. */
@@ -127,4 +134,38 @@ internal fun interfaceAddresses(): List<String> {
 internal fun namesThisComputer(host: String): Boolean {
     val h = host.trim().removePrefix("[").removeSuffix("]").lowercase()
     return h == "localhost" || h == "::1" || h.startsWith("127.")
+}
+
+/**
+ * Whether a connection from [address] comes from this computer: loopback, or one of [alsoThisComputer].
+ * The test host gives `localhost` as the address of every call, and is this computer too.
+ */
+internal fun connectsFromThisComputer(address: String, alsoThisComputer: Set<String>): Boolean {
+    val a = address.trim().removePrefix("[").removeSuffix("]").lowercase()
+    if (a == "localhost" || a in alsoThisComputer) return true
+    // A literal address is parsed without a lookup; anything else is not one this side can trust.
+    if (!a.all { it.isDigit() || it in "abcdef.:" }) return false
+    return runCatching { InetAddress.getByName(a).isLoopbackAddress }.getOrDefault(false)
+}
+
+/**
+ * The gateway of the default route in [routes], the text of `/proc/net/route`; null when it has
+ * none. Addresses there are hexadecimal and little-endian: `010011AC` is 172.17.0.1.
+ */
+internal fun defaultGateway(routes: String): String? = routes.lineSequence()
+    .drop(1)
+    .map { it.trim().split(Regex("\\s+")) }
+    .firstOrNull { it.size > 2 && it[1] == "00000000" && it[2] != "00000000" }
+    ?.get(2)
+    ?.toLongOrNull(16)
+    ?.let { gateway -> (0 until 4).joinToString(".") { ((gateway shr (8 * it)) and 0xFF).toString() } }
+
+/**
+ * Inside a container, the default gateway, from `/proc/net/route`: the host's published port
+ * reaches the server from there. Empty anywhere else.
+ */
+internal fun containerGateway(): Set<String> {
+    if (!File("/.dockerenv").exists()) return emptySet()
+    val routes = runCatching { File("/proc/net/route").readText() }.getOrNull() ?: return emptySet()
+    return setOfNotNull(defaultGateway(routes))
 }

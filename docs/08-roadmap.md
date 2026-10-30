@@ -1258,8 +1258,8 @@ the next sync rebuilds them (c5ec213).
 - **The morning digest** leaves out overdue items and deadline warnings ([07](07-calendar-agenda.md#notifications)).
 - **A widget sync** does not plan reminders again.
 - **The desktop's pairing token** is kept in plain preferences.
-- **The plain port** has no authentication: any process on the computer can use it, and in the
-  container so can anything on the Docker network.
+- **The plain port** has no authentication: any process on the computer can use it. Another
+  container on the Docker network no longer can: it is refused by its address.
 - **Completion labels** are English only.
 
 ## Sequencing notes

@@ -23,6 +23,7 @@ fun main() {
         DeviceRegistry(File(config.stateDir, "devices.json")),
         securePort = config.httpsPort,
         pairing = PairingDetails(identity.serverId, config.serverName, identity.fingerprint, config.advertisedPort, config.advertisedAddresses),
+        thisComputer = containerGateway(),
     )
     fun isSet(name: String) = System.getenv(name)?.trim()?.lowercase() in setOf("1", "true", "yes")
     embeddedServer(
@@ -286,6 +287,12 @@ internal fun refusalOf(call: ApplicationCall, access: ServerAccess): Pair<HttpSt
         } else {
             null
         }
+    }
+    // Where the connection comes from, which the caller cannot write, before what it says about
+    // itself: in a container this port listens on every interface inside, and another container on
+    // the same network could otherwise claim to be localhost.
+    if (!connectsFromThisComputer(call.request.local.remoteAddress, access.thisComputer)) {
+        return HttpStatusCode.Forbidden to "This port serves the computer the server runs on only."
     }
     if (!namesThisComputer(call.request.host())) {
         return HttpStatusCode.Forbidden to "This port serves the computer the server runs on, by the name localhost."

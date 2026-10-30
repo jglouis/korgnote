@@ -159,7 +159,7 @@ certificate's fingerprint, so a phone needs no proxy and no certificate authorit
 | Port | For | Who gets in |
 |---|---|---|
 | 8443, TLS (`KORGNOTE_HTTPS_PORT`) | paired devices | the sync API only, with `Authorization: Bearer <device token>`; `POST /api/pair` excepted, which is how a device gets one. Anything outside `/api/`, or under `/api/local/`, is `404`; an unknown or revoked token `401`. |
-| 8080, plain (`KORGNOTE_PORT`) | this computer | no token. Bound to `127.0.0.1` (`KORGNOTE_HTTP_HOST`). The `Host` must name this computer (`localhost` or a loopback address), or `403` — which stops DNS rebinding — and a change that carries an `Origin` must come from the server's own pages. Serves the web client, the desktop app, the Devices page (`/devices`) and `POST /api/local/pairing`, which `scripts/pair.sh` calls. |
+| 8080, plain (`KORGNOTE_PORT`) | this computer | no token. Bound to `127.0.0.1` (`KORGNOTE_HTTP_HOST`). The connection must come from loopback — or, in a container, from its network's gateway, which is where the host's published port arrives — or `403`. The `Host` must also name this computer (`localhost` or a loopback address), or `403` — which stops DNS rebinding — and a change that carries an `Origin` must come from the server's own pages. Serves the web client, the desktop app, the Devices page (`/devices`) and `POST /api/local/pairing`, which `scripts/pair.sh` calls. |
 
 TLS uses a self-signed certificate the server makes on first start and keeps, with its id and
 the paired devices, in `KORGNOTE_STATE_DIR` (`~/.korgnote-server`). The Devices page shows a QR
@@ -171,10 +171,16 @@ only a hash of the token.
 
 What this trusts, stated plainly:
 
-- **Anything that reaches port 8080 with `Host: localhost` has full read and write**, and can
-  mint pairing codes. On a desktop that is every local process. In Docker the plain port listens
-  on `0.0.0.0` inside the container (`KORGNOTE_HTTP_HOST=0.0.0.0`) and is published on the host's
-  loopback only, so other containers on the same Docker network reach it too.
+- **Any process on this computer has full read and write through port 8080**, and can mint
+  pairing codes. It could read the notes folder anyway; a web page cannot, for the `Host` and
+  `Origin` checks.
+- The port trusts where a connection comes from, not what it says: a `Host: localhost` header is
+  the caller's to write. In Docker the plain port listens on `0.0.0.0` inside the container
+  (`KORGNOTE_HTTP_HOST=0.0.0.0`), so another container on the same network could reach it and
+  claim to be localhost; it is refused, because it connects from its own address. The host's
+  published port arrives from the network's gateway (read from `/proc/net/route`), which is
+  trusted — so 8080 must stay published on the host's loopback only (`-p 127.0.0.1:8080:8080`), or
+  the network reaches it through that gateway too.
 - The device token is sealed on Android (a Keystore key) and iOS (the Keychain). The desktop app
   keeps it in plain Java `Preferences` (`composeApp/…/PersistentSettingsRepository.jvm.kt`).
 
