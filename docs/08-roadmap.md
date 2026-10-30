@@ -1246,9 +1246,10 @@ the next sync rebuilds them (c5ec213).
 
 ## Open, and known gaps
 
-- **Sync triggers.** The app syncs on start, on coming back, after a save and on the change stream.
-  Not built: a periodic poll while open, Android's periodic `WorkManager` job, iOS's
-  `BGAppRefreshTask`, and a debounce on saves.
+- **Sync triggers.** The app syncs on start, on coming back, after a save and on the change stream;
+  on Android also hourly with the app closed, and once the network is back after a failed push.
+  Not built: iOS's `BGAppRefreshTask` (after T18 is seen on an iPhone) and a debounce on saves. A
+  periodic poll while open is not wanted: the change stream's watchdog covers it.
 - **T10b leftovers.** Debounced autosave, a web replica that survives a reload, SSE on the JS
   engine; and the web client works only on the server's machine.
 - **T0/T0b.** The two spike notes were never written.
@@ -1256,7 +1257,6 @@ the next sync rebuilds them (c5ec213).
 - **T6 drift.** Org regexes back in `OrgText.kt`, `NoteByline.kt`, `LinkNavigator.kt`,
   `OrgSyntaxHighlighting.kt` and `TableFormulas.kt`.
 - **The morning digest** leaves out overdue items and deadline warnings ([07](07-calendar-agenda.md#notifications)).
-- **A widget sync** does not plan reminders again.
 - **The desktop's pairing token** is kept in plain preferences.
 - **The plain port** has no authentication: any process on the computer can use it. Another
   container on the Docker network no longer can: it is refused by its address.

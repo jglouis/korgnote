@@ -193,8 +193,9 @@ Policy: a reminder per timed occurrence at a configurable lead time (default 10 
 plus an optional daily digest in the morning listing today's agenda. Rescheduling is
 idempotent — always "cancel all, schedule the next N" — so a sync that changes nothing
 leaves notifications untouched. The plan is made again on every change to the notes and on
-returning to the app. *Known gap:* a sync started from an Android widget is neither; it does not
-plan reminders again, and they wait for the app.
+returning to the app, and on Android after every sync made with the app closed — hourly, after a
+failed push once the network is back, and from a widget's sync button — so a meeting added on the
+computer gets its reminder without the app being opened (`planRemindersFrom`).
 
 **The morning digest, as built.** Off by default; when on, it comes at 08:00 unless Settings' clock
 picker says otherwise. There is one for each day in the next 14 that has something on it. Its title
@@ -224,10 +225,10 @@ a tapped day or title opens the app's calendar there (`CalendarTaps`).
   `res/layout-v31/*_preview.xml`).
 - **Sync button.** Starts a one-off `WorkManager` job that syncs as the app does on opening (the
   replica with the server or with WebDAV, or a look at the folder), rebuilds the entries and
-  redraws. No periodic background sync: the widget says how fresh it is ("Updated 14:32")
-  instead. If the app is open meanwhile it reads the notes again (`WidgetSyncs`), so nothing on
-  screen is saved back over what the sync brought. *Known gap:* it does not plan reminders again
-  (`WidgetSync.kt`).
+  redraws, and plans reminders from the notes it brought. The same runs every hour in the
+  background (`BackgroundSyncWorker`); the widget still says how fresh it is ("Updated 14:32"). If
+  the app is open meanwhile it reads the notes again (`WidgetSyncs`), so nothing on screen is saved
+  back over what the sync brought.
 - **Not yet:** ticking off a TODO from the widget, iOS (WidgetKit would read the same entries from
   an App Group).
 

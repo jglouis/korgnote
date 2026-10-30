@@ -33,13 +33,24 @@ class ServerSyncTest {
     private var message: String? = null
 
     private var clock = Instant.fromEpochSeconds(1_800_000_000)
+    private var askedToSyncWhenOnline = 0
 
-    private fun TestScope.serverSync() = ServerSync(
+    /**
+     * [plainReasons] for a sync the stream starts in the background: the app's own reason is read
+     * from its resources on a thread of their own, which virtual time does not wait for.
+     */
+    private fun TestScope.serverSync(plainReasons: Boolean = false) = ServerSync(
         backgroundScope,
         SyncEngine(store, api),
         onReplicaChanged = { replicaShown++ },
         showMessage = { message = it },
         now = { clock },
+        background = object : BackgroundSync {
+            override fun whenOnline() {
+                askedToSyncWhenOnline++
+            }
+        },
+        reason = if (plainReasons) { t -> t.message.orEmpty() } else ::unreachableReason,
     )
 
     /** Runs whatever is due [millis] from now, the way [advanceTimeBy] alone does not. */
@@ -174,7 +185,7 @@ class ServerSyncTest {
     @Test
     fun theStreamsCatchUpMarksTheServerUnreachableAndThenReachableAgain() = runTest {
         api.online = false
-        val server = serverSync()
+        val server = serverSync(plainReasons = true)
         server.watch()
         runCurrent()
         assertNull(server.unreachable, "a dropped stream alone is not proof of being offline")
@@ -260,5 +271,28 @@ class ServerSyncTest {
         runCurrent()
 
         assertEquals(opened + 1, api.streamOpened, "reconnected at once, not up to 30 s later")
+    }
+
+    /**
+     * An edit saved offline waits in the replica. With the app closed before the network returns,
+     * only a sync in the background takes it to the server before the app is opened again.
+     */
+    @Test
+    fun anEditThatCouldNotBeSentAsksForASyncOnceOnline() = runTest {
+        val server = serverSync()
+        api.online = false
+
+        server.push { store.create("new.org", "* New\n") }
+
+        assertEquals(1, askedToSyncWhenOnline)
+    }
+
+    @Test
+    fun anEditThatWasSentAsksForNothing() = runTest {
+        val server = serverSync()
+
+        server.push { store.create("new.org", "* New\n") }
+
+        assertEquals(0, askedToSyncWhenOnline)
     }
 }

@@ -103,6 +103,8 @@ class NotesViewModel(
     },
     /** Where reminders go: the device's own notifications, or nowhere on desktop and web. */
     notifications: NotificationScheduler = NoopNotificationScheduler,
+    /** Sends an edit made offline once the network is back, with the app closed if need be. */
+    private val backgroundSync: BackgroundSync = NoBackgroundSync,
     /** Read each time reminders are planned, so a change in Settings applies on the next plan. */
     reminderSettings: () -> ReminderSettings = { ReminderSettings() },
     /** The home-screen widgets showing the agenda: Android's, or none. */
@@ -205,7 +207,7 @@ class NotesViewModel(
     val server: NotesSync = if (folder != null) {
         FolderSync(viewModelScope, folder, onReplicaChanged = ::showFromReplica, showMessage = ::showMessage)
     } else {
-        ServerSync(viewModelScope, sync, onReplicaChanged = ::showFromReplica, showMessage = ::showMessage)
+        ServerSync(viewModelScope, sync, onReplicaChanged = ::showFromReplica, showMessage = ::showMessage, background = backgroundSync)
     }
 
     /**

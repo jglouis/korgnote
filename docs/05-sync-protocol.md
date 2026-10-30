@@ -355,11 +355,22 @@ What is built (`composeApp/…/viewmodel/ServerSync.kt`):
 | Change stream silent 90 s after a heartbeat | taken as dead: reconnect and full cycle |
 | Local save | mark dirty, and run a cycle at once, which pushes it — no debounce |
 | Manual retry | full cycle |
+| A push that fails | asks for a sync once the network is back, the app open or not (`BackgroundSync`) |
+| Android, every hour, the app closed or not | full cycle, then the widgets and the reminders from the notes as they now are |
 
-Not built: a periodic manifest poll while in the foreground (~5 min, as an SSE backstop),
-Android periodic `WorkManager` sync, and iOS `BGAppRefreshTask`. `WorkManager` is used only for
-a one-shot sync when a home-screen widget's sync button is tapped
-(`androidApp/…/widget/WidgetSync.kt`).
+On Android the last two are `WorkManager` jobs (`androidApp/…/sync/BackgroundSyncWorker.kt`),
+running what a widget's sync button runs (`syncInBackground`, `widget/WidgetSync.kt`). Hourly
+needs no network: offline it still plans reminders, which moves their window on. The one after a
+failed push waits for a network, and tries again with a backoff, up to five times, while the
+server cannot be reached and an edit is still waiting. Without them a meeting typed in on the
+computer got no reminder on the phone until the app was opened, and an edit made offline stayed on
+the phone until then too. Checked on a phone with the app closed: the edit reached the server
+seconds after it came back, and the new meeting's reminder was set.
+
+Not built, on purpose: a periodic manifest poll while in the foreground — the change stream, its
+heartbeat watchdog and the catch-up after each reconnection already cover it. Not built yet: iOS
+`BGAppRefreshTask`, which iOS runs when it chooses if at all; reminders on an iPhone are to be seen
+working first (T18).
 
 iOS will not give you daemon-like background sync. Design for it: a foreground sync is
 fast, reminders are scheduled locally in advance

@@ -40,6 +40,13 @@ class ServerSync(
     /** Shows a message to the user; an empty one clears it. */
     private val showMessage: (String) -> Unit,
     private val now: () -> Instant = { Clock.System.now() },
+    /** Takes an edit that could not be sent to the server once the network is back, the app open or not. */
+    private val background: BackgroundSync = NoBackgroundSync,
+    /**
+     * What [unreachable] says for a failure: by default in the app's language, read from its
+     * resources on a thread of their own, which a test on virtual time can pass a plain one for.
+     */
+    private val reason: suspend (Throwable) -> String = ::unreachableReason,
 ) : NotesSync {
     /**
      * Why the server could not be reached on the last attempt, or null when it answered.
@@ -183,6 +190,7 @@ class ServerSync(
             // instead of being reported as a failure.
             currentCoroutineContext().ensureActive()
             unreachable = reason(t)
+            background.whenOnline()
             t.printStackTrace()
         }
     }
@@ -191,7 +199,7 @@ class ServerSync(
      * Pushes what just changed, if the server can be reached; offline, it waits for the next sync.
      * No message either way: a created, renamed or deleted note needs none to say it was sent.
      */
-    override suspend fun pushQuietly() = catchUp("Sync after a file change")
+    override suspend fun pushQuietly() = catchUp("Sync after a file change", onFailure = background::whenOnline)
 
     /**
      * Catches up with changes made while the app was away. The stream may have been cut meanwhile
@@ -213,7 +221,7 @@ class ServerSync(
      * Not runCatching: it would swallow cancellation, and keep a loop alive after the view model is
      * gone.
      */
-    private suspend fun catchUp(what: String) {
+    private suspend fun catchUp(what: String, onFailure: () -> Unit = {}) {
         try {
             reportConflicts(syncOnce())
             unreachable = null
@@ -221,6 +229,7 @@ class ServerSync(
         } catch (t: Throwable) {
             currentCoroutineContext().ensureActive()
             unreachable = reason(t)
+            onFailure()
             println("[DEBUG_LOG][ServerSync] $what failed: ${t.message}")
         }
     }
@@ -245,11 +254,13 @@ class ServerSync(
         return true
     }
 
-    private suspend fun reason(t: Throwable): String {
-        // Reached, and refused: what to do about it is not checking the connection.
-        if (t is NotPairedException || t is WebDavRefusedException || t is WebDavException) return t.message.orEmpty()
-        val msg = t.message ?: ""
-        val simple = t::class.simpleName ?: "Error"
-        return getString(Res.string.vm_server_unreachable, simple, msg)
-    }
+}
+
+/** Why the server could not be reached, in the words of the app's language. */
+internal suspend fun unreachableReason(t: Throwable): String {
+    // Reached, and refused: what to do about it is not checking the connection.
+    if (t is NotPairedException || t is WebDavRefusedException || t is WebDavException) return t.message.orEmpty()
+    val msg = t.message ?: ""
+    val simple = t::class.simpleName ?: "Error"
+    return getString(Res.string.vm_server_unreachable, simple, msg)
 }

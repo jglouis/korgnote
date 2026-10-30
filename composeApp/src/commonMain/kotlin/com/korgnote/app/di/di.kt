@@ -14,6 +14,8 @@ import com.korgnote.common.replica.FolderNoteStorage
 import com.korgnote.app.files.NoFileOpener
 import com.korgnote.app.notifications.NoopNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
+import com.korgnote.app.viewmodel.BackgroundSync
+import com.korgnote.app.viewmodel.NoBackgroundSync
 import com.korgnote.app.viewmodel.NotesViewModel
 import com.korgnote.app.widgets.AgendaWidgets
 import com.korgnote.app.widgets.NoAgendaWidgets
@@ -86,6 +88,7 @@ val appModule = module {
             if (webDav) get<SyncEngine>(WEBDAV) else get<SyncEngine>(),
             folder?.let(::DocumentStore) ?: if (webDav) get<DocumentStore>(WEBDAV) else get<DocumentStore>(),
             notifications = getOrNull<NotificationScheduler>() ?: NoopNotificationScheduler,
+            backgroundSync = getOrNull<BackgroundSync>() ?: NoBackgroundSync,
             widgets = getOrNull<AgendaWidgets>() ?: NoAgendaWidgets,
             reminderSettings = settings::getReminderSettings,
             newNotesFolder = settings::getNewNotesFolder,

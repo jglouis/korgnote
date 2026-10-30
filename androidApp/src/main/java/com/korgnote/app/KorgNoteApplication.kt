@@ -10,6 +10,9 @@ import com.korgnote.app.files.FileOpener
 import com.korgnote.app.di.initKoin
 import com.korgnote.app.notifications.AndroidNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
+import com.korgnote.app.sync.AndroidBackgroundSync
+import com.korgnote.app.sync.BackgroundSyncWorker
+import com.korgnote.app.viewmodel.BackgroundSync
 import com.korgnote.app.widget.AndroidAgendaWidgets
 import com.korgnote.app.widget.WidgetPreviews
 import com.korgnote.app.widgets.AgendaWidgets
@@ -27,8 +30,10 @@ class KorgNoteApplication : Application() {
             single<NotificationScheduler> { AndroidNotificationScheduler(this@KorgNoteApplication) }
             single<AgendaWidgets> { AndroidAgendaWidgets(this@KorgNoteApplication) }
             single<FileOpener> { AndroidFileOpener(this@KorgNoteApplication) }
+            single<BackgroundSync> { AndroidBackgroundSync(this@KorgNoteApplication) }
         }
         initKoin(extraModules = listOf(androidModule))
         WidgetPreviews.publish(this)
+        BackgroundSyncWorker.scheduleHourly(this)
     }
 }
