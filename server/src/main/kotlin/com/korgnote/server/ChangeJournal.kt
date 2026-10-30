@@ -15,6 +15,9 @@ data class ChangeEntry(
     val deleted: Boolean = false,
 )
 
+/** What changed after a generation, and the generation those changes bring a client up to. */
+data class JournalDelta(val generation: Long, val changes: List<ChangeEntry>)
+
 /**
  * A bounded, in-memory log of recent changes, and the generation counter clients diff against.
  *
@@ -22,10 +25,19 @@ data class ChangeEntry(
  * generation the journal no longer covers — because the server restarted or the log was trimmed —
  * gets a full manifest instead, so losing this costs bandwidth and nothing else. That is what keeps
  * it safe to hold only in memory.
+ *
+ * For a restart to be noticed, a new journal must never hand out a generation an old one did: one
+ * counting from zero again would soon pass the number a client kept, and answer for it with only
+ * the changes after it. So the counter starts at the time the journal was made, in milliseconds,
+ * which is past every generation a previous run reached unless it saw more changes than it ran
+ * milliseconds.
  */
-class ChangeJournal(private val capacity: Int = 512) {
+class ChangeJournal(
+    private val capacity: Int = 512,
+    start: Long = System.currentTimeMillis(),
+) {
 
-    private val counter = AtomicLong(0)
+    private val counter = AtomicLong(start)
     private val entries = ArrayDeque<ChangeEntry>()
     private val lock = Any()
 
@@ -49,14 +61,21 @@ class ChangeJournal(private val capacity: Int = 512) {
     }
 
     /**
-     * Changes after [since], or null when the journal cannot answer for that generation and the
-     * caller must fall back to a full manifest.
+     * What changed after [since], or null when the journal cannot answer for that generation and
+     * the caller must fall back to a full manifest.
+     *
+     * One entry per path, its latest: a note deleted and made again is there, not gone. The
+     * generation is read under the same lock as the changes, so it covers exactly them; read apart,
+     * a change landing in between would be covered by the generation and missing from the changes.
      */
-    fun changesSince(since: Long): List<ChangeEntry>? = synchronized(lock) {
-        if (since > counter.get()) return null
-        val oldest = entries.firstOrNull() ?: return if (since == counter.get()) emptyList() else null
+    fun changesSince(since: Long): JournalDelta? = synchronized(lock) {
+        val generation = counter.get()
+        if (since > generation) return null
+        val oldest = entries.firstOrNull()
+            ?: return if (since == generation) JournalDelta(generation, emptyList()) else null
         // The client is further behind than the log reaches.
         if (since < oldest.generation - 1) return null
-        entries.filter { it.generation > since }
+        val latest = entries.filter { it.generation > since }.associateBy { it.path }.values
+        JournalDelta(generation, latest.sortedBy { it.generation })
     }
 }

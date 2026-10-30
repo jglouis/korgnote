@@ -188,4 +188,23 @@ class FileStoreTest {
 
         assertEquals("rw-r--r--", modeOf("inbox/new.org"))
     }
+
+    /**
+     * A folder linked into the notes from elsewhere is outside them. Reading or editing a note
+     * through it was already refused; creating one must be too, or a new note lands outside the root.
+     */
+    @Test
+    fun aNoteCannotBeCreatedThroughALinkThatLeavesTheRoot() {
+        val outside = createTempDirectory("korgnote-outside")
+        try {
+            java.nio.file.Files.createSymbolicLink(root.resolve("linked"), outside)
+
+            val result = store.put("linked/new.org", "* escaped\n", mustNotExist = true)
+
+            assertIs<WriteResult.Rejected>(result)
+            assertTrue(outside.toFile().list().isNullOrEmpty(), "nothing may be written outside the root")
+        } finally {
+            outside.toFile().deleteRecursively()
+        }
+    }
 }

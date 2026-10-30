@@ -16,6 +16,11 @@ import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import io.ktor.utils.io.readLine
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -197,8 +202,9 @@ class SyncApiV1Test {
             setBody("* A2\n")
         }
 
-        // Generation 1 was that write; asking since 1 should report no further changes.
-        val body = client.get("/api/v1/manifest?since=1").bodyAsText()
+        // Asking since the generation that write made should report no further changes.
+        val generation = manifestOf(client.get("/api/v1/manifest").bodyAsText())["generation"]!!.jsonPrimitive.long
+        val body = client.get("/api/v1/manifest?since=$generation").bodyAsText()
         assertTrue(body.contains("\"complete\":false"), body)
         assertTrue(body.contains("\"entries\":[]"), body)
     }
@@ -286,5 +292,28 @@ class SyncApiV1Test {
 
         assertEquals(": connected", lines.first())
         assertEquals(2, lines.count { it == ": ping" }, lines.toString())
+    }
+
+    private fun manifestOf(body: String) = Json.parseToJsonElement(body).jsonObject
+
+    /**
+     * A note deleted and then made again since the client last looked is there, not gone: a delta
+     * that named it both changed and deleted had the client pull it and then remove it.
+     */
+    @Test
+    fun aNoteDeletedAndMadeAgainIsListedAsThereNotAsDeleted() = testApplication {
+        serve(notesDir("a.org" to "* A\n"))
+        val since = manifestOf(client.get("/api/v1/manifest").bodyAsText())["generation"]!!.jsonPrimitive.long
+        val etag = client.get("/api/v1/files/a.org").headers[HttpHeaders.ETag]!!
+        client.delete("/api/v1/files/a.org") { header(HttpHeaders.IfMatch, etag) }
+        client.put("/api/v1/files/a.org") {
+            header(HttpHeaders.IfNoneMatch, "*")
+            setBody("* A again\n")
+        }
+
+        val delta = manifestOf(client.get("/api/v1/manifest?since=$since").bodyAsText())
+
+        assertEquals(listOf("a.org"), delta["entries"]!!.jsonArray.map { it.jsonObject["path"]!!.jsonPrimitive.content })
+        assertEquals(emptyList(), delta["deleted"]!!.jsonArray.map { it.jsonPrimitive.content })
     }
 }

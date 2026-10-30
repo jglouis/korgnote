@@ -259,10 +259,11 @@ class FileStore(
 
         val rootReal = runCatching { root.toRealPath() }.getOrElse { root.normalize() }
         if (!candidate.normalize().startsWith(root.normalize())) return null
-        if (candidate.exists()) {
-            val fileReal = runCatching { candidate.toRealPath() }.getOrNull() ?: return null
-            if (!fileReal.startsWith(rootReal)) return null
-        }
+        // Through links, the file — or, for a new one, the nearest folder it would be made in — must
+        // still be inside the root: a folder linked in from elsewhere is not part of the library.
+        val existing = generateSequence(candidate) { it.parent }.firstOrNull { it.exists() } ?: return null
+        val existingReal = runCatching { existing.toRealPath() }.getOrNull() ?: return null
+        if (!existingReal.startsWith(rootReal)) return null
         return candidate
     }
 

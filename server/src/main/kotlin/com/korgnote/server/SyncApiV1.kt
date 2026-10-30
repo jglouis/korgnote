@@ -82,14 +82,14 @@ fun Route.syncApiV1(
                 // The journal could answer: send only what moved.
                 call.respond(
                     Manifest(
-                        generation = journal.generation,
+                        generation = delta.generation,
                         complete = false,
-                        entries = delta.filterNot { it.deleted }.mapNotNull { entry ->
+                        entries = delta.changes.filterNot { it.deleted }.mapNotNull { entry ->
                             store.meta(entry.path)?.let {
                                 ManifestEntry(it.path, it.size, it.mtimeMillis, it.etag)
                             }
                         },
-                        deleted = delta.filter { it.deleted }.map { it.path },
+                        deleted = delta.changes.filter { it.deleted }.map { it.path },
                     ),
                 )
                 return@get
@@ -109,7 +109,7 @@ fun Route.syncApiV1(
         get("/bundle") {
             val since = call.request.queryParameters["since"]?.toLongOrNull()
             val delta = since?.let { journal.changesSince(it) }
-            val paths = delta?.filterNot { it.deleted }?.map { it.path }?.distinct()
+            val paths = delta?.changes?.filterNot { it.deleted }?.map { it.path }
                 ?: store.list().map { it.path }
 
             // Streamed, not assembled: the whole library is megabytes and need not be held twice.
