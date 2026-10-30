@@ -93,6 +93,20 @@ class ReminderSchedulingTest {
         assertEquals(listOf("Design review", "Lunch"), handedOver.last().map { it.title })
     }
 
+    /**
+     * iOS drops the reminders it is not allowed to show. Allowed later, from Settings, the same
+     * plan must be handed over again — though it has not changed, which otherwise leaves it alone.
+     */
+    @Test
+    fun allowingNotificationsHandsTheSamePlanOverAgain() = runTest {
+        viewModel.server.load()
+
+        viewModel.agenda.onNotificationsAllowed()
+
+        assertEquals(2, handedOver.size)
+        assertEquals(handedOver.first(), handedOver.last())
+    }
+
     @Test
     fun aChangedSettingAppliesOnTheNextPlan() = runTest {
         viewModel.server.load()

@@ -311,9 +311,12 @@ private fun AgendaEntry.expandInto(into: MutableList<AgendaOccurrence>, from: Lo
                 into += AgendaOccurrence(this, repeat.date, repeat.time, stamp.endTime, daysUntilDeadline = 0)
             }
             if (done) return
+            // Missed and not done: today says so, below, and a warning of the next repeat would only
+            // hide that — a repeating deadline's date moves on when it is done, not when it passes.
+            val missed = options.carryOver && stamp.start < today
             // Advance warning for the next deadline to come — not for every repeat of it, or a daily
             // deadline would fill each day with a fortnight of copies of itself.
-            val next = stamp.repeats(onOrAfter = today).firstOrNull()
+            val next = if (missed) null else stamp.repeats(onOrAfter = today).firstOrNull()
             if (next != null) {
                 val warning = stamp.delay?.takeIf { !it.firstOnly || next.index == 0 }?.by
                     ?: OrgDuration(options.deadlineWarningDays, OrgTimeUnit.DAY)
@@ -324,7 +327,7 @@ private fun AgendaEntry.expandInto(into: MutableList<AgendaOccurrence>, from: Lo
                 }
             }
             // Missed: shown on today, counting how late it is, until it is done.
-            if (options.carryOver && stamp.start < today && today in from..to &&
+            if (missed && today in from..to &&
                 into.none { it.entry === this && it.date == today }
             ) {
                 into += AgendaOccurrence(
@@ -451,6 +454,10 @@ class AgendaIndex(val entries: List<AgendaEntry>, val options: AgendaOptions) {
 
     /** Occurrences between [from] and [to], both inclusive. */
     fun between(from: LocalDate, to: LocalDate): List<AgendaOccurrence> = entries.occurrences(from, to, options)
+
+    /** The same entries, carried over and warned of as on [today]; this one when it already is. */
+    fun asOf(today: LocalDate): AgendaIndex =
+        if (today == options.today) this else AgendaIndex(entries, options.copy(today = today))
 
     companion object {
         fun of(files: Map<String, String>, options: AgendaOptions) = AgendaIndex(agendaEntries(files), options)

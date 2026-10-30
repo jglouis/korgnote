@@ -88,6 +88,29 @@ class CalendarScreenTest {
         assertEquals(listOf("Lunch with Sam"), opened.map { it.title })
     }
 
+    /**
+     * The index is built when the notes change, and nothing need change overnight: an app left open
+     * past midnight still holds yesterday's. What is overdue must follow the clock, not the index.
+     */
+    @Test
+    fun whatIsOverdueFollowsTheClockPastMidnight() = runComposeUiTest {
+        val builtYesterday = AgendaIndex.of(
+            mapOf("life.org" to "* TODO Call the bank\nSCHEDULED: <2026-09-20 Sun>\n"),
+            AgendaOptions(today = LocalDate(2026, 9, 22)),
+        )
+        setContent {
+            MaterialTheme {
+                CalendarScreen(
+                    Modifier.size(390.dp, 800.dp),
+                    agenda = builtYesterday,
+                    initialMode = CalendarMode.Agenda,
+                    now = now,
+                )
+            }
+        }
+        assertShown("Call the bank")
+    }
+
     @Test
     fun theAgendaListShowsTagsAsChips() = runComposeUiTest {
         show(CalendarMode.Agenda)

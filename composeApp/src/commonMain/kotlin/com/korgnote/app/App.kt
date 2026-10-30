@@ -830,6 +830,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                     pairing = remember { KoinPlatform.getKoin().getOrNull<DevicePairing>() },
                                     notesSource = source,
                                     onChangeNotesSource = onChangeSource.takeIf { offersNotesFolder },
+                                    onNotificationsAllowed = vm.agenda::onNotificationsAllowed,
                                 )
                             }
                         }

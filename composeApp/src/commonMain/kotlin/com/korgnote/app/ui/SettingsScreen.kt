@@ -135,6 +135,8 @@ fun SettingsScreen(
     notesSource: NotesSource = NotesSource.Server,
     /** Opens the welcome screens again, to keep the notes elsewhere; null where there is no choice. */
     onChangeNotesSource: (() -> Unit)? = null,
+    /** Notifications were allowed from here, so the reminders already planned can be shown. */
+    onNotificationsAllowed: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     var host by remember { mutableStateOf("") }
@@ -363,7 +365,7 @@ fun SettingsScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer,
                                 )
-                                OutlinedButton(onClick = { notifications.request { } }) {
+                                OutlinedButton(onClick = { notifications.request { granted -> if (granted) onNotificationsAllowed() } }) {
                                     Text(stringResource(Res.string.settings_allow_notifications))
                                 }
                             }

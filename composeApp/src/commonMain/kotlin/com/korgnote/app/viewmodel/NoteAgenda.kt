@@ -112,6 +112,15 @@ class NoteAgenda(
         }
     }
 
+    /**
+     * Notifications were just allowed. iOS drops the reminders it is not allowed to show, so the
+     * plan is handed over again even though it has not changed.
+     */
+    fun onNotificationsAllowed() {
+        plannedReminders = null
+        refreshReminders()
+    }
+
     /** The entries and sync time last handed to [widgets]. */
     private var shownOnWidgets: Pair<List<AgendaEntry>, Instant?>? = null
 

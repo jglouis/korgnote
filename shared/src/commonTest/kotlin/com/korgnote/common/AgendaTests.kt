@@ -124,6 +124,16 @@ class AgendaTests {
         assertTrue(found.all { it.daysUntilDeadline == 0 })
     }
 
+    @Test
+    fun anUnfinishedRepeatingDeadlineIsOverdueRatherThanWarningOfTheNextOne() {
+        // Missed on the 7th and not done since: that is what today must say, as for a scheduled
+        // item. The next repeat's warning landed on today first and kept the carried entry out.
+        val found = occurrences("* TODO Timesheet\nDEADLINE: <2026-09-07 Mon +1w>\n", from = day(20), to = day(30))
+        assertEquals(listOf(day(21), today, day(28)), found.dates())
+        assertEquals(listOf(false, true, false), found.map { it.isCarriedOver })
+        assertEquals(-16, found[1].daysUntilDeadline)
+    }
+
     // --- Repeaters ---
 
     @Test

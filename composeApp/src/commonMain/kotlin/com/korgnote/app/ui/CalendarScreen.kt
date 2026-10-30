@@ -96,6 +96,9 @@ fun CalendarScreen(
         }
     }
     val today = clock.date
+    // The index is built when the notes change, and nothing need change overnight: what is carried
+    // over and warned of follows this clock, not the day the index was built on.
+    val agendaToday = remember(agenda, today) { agenda.asOf(today) }
     // Saved, as is the tab: turning the phone recreates the activity, and turning it to see more of
     // the calendar should not lose the place in it.
     var mode by rememberSaveable { mutableStateOf(initialMode ?: CalendarMode.Agenda) }
@@ -154,7 +157,7 @@ fun CalendarScreen(
                 val open = { occurrence: AgendaOccurrence -> onOpenEntry(occurrence.entry) }
                 when (calendarMode) {
                     CalendarMode.Agenda -> AgendaListView(
-                        agenda = agenda,
+                        agenda = agendaToday,
                         from = aDate,
                         today = today,
                         showDone = showDone,
@@ -163,7 +166,7 @@ fun CalendarScreen(
 
                     CalendarMode.Day -> TimeGridView(
                         dates = listOf(aDate),
-                        agenda = agenda,
+                        agenda = agendaToday,
                         now = clock,
                         showDone = showDone,
                         onOpen = open,
@@ -174,7 +177,7 @@ fun CalendarScreen(
 
                     CalendarMode.Week -> TimeGridView(
                         dates = (0 until 7).map { aDate.startOfWeek().plus(it, DateTimeUnit.DAY) },
-                        agenda = agenda,
+                        agenda = agendaToday,
                         now = clock,
                         showDone = showDone,
                         onOpen = open,
@@ -185,7 +188,7 @@ fun CalendarScreen(
 
                     CalendarMode.Month -> MonthView(
                         anchorDate = aDate,
-                        agenda = agenda,
+                        agenda = agendaToday,
                         today = today,
                         showDone = showDone,
                         onDayClick = { show(CalendarMode.Day, it) },
