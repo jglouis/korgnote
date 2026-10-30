@@ -119,7 +119,12 @@ class SyncEngine(
 
             when {
                 // Never seen it, or the copy went missing: take the server's.
-                !haveLocally || meta == null -> if (pullOne(entry.path)) pulled.add(entry.path)
+                !haveLocally -> if (pullOne(entry.path)) pulled.add(entry.path)
+
+                // Here, but with no record of what was synced — a corrupt meta.json is read as
+                // empty — so it may hold edits never pushed. Theirs takes the path, and ours is kept
+                // beside it unless the two are the same.
+                meta == null -> record(keepTheirs(entry.path), entry.path)
 
                 // Untouched locally and unchanged remotely: nothing to do.
                 !dirty && meta.etag == entry.etag -> Unit

@@ -349,11 +349,17 @@ class DocumentStore(private val storage: ReplicaStorage) {
         return replaced
     }
 
-    /** Remembers how far the replica has caught up, so the next sync can ask for a delta. */
+    /**
+     * Remembers how far the replica has caught up, so the next sync can ask for a delta.
+     *
+     * Taken as the server gives it, even when lower: a server whose clock went back across a
+     * restart counts from behind where it was, and a client kept at the higher number would ask
+     * for changes since a generation that server reaches only later, missing all before it.
+     */
     suspend fun setGeneration(generation: Long) {
         mutex.withLock {
             val meta = storage.readMeta()
-            storage.writeMeta(meta.copy(generation = maxOf(meta.generation, generation)))
+            storage.writeMeta(meta.copy(generation = generation))
         }
     }
 

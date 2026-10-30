@@ -787,4 +787,52 @@ class SyncEngineTests {
         val copy = store.paths().single { it.startsWith("n0.sync-conflict-") }
         assertEquals(":ID: new\n", store.read(copy), "and the new note beside it")
     }
+
+    /**
+     * A corrupt meta.json is read as empty, so the notes are there with no record of what was
+     * synced. Unsynced edits among them must not be overwritten by the server's copy.
+     */
+    @Test
+    fun aNoteWhoseRecordWasLostIsKeptBesideTheServersVersion() = runTest {
+        val server = FakeServer()
+        server.put("a.org", "* A\n")
+        val store = DocumentStore(InMemoryReplicaStorage(mapOf("a.org" to "* A, edited here\n")))
+        val engine = SyncEngine(store, server) { "20260921-101500" }
+
+        engine.sync()
+
+        assertEquals("* A\n", store.read("a.org"))
+        val copy = store.paths().single { it.startsWith("a.sync-conflict-") }
+        assertEquals("* A, edited here\n", store.read(copy), "the edit is kept beside it")
+    }
+
+    @Test
+    fun aNoteWhoseRecordWasLostButMatchesTheServerSimplyConverges() = runTest {
+        val server = FakeServer()
+        server.put("a.org", "* A\n")
+        val store = DocumentStore(InMemoryReplicaStorage(mapOf("a.org" to "* A\n")))
+        val engine = SyncEngine(store, server) { "20260921-101500" }
+
+        val report = engine.sync()
+
+        assertTrue(report.conflicted.isEmpty())
+        assertEquals(listOf("a.org"), store.paths())
+    }
+
+    /**
+     * A complete manifest says where the server is now, even behind where it was: a server whose
+     * clock went back across a restart. Kept at the higher number, the client would ask for changes
+     * since a generation the server reaches only later, and miss everything before it.
+     */
+    @Test
+    fun aCompleteManifestSetsTheGenerationEvenBackwards() = runTest {
+        val (server, store, engine) = setUp()
+        server.generation = 50
+        engine.sync()
+
+        server.generation = 3
+        engine.sync()
+
+        assertEquals(3, store.generation())
+    }
 }
