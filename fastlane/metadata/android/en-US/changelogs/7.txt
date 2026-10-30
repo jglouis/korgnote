@@ -1,0 +1,4 @@
+* Sync no longer merges two notes with the same name into one file; the other is kept as a conflict copy.
+* Changes made elsewhere arrive again after the connection dies silently (needs the 1.4.1 server).
+* The app syncs when you come back to it.
+* A list item or footnote written over several lines keeps all of them.
