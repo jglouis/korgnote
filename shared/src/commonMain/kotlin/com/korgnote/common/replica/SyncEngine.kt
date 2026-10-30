@@ -130,6 +130,11 @@ class SyncEngine(
                 // Edited locally, server unchanged since we synced: push.
                 meta.etag == entry.etag -> record(pushLocal(entry.path, meta.etag), entry.path)
 
+                // Created here and, at the same path, elsewhere: two notes with no common ancestor,
+                // not one note changed twice. Merging them against an empty base would splice both
+                // into one file, with two IDs and two titles; theirs takes the path instead.
+                meta.etag == null -> record(keepTheirs(entry.path), entry.path)
+
                 // Both moved: try to reconcile them, and only involve the user if that fails.
                 else -> record(reconcile(entry.path), entry.path)
             }
@@ -328,15 +333,18 @@ class SyncEngine(
                 store.markPushed(path, result.etag, content)
                 PushOutcome.PUSHED
             }
-            is PushResult.Conflict -> {
-                val theirs = api.fetch(path) ?: return PushOutcome.FAILED
-                if (store.keepServerVersion(path, theirs.text, theirs.etag, timestamp()) != null) {
-                    PushOutcome.CONFLICT
-                } else {
-                    PushOutcome.SKIPPED
-                }
-            }
+            is PushResult.Conflict -> keepTheirs(path)
             is PushResult.Failed -> PushOutcome.FAILED
+        }
+    }
+
+    /** The server's [path] takes the path; what is here, if it differs, is kept as a conflict copy. */
+    private suspend fun keepTheirs(path: String): PushOutcome {
+        val theirs = api.fetch(path) ?: return PushOutcome.FAILED
+        return if (store.keepServerVersion(path, theirs.text, theirs.etag, timestamp()) != null) {
+            PushOutcome.CONFLICT
+        } else {
+            PushOutcome.SKIPPED
         }
     }
 

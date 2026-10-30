@@ -734,4 +734,37 @@ class SyncEngineTests {
         val copy = store.paths().single { it.startsWith("inbox/idea.sync-conflict-") }
         assertEquals("* Mine\n", store.read(copy), "and mine is kept beside it")
     }
+
+    @Test
+    fun twoNotesCreatedAtTheSamePathAreNeverSplicedTogether() = runTest {
+        val (server, store, engine) = setUp()
+        engine.sync()
+        val mine = ":PROPERTIES:\n:ID:       mine\n:END:\n#+TITLE: Plan\n"
+        val theirs = ":PROPERTIES:\n:ID:       theirs\n:END:\n#+TITLE: Plan\n"
+        store.create("plan.org", mine)
+        // Created on another device meanwhile, and listed by the manifest this time.
+        server.put("plan.org", theirs)
+
+        val report = engine.sync()
+
+        assertEquals(listOf("plan.org"), report.conflicted)
+        assertEquals(theirs, server.files["plan.org"]?.second, "theirs is not overwritten")
+        assertEquals(theirs, store.read("plan.org"), "nor merged with mine")
+        val copy = store.paths().single { it.startsWith("plan.sync-conflict-") }
+        assertEquals(mine, store.read(copy), "mine is kept beside it")
+    }
+
+    @Test
+    fun theSameNoteCreatedOnTwoDevicesSimplyConverges() = runTest {
+        val (server, store, engine) = setUp()
+        engine.sync()
+        store.create("plan.org", "* Plan\n")
+        server.put("plan.org", "* Plan\n")
+
+        val report = engine.sync()
+
+        assertTrue(report.conflicted.isEmpty())
+        assertEquals(listOf("plan.org"), store.paths().filter { it.startsWith("plan") })
+        assertFalse(store.isDirty("plan.org"))
+    }
 }
