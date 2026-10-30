@@ -767,4 +767,24 @@ class SyncEngineTests {
         assertEquals(listOf("plan.org"), store.paths().filter { it.startsWith("plan") })
         assertFalse(store.isDirty("plan.org"))
     }
+
+    /** Found by [SyncEngineRandomTests]: the new note took over the old one's version, but had no base. */
+    @Test
+    fun aNoteMadeOverTheNameOfOneRenamedAwayIsNeverSplicedIntoItsEditedOriginal() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("n0.org", ":ID: old\nt0\n")
+        engine.sync()
+        store.rename("n0.org", "n3.org")
+        store.create("n0.org", ":ID: new\n")
+        // Edited on another device meanwhile, before the rename reached the server.
+        server.put("n0.org", ":ID: old\nt0\nedited elsewhere\n")
+
+        val report = engine.sync()
+
+        assertEquals(listOf("n0.org"), report.conflicted)
+        assertEquals(":ID: old\nt0\nedited elsewhere\n", server.files["n0.org"]?.second, "the edit is kept")
+        assertEquals(":ID: old\nt0\n", server.files["n3.org"]?.second, "the renamed note is there")
+        val copy = store.paths().single { it.startsWith("n0.sync-conflict-") }
+        assertEquals(":ID: new\n", store.read(copy), "and the new note beside it")
+    }
 }

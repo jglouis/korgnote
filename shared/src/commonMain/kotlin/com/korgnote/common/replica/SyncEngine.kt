@@ -130,11 +130,6 @@ class SyncEngine(
                 // Edited locally, server unchanged since we synced: push.
                 meta.etag == entry.etag -> record(pushLocal(entry.path, meta.etag), entry.path)
 
-                // Created here and, at the same path, elsewhere: two notes with no common ancestor,
-                // not one note changed twice. Merging them against an empty base would splice both
-                // into one file, with two IDs and two titles; theirs takes the path instead.
-                meta.etag == null -> record(keepTheirs(entry.path), entry.path)
-
                 // Both moved: try to reconcile them, and only involve the user if that fails.
                 else -> record(reconcile(entry.path), entry.path)
             }
@@ -273,10 +268,15 @@ class SyncEngine(
      * it. A real conflict keeps the server's version at the path and saves this device's beside it
      * as `name.sync-conflict-<timestamp>.org` — deliberately not conflict markers inside the note.
      * Neither version is ever discarded; the user resolves it by keeping one.
+     *
+     * Without a base there is nothing to merge from: a note created here, or over the name of one
+     * deleted here, and another at the same path elsewhere are two notes, not one changed twice.
+     * Merged against an empty base, both would be kept whole, one after the other — one file with
+     * two IDs and two titles — so theirs takes the path, as for a conflict.
      */
     private suspend fun reconcile(path: String): PushOutcome {
         val local = store.read(path) ?: return PushOutcome.SKIPPED
-        val base = store.base(path) ?: ""
+        val base = store.base(path) ?: return keepTheirs(path)
         val remote = api.fetch(path) ?: return PushOutcome.FAILED
 
         return when (val result = merge(base, local, remote.text)) {
