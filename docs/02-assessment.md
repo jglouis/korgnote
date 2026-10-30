@@ -30,8 +30,8 @@ The corrective move is a single architectural inversion, detailed in
 | Lossy AST as the editable representation | **Change** | Already patched at the buffer level; fix properly with a source-mapped model (D4). |
 | Two Org grammars (parser vs highlighter) | **Change** | Every new construct otherwise costs two implementations that drift (D5). |
 | Calendar keyed on `SCHEDULED`-with-plain-date | **Change** | G6 needs `DEADLINE`, ranges, times and repeaters, which requires a real timestamp model (D7). |
-| `wasmJs` target | **Keep, as a full online client** | Always served by the same server, so offline is a non-goal. Costs ~120 lines once the replica sits behind a storage interface. See [The web target](#the-web-target-keep-it-as-a-full-online-client). |
-| No auth on a `0.0.0.0` listener | **Change** | Acceptable for a LAN toy, not for something holding your notes and reachable for sync (D8). |
+| `wasmJs` target | **Keep, as a full online client** | Always served by the same server, so offline is a non-goal. Costs ~120 lines once the replica sits behind a storage interface. Since pairing, it works only on the server's own computer. See [The web target](#the-web-target-keep-it-as-a-full-online-client). |
+| No auth on a `0.0.0.0` listener | **Change** | Acceptable for a LAN toy, not for something holding your notes and reachable for sync (D8). Done as device pairing rather than the shared token first planned: TLS with a pinned certificate and a token per device, and a plain port for the server's own computer — see [05](05-sync-protocol.md#auth). |
 
 ## Is the REST API "too cute"?
 
@@ -48,7 +48,7 @@ protocol, and it is the most boring, most maintainable option available to you:
 | Concern | HTTP mechanism |
 |---|---|
 | "Has this file changed?" | `ETag` + `If-None-Match` → `304 Not Modified`, no body |
-| "Save only if nobody else did" | `If-Match` → `412 Precondition Failed` = conflict detected |
+| "Save only if nobody else did" | `If-Match` → `409 Conflict` = conflict detected (`412` would do too; see [05](05-sync-protocol.md#put-apiv1filespath)) |
 | "What changed since I last synced?" | one manifest endpoint with a `since` token |
 | "Tell me when something changes" | SSE (or WebSocket) event stream |
 | Payload size | `Compression` plugin — Org text gzips ~4–5× |
@@ -81,8 +81,8 @@ would hook in if measurement ever justifies it.
 | gRPC / protobuf | Toolchain and build complexity against G7; gains little over gzipped text for this payload shape. |
 | Custom WebSocket protocol for everything | You would be reimplementing caching and conditional requests. Use SSE for *notifications only*, keep HTTP for transfer. |
 | Git as the sync layer (JGit) | Semantically ideal for text notes — history, merges, existing tooling. But JGit is JVM-only, so iOS is out, and iOS is the reason this project exists. Revisit only if you drop iOS. |
-| WebDAV / Nextcloud / CalDAV as backend | Delegates sync to a server you would still have to run, and you would write the same client-side replica and conflict logic anyway. CalDAV remains interesting later purely as an *export* of your agenda to other calendar apps. |
-| Keep Syncthing, app reads a local folder | Works beautifully on desktop/Android and is arguably the "correct" Unix answer — but iOS has no Syncthing client and sandboxes the filesystem, which is exactly the gap you set out to close. |
+| WebDAV / Nextcloud / CalDAV as backend | Delegates sync to a server you would still have to run, and you would write the same client-side replica and conflict logic anyway. *Later added on Android and iOS as an experimental third source, beside the server, not instead of it:* once that replica and conflict logic existed, a WebDAV folder needed only another `SyncApi` under the same engine, and lets someone who already runs Nextcloud skip the KorgNote server. It has no change stream (a 30 s poll), no delta, no bundle and no trash. CalDAV remains interesting later purely as an *export* of your agenda to other calendar apps. |
+| Keep Syncthing, app reads a local folder | Works beautifully on desktop/Android and is arguably the "correct" Unix answer — but iOS has no Syncthing client and sandboxes the filesystem, which is exactly the gap you set out to close. *Later added on Android and iOS as an option beside the server, not as the design:* a folder the user picks, which Syncthing, Dropbox or iCloud Drive keeps in step. See [05](05-sync-protocol.md#three-places-for-the-notes). |
 
 ## Risks worth retiring early
 
@@ -146,7 +146,7 @@ fails leaves the document dirty and retries", which is the same code path native
 | `ReplicaStorage` | filesystem | memory | interface shared |
 | Corpus loading | incremental, cached across restarts | eager on page load | policy flag |
 | Notification scheduler | real | no-op | `expect/actual`, already the pattern |
-| Background sync triggers | WorkManager / BGTask | none needed | — |
+| Background sync triggers | none yet: sync at start, on resume and on change events ([05](05-sync-protocol.md#triggers)) | none needed | — |
 
 ### What it actually costs
 
@@ -175,9 +175,9 @@ view-only.
    state (saving / saved / conflict) that native rarely exercises. This is a genuine leak,
    and it is the *good* kind: it forces the interface to admit something that was always
    true (a sync can conflict), instead of hiding it behind a store that never says no.
-2. **A page reload loses unsaved edits and the merge ancestor.** Mitigate with debounced
-   autosave straight to the server — which is also the behaviour that makes web feel like
-   native — plus optionally a `localStorage` draft. After a reload without a base copy,
+2. **A page reload loses unsaved edits and the merge ancestor.** Mitigated by pushing each
+   save to the server at once — which is also the behaviour that makes web feel like
+   native — plus optionally a `localStorage` draft (not built). After a reload without a base copy,
    conflict resolution falls back to "keep both" instead of a three-way merge, which is
    acceptable for a case that autosave makes rare.
 3. **Cold load pays for the corpus.** See the bulk-fetch note below.
@@ -210,9 +210,13 @@ GET /api/v1/bundle[?since=<generation>]   → NDJSON: {path, etag, text} per lin
 ```
 
 — which is *also* the better cold start for a fresh native client. Keeping web in scope
-applies steady pressure on the sync API to stay simple and bulk-friendly, and gives you a
-zero-install way to reach your notes from any machine. That is worth more than the ~120
-lines it costs.
+applies steady pressure on the sync API to stay simple and bulk-friendly. It was also meant
+as a zero-install way to reach your notes from any machine; since pairing it is not. The TLS
+port serves nothing outside `/api/`, and the plain port answers only a `Host` naming the
+server's own computer, so a reverse proxy passing on its own name gets `403`; and a browser
+cannot pair.
+It is now a client for the computer the server runs on. Even so, it is worth more than the
+~120 lines it costs.
 
 ## What this means for sequencing
 

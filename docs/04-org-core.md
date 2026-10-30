@@ -2,14 +2,36 @@
 
 Addresses D4, D5, D12. Everything here lives in `shared/` and is testable without a UI.
 
-## The problem
+> **Status: built (T3–T7).** The rule below holds and the four invariants are tested, I3 in the
+> weaker form T4 recorded ([08](08-roadmap.md#t4--nested-headings---done)). The sketches are the
+> plan; what shipped differs in its names and shapes:
+>
+> - The model and spans are in `com.korgnote.common.org` (`OrgMode.kt`, `OrgSpans.kt`) and the
+>   edits in `com.korgnote.common.org.edit`; there is no `org.model`.
+> - A document is parsed with `String.toOrgDocument()`, not `OrgDocument.parse`. `OrgDocument` is a
+>   data class holding `children` and `metadata`, with no `OrgRoot`.
+> - `range` and `text` are body properties, not constructor parameters, so they stay out of the
+>   data classes' `equals`; a node built by hand has an empty range.
+> - A heading is `OrgSection(title, todo, level, tags, children, priority)`. Its planning lines and
+>   drawers are children (`OrgPlanning`, `OrgDrawer`), and its title is a string, not a range.
+>   `OrgHeading` exists, but as the parts of one heading line (`orgHeadingOf`), shared by the parser
+>   and anything that must find a heading again.
+> - `replace` and `nodeAt` are extensions in `org.edit`, and `nodeAt<T>(offset)` is generic: the
+>   innermost node of type `T` there, or null. The edit functions take an `OrgSection`, and
+>   `tickAsOrgDoes`, `changeTodoState` and `setProperty` joined them.
+> - Spans are `orgSpans(text, within)` and `orgSpansForLine(line, state)`, with
+>   `OrgDocument.spans(range)` over them, and a finer `OrgSpanKind`.
+> - Step 6 was never done: the printer is still `toOrgString()` (`OrgMode.kt`), not
+>   `OrgPrinter.render`. Harmless, since nothing prints an existing document back over itself; its
+>   only callers outside the printer write a table cell's text.
 
-Today `String.toOrgDocument()` throws away the exact source (trailing spaces, blank-line
-counts, anything the parser has no node for) and `OrgNode.toOrgString()` guesses it back.
-Any feature that reads a document, changes one thing and writes it out therefore rewrites
-the whole file. That is what produced the whitespace-churn bug, and it is why toggling a
-checkbox currently has to bypass the model and patch raw text by ordinal
-(`OrgMode.kt:305`).
+## The problem, before T3
+
+`String.toOrgDocument()` threw away the exact source (trailing spaces, blank-line counts, anything
+the parser had no node for) and `OrgNode.toOrgString()` guessed it back. Any feature that read a
+document, changed one thing and wrote it out therefore rewrote the whole file. That is what produced
+the whitespace-churn bug, and it is why toggling a checkbox had to bypass the model and patch raw
+text by ordinal (`toggleNthCheckbox`, deleted by T7).
 
 The rule that removes this entire class of bug:
 
@@ -103,14 +125,15 @@ Every one of these computes a range and calls `replace`. Consequences: the rest 
 is untouched by construction, each function is a two-line test (`before` → `after` text),
 and the UI can apply the same operations from read mode, edit mode or the calendar.
 
-The ordinal-based `String.toggleNthCheckbox` added by the in-flight fix is replaced by
-`toggleCheckbox(node)`. Ordinals are fragile — they shift whenever anything above them
-changes — and only exist today because the renderer had no node identity to hand back.
+T7 replaced the ordinal-based `String.toggleNthCheckbox` with `toggleCheckbox(node)`. Ordinals
+are fragile — they shift whenever anything above them changes — and only existed because the
+renderer had no node identity to hand back.
 
 ## One grammar, two consumers
 
-`OrgSyntaxHighlighting.kt` currently re-implements Org syntax for colouring (D5). After
-this change it consumes the parse tree instead:
+`OrgSyntaxHighlighting.kt` used to re-implement Org syntax for colouring (D5). Since T6 it paints
+from shared spans instead. They come from a line scanner over the same `OrgSyntax` patterns the
+parser uses, rather than from the parse tree itself:
 
 ```kotlin
 package com.korgnote.common.org.model
@@ -126,13 +149,33 @@ fun OrgDocument.spans(range: IntRange): List<OrgSpan>
 ```
 
 `shared/` decides *what* something is; `composeApp/` decides what colour that is. The
-existing `OrgColors` palette and the `OrgSyntaxHighlightingTest` expectations carry over —
-only the producer changes.
+existing `OrgColors` palette and the `OrgSyntaxHighlightingTest` expectations carried over —
+only the producer changed.
+
+**Drift to fold back.** Org patterns have crept back outside the one grammar since T6. None breaks an
+edit, but each is a second definition that can disagree with the first, and two already do:
+
+| Where | Pattern | Duplicates |
+|---|---|---|
+| `composeApp/…/ui/OrgText.kt` | `ID_PROPERTY` (`:ID:`) | `ID_PROPERTY` in `shared/…/org/link/LinkTargets.kt` |
+| `composeApp/…/ui/OrgText.kt` | `TODO_KEYWORDS_LINE` | `parseTodoConfigFrom` — and **disagrees**: it also reads `#+SEQ_TODO:` and `#+TYP_TODO:`, which the parser ignores, so reading mode shows chips for keywords nothing else treats as keywords |
+| `composeApp/…/ui/NoteByline.kt` | `AUTHOR`, `DATE` | `FILE_KEYWORD` in `shared/…/org/edit/FileKeywords.kt` |
+| `composeApp/…/viewmodel/LinkNavigator.kt` | `TITLE_LINE`, `SCHEME` | `OrgSyntax.titleKeyword`; `SCHEME` in `edit/LinkEditing.kt` |
+| `composeApp/…/ui/LinkEditor.kt` | `FILE_SCHEME`, `HAS_SCHEME` | `FILE_SCHEMES`, `SCHEME` in `edit/LinkEditing.kt` |
+| `composeApp/…/ui/OrgSyntaxHighlighting.kt` | `timestampDay` | `OrgSyntax.timestampDate`, without its `<` |
+| `composeApp/…/ui/TableFormulas.kt` | `#+TBLFM:` targets (`$3`, `@>$2`) and formats (`;%.2f`) | what `shared/…/org/table/` parses |
+| `shared/…/org/edit/ListContinuation.kt` | `LIST_ITEM` | `OrgSyntax.listItem` |
+| `shared/…/org/edit/StatisticsCookies.kt` | `STATISTICS_COOKIE` | `OrgSyntax.statistics` — and **disagrees**: only the former matches an empty `[/]` or `[%]`, so the highlighter does not show a cookie as one until a save fills it in |
+| `shared/…/org/edit/LinkEditing.kt` | `KEYWORD_LINE`, `PROPERTY_LINE` | `OrgSyntax.keyword`, `OrgSyntax.property` |
+| `shared/…/org/edit/FileKeywords.kt`, `shared/…/org/link/LinkTargets.kt` | `KEYWORD_LINE`; `TITLE`, `PROPERTIES` | `OrgSyntax.keyword`; `OrgSyntax.titleKeyword`, the parser's drawers |
+
+The fix is the one T6 made: move each into `OrgSyntax`, or call what is already there.
 
 ## Migration path
 
-The parser has 12 test files; treat them as the safety net and move in steps that each keep
-the suite green.
+Steps 1–5 were done as T3–T7; step 6 was not (see the status note).
+
+The parser had 12 test files; they were the safety net, and each step kept the suite green.
 
 1. **Add ranges to the existing nodes** without changing their shape. Store `text` on
    `OrgDocument`. Assert I1 and I2. Nothing else changes yet.
@@ -164,3 +207,20 @@ ranges and non-serialisable shapes freely.
 - **Golden files** for `spans()` to keep highlighting honest as the grammar grows.
 - Optional and high-value: a test that runs the round-trip property over *your real notes
   directory* when an env var points at it — the corpus that matters most.
+
+What exists: `OrgSourceRangeTests` asserts I1 and I2 over hand-written edge cases on every platform,
+`OrgFixtureRoundTripTest` over the bundled samples in `server/src/main/resources/org`,
+`OrgNestingTests` the weaker I3, `OrgEditTests` the edits, and `OrgSpansTests` with
+`OrgSyntaxHighlightingTest` the spans, as assertions rather than golden files. Known gaps:
+
+- **I2 is not checked below the top level.** Both I2 walks (`everyNode` in `OrgSourceRangeTests` and
+  `OrgFixtureRoundTripTest`) descend only into `OrgDocument` and `OrgTable`, never into a section's
+  children, so a planning line, list or drawer inside a heading is never checked to select its own
+  source. `OrgNestingTests` does walk the whole tree, but asserts only that a child sits inside its
+  parent and that each line's owners form one chain.
+- **No test runs over the real notes directory.** The sweeps recorded in
+  [08](08-roadmap.md) for T4, T5 and T7 were one-off runs, not an env-var test.
+- **Nothing tests CRLF**, nor a 1 MB file.
+- **Table cells still have no source range.** `parseOrgTable` builds them from trimmed cell text
+  (`OrgMode.kt`); T3 deferred this to T5, which did not do it. The grid editor replaces whole tables,
+  so nothing needs it yet.

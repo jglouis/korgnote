@@ -1,5 +1,12 @@
 # 01 — Current state (as-is)
 
+> **Historical snapshot, 2026-09-20.** This describes the app as it was before the plan in these
+> documents was carried out. Most of what it names is gone: the `/api/org-content`,
+> `/api/org-tree-paths` and `/api/content` endpoints, `FileTreeViewModel`, `KtorOrgRepository`, the
+> flat model, the boot-time file map. It is kept because 02 and 08 argue from it. For what exists
+> now, read the [status table in 08](08-roadmap.md#status) and the [top-level README](../README.md);
+> the defect table at the end says what became of each defect.
+
 Snapshot of the system as of commit `2cc66f7`. ~4,700 lines of Kotlin across four Gradle
 modules. This document is descriptive: judgements live in [02-assessment.md](02-assessment.md).
 
@@ -121,7 +128,7 @@ maintained separately and can disagree.
 
 ### Since this document was written
 
-Three things landed that change the picture:
+Three things landed the same day that change the picture:
 
 - **Raw-text editing** — the edit buffer is the file's bytes, not a re-render of the AST (commit
   `c518b21`). This was the fix for the whitespace-rewriting bug and the reason D4 is mitigated.
@@ -130,21 +137,26 @@ Three things landed that change the picture:
 - **Per-element editing** — reading mode became the primary surface, with each heading editable in
   place as a range splice, plus adding sections. See [09-element-editing.md](09-element-editing.md).
 
+Everything after that — the whole of the plan, and the work nobody planned (pairing, notes in a
+folder or on WebDAV, widgets, tables, French) — is in [08-roadmap.md](08-roadmap.md) rather than
+here. The editor-performance notes linked above were never committed; the finding (Cost A) is
+recorded in [06](06-editor.md).
+
 ## Known defects and limitations
 
-Status added 2026-09-20. Everything unmarked is unchanged since the documents were written.
+Status added 2026-09-20, brought up to date 2026-10-30 (1.4.1). Line references are to `2cc66f7`.
 
 | # | Issue | Where | Impact |
 |---|-------|-------|--------|
 | D1 | Server caches files at startup and never re-reads disk | was `Application.kt:81,112` | **Fixed** — `FileStore` reads on demand and refuses a write whose baseline is stale |
-| D2 | Whole corpus is parsed and shipped as JSON on every cold start | `Application.kt:169` | Bandwidth and CPU grow with corpus size; directly opposes G5 |
-| D3 | No local persistence of documents on the client | `composeApp/…/data/` | Offline use (G4) is impossible today |
-| D4 | AST cannot round-trip to its own source text | `OrgMode.kt:329` | **Mitigated, not fixed.** Editing and saving now work on raw text, and element edits are range splices ([09](09-element-editing.md)), so no path rewrites a file from the AST. The model itself is still lossy — T3 remains |
-| D5 | Two independent Org grammars | `OrgMode.kt` vs `OrgSyntaxHighlighting.kt:85` | **Worse: now three.** `OrgElements.kt` adds a heading rule, deliberately matching the parser's rather than Org's, with a test pinning the agreement ([09](09-element-editing.md#a-deliberate-compromise)). T5/T6 should collapse all three |
-| D6 | Full-document re-highlight per keystroke; whole document composed eagerly | `OrgSyntaxHighlighting.kt`, `OrgDocumentView.kt` | **Highlighting fixed** (cache + viewport scoping + per-element editing). **Eager composition still open**: reading mode renders every element in a `Column` |
-| D7 | Calendar only understands `SCHEDULED` with a plain date | `FileTreeViewModel.kt:230` | No `DEADLINE`, no ranges, no times, no repeaters; opposes G6 |
-| D8 | No authentication, no TLS, binds `0.0.0.0` | `Application.kt:36` | Personal notes are readable and writable by anyone who can reach the port |
-| D9 | No conflict detection on save | `Application.kt` | **Partly closed.** An *external* edit is now detected and refused, and `If-Match` is honoured. Two app clients racing still resolve last-writer-wins; needs the sync protocol (T9/T11) |
-| D10 | No compression on server responses | `Application.kt` | Org text compresses ~4–5×; free bandwidth win being left on the table |
+| D2 | Whole corpus is parsed and shipped as JSON on every cold start | `Application.kt:169` | **Fixed** by T9/T10: the endpoint is deleted, and the client syncs text through the manifest, fetching only stale files — in one bundle when eight or more are stale |
+| D3 | No local persistence of documents on the client | `composeApp/…/data/` | **Fixed** by T8: a local replica; the app opens and edits with no network |
+| D4 | AST cannot round-trip to its own source text | `OrgMode.kt:329` | **Fixed** by T3: every node carries its source range and the document its text, so the model is lossless; edits are range replacements (T7) |
+| D5 | Two independent Org grammars | `OrgMode.kt` vs `OrgSyntaxHighlighting.kt:85` | **Fixed by T5/T6, partly back.** `OrgSyntax` and `orgSpans()` in `shared/` are the one grammar, and `OrgElements.kt` uses them too. Since then, a few Org patterns have crept back into `composeApp/`: `OrgText.kt` (`:ID:`, `#+TODO:`), `NoteByline.kt` (`#+AUTHOR:`, `#+DATE:`), `LinkNavigator.kt` (`#+TITLE:`, link scheme), `OrgSyntaxHighlighting.kt` (tag name, date) and `TableFormulas.kt` (formula targets) |
+| D6 | Full-document re-highlight per keystroke; whole document composed eagerly | `OrgSyntaxHighlighting.kt`, `OrgDocumentView.kt` | **Fixed.** Highlighting by cache and per-element editing; reading mode is a `LazyColumn` keyed by element (T12b) |
+| D7 | Calendar only understands `SCHEDULED` with a plain date | `FileTreeViewModel.kt:230` | **Fixed** by T15–T17: a timestamp parser, an agenda engine (`AgendaIndex`) and agenda, day, week and month views |
+| D8 | No authentication, no TLS, binds `0.0.0.0` | `Application.kt:36` | **Fixed.** T2 added a token; pairing replaced it (T30): devices sync over TLS on 8443 with a pinned certificate and a token each, and plain 8080 answers this computer only |
+| D9 | No conflict detection on save | `Application.kt` | **Fixed** by T11: a diff3 merge, and a conflict copy when both sides changed the same lines; neither version is lost |
+| D10 | No compression on server responses | `Application.kt` | **Fixed** by T2: gzip on |
 | D11 | Cannot create, rename or delete files from the app | `Application.kt:189` | **Fixed** by T20: the drawer creates, renames and deletes notes, offline too, synced through tombstones ([05](05-sync-protocol.md#creating-renaming-and-deleting-t20)) |
-| D12 | Flat document model (sections are not nested) | `OrgMode.kt:19,93` | Subtree operations (fold, promote, filter by ancestor tag) cannot be expressed |
+| D12 | Flat document model (sections are not nested) | `OrgMode.kt:19,93` | **Fixed** by T4: headings nest, and a heading's range covers its subtree |

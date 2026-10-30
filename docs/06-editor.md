@@ -207,13 +207,30 @@ the calendar — and keeps it for everything else. Mapping a scroll offset acros
 edit never became necessary: per-element editing removed the transition between two full-document
 renderings.
 
-### Structural editing from both modes
+### Structural editing from reading mode
 
-With `org.edit` in place, the same operations are available from the reader (tap a checkbox,
-long-press a heading to cycle TODO, swipe to reschedule) and the editor (keyboard
-shortcuts). What shipped for restructuring is the long-press menu's move, promote and demote
-([09](09-element-editing.md#the-surface)), which work on element ranges rather than through `org.edit`. Both call `DocumentStore.apply(doc.toggleCheckbox(node))`; neither reformats
-anything else.
+The plan was the same operations from both modes: long-press a heading to cycle TODO, swipe to
+reschedule, keyboard shortcuts in the editor. With one surface left, what shipped is taps and menus
+in reading mode ([09](09-element-editing.md#the-surface)), each a range replacement that reformats
+nothing else:
+
+- **Tap a checkbox**: `toggleCheckboxAt` finds the node at the tapped offset and ticks it with
+  `tickAsOrgDoes`, which also settles the boxes above and below it as Org does.
+- **Tap a TODO keyword**: a menu of the file's keywords; picking one goes through `changeTodoState`,
+  which logs the change under the heading and repeats a repeating entry. It replaced a tap that
+  cycled to the next keyword.
+- **Long-press a heading**: the menu adds, moves, promotes, demotes and deletes. These work on
+  element ranges (`withOrgSubtreesSwapped`, `withOrgSubtreeShifted`) rather than through `org.edit`.
+- **Tap a table**: the grid editor ([09](09-element-editing.md#tables)).
+
+Rescheduling is done in the editor rather than by a swipe: with the caret on a `SCHEDULED:` or
+`DEADLINE:` stamp, completion offers a date and time picker opened on it (see the trigger table
+below). There are no structural keyboard shortcuts. A tick and a keyword change both update the
+statistics cookies over what they changed, as a save does.
+
+`org.edit` also has `setTodo`, `cycleTodo`, `setTags`, `setPlanning`, `promote` and `demote` from T7.
+The app does not call them, apart from what `changeTodoState` uses; they are tested and ready for a
+caller.
 
 ## Completion (G3)
 
@@ -229,7 +246,12 @@ data class CompletionContext(
     val todoKeywords: OrgTodoConfig,   // from this document's #+TODO:, else the global default
     val knownTags: List<String>,       // harvested from the whole replica, most-used first
     val filePaths: List<String>,       // for [[file:…]]
+    val currentPath: String,           // the note being edited; file: links are relative to it
+    val noteIds: Map<String, String>,  // a note's own :ID:, linked as id: when it has one
+    val noteTitles: Map<String, String>, // a note's #+TITLE:, as the link's description
     val headings: List<String>,        // for [[*Heading]] within the document
+    val knownLocations: List<String>,  // :LOCATION: values across the replica, most-used first
+    val author: String,                // from Settings, for #+AUTHOR:
     val today: LocalDate,
 )
 
@@ -244,7 +266,8 @@ data class CompletionItem(
 fun complete(doc: OrgDocument, cursor: Int, ctx: CompletionContext): List<CompletionItem>
 ```
 
-Triggers, all derived from `doc.nodeAt(cursor)` plus the current line prefix:
+Triggers, all derived from the current line — and the one above, for a planning line — with
+`doc.nodeAt<OrgBlock>(cursor)` to tell when the caret is in a block's body:
 
 | Typing | Suggestions |
 |---|---|
@@ -254,14 +277,20 @@ Triggers, all derived from `doc.nodeAt(cursor)` plus the current line prefix:
 | caret on a `SCHEDULED:`/`DEADLINE:` stamp already written | the picker, opened on that stamp, then the same snippets; all replace the whole stamp and keep its repeater and warning |
 | `:` at end of a heading | tags used elsewhere in the corpus, most frequent first |
 | `#+` at line start | `TITLE`, `FILETAGS`, `TODO`, `STARTUP`, `BEGIN_SRC`, … |
-| `[[` | file paths, then headings in the current document |
+| after `#+FILETAGS:` | the corpus's tags, written `:a:b:`, leaving out those already there |
+| after `#+AUTHOR:` | the author Settings names |
+| after an empty `#+DATE:` | today as an inactive stamp, as org-roam dates a note |
+| after `:LOCATION:` | places the notes already name, most named first |
+| `[[` | notes — by `id:` when the note has an `:ID:`, else a `file:` path relative to this note, described by its title — then headings in the current document |
 | `<` in body text | active timestamp for today; `[` for inactive |
 | `<s`, `<q`, `<e` at line start | structure templates (src/quote/example blocks), Org's `org-tempo` convention |
 
 Being pure functions of `(document, cursor, context)`, every row above is a unit test with
-no UI involved — 26 of them. The rules are tried in a fixed order, which is what keeps `[[` a link
-rather than a bracket and `<s` a template rather than a timestamp; inside a source block nothing is
-offered at all, because there the text is code and the parser already knows it.
+no UI involved — 41 of them in `OrgCompleteTests`, plus `CompletionContextTest` (6) for how the
+context is built and `CompletionEditingTest` (17) for accepting, the keyboard, the picker and the
+insert buttons. The rules are tried in a fixed order, which is what keeps `[[` a link rather than a
+bracket and `<s` a template rather than a timestamp; inside a block's body nothing is offered at all,
+because there the text is not Org and the parser already knows it.
 
 The strip renders the list, and the field handles Tab (accept), ↑/↓/←/→ (move) and Esc (dismiss
 until the next keystroke). Accepting calls `applyTo`, which replaces the item's range and places
@@ -289,14 +318,36 @@ an element is being edited. Three consequences, all deliberate:
   than a message pushed down into a composable — and testable, which the caret handling was not.
 - **The navigation bar is hidden while editing.** It occupied that space, and switching tabs in the
   middle of an edit only ever happened by accident.
-- **The bar holds its place even with nothing to suggest**, showing what completion responds to.
-  Suggestions appear and vanish with almost every keystroke; a bar that came and went with them
-  would reflow the document under the caret each time. That empty state is also the obvious home for
-  Org quick-inserts (`*`, `-`, `[ ]`, a date) whenever typing Org on a phone gets addressed.
+- **The bar holds its place even with nothing to suggest.** Suggestions appear and vanish with
+  almost every keystroke; a bar that came and went with them would reflow the document under the
+  caret each time. With nothing to suggest it shows insert buttons (`DraftInsert` in
+  `shared/…/org/edit/DraftInserts.kt`): link, date, tag, schedule, place, checkbox and table. Each
+  writes the start of its syntax and leaves the caret where the suggestions take over — after the
+  heading's tag colon, `SCHEDULED:` or `:LOCATION:` — so the rest is completion's job, as when it is
+  typed. Link opens a finder over every note and heading, date the picker, and table the grid editor
+  ([09](09-element-editing.md#tables)); with the caret on a link, *Edit link* leads. Tag, schedule
+  and place are offered only on a heading. Save and Discard sit at the bar's end.
 
 The context comes from outside the document being edited: completion runs against a single element,
 while the tags are the whole replica's and the `#+TODO:` keywords are the open file's. The view
 model rebuilds it when the replica or the open file changes — not per keystroke.
+
+### Lists continue on Enter
+
+Enter at the end of a list item starts the next one, as Org's `M-RET` does: the same bullet, the next
+number of an ordered list, an empty box after a checkbox (`continueList` in
+`shared/…/org/edit/ListContinuation.kt`). Enter in the middle of an item splits it. Enter on an
+empty item ends the list instead, so there is a way out of one. It does nothing inside a `SRC`,
+`EXAMPLE`, `EXPORT` or `COMMENT` block, where the text is code and a `- ` line in YAML is not an Org
+list. Covered by `ListContinuationTest`.
+
+### Known gap: suggestions are in English
+
+The app is translated into French, but the engine's labels live in `shared/` and are English only:
+`Pick date & time…`, `today`, `tomorrow` and the weekday names in `OrgComplete.kt`. The names are
+also what typing narrows by, so `fri` finds Friday and `ven` finds nothing. What gets inserted is
+right either way, since Org writes English day names whatever the locale. Fixing it means the engine
+taking its labels from the caller, as it already takes the date.
 
 ## Search (G2)
 
@@ -340,6 +391,8 @@ fix: the tree is flattened into `visibleRows` — a pure function, so the nestin
 now that they are a list rather than a shape made of composables — and drawn as real lazy items,
 keyed by path. Paths survive a rebuild; object identities do not.
 
-One cost remains, measured and still open: `searchOrgFile` splits a file into elements before it
-knows whether the file contains the words at all. A raw-text pre-check first would cut a scan from
-12 ms to 4 ms (search) and 10 ms to 4 ms (drawer filter) without changing what is found.
+One more cost was measured and is now gone: `searchOrgFile` used to split a file into elements before
+it knew whether the file contained the words at all. It now checks the raw text first and passes over
+a file missing any term, word or tag, unparsed. It is the same case-insensitive test applied per
+line, so it never drops a real hit. The estimate beforehand was a scan cut from 12 ms to 4 ms
+(search) and 10 ms to 4 ms (drawer filter).

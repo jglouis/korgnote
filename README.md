@@ -289,7 +289,9 @@ makes an unsigned APK that Android will not install.
 An APK signed with a different key cannot update an installed app. You must uninstall it first,
 which deletes the notes stored in the app, so sync before you do.
 
-Increase `versionCode` in `androidApp/build.gradle.kts` for each release.
+Each release needs a higher `versionCode` in `androidApp/build.gradle.kts`. `scripts/publish.sh`
+raises it with the version; raise it yourself only when you build a release by hand, or before you
+release with `current`.
 
 To do all of a release in one go, use `scripts/publish.sh`. It raises the version (in the iOS
 project too, though the iOS app is not released), runs the tests, builds the signed APK with
@@ -315,9 +317,10 @@ screenshots beside it, this folder is the store listing, in the layout fastlane'
 the Play Store.
 
 `--no-push` stops before the push, `--draft` leaves the release a draft for you to publish,
-`--no-wait` publishes it without waiting for the image, and `--edit-notes` lets you edit the notes
-first. The script will not publish an APK signed with a key other than the release key, which could
-not update the app. If the image build fails, the release stays a draft and the script tells you how
+`--no-wait` publishes it without waiting for the image, `--edit-notes` lets you edit the notes
+first, and `--skip-tests` builds without running the tests. The script will not publish an APK
+signed with a key other than the release key, which could not update the app. The release key is
+the 1.0.0 one unless `KORGNOTE_CERT_SHA256` gives another certificate's SHA-256. If the image build fails, the release stays a draft and the script tells you how
 to retry. It needs the GitHub CLI, logged in with `gh auth login`.
 
 ### Desktop
@@ -360,7 +363,8 @@ this folder, every device must pair again.
 
 | Variable | Meaning |
 |---|---|
-| `NOTES_DIR` | Folder with your `.org` files. Without it, the server shows sample notes. |
+| `NOTES_DIR` | Folder with your `.org` files. The `-Dnotes.dir=…` system property wins over it. Without either, the server uses `notes` in its working directory, and if there is none, shows sample notes. |
+| `WASM_DIR` | Folder of the built web app. The `-Dwasm.dir=…` system property wins over it. Without either, the server looks in `composeApp/build/dist/wasmJs/` from the repository root or from `server/`. |
 | `KORGNOTE_PORT` | HTTP port. Default: 8080. |
 | `KORGNOTE_HTTP_HOST` | Address the HTTP port listens on. Default: `127.0.0.1`. |
 | `KORGNOTE_HTTPS_PORT` | HTTPS port for paired devices. Default: 8443. |

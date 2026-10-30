@@ -13,51 +13,70 @@ the grammar covers the constructs these notes actually use, Org syntax is define
 edits are range replacements. Phase 2 (T8–T11) is complete too: the app holds the whole corpus
 locally, syncs through the v1 API, and merges divergent edits instead of losing them. **Phase 3 is
 complete** as well — the editor work is done bar what was deliberately deferred, and search and
-completion have landed. **Phase 4** (agenda) is under way: the parser, engine and views (T15–T17) are in,
-and notifications (T18) are built and waiting on a device check. T19 (CI), which had to come first, is done: every push now runs the
-suite.
+completion have landed. **Phase 4** (agenda) is complete bar one check: the parser, engine and views
+(T15–T17) are in, and notifications (T18) work on Android but have not been seen on an iPhone. T19
+(CI), which had to come first, is done: every push now runs the suite.
 
-**Phase 5 (T19–T24) came from using the thing.** Nothing in it was foreseen when the plan was
-written: it is what a day of real use and three regressions exposed. All of it is done, T23 (the server
-container) included. T22 settled the editor question: there is one editing surface now.
+**Phase 5 (T19–T29) came from using the thing.** Nothing in it was foreseen when the plan was
+written: it is what a day of real use and three regressions exposed, and then (T25–T29) what
+further use asked for. All of it is done, T23 (the server container) included. T22 settled the
+editor question: there is one editing surface now.
+
+**After T29 the work stopped following the plan.** Pairing, notes kept in a folder or on WebDAV,
+home-screen widgets, a table editor, French, a dark theme, a release pipeline and a run of sync
+fixes shipped without a task written first. **Phase 6** (T30–T40) records them after the fact, so
+the status table stays the one place to look. What is still open is listed under
+[Open, and known gaps](#open-and-known-gaps).
 
 ## Status
 
-Updated 2026-09-25.
+Updated 2026-10-30, as of 1.4.1.
 
 | | Task | State |
 |---|---|---|
-| ✅ | T12a Editor performance diagnostic | Done — [notes/editor-perf.md](notes/editor-perf.md) |
+| ✅ | T12a Editor performance diagnostic | Done — Cost A, recorded in [06](06-editor.md#performance-where-the-time-actually-goes); the `notes/editor-perf.md` it names was never committed |
 | ✅ | T12b Editor surface | Done — the two deferred items went with the whole-file editor (T22) |
-| 🟡 | T0 / T0b Text-editing spikes | Answered in practice, findings in [06](06-editor.md#editor-surface) |
+| 🟡 | T0 / T0b Text-editing spikes | Answered in practice, findings in [06](06-editor.md#editor-surface); the two spike notes were never written |
 | ✅ | T1 Server reads the disk | Done — `FileStore`, plus conflict refusal and path validation |
 | ✅ | T3 Source-mapped documents | Done — `range` on every node, `text` on the document, raw-text wire |
 | ✅ | T4 Nested headings | Done — sections own their body and sub-headings; subtree = one range |
 | ✅ | T5 Complete the grammar | Done — blocks, drawers, lists, priorities; `OrgSyntax` now shared |
-| ✅ | T6 One grammar | Done — `orgSpans()` in shared; no Org pattern left in `composeApp/` |
+| ✅ | T6 One grammar | Done — `orgSpans()` in shared. A few Org patterns have since crept back into `composeApp/`; see the task |
 | ✅ | T7 Structural edit API | Done — `org.edit`; ordinals replaced by node identity |
-| ✅ | T2 Transport hygiene | Done — gzip, bearer token, loopback default, LAN opt-in for testing |
+| ✅ | T2 Transport hygiene | Done, then superseded by pairing (T30): gzip stays; the shared token and the LAN switch are gone |
 | ✅ | T8 Replica store | Done — local replica; the app opens and edits with the server unreachable |
 | ✅ | T9 Sync API v1 | Done — manifest, conditional files, bundle, SSE fed by a file watcher |
 | ✅ | T10 Sync engine and cutover | Done — old API deleted; the client syncs through v1 |
 | ✅ | T11 Conflicts | Done — diff3 merge; divergent edits keep both versions, never markers |
 | ✅ | T13 Completion | Done — pure engine, every trigger row tested; a suggestion strip, not a popup |
 | ✅ | T14 Search | Done — linear scan over the replica, words and `tag:`, results open at the match |
-| 🟡 | T10b Web client | Mostly wired by T10; what is left is listed in the task |
+| 🟡 | T10b Web client | Bundle in; autosave, a replica that survives a reload, and SSE on JS left. Works on the server's own machine only |
 | ✅ | T15 Timestamp parser | Done — every syntax row, ranges, repeaters, delays; malformed stamps are skipped |
 | ✅ | T16 Agenda engine | Done — `AgendaIndex` replaces `scheduledByDate`; the calendar renders from it |
 | ✅ | T17 Day and week views | Done — agenda list, day, week and month, all from `AgendaIndex` |
-| 🟡 | T18 Notifications | Done on Android (checked on an emulator: app closed, network off, on the minute); iOS built, not yet seen on a device |
-| ✅ | T19 CI | Done — [ci.yml](../.github/workflows/ci.yml): Linux on every push, iOS nightly when master changed |
+| 🟡 | T18 Notifications | Done on Android (checked on an emulator: app closed, network off, on the minute); iOS built, not yet seen on a device. Permission is asked by the welcome screens and Settings |
+| ✅ | T19 CI | Done — [ci.yml](../.github/workflows/ci.yml): Linux and 30 random sync sessions on every push; iOS and a 10,000-session sweep nightly when master moved |
 | ✅ | T20 File lifecycle | Done — create into an inbox folder, rename/move, delete; offline-safe through tombstones |
-| ✅ | T21 Link navigation | Done — `id:`, `file:`, `*Heading`, `#id` and fuzzy links open their target; backlinks; Back |
+| ✅ | T21 Link navigation | Done — `id:`, `file:`, `*Heading`, `#id` and fuzzy links open their target; backlinks; Back, and the system's back since |
 | ✅ | T22 Whole-file editing | Done — retired; the long-press menu moves, promotes and demotes instead |
-| ✅ | T23 Server container | Done — `Dockerfile` + `docker-compose.yml`; refuses to start without a token or a writable `/notes` |
+| ✅ | T23 Server container | Done — distroless image, published to GHCR with each release; refuses a missing or unwritable `/notes`; TLS built in since T30 |
 | ✅ | T24 Reading-mode affordances | Done — tap to edit, long-press menu, one fold chevron per heading; [09](09-element-editing.md#the-surface) |
 | ✅ | T25 Pinned notes | Done — pin from a note's long-press menu; pins sit above the file tree and the first opens at launch |
 | ✅ | T26 Linked files | Done — `[[file:~/Sync/x.pdf]]` opens in the device's app for it; Settings maps `~/Sync` to where it is on a phone |
+| ✅ | T27 Highlighting src blocks | Done — hand-written lexers for shell, Lisp, C-like, config and XML; light and dark colours |
 | ✅ | T28 Links without syntax | Done — a pasted address becomes a link; a form edits a link's label and target, a file chosen through File links in reverse |
 | ✅ | T29 Saved searches | Done — the search field's bookmark names and keeps a query; the Search tab's drawer runs it again |
+| ✅ | T30 Pairing by QR code, and TLS | Done — per-device tokens, a pinned self-signed certificate on 8443; plain 8080 for this computer only |
+| ✅ | T31 Notes as a folder on the phone | Done — any folder another app syncs, or none; chosen on the welcome screens |
+| ✅ | T32 WebDAV source (experimental) | Done — the same sync engine against Nextcloud or Apache; servers that break conditional writes are refused |
+| ✅ | T33 Android home-screen widgets | Done — agenda and month, sync button, picker previews; [07](07-calendar-agenda.md#home-screen-widgets-android) |
+| ✅ | T34 Grid table editor and formulas | Done — a table opens as a grid; `#+TBLFM:` computed and aligned as Emacs does |
+| ✅ | T35 Translation | Done — French beside English; completion labels are still English only |
+| ✅ | T36 Dark theme | Done — follows the system; the Org palette and src blocks have dark values |
+| ✅ | T37 Release pipeline | Done — signed APK, GitHub release and server image in one script; Obtainium for updates; GPL |
+| ✅ | T38 Randomized two-device sync tests | Done — 30 seeded sessions per push, 10,000 nightly |
+| ✅ | T39 Secrets sealed, notes out of backups | Done — Keystore and Keychain; notes, widget state and reminder plan left out of backups |
+| ✅ | T40 Sync robustness | Done — first sync in one bundle, one cycle at a time, conflict copies instead of blind merges, restarts survived |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -109,7 +128,15 @@ Keep the current API shape — this is a behaviour fix, not the protocol change.
 the next request; a save never clobbers a newer on-disk version silently; tests cover
 external modification and path-traversal attempts.
 
-### T2 · Transport hygiene — ✅ **done**
+### T2 · Transport hygiene — ✅ **done, then superseded by T30**
+**Superseded** Pairing (T30, 1.0.0) replaced the token and both switches; what follows is the
+history. Gzip stays. The plain port, 8080, listens on loopback and answers only a loopback `Host`:
+the web client, the desktop app and the Devices page. Paired devices reach the server over TLS on
+8443, trusting its self-signed certificate by the fingerprint the QR code carries, each with a token
+of its own that the Devices page can revoke. `KORGNOTE_TOKEN` is ignored, with a line in the log if
+it is set; `KORGNOTE_ALLOW_LAN` and `KORGNOTE_REQUIRE_TOKEN` are gone. The shared token was one
+secret on every device, sent over plain HTTP, and the LAN switch meant no authentication at all;
+pairing removed the need for either.
 **Landed** Ktor `Compression` (gzip/deflate), bearer-token auth on `/api` from `KORGNOTE_TOKEN`, and
 a bind host chosen by configuration: loopback by default, all interfaces once a token is set. The
 token is a field in the app's settings and rides on every request. README documents the variables
@@ -224,6 +251,11 @@ anywhere in `composeApp/`** — the last two, `#+TITLE:` and the timestamp date,
 with the rest. That is D5 closed. `OrgLineState` is public so a client keeping a per-line cache can
 thread the state itself, which is what let the editor's incremental cache survive the change
 untouched.
+**Since** Later features brought a few Org patterns back into `composeApp/`: `OrgText.kt` (`:ID:`,
+`#+TODO:` lines), `NoteByline.kt` (`#+AUTHOR:`, `#+DATE:`), `LinkNavigator.kt` (`#+TITLE:`, a link's
+scheme), `OrgSyntaxHighlighting.kt` (a tag name, a date) and `TableFormulas.kt` (formula targets).
+Each is small, but each is a second definition of something, which is what D5 was closed to stop.
+Most belong in `OrgSyntax`. The task stays done; the drift is listed under open gaps.
 **Not included** Reading mode still walks the line itself. It does not just style text, it *rewrites*
 it — hiding emphasis markers and link targets, turning a `LOCATION` property into a Google Maps link
 — and a list of spans over the original text cannot express a text substitution. Spans could grow a
@@ -320,6 +352,12 @@ endpoints are untouched until the client cuts over in T10.
 a mergeable conflict, not a precondition the client should give up on. The journal is deliberately an
 optimisation — a `since` it cannot cover returns a full manifest — which is what makes it safe to
 hold only in memory across restarts.
+**Found later: it was not safe.** A restarted server counted from zero again, so once it passed the
+generation a phone had kept, it answered that phone with only the later changes, and the ones in
+between were never seen. The journal now starts at the time it is made, in milliseconds, so a
+generation from an earlier run always asks for a full manifest. A delta lists each path once, as its
+latest change, and is read under the same lock as its generation (4d44808). The client keeps a full
+manifest's generation as given, not only when it is higher (094fb3f).
 **Also added** `KORGNOTE_PORT`, so a second server can run beside the real one while testing.
 **Verified** 34 server tests (14 API, 7 journal, 2 watcher, plus the existing suites). The watcher
 test prints its measured latency; an external edit was detected in **110 ms**, comfortably inside the
@@ -373,14 +411,17 @@ more (D2, D3).
 
 ### T10b · Web client on the same engine — 🟡 **mostly wired by T10**
 **Already true** The wasm target builds and runs on the shared stack: `InMemoryReplicaStorage`,
-settings in `localStorage` (token, pins, new-notes folder, file-link folders — so a reload does not
-ask for the token again), the same `SyncEngine` and ViewModel as the native clients, and a
-same-origin base URL from `window.location.origin`, so no host or port is configured on web.
-**Still to do** Cold start through `GET /api/v1/bundle` — the server serves it, but `SyncApi` has
-no `bundle()` yet, so every client still walks the manifest and fetches file by file; debounced
-(~1 s) autosave; and confirming the SSE loop, which reads the stream with `prepareGet`, actually
-delivers on the JS engine. The no-op `NotificationScheduler` belongs with T18, which is what
-introduces the interface.
+settings in `localStorage` (pins, new-notes folder, file-link folders), the same `SyncEngine` and
+ViewModel as the native clients, and a same-origin base URL from `window.location.origin`, so no
+host or port is configured on web. The no-op `NotificationScheduler` came with T18.
+**Since** `SyncApi.bundle()` exists (`KtorSyncApi`), and a cycle that would pull eight or more files
+asks for the bundle (T40), on the web as everywhere.
+**Still to do** Debounced (~1 s) autosave; a replica that survives a reload — the web still keeps
+`InMemoryReplicaStorage`, so every page load pulls the notes again; and confirming the SSE loop,
+which reads the stream with `prepareGet`, actually delivers on the JS engine.
+**A new limit** Since pairing (T30) the web client is served on the plain port only, which answers
+this computer alone, and a browser cannot pair. So the web client now works only on the server's own
+machine.
 **Depends** T10
 **Scope** Wire the wasm target to `InMemoryReplicaStorage` + `GET /api/v1/bundle` on page
 load, debounced autosave (~1 s) through the same `SyncEngine`, SSE for live updates,
@@ -410,6 +451,11 @@ edits to different headings converge with nothing asked of the user, and the sam
 produces a conflict copy while the local version stays live. Also that the same conflict is not
 re-reported every cycle, and that the copy reaches the server. Replacing the merge with an
 unconditional conflict fails the convergence test.
+**Reversed since** (daf827b, 2026-10-25). When a conflict cannot be merged, the **server's** version
+now keeps the path and this device's is saved beside it as the conflict copy
+(`DocumentStore.keepServerVersion`), as [05](05-sync-protocol.md) describes. The server is the
+source of truth: with the local version at the path, the next cycle pushed it over the file Emacs
+had open, a version nobody merged.
 **Found while testing** The fake server in `SyncEngineTests` derived etags from content *length*, so
 two different edits of equal length looked identical to it and the conflict path was never reached.
 Etags now follow content. A fake that is too forgiving hides exactly the case the tests exist for.
@@ -650,8 +696,8 @@ correctly in all four views.
   planned before the replica has been read, which would otherwise cancel everything at start-up.
 - **Android**: one exact `setExactAndAllowWhileIdle` alarm per reminder, firing a receiver that
   posts it. The plan is kept in preferences and set again after a reboot, an app update or a
-  clock/time-zone change. `POST_NOTIFICATIONS` is asked for at start on 13+.
-- **iOS**: `UNCalendarNotificationTrigger` per reminder; permission asked on the first plan; a
+  clock/time-zone change. `POST_NOTIFICATIONS` was asked for at start on 13+ (see *Since* below).
+- **iOS**: `UNCalendarNotificationTrigger` per reminder; permission was asked on the first plan; a
   delegate shows banners while the app is open.
 - Tapping a reminder opens its note at the heading — held until the notes are read when the tap
   is what started the app. Desktop and web schedule nothing.
@@ -666,6 +712,12 @@ emulator, Android allowed a reminder three days out to arrive up to an hour late
 alarms by up to 75% of the time remaining, capped at an hour), and a test digest came four minutes
 late. Exact alarms need `USE_EXACT_ALARM`, which Play reserves for calendar and alarm apps — an
 agenda is one; inexact remains the fallback if exact alarms are refused.
+**Since** (9902878) neither platform asks on its own. "Not now" on the welcome screens was followed
+by the question anyway — on iOS whenever the scheduler planned, on Android at every start. Now the
+welcome screens ask, a scheduler only checks, and Settings shows *Allow notifications* under
+Reminders while they cannot be shown; on Android, once the prompt has been refused for good, it opens
+the app's notification settings. Allowing them there hands the plan over again, since iOS drops what
+it was not allowed to show (`NoteAgenda.onNotificationsAllowed`, e9f1ee0).
 **Still to prove** The same on an iPhone: the iOS scheduler compiles and links, nothing more.
 **Depends** T16
 **Scope** `NotificationScheduler` `expect/actual` for iOS and Android; idempotent
@@ -689,6 +741,14 @@ count 10× against the free quota. A nightly run of about 10 minutes would use 3
 month, so a cheap Ubuntu job first checks for commits in the last 25 hours. `workflow_dispatch` runs
 it by hand, with the iOS job on by default. The iOS simulator tests are the ones that have most
 likely never run anywhere, so their first run is the one to watch.
+**Since** The repository is public now, so its macOS minutes no longer count against a quota and the
+reason above for keeping iOS nightly no longer holds; it is still nightly. The nightly check asks
+whether master moved since the last scheduled run that passed, by comparing that run's SHA, rather
+than whether it had commits in the last 25 hours, which a run starting later than the one before
+could skip a commit through; a failed night is tried again. Nights start at 01:37 UTC, because
+runs scheduled on the hour started hours late. A third job, `sweep`, plays 10,000 seeded sessions of
+`SyncEngineRandomTests` (T38, d614601) on the same nights, while every push plays 30 inside the JVM
+tests. `workflow_dispatch` has an input for each nightly job.
 **Proven on GitHub** Both jobs have run green. The first red run was a real one:
 `OrgSearchTests.findsOneMatchInACorpusSizedCollection` passed its assertions on wasm but took 3.4 s
 in headless Chrome, past Mocha's 2 s limit. Raising the timeout was rejected as hiding the problem.
@@ -710,6 +770,7 @@ caret landing outside a block, and a drawer that stopped opening notes — and t
 caught any of them. Tests nobody runs are documentation.
 **Done when** A push that breaks any target, or any test, fails the build and names what broke.
 **Not included** Signing, publishing, or distributing builds. This is a gate, not a pipeline.
+Those came later, as T37: `container.yml` and `scripts/publish.sh`.
 
 ### T20 · Creating, renaming and deleting notes — ✅ **done**
 **Landed** In the drawer, a *New note* button asks for a title, shows the file it will make (lower
@@ -729,7 +790,10 @@ the server has not seen. All three work offline.
 fake server), `NoteLifecycleUiTest` (drawer menu, dialogs), and two new `SyncApiV1Test` cases
 (encoded path, stale delete refused). Not yet tried against the real server from a phone.
 **Not included** Templates beyond `#+TITLE:`, and creating or deleting folders — an empty folder
-does not exist in this model, and one appears when a note is moved into it.
+does not exist in this model, and one appears when a note is moved into it. Templates came later
+(0970366, `template/NoteTemplates.kt`): a new note starts as org-roam starts one, with its own `:ID:`,
+title, author, date and the tags typed in the dialog, then the header lines Settings holds; a
+*Today* button opens today's daily, creating it in the daily folder first.
 
 **Depends** T10
 **Scope** The app side of D11. The server can already take a file it has never seen — `put` with
@@ -768,8 +832,9 @@ target: it follows, never edits) and the backlinks list. Against the real notes:
 links, every `file:` link to a note inside them, and 111 fuzzy links resolve; the misses are links
 that are broken in Emacs too. One backlink pass over all 367 notes takes ~33 ms on desktop, and is
 done once per change to the notes, not per note opened.
-**Not included** Following links from inside the editor, and the system back gesture (the arrow
-in the top bar is the way back for now).
+**Not included** Following links from inside the editor. The system back gesture came later
+(5310dcd): Back closes an open drawer first, and otherwise returns from a followed link, as the
+top bar's arrow does.
 
 **Depends** T14
 **Scope** `[[file:…]]`, `[[*Heading]]` and `[[id:…]]` become navigation: tapping one in reading
@@ -830,6 +895,13 @@ first, and whichever it is, the reason is written down.
 
 
 ### T23 · Server container — ✅ **done**
+**Since** The run stage is `gcr.io/distroless/java25-debian13:nonroot` rather than a JRE image
+(e4ebc1e): the same JRE with no shell or package manager, so far fewer packages for CVEs to land
+in. The image is published to GHCR for amd64 and arm64 on each `v*` tag by `container.yml`
+(e094b3e). It no longer refuses to start without a token: pairing (T30) removed
+`KORGNOTE_REQUIRE_TOKEN` along with the token. What it refuses is a missing or unwritable `/notes`
+(`KORGNOTE_REQUIRE_NOTES_DIR`). TLS is built in on 8443, and a `/state` volume keeps the certificate
+and the paired devices. The history follows.
 **Landed** A multi-stage [`Dockerfile`](../Dockerfile) (`:server:installDist` on a JDK 25 image, then
 a JRE image) and a [`docker-compose.yml`](../docker-compose.yml). Two new switches, both set by the
 image: `KORGNOTE_REQUIRE_TOKEN` refuses to start without a token (`KORGNOTE_ALLOW_LAN` does not
@@ -848,7 +920,7 @@ mount, unwritable directory) exits with a message. Not yet run on a Linux host.
 **Optional, half done** The image builds the wasm client alongside the server and serves it at `/`
 (`WASM_DIR=/opt/korgnote/web`); `KORGNOTE_DISABLE_WEB=1` turns that off at run time. The build stage
 needs `libatomic1`, which the Node that the Kotlin plugin downloads links against. Pushing the image
-to GHCR from CI is not done.
+to GHCR from CI is not done (since done, as above).
 
 **Depends** T2
 **Scope** A `Dockerfile` for the Ktor server and a `docker-compose.yml` example: the notes
@@ -877,6 +949,7 @@ image and push it to GHCR on master. Both are extensions of T19 rather than part
 made on the host reaches a connected client, and a note saved from the app appears on the host
 owned by the host user.
 **Not included** TLS. The README's reverse-proxy recipe still applies in front of the container.
+(Since T30 the server serves TLS itself, and the README has no reverse-proxy recipe.)
 
 ### T24 · Tap to edit, fold instead of pencil and + — ✅ **done**
 **Landed** A tap edits; inner targets (checkbox, link, drawer, chevron) keep their own taps. The
@@ -889,6 +962,10 @@ also moves when a sibling is added above; see [09](09-element-editing.md#folding
 **Verified** `ElementEditingTest` (every way of adding a heading), `FoldingTest`,
 `ReadingModeInteractionTest` (tap, checkbox, long-press menu, fold) on desktop JVM. Not yet tried on
 a phone — the long-press menu placement in particular should be looked at there.
+**Since** The editor's floating Discard, save-and-add and Save buttons moved onto the editing strip,
+since they covered the last element of a file (149b5f9). Save-and-add then left the strip
+(dcec372): the long-press menu and the button at the foot of the note still add a heading. It has
+been used on a phone since, and the strip fitted to one (ace6cc7).
 
 **Depends** T4
 **Why** Every element in reading mode has two icons on its right, a pencil and a **+**. With a few
@@ -997,7 +1074,8 @@ Run once over the 371 real notes: no out-of-range span.
 **Not included** Lisp function calls (as in Emacs, only special forms, macros and defined names are
 coloured — a call cannot be told from a `let` binding without more than one line of context),
 variables inside unquoted heredocs, YAML block scalars, nested languages (`<script>` in HTML).
-Colours are for the light theme, which is the only one the app has.
+Colours were for the light theme, then the only one; since the dark theme (T36) src blocks take
+GitHub's dark colours there.
 
 ### T28 · Links without syntax — ✅ **done**
 **Why** On a phone keyboard `[[target][label]]` is the hardest thing in the notes to type, and the
@@ -1045,19 +1123,152 @@ is worth considering if they are wanted on every device), and the structured que
 
 ---
 
+## Phase 6 — Shipped without a plan
+
+Written after the fact, from the commits, so that the status table covers everything that shipped.
+Each commit message says why; these say what.
+
+### T30 · Pairing by QR code, and TLS — ✅ **done** (1.0.0)
+**Landed** The server has two ports. 8080, plain, answers this computer only: the web client, the
+desktop app, and a Devices page that lists paired devices, revokes them and shows a pairing QR code
+(`scripts/pair.sh` prints it in a terminal). 8443 serves the sync API over TLS, with a self-signed
+certificate made on first start, to paired devices only. The code carries the server's id and
+addresses, the certificate's SHA-256 and a one-time code a device trades for a token of its own; the
+server keeps only a hash. The app trusts the server by that fingerprint and nothing else, and tries
+its addresses in turn (bfe1c27). Each pairing builds a client that trusts only the certificate its
+link names — the iOS simulator showed a wrong fingerprint still pairing over the app's open
+connection — and `korgnote://pair` links open the app (0e8704f). Phones have no plain-HTTP server
+fields, and Android refuses cleartext traffic (65ee042). A revoked device is told to pair again
+rather than that the server cannot be reached (beb8f9b).
+**Not included** The desktop keeps its pairing in plain `java.util.prefs`; T39 sealed it on phones only.
+
+### T31 · Notes as a folder on the phone — ✅ **done** (1.2.0)
+**Landed** A phone can keep its notes in a folder of the user's instead of syncing with the server:
+one Syncthing, Dropbox or iCloud Drive keeps in step, or nothing does. Nothing of KorgNote's is
+written into it. `FolderNoteStorage` reads it through a `NoteFolder` per platform (the Storage Access
+Framework on Android, a bookmarked URL with coordinated access on iOS) and looks again when the app
+comes to the front and every 10 s while it is there. A save over an edit made elsewhere goes to a
+`.sync-conflict-` copy. Welcome screens on a first start set the choices side by side (1103226).
+Reads go eight at a time, which took a first load of 400 notes over SAF from 44 s to about 10 s;
+pairing links open from a folder setup too (007f952). After a conflict the note shows the folder's
+version at once, and the banner names the folder rather than the server (3373483).
+
+### T32 · WebDAV source, experimental — ✅ **done** (1.3.0)
+**Landed** A WebDAV server, such as Nextcloud, as a third place for the notes on Android and iOS. It
+reuses the sync engine unchanged through `WebDavSyncApi`, with a replica, an engine and an HTTP
+client of its own. Before a server is used the app checks that it refuses a write or delete over a
+version it no longer holds and a creation over an existing file; one that does not, such as
+`rclone serve webdav`, is refused with why. Real servers needed three workarounds: Nextcloud's 404
+for a missing folder, Apache's weak etag in the second after a write, and Nextcloud keeping an etag
+across a same-size write in the same second (4700a45). Requests say `Accept-Encoding: identity`,
+since a gzipped answer got an etag no `If-Match` matched and no Android push went through (56ce835).
+A 401 says which way to sign in the server asked for (215278e). `WebDavServersTest` syncs two
+devices through Apache, rclone and Nextcloud in Docker.
+**Not included** Any sign-in but Basic.
+
+### T33 · Android home-screen widgets — ✅ **done** (1.3.0)
+**Landed** Two Glance widgets, the agenda and the month, drawn from the agenda's entries, with a
+sync button that runs a one-off `WorkManager` job (8c298f0). The app's strings are packed into the
+APK, without which it closed on start; the agenda widget's TODO keyword moved onto its status line,
+and the picker previews use only views a widget may hold (7952a77). [07](07-calendar-agenda.md#home-screen-widgets-android)
+describes them.
+**Not included** Ticking off a TODO from a widget, iOS, and re-planning reminders after a widget sync.
+
+### T34 · Grid table editor and formulas — ✅ **done** (1.0.0)
+**Landed** A tap on a table opens it as a grid, a field per cell, with menus to insert, move and
+remove rows and columns; Save writes it back aligned (fecf931). `#+TBLFM:` formulas are read,
+recalculated with Calc's arithmetic and printing, and renumbered when rows and columns move, with a
+review of what cannot be computed or looks like a slip (ee6342c). The grid edits formulas and
+recalculates on demand (210991e). Columns align by what their cells show, as Emacs aligns them
+(f186e92). More of Calc's functions, dates included (8ba8bd6). A Table button makes a new one in the
+grid (a12b071). Back asks before throwing a changed table away (86a403e).
+**Not included** Trigonometry: Calc answers it in degrees with exact special cases.
+
+### T35 · Translation — ✅ **done** (1.4.0)
+**Landed** The app's text moved into Compose resources, one strings file per area, with a French set
+beside the English (82a7bf3); months and weekdays are named in the app's language (29cb50a). The
+widgets take theirs from Android's resources, and Android 13 and later offers the language per app
+(f9b1236).
+**Not included** Completion's labels: they are made in `shared/`, which has no resources, so `today`,
+`tomorrow` and the weekday names it offers are English only.
+
+### T36 · Dark theme — ✅ **done** (1.0.0)
+**Landed** The app follows the system's dark setting. The Org palette has a dark value for each
+colour and src blocks take GitHub's dark theme; on Android the window theme follows too, so the app
+no longer flashes white as it opens in the dark (b42d920).
+
+### T37 · Release pipeline — ✅ **done**
+**Landed** `scripts/release.sh` signs release builds with the key kept in KeePassXC, and debug builds
+became an app of their own (a152c33). `scripts/publish.sh` raises the version, runs the tests, builds
+and checks the signed APK, tags, pushes and makes the GitHub release (68f35bc). A version tag builds
+the server image for amd64 and arm64 and pushes it to GHCR, and the release waits for it
+(e094b3e). `fastlane/` holds the store listing, and the APK leaves out Google's dependency blob
+(4d9d456). The README offers Obtainium for updates; F-Droid and IzzyOnDroid were dropped
+(fd5c437). KorgNote is licensed under the GPL (9dccb97).
+
+### T38 · Randomized two-device sync tests — ✅ **done**
+**Landed** `SyncEngineRandomTests`: two devices doing seeded random edits, creates, deletes, renames
+and conflict resolutions to a few shared names over a network that drops requests before and after
+the server acts. Then everything syncs until quiet, and the replicas must match the server, no
+line anyone wrote may be missing unless a device removed it, and no note may hold two notes'
+headers. A failure names its seed and its steps (6e76835). Every push plays 30 sessions; a nightly
+job plays 10,000, on the JVM only, since the engine is common code (d614601).
+
+### T39 · Secrets sealed, notes kept out of backups — ✅ **done**
+**Landed** The pairing token and the WebDAV password are sealed with an Android Keystore key, which
+no backup holds, and kept in the Keychain on iOS; a value saved in the clear is sealed the first time
+it is read (9072fd5). The app's copies of the notes, the widgets' agenda and the reminder plan are
+left out of Android's backups and device transfer, and out of iCloud and computer backups on iOS;
+the next sync rebuilds them (c5ec213).
+**Not included** The desktop, whose pairing is still in plain preferences.
+
+### T40 · Sync robustness — ✅ **done**
+**Landed** A run of fixes, most found on a phone or by T38:
+- A first sync of 371 notes took about 80 s file by file; a cycle that pulls eight or more files now
+  asks for the bundle, about 15 s. Cycles run one at a time, which stopped a conflict copy's DELETE
+  going out three times (eb46572).
+- An edit being made is kept when a sync brings a newer note: saving makes the edit on that note,
+  merged line by line, and reloads parse only what changed, off the main thread (5b9e083).
+- A note created at the same path on two devices, or over a name deleted or renamed away here, is
+  never merged against a base it does not have: the server's keeps the path and this one becomes a
+  conflict copy (4ff6d10, 4a4a650).
+- A change stream that died without a word is noticed: the server sends a heartbeat every 30 s, and
+  90 s of silence counts as a dead connection, followed by a catch-up sync (27e1dfc).
+- The app syncs on coming back to the foreground (50b7173).
+- Generations survive a server restart, a delta lists each path once and is read atomically, and
+  the client keeps a full manifest's generation as given (4d44808, 094fb3f; see T9).
+- A replica whose `meta.json` is lost keeps any note that differs from the server's as a conflict
+  copy instead of overwriting it (094fb3f).
+- A new note cannot be created through a symlink that leads out of the notes directory, as reading
+  and editing one already could not (4d44808).
+
+---
+
+## Open, and known gaps
+
+- **Sync triggers.** The app syncs on start, on coming back, after a save and on the change stream.
+  Not built: a periodic poll while open, Android's periodic `WorkManager` job, iOS's
+  `BGAppRefreshTask`, and a debounce on saves.
+- **T10b leftovers.** Debounced autosave, a web replica that survives a reload, SSE on the JS
+  engine; and the web client works only on the server's machine.
+- **T0/T0b.** The two spike notes were never written.
+- **T18 on an iPhone.** Built, never seen on a device.
+- **T6 drift.** Org regexes back in `OrgText.kt`, `NoteByline.kt`, `LinkNavigator.kt`,
+  `OrgSyntaxHighlighting.kt` and `TableFormulas.kt`.
+- **The morning digest** leaves out overdue items and deadline warnings ([07](07-calendar-agenda.md#notifications)).
+- **A widget sync** does not plan reminders again.
+- **The desktop's pairing token** is kept in plain preferences.
+- **The plain port** has no authentication: any process on the computer can use it, and in the
+  container so can anything on the Docker network.
+- **Completion labels** are English only.
+
 ## Sequencing notes
 
-- T1 and T2 are independent of everything else and can ship immediately.
 - Phase 1 (core) and T8 (replica store) can proceed in parallel — different modules.
 - T8's storage interface is what keeps the web target cheap; do not let the filesystem
   implementation leak into `DocumentStore`, or T10b turns from ~120 lines into a fork.
 - T10 is the cutover point: after it, the server no longer serves ASTs and the client is
   genuinely offline-capable. Everything downstream gets easier.
-- The in-flight raw-text fix (PR #1 / uncommitted working-tree change) is superseded by T3
-  and T7. Land it as-is first — it fixes real data corruption today — then let T7 remove
-  the ordinal hack.
-- **T19 before Phase 4.** Everything after this point is built on a suite nothing runs; the longer
-  that is true, the more of it is decoration. It is also the only task here that takes an hour.
 - T23 is independent of everything but T2 and can be done whenever a machine to run it on is ready.
 - T20 before T21: a corpus you cannot add to is a corpus whose links you cannot finish writing.
 - ~~T22 is independent and can wait, but it should be settled before the editor is touched again,

@@ -38,7 +38,6 @@ fun String.withNewOrgElement(at: Int, level: Int): OrgInsertion
 fun String.withoutOrgSubtree(index: Int): String?
 fun String.withOrgSubtreesSwapped(first: Int, second: Int): String?
 fun String.withOrgSubtreeShifted(index: Int, delta: Int): String?
-fun String.orgCheckboxesBefore(offset: Int): Int
 ```
 
 - An element runs from its heading line to the **next heading of any level**, so a child heading is
@@ -57,17 +56,39 @@ started from. A stale range would overwrite something the user never saw.
 It also **re-adds a trailing newline** when one is needed to keep the following element on its own
 line, so deleting the last newline while editing cannot weld two headings together.
 
-### A deliberate compromise
+### A sync during an edit
 
-`isHeadingLine` uses the same rule as `toOrgDocument`'s section detection — a line starting with `*`
-— rather than Org's stricter "stars followed by whitespace". That is wrong for a `*` line inside a
-`#+BEGIN_SRC` block, but **consistency with the parser matters more than either being individually
-right**: if the splitter and the parser disagreed, the range offered for editing would not be the
-range written back, which corrupts a file. A shared quirk merely splits an element oddly.
+On its own, that refusal was too strict once a sync could change the note mid-edit. Found on a
+phone: a heading being added could not be saved once Emacs had touched the note, and discarding it
+showed the note as it was before Emacs. So `ElementEditor` no longer refuses just because the note
+moved:
 
-`OrgElementsTests.headingCountMatchesTheParser` asserts they agree across a corpus, so a future
-grammar change cannot silently break the splice. **T5/T6 should retire this** by moving both onto
-the real grammar together.
+- While an element is open, a note a sync brings is **set aside** (`noteChangedElsewhere`) instead of
+  replacing the text under the caret, which made a new heading vanish from the screen.
+- `commit` splices the draft into the note the edit began on, then makes the same edit on the newer
+  note. A heading added for this edit goes where it went: at the end, or before the line that
+  followed it, when that line is found exactly once in the newer note. Any other edit — or a new
+  heading whose place cannot be found again — is merged three ways, line by line, over the note
+  before the edit: the same `merge` a save goes through with the server.
+- Only a change to the same lines is still refused, and the editor stays open with a message.
+- Discarding shows the newer note.
+
+Covered by `EditRebaseTest`.
+
+### The splitter and the parser agree
+
+The splitter must find headings exactly where `toOrgDocument` finds sections. If the two disagreed,
+the range offered for editing would not be the range written back, which corrupts a file.
+
+They now share Org's own rule. `isHeadingLine` is `OrgSyntax.heading` — stars, then whitespace — so
+`*bold* text` at the start of a line is a paragraph. And the splitter treats blocks and drawers as
+opaque, as the parser does: a `* ` line inside `#+BEGIN_SRC` is code, and a heading closes a drawer
+that was never ended. This replaced an earlier compromise, in which both took any line starting with
+`*` for a heading: consistent, but wrong, and `*bold* text` became a heading in reading mode.
+
+`OrgElementsTests.headingCountMatchesTheParser` and
+`OrgGrammarTests.theSplitterAgreesWithTheParserOnTheNewConstructs` assert that they agree, so a
+future grammar change cannot silently break the splice.
 
 ## The surface
 
@@ -89,15 +110,23 @@ on: every rendered element knows the range it came from.
 | Tap a link into the notes | Opens its target — see [08 T21](08-roadmap.md#t21--following-links-between-notes---done); the back arrow returns |
 | *Linked from* at the end | Every link elsewhere that leads to this note; tapping one opens it at the link |
 | Tap a heading's TODO keyword | A menu of the file's keywords; picking one changes it, logs the change under the heading, and saves. Marking a repeating entry done repeats it — see [Repeated tasks](#repeated-tasks) |
+| Tap a checkbox | Ticks it as Org does, and saves — see [Checkboxes and cookies](#checkboxes-and-cookies) |
+| Tap a table | Opens it in a grid editor — see [Tables](#tables) |
 | Chevron on a heading | Folds or unfolds the heading's subtree — see [Folding](#folding) |
 | **+** FAB in reading mode | Appends a heading at the end of the file, and opens it |
-| Save FAB | Splices the draft back and saves |
-| **+** FAB while editing | Saves the draft, then opens a new heading after it — a sibling of the last heading the draft holds |
-| Discard FAB | Drops the draft; if the heading was *just inserted*, removes it again |
+| Double-arrow FAB above it | Scrolls to the end of the note; shown only while there is more below |
+| Save, on the strip while editing | Splices the draft back and saves |
+| Discard, on the strip while editing | Drops the draft; if the heading was *just inserted*, removes it again |
 
-**A tap edits unless something inside the element wants it.** A checkbox, a link, a drawer's
-toggle and the fold chevron are clickables of their own, and Compose hands the tap to the innermost
-one first, so the element's own tap only sees what they leave. That replaces an earlier rule —
+Save and Discard sit at the end of the completion strip pinned to the bottom of the screen
+([06](06-editor.md#where-the-strip-goes-and-why-it-matters)). They used to be floating buttons,
+drawn over the document: the last element of a file, with nothing below it to scroll up with, stayed
+under them while it was being edited. A third button, save-and-add-a-heading, was dropped then; the
+long-press menu and the **+** at the foot of the note still add one.
+
+**A tap edits unless something inside the element wants it.** A checkbox, a link, a table, a
+drawer's toggle and the fold chevron are clickables of their own, and Compose hands the tap to the
+innermost one first, so the element's own tap only sees what they leave. That replaces an earlier rule —
 "plain taps are left alone" — which protected those targets by giving up the tap altogether. A
 scroll or fling never becomes a tap. For screen readers the element's tap is labelled *Edit* and
 its long-press *More actions*, since there is no longer a pencil to find.
@@ -105,7 +134,7 @@ its long-press *More actions*, since there is no longer a pencil to find.
 **There used to be a pencil and a +** on every element. With a few hundred elements that was a few
 hundred identical pairs, taking width from the text and making a note look like a form. Editing now
 has the tap, and adding after one particular element is rare next to reading, so it moved into the
-long-press menu and the editor.
+long-press menu.
 
 *Delete heading* takes the subtree for the same reason Org does: a heading's sub-headings belong
 to it, and leaving them behind would re-parent them under whatever heading came before. The
@@ -129,11 +158,14 @@ A new heading is inserted as bare stars (`* `, or `** ` to match the level) with
 them. There is no template: completion ([06](06-editor.md#completion-g3)) is the better answer to
 "pre-fill SCHEDULED".
 
-Checkbox ordinals are per-element in rendering but reported document-wide, using
-`orgCheckboxesBefore` to offset each element's numbering.
+A tap on a checkbox, a keyword or a table reports **an offset**, not an ordinal. Each element is
+parsed from its own slice, so its nodes carry slice-relative ranges; `OrgDocumentView` adds the
+element's start, and the view model finds the node at that offset in the whole note (`nodeAt`). T7
+deleted the ordinal path, `orgCheckboxesBefore` with it: an ordinal shifted whenever anything above
+it changed.
 
 State lives in `ElementEditor`, owned by `NotesViewModel`: `editingIndex` and `draftValue`, plus
-the text before an insertion so that discarding removes it. Covered by `ElementEditingTest`, which
+the text before an insertion so that discarding removes it, and the newer note a sync set aside. Covered by `ElementEditingTest`, which
 has a test for every way of adding, moving, restarring and deleting a heading, and
 `ReadingModeInteractionTest` for the gestures.
 
@@ -182,6 +214,56 @@ typed, as in Org. A `+0d` repeater, or `+1h` on a stamp without a time, does not
 change is an ordinary one. A month on from the 31st lands on the month's last day; Emacs spills
 into the next month instead. Covered by the *Repeated tasks* tests in `OrgEditTests` and by
 `ElementEditingTest`.
+
+### Checkboxes and cookies
+
+A tapped checkbox goes through `toggleCheckboxAt` and `tickAsOrgDoes` (`shared/…/org/edit/OrgEdit.kt`).
+Ticking a box ticks or unticks every box under it, and every box above it then says what its
+children say — `[X]` when all are ticked, `[ ]` when none are, `[-]` when some are — as Org's
+`C-c C-c` leaves them. Org would put a parent straight back to what its children say, so a tap there
+would do nothing; ticking them all ends where Org would. Every marker is three characters, so
+nothing else in the file moves. Covered by `CheckboxHierarchyTest`.
+
+A save, a tick and a keyword change then bring the **statistics cookies** up to date — `[2/5]` and
+`[40%]` — with `updateStatisticsCookies(text, keywords, before)` in
+`shared/…/org/edit/StatisticsCookies.kt`. Only the cookies on headings and list items over the lines
+that changed are touched; one elsewhere is left as it is, even if it counts differently, since Emacs
+may keep it that way on purpose with other settings. The rest of the note stays byte for byte as it
+was. This replaced a rule that rewrote every cookie in the note on every save, so an edit under one
+heading could change a cookie under another.
+
+A heading's cookie counts its direct sub-headings that carry a keyword, done against all, or, with
+none of those, the checkboxes of its own lists; a list item's counts the boxes directly under it.
+Those are Org's defaults. A heading's `:COOKIE_DATA:` property is honoured: `todo` or `checkbox`
+picks what is counted, and `recursive` counts at every depth below. Covered by
+`StatisticsCookiesTest` and `StatisticsOnSaveTest`.
+
+### Tables
+
+A table is all but impossible to keep aligned as text on a phone keyboard, so a tap on one opens it
+over the whole screen as a grid, a field per cell (`composeApp/…/ui/TableEditor.kt`, `TableGrid` in
+`shared/…/org/edit/TableEdit.kt`). Menus insert, move and remove rows and columns, and add a rule
+under a header. The editor's Table button opens the same grid on an empty table and writes it in at
+the caret (`insertTable`).
+
+The table's `#+TBLFM:` line comes with it. Cells a formula fills are shaded and open their formula
+when tapped. Nothing is computed until *Recalculate* is pressed, as in Emacs; it computes every
+formula or, when one cannot be computed, nothing, and says why. Numbers follow Calc's arithmetic and
+printing, so a cell KorgNote computes is the one Emacs would write. Inserting, moving or deleting rows
+and columns renumbers what the formulas read. A Formulas panel names what cannot be computed, what is
+out of date, and slips that are easy to make in Emacs. The calculator is in `shared/…/org/table/`;
+trigonometry is left out, since Calc answers it in degrees with exact special cases.
+
+Saving is a range replacement over the table's lines and its formula line (`replaceOrgTable`),
+aligned as Emacs aligns it (`toAlignedLines`): a column is as wide as its widest cell as displayed,
+and right-aligned when at least half its filled cells look like numbers, unless an `<l>`, `<c>` or
+`<r>` cookie says otherwise. A `|` typed in a cell is written
+`\vert{}`. The same guard as an element's applies: nothing is written when nothing changed, and the
+save is refused when the table's text is no longer what it was when the grid opened, say after a
+sync. Opening a table is refused while an element is open in the editor.
+
+Covered by `TableEditTest`, `TableFormulaEditTest`, `TableCalcTest`, `CalcNumberTest`,
+`TableEditingTest` and `TableEditorFormulaTest`.
 
 ## Consequences
 
