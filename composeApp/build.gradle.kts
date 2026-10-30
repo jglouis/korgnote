@@ -100,6 +100,12 @@ kotlin {
 
 
 
+// The UI tests look for the English words: in English, whatever language the machine is set to.
+tasks.withType<Test>().configureEach {
+    systemProperty("user.language", "en")
+    systemProperty("user.country", "US")
+}
+
 compose.desktop {
     application {
         mainClass = "com.korgnote.app.MainKt"

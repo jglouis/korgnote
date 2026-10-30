@@ -1,0 +1,16 @@
+<resources>
+    <string name="home">Accueil</string>
+    <string name="calendar">Calendrier</string>
+    <string name="settings">Réglages</string>
+    <string name="ok">OK</string>
+    <string name="cancel">Annuler</string>
+    <string name="save">Enregistrer</string>
+    <string name="saved">Enregistré</string>
+    <string name="delete">Supprimer</string>
+    <string name="close">Fermer</string>
+    <string name="back">Retour</string>
+    <string name="rename">Renommer</string>
+    <string name="remove">Retirer</string>
+    <string name="title">Titre</string>
+    <string name="author">Auteur</string>
+</resources>
