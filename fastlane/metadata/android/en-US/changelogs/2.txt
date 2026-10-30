@@ -1,0 +1,4 @@
+* Week view: the days scroll sideways and the week opens on today.
+* Pinch the day or week view to zoom the hours.
+* Month view: busy weeks get the room they need, and a full month scrolls.
+* The server is published as a Docker image for amd64 and arm64.

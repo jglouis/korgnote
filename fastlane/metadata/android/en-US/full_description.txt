@@ -1,0 +1,33 @@
+KorgNote brings the power of <a href="https://orgmode.org">Org-mode</a> to your phone: plain .org files, edited as text, with an agenda and a calendar.
+
+<b>Your notes are your calendar</b>
+
+In Emacs, Org Agenda makes your notes and your calendar the same thing. KorgNote does that on the phone: there is no calendar to keep apart from your notes, and nothing to copy between them.
+
+<ul>
+<li><b>From a heading to its day, and back.</b> Tap the SCHEDULED or DEADLINE date of a heading to open that day in the calendar. Tap any entry in the calendar to open its note at that heading.</li>
+<li><b>A real calendar:</b> the agenda, with what is overdue on top, a day and a week on an hour grid you can pinch to zoom, and a month. Times, ranges, repeats, deadline warnings and events over several days.</li>
+<li><b>Reminders</b> before each timed entry, and a morning digest with the day's agenda.</li>
+<li><b>Home-screen widgets:</b> the agenda, and the month.</li>
+<li><b>Even offline:</b> reminders are scheduled on the phone, from your notes. Nothing goes through a server.</li>
+</ul>
+
+<b>Where your notes are</b>
+
+<ul>
+<li><b>A folder on the phone</b>, kept in sync by Syncthing or any app you like, or not synced at all.</li>
+<li><b>A WebDAV server</b> such as Nextcloud (experimental). Edits made on two devices are merged.</li>
+<li><b>Your computer, with the KorgNote server</b>, free software too, run with Docker. The phone pairs by QR code and they talk over TLS.</li>
+</ul>
+
+<b>What else it does</b>
+
+<ul>
+<li><b>Your files stay yours:</b> an edit rewrites only what you changed, so Emacs, org-roam and git keep working on your notes.</li>
+<li><b>Notes:</b> headings, TODO keywords, priorities, tags, checkboxes, tables, drawers and code blocks.</li>
+<li><b>Links:</b> id:, file:, headings and custom IDs, with backlinks. New notes and daily notes are made the way org-roam makes them.</li>
+<li><b>Tables</b> edited as a grid, with #+TBLFM formulas computed as in Emacs.</li>
+<li><b>Search</b> by words and tags, saved searches, and pinned notes.</li>
+</ul>
+
+No ads, no tracking, no account. Your notes are in no phone backup, and the pairing and the WebDAV password are encrypted with the Android Keystore.

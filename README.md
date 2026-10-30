@@ -303,6 +303,11 @@ Before a release, write what changed for the people using the app in `docs/relea
 break. The script uses it as the release notes; without it, the notes are the titles of the commits
 since the last release.
 
+Also write a short version, at most 500 characters, in
+`fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`: F-Droid and IzzyOnDroid show it as
+the release's changes. The rest of what they show, the description, icon and screenshots, is in the
+same `fastlane/` folder.
+
 `--no-push` stops before the push, `--draft` leaves the release a draft for you to publish,
 `--no-wait` publishes it without waiting for the image, and `--edit-notes` lets you edit the notes
 first. The script will not publish an APK signed with a key other than the release key, which could

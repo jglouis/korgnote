@@ -63,6 +63,12 @@ extensions.configure<ApplicationExtension> {
     buildFeatures {
         compose = true
     }
+    // Without the dependency list AGP otherwise signs into the APK, encrypted with a key only Google
+    // Play can read: F-Droid and IzzyOnDroid reject an APK that carries a blob they cannot check.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
 
 }
 

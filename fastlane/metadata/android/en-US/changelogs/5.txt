@@ -1,0 +1,4 @@
+* Sync with a WebDAV server such as Nextcloud (experimental).
+* Home-screen widgets: the agenda, and the month, with a sync button.
+* Saved searches, kept by name in the Search tab's drawer.
+* Your notes are no longer in phone backups, and the pairing and WebDAV password are encrypted with the Android Keystore.

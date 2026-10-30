@@ -1,0 +1,4 @@
+* The server is now optional: keep your notes in a folder on the phone, synced by Syncthing or any app, or not at all.
+* The first start asks where your notes are; change it later in Settings.
+* Syncing with the server is faster on first pairing, and no longer loses a heading edited on both sides.
+* The save button is no longer hidden behind the navigation buttons.
