@@ -556,5 +556,6 @@ private fun Hint(text: String) {
     Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
 }
 
-private const val INSTALL_URL = "https://github.com/jglouis/korgnote#install"
+/** Where the README says how to install the server; ReadmeLinksTest checks the heading is there. */
+internal const val INSTALL_URL = "https://github.com/jglouis/korgnote#your-computer-with-the-korgnote-server"
 private const val DEVICES_URL = "http://localhost:8080/devices"

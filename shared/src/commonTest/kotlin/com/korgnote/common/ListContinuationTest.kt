@@ -25,6 +25,20 @@ class ListContinuationTest {
         assertEquals("  * nested\n  * |", enter("  * nested|"))
     }
 
+    /** In a source or example block the text is code, and a `- ` in YAML is not an Org list. */
+    @Test
+    fun enterInsideAVerbatimBlockIsLeftAsTyped() {
+        assertNull(enter("#+BEGIN_SRC yaml\nitems:\n  - foo|\n#+END_SRC"))
+        assertNull(enter("#+begin_example\n- foo|\n#+end_example"))
+        assertNull(enter("#+BEGIN_SRC markdown\n- |\n#+END_SRC"), "nor is an empty one taken away")
+    }
+
+    @Test
+    fun aListInAQuoteOrAfterABlockStillContinues() {
+        assertEquals("#+BEGIN_QUOTE\n- one\n- |\n#+END_QUOTE", enter("#+BEGIN_QUOTE\n- one|\n#+END_QUOTE"))
+        assertEquals("#+BEGIN_SRC sh\nls\n#+END_SRC\n- one\n- |", enter("#+BEGIN_SRC sh\nls\n#+END_SRC\n- one|"))
+    }
+
     @Test
     fun anOrderedListCountsOn() {
         assertEquals("1. one\n2. |", enter("1. one|"))

@@ -2,6 +2,7 @@ package com.korgnote.common.org.edit
 
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgDocument
+import com.korgnote.common.org.OrgDrawer
 import com.korgnote.common.org.OrgList
 import com.korgnote.common.org.OrgListItem
 import com.korgnote.common.org.OrgNode
@@ -43,12 +44,24 @@ private fun cookieFor(match: MatchResult, progress: Progress): String =
  * [text] with every statistics cookie saying what is now under it, and nothing else changed: each
  * cookie is a range replacement in its own line. Text with no cookie in it is returned as is,
  * without being parsed.
+ *
+ * Given [before], the text this edit started from, only the cookies over what changed are brought
+ * up to date. One elsewhere in the note is left as it is, even if it counts differently: it may do
+ * so on purpose, kept by Emacs with other settings, and an edit is promised to leave the rest of
+ * the note byte for byte as it was.
  */
-fun updateStatisticsCookies(text: String, todoKeywords: OrgTodoConfig): String {
+fun updateStatisticsCookies(text: String, todoKeywords: OrgTodoConfig, before: String? = null): String {
     if (!STATISTICS_COOKIE.containsMatchIn(text)) return text
+    val changed = before?.let { changedRegion(it, text) }
+    if (before != null && changed == null) return text
     val document = text.toOrgDocument()
     val edits = mutableListOf<Pair<IntRange, String>>()
     for (node in document.allNodes()) {
+        // Over the change: it starts before where the change ends, and ends at or after where it
+        // starts — just before, for something added at the very end of it.
+        if (changed != null && (node.range.isEmpty() || node.range.first >= changed.end || node.range.last + 1 < changed.start)) {
+            continue
+        }
         val progress = when (node) {
             is OrgSection -> headingProgress(node, todoKeywords)
             is OrgCheckboxItem, is OrgListItem -> Progress(
@@ -73,16 +86,65 @@ fun updateStatisticsCookies(text: String, todoKeywords: OrgTodoConfig): String {
     return updated
 }
 
-/** What a heading's cookie counts: its keyworded sub-headings, else its own checkboxes. */
-fun headingProgress(section: OrgSection, todoKeywords: OrgTodoConfig): Progress {
-    val keyworded = section.children.filterIsInstance<OrgSection>()
-        .filter { it.todo != null && (it.todo in todoKeywords.todo || it.todo in todoKeywords.done) }
-    if (keyworded.isNotEmpty()) {
-        return Progress(keyworded.count { it.todo in todoKeywords.done }, keyworded.size)
+/** Where an edit changed a text: from [start] to [end], exclusive, in the text after it. */
+private data class Change(val start: Int, val end: Int)
+
+/**
+ * Where [after] differs from [before], in whole lines, or null when they are equal. Whole lines,
+ * because a character-wise diff is ambiguous where lines start alike: a heading added at the end of
+ * a subtree would otherwise reach into the first character of the heading after it.
+ */
+private fun changedRegion(before: String, after: String): Change? {
+    if (before == after) return null
+    val shorter = minOf(before.length, after.length)
+    var prefix = 0
+    while (prefix < shorter && before[prefix] == after[prefix]) prefix++
+    prefix = before.lastIndexOf('\n', prefix - 1) + 1
+    var suffix = 0
+    while (suffix < shorter - prefix && before[before.length - 1 - suffix] == after[after.length - 1 - suffix]) suffix++
+    var end = after.length - suffix
+    if (end > prefix && after[end - 1] != '\n') {
+        end = after.indexOf('\n', end).let { if (it < 0) after.length else it + 1 }
     }
-    val boxes = section.children.filterIsInstance<OrgList>().flatMap { it.children }.filterIsInstance<OrgCheckboxItem>()
-    return Progress(boxes.count { it.checked }, boxes.size)
+    return Change(prefix, end)
 }
+/**
+ * What a heading's cookie counts: its keyworded sub-headings, else its own checkboxes — or what its
+ * `:COOKIE_DATA:` property asks for, `todo` or `checkbox`, at every depth below with `recursive`.
+ */
+fun headingProgress(section: OrgSection, todoKeywords: OrgTodoConfig): Progress {
+    val cookieData = section.children.filterIsInstance<OrgDrawer>()
+        .firstOrNull { it.name.equals("PROPERTIES", ignoreCase = true) }
+        ?.properties?.firstOrNull { it.first.equals("COOKIE_DATA", ignoreCase = true) }
+        ?.second?.lowercase()?.split(' ', ',')?.filter { it.isNotBlank() }
+        .orEmpty()
+    val recursive = "recursive" in cookieData
+
+    fun keyworded(): List<OrgSection> {
+        val below = if (recursive) section.subHeadings() else section.children.filterIsInstance<OrgSection>()
+        return below.filter { it.todo != null && (it.todo in todoKeywords.todo || it.todo in todoKeywords.done) }
+    }
+    fun boxes(): List<OrgCheckboxItem> {
+        val items = section.children.filterIsInstance<OrgList>().flatMap { it.children }
+        return (if (recursive) items.flatMap { listOf(it) + it.nestedItems() } else items).filterIsInstance<OrgCheckboxItem>()
+    }
+    fun headingsDone(headings: List<OrgSection>) = Progress(headings.count { it.todo in todoKeywords.done }, headings.size)
+    fun boxesTicked(boxes: List<OrgCheckboxItem>) = Progress(boxes.count { it.checked }, boxes.size)
+
+    return when {
+        "checkbox" in cookieData -> boxesTicked(boxes())
+        "todo" in cookieData -> headingsDone(keyworded())
+        else -> keyworded().takeIf { it.isNotEmpty() }?.let(::headingsDone) ?: boxesTicked(boxes())
+    }
+}
+
+/** Every heading below this one, at any depth. */
+private fun OrgSection.subHeadings(): List<OrgSection> =
+    children.filterIsInstance<OrgSection>().flatMap { listOf(it) + it.subHeadings() }
+
+/** Every list item under this one, at any depth. */
+private fun OrgNode.nestedItems(): List<OrgNode> =
+    children.filterIsInstance<OrgList>().flatMap { it.children }.flatMap { listOf(it) + it.nestedItems() }
 
 /** The checkboxes of the lists directly under a list item. */
 private fun OrgNode.childCheckboxes(): List<OrgCheckboxItem> =

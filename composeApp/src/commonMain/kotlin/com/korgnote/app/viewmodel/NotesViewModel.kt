@@ -357,8 +357,9 @@ class NotesViewModel(
      */
     suspend fun saveCurrentFile() {
         val path = note.path ?: return
-        // A heading's `[2/5]` counts what is under it, which the edit may have changed.
-        note.content = updateStatisticsCookies(note.content, todoKeywords)
+        // A heading's `[2/5]` counts what is under it, which the edit may have changed — and only
+        // those over the edit: the rest of the note is saved as it was.
+        note.content = updateStatisticsCookies(note.content, todoKeywords, before = store.read(path))
         store.save(path, note.content)
         library.put(path, note.content.toOrgDocument())
         refreshDerivedViews()
@@ -376,7 +377,7 @@ class NotesViewModel(
         val file = note.path ?: return
         val document = note.content.toOrgDocument()
         val item = document.nodeAt<OrgCheckboxItem>(offsetInDocument) ?: return
-        val updated = document.tickAsOrgDoes(item).withStatistics()
+        val updated = document.tickAsOrgDoes(item).withStatistics(since = document)
         note.content = updated.text
         library.put(file, updated)
         // Not now: the box should flip the moment it is tapped.
@@ -399,7 +400,7 @@ class NotesViewModel(
         val file = note.path ?: return
         val document = note.content.toOrgDocument()
         val heading = document.nodeAt<OrgSection>(offsetInDocument) ?: return
-        val updated = document.changeTodoState(heading, keyword, now(), todoKeywords).withStatistics()
+        val updated = document.changeTodoState(heading, keyword, now(), todoKeywords).withStatistics(since = document)
         if (updated.text == document.text) return
         note.content = updated.text
         library.put(file, updated)
@@ -408,9 +409,12 @@ class NotesViewModel(
         scope?.launch { server.push(writeFirst = { store.save(file, note.content) }) }
     }
 
-    /** This document with its statistics cookies counting what is now under them, as Org updates them. */
-    private fun OrgDocument.withStatistics(): OrgDocument =
-        updateStatisticsCookies(text, todoKeywords).let { if (it == text) this else it.toOrgDocument() }
+    /**
+     * This document with the statistics cookies over what changed [since] counting what is now
+     * under them, as Org updates them.
+     */
+    private fun OrgDocument.withStatistics(since: OrgDocument): OrgDocument =
+        updateStatisticsCookies(text, todoKeywords, before = since.text).let { if (it == text) this else it.toOrgDocument() }
 
     /**
      * Every note and heading a link can go to, for the heading-link picker: the open note as it

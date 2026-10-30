@@ -85,4 +85,63 @@ class StatisticsCookiesTest {
         assertNull(STATISTICS_COOKIE.find("[%]")?.let(::progressOf))
         assertEquals(0, Progress(0, 0).percent)
     }
+
+    @Test
+    fun givenWhatItWasOnlyTheCookiesOverTheChangeAreUpdated() {
+        val before = "* Garden [0/1]\n** TODO Dig\n* Kitchen [5/9]\n** DONE Paint\n"
+        // Added at the very end of the Garden's subtree, just where the Kitchen starts.
+        val after = before.replace("** TODO Dig\n", "** TODO Dig\n** TODO Water\n")
+
+        assertEquals(
+            after.replace("[0/1]", "[0/2]"),
+            updateStatisticsCookies(after, keywords, before = before),
+        )
+    }
+
+    /** `:COOKIE_DATA: checkbox` counts the boxes even where keyworded sub-headings exist. */
+    @Test
+    fun cookieDataCanAskForCheckboxes() {
+        val text = """
+            * Trip [/]
+            :PROPERTIES:
+            :COOKIE_DATA: checkbox
+            :END:
+            - [X] Tickets
+            - [ ] Hotel
+            - [ ] Visa
+            ** DONE Pack
+        """.trimIndent()
+        assertEquals(text.replace("[/]", "[1/3]"), update(text))
+    }
+
+    /** `:COOKIE_DATA: todo recursive` counts keyworded headings at every depth below. */
+    @Test
+    fun cookieDataCanCountKeywordsAllTheWayDown() {
+        val text = """
+            * Project [/]
+            :PROPERTIES:
+            :COOKIE_DATA: todo recursive
+            :END:
+            ** TODO One
+            *** DONE One and a half
+            ** DONE Two
+        """.trimIndent()
+        assertEquals(text.replace("[/]", "[2/3]"), update(text))
+    }
+
+    /** `:COOKIE_DATA: checkbox recursive` counts the boxes of nested lists too. */
+    @Test
+    fun cookieDataCanCountCheckboxesAllTheWayDown() {
+        val text = """
+            * Move [/]
+            :PROPERTIES:
+            :COOKIE_DATA: checkbox recursive
+            :END:
+            - [ ] Pack
+              - [X] Books
+              - [X] Kitchen
+            - [ ] Clean
+        """.trimIndent()
+        assertEquals(text.replace("[/]", "[2/4]"), update(text))
+    }
 }

@@ -1,5 +1,6 @@
 package com.korgnote.common.org.edit
 
+import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.complete.CompletionResult
 
 /**
@@ -23,6 +24,8 @@ fun continueList(before: String, caret: Int, after: String): CompletionResult? {
     // Enter in the middle of an item splits it: what follows the caret becomes the next item.
     val rest = before.substring(caret).substringBefore('\n')
     val item = LIST_ITEM.matchEntire(line) ?: return null
+    // In a source or example block the text is code: a `- ` in YAML is not an Org list.
+    if (insideVerbatimBlock(before.substring(0, lineStart))) return null
     val (indent, bullet, box, content) = item.destructured
     // At the start of a line, a star is a heading's.
     if (bullet == "*" && indent.isEmpty()) return null
@@ -51,3 +54,19 @@ private fun nextBullet(bullet: String): String {
 
 /** A list item's line, up to the caret: its indent, bullet, checkbox and text. */
 private val LIST_ITEM = Regex("^([ \\t]*)([-+*]|\\d+[.)])[ \\t]+(\\[[ xX-]\\][ \\t]+)?(.*)$")
+
+/** Blocks whose body Org reads as it is, not as Org: lists in them are someone else's syntax. */
+private val VERBATIM_BLOCKS = setOf("SRC", "EXAMPLE", "EXPORT", "COMMENT")
+
+/** Whether the lines in [text] leave a verbatim block open. */
+private fun insideVerbatimBlock(text: String): Boolean {
+    var open: String? = null
+    for (line in text.lineSequence()) {
+        if (open == null) {
+            open = OrgSyntax.blockBegin.find(line)?.groupValues?.get(1)?.uppercase()
+        } else if (OrgSyntax.blockEnd.containsMatchIn(line)) {
+            open = null
+        }
+    }
+    return open in VERBATIM_BLOCKS
+}
