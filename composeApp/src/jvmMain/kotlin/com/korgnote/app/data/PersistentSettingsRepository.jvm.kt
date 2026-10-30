@@ -8,12 +8,18 @@ import com.korgnote.common.SERVER_PORT
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.prefs.Preferences
 
-class PersistentSettingsRepository : SettingsRepository {
-    private val prefs: Preferences = Preferences.userRoot().node("com.korgnote.app")
+class PersistentSettingsRepository(
+    private val prefs: Preferences = Preferences.userRoot().node("com.korgnote.app"),
+    /** Seals the paired server's token with a key the system's keyring holds; see [KeyringCipher]. */
+    private val cipher: SecretCipher = KeyringCipher(OsKeyring()),
+) : SettingsRepository {
 
     private val hostFlow = MutableStateFlow(loadHost())
     private val portFlow = MutableStateFlow(loadPort())
-    private var pairedServer: PairedServer? = PairedServer.decode(prefs.get(KEY_PAIRED_SERVER, null))
+    private var pairedServer: PairedServer? = PairedServer.decode(
+        // One an older version kept in the clear is sealed on the way.
+        openSecret(prefs.get(KEY_PAIRED_SERVER, null), cipher) { sealed -> prefs.put(KEY_PAIRED_SERVER, sealed) },
+    )
 
 
     override fun getServerHost(): String = hostFlow.value
@@ -32,7 +38,7 @@ class PersistentSettingsRepository : SettingsRepository {
 
     override fun setPairedServer(server: PairedServer?) {
         pairedServer = server
-        if (server == null) prefs.remove(KEY_PAIRED_SERVER) else prefs.put(KEY_PAIRED_SERVER, server.encode())
+        if (server == null) prefs.remove(KEY_PAIRED_SERVER) else prefs.put(KEY_PAIRED_SERVER, sealSecret(server.encode(), cipher))
         // The shared token from before pairing, which nothing reads any more.
         prefs.remove(KEY_TOKEN)
     }

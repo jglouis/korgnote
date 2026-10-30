@@ -130,7 +130,7 @@ stops parsing Org entirely.
 | Dirty/queued-for-push flags | client only | survives restart on native, so an offline edit is never lost; on web it lives for the page session, with autosave keeping the window short |
 | ETag / content hash | server computes, device caches | the sync currency |
 | Parse trees, agenda index, search index | device, in memory | derived, disposable, rebuilt from text |
-| Settings, and the paired server (id, addresses, certificate fingerprint, device token) | device | the token is sealed on Android (Keystore) and iOS (Keychain), but kept in plain Java `Preferences` on desktop; the web client cannot pair |
+| Settings, and the paired server (id, addresses, certificate fingerprint, device token) | device | the token is sealed on Android (Keystore), iOS (Keychain) and desktop (a key in the system's keyring); the web client cannot pair |
 | Paired devices, certificate, server id | server, in `KORGNOTE_STATE_DIR` | only a hash of each device's token is kept |
 
 ## Consequences worth stating

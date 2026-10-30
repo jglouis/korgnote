@@ -1220,7 +1220,7 @@ no backup holds, and kept in the Keychain on iOS; a value saved in the clear is 
 it is read (9072fd5). The app's copies of the notes, the widgets' agenda and the reminder plan are
 left out of Android's backups and device transfer, and out of iCloud and computer backups on iOS;
 the next sync rebuilds them (c5ec213).
-**Not included** The desktop, whose pairing is still in plain preferences.
+**Not included** The desktop, whose pairing stayed in plain preferences until it was sealed with a key in the system's keyring (`KeyringCipher.kt`).
 
 ### T40 · Sync robustness — ✅ **done**
 **Landed** A run of fixes, most found on a phone or by T38:
@@ -1257,7 +1257,6 @@ the next sync rebuilds them (c5ec213).
 - **T6 drift.** Org regexes back in `OrgText.kt`, `NoteByline.kt`, `LinkNavigator.kt`,
   `OrgSyntaxHighlighting.kt` and `TableFormulas.kt`.
 - **The morning digest** leaves out overdue items and deadline warnings ([07](07-calendar-agenda.md#notifications)).
-- **The desktop's pairing token** is kept in plain preferences.
 - **The plain port** has no authentication: any process on the computer can use it. Another
   container on the Docker network no longer can: it is refused by its address.
 - **Completion labels** are English only.

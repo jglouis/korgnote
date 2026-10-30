@@ -181,8 +181,11 @@ What this trusts, stated plainly:
   published port arrives from the network's gateway (read from `/proc/net/route`), which is
   trusted — so 8080 must stay published on the host's loopback only (`-p 127.0.0.1:8080:8080`), or
   the network reaches it through that gateway too.
-- The device token is sealed on Android (a Keystore key) and iOS (the Keychain). The desktop app
-  keeps it in plain Java `Preferences` (`composeApp/…/PersistentSettingsRepository.jvm.kt`).
+- The device token is sealed on Android (a Keystore key) and iOS (the Keychain). On the desktop it
+  is sealed in Java `Preferences` with an AES key kept in the system's keyring — macOS Keychain,
+  Windows Credential Manager, Secret Service on Linux (`KeyringCipher.kt`, through
+  `java-keyring`). Where no keyring answers, it is kept in the clear, as before. A desktop using
+  the server on its own computer has no token at all: it uses the plain port.
 
 ## Client: the local replica
 

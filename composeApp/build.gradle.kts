@@ -88,6 +88,9 @@ kotlin {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutines.swing)
             implementation(libs.ktor.client.java)
+            // The system's keyring — macOS Keychain, Windows Credential Manager, Secret Service on
+            // Linux — for the key that seals the pairing token.
+            implementation(libs.java.keyring)
         }
         iosMain.dependencies {
             // Ktor iOS engine (Darwin)
