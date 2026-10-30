@@ -26,8 +26,31 @@ import io.ktor.http.isSuccess
 import io.ktor.http.withCharset
 import kotlin.io.encoding.Base64
 import io.ktor.utils.io.charsets.Charsets
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.data_or
+import korgnote.composeapp.generated.resources.data_webdav_cannot_write
+import korgnote.composeapp.generated.resources.data_webdav_etag_mismatch
+import korgnote.composeapp.generated.resources.data_webdav_ignores_if_match
+import korgnote.composeapp.generated.resources.data_webdav_ignores_if_match_delete
+import korgnote.composeapp.generated.resources.data_webdav_ignores_if_none_match
+import korgnote.composeapp.generated.resources.data_webdav_list_failed
+import korgnote.composeapp.generated.resources.data_webdav_list_failed_top
+import korgnote.composeapp.generated.resources.data_webdav_listed_without_etag
+import korgnote.composeapp.generated.resources.data_webdav_lost_file
+import korgnote.composeapp.generated.resources.data_webdav_no_folder
+import korgnote.composeapp.generated.resources.data_webdav_not_a_folder
+import korgnote.composeapp.generated.resources.data_webdav_not_set_up
+import korgnote.composeapp.generated.resources.data_webdav_refuses_own_etag
+import korgnote.composeapp.generated.resources.data_webdav_sent_without_etag
+import korgnote.composeapp.generated.resources.data_webdav_sign_in_token
+import korgnote.composeapp.generated.resources.data_webdav_sign_in_windows
+import korgnote.composeapp.generated.resources.data_webdav_unreachable
+import korgnote.composeapp.generated.resources.data_webdav_unsafe
+import korgnote.composeapp.generated.resources.data_webdav_unsupported_sign_in
+import korgnote.composeapp.generated.resources.data_webdav_wrong_password
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import org.jetbrains.compose.resources.getString
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -66,8 +89,8 @@ class WebDavSyncApi(
     /** The same client, for [account] instead: to [check] a server before it is saved in settings. */
     fun trying(account: WebDavAccount) = WebDavSyncApi(client, { account }, pollEvery)
 
-    private fun current(): WebDavAccount =
-        account() ?: throw WebDavRefusedException("No WebDAV server is set up yet. Set one up in Settings.")
+    private suspend fun current(): WebDavAccount =
+        account() ?: throw WebDavRefusedException(getString(Res.string.data_webdav_not_set_up))
 
     /** The folder's URL, ending in `/`. */
     private fun WebDavAccount.base(): String = url.trim().trimEnd('/') + "/"
@@ -115,8 +138,11 @@ class WebDavSyncApi(
         }
         if (response.status.value != 207) {
             throw WebDavException(
-                if (response.status == HttpStatusCode.NotFound) "There is no folder at ${current().url}."
-                else "The WebDAV server answered ${response.status} when listing ${path.ifEmpty { "the notes folder" }}."
+                when {
+                    response.status == HttpStatusCode.NotFound -> getString(Res.string.data_webdav_no_folder, current().url)
+                    path.isEmpty() -> getString(Res.string.data_webdav_list_failed_top, response.status.toString())
+                    else -> getString(Res.string.data_webdav_list_failed, response.status.toString(), path)
+                }
             )
         }
         val basePath = decodedPath(current().base())
@@ -153,7 +179,7 @@ class WebDavSyncApi(
                 if (item.folder) {
                     if (!item.path.substringAfterLast('/').startsWith('.')) folders += item.path
                 } else if (isListedNotePath(item.path)) {
-                    val etag = item.etag ?: throw WebDavException("The WebDAV server lists ${item.path} without an etag.")
+                    val etag = item.etag ?: throw WebDavException(getString(Res.string.data_webdav_listed_without_etag, item.path))
                     entries += RemoteEntry(item.path, etag, item.size)
                 }
             }
@@ -180,7 +206,7 @@ class WebDavSyncApi(
         val response = send(HttpMethod.Get, path)
         if (response.status != HttpStatusCode.OK) return null
         val etag = response.headers[HttpHeaders.ETag]?.let(::canonicalEtag)
-            ?: throw WebDavException("The WebDAV server sent $path without an etag.")
+            ?: throw WebDavException(getString(Res.string.data_webdav_sent_without_etag, path))
         return RemoteFile(path, etag, response.bodyAsText(Charsets.UTF_8))
     }
 
@@ -271,7 +297,7 @@ class WebDavSyncApi(
     suspend fun check(): WebDavCheck {
         return try {
             val top = propfind("", depth = "0").firstOrNull()
-            if (top == null || !top.folder) return WebDavCheck.Unusable("This address is not a WebDAV folder.")
+            if (top == null || !top.folder) return WebDavCheck.Unusable(getString(Res.string.data_webdav_not_a_folder))
             checkConditions()?.let { return WebDavCheck.Unusable(it) }
             WebDavCheck.Usable(manifest().entries.size)
         } catch (e: CancellationException) {
@@ -281,34 +307,34 @@ class WebDavSyncApi(
         } catch (e: WebDavException) {
             WebDavCheck.Unusable(e.message.orEmpty())
         } catch (e: Exception) {
-            WebDavCheck.Unusable("Cannot reach the server: ${e.message ?: e::class.simpleName}")
+            WebDavCheck.Unusable(getString(Res.string.data_webdav_unreachable, e.message ?: e::class.simpleName.orEmpty()))
         }
     }
 
     /** Null when the server honours every condition sync needs; otherwise what it does not. */
     private suspend fun checkConditions(): String? {
-        val unsafe = "KorgNote cannot sync with it safely: edits made on two devices could overwrite each other."
+        val unsafe = getString(Res.string.data_webdav_unsafe)
         send(HttpMethod.Delete, PROBE)
         try {
             val created = put(PROBE, "1", ifMatch = null, mustNotExist = true)
-            if (!created.status.isSuccess()) return "KorgNote cannot write in this folder (${created.status})."
+            if (!created.status.isSuccess()) return getString(Res.string.data_webdav_cannot_write, created.status.toString())
             if (put(PROBE, "2", ifMatch = null, mustNotExist = true).status != HttpStatusCode.PreconditionFailed) {
-                return "The server ignores If-None-Match. $unsafe"
+                return getString(Res.string.data_webdav_ignores_if_none_match, unsafe)
             }
             if (put(PROBE, "3", ifMatch = "korgnote-no-such-version", mustNotExist = false).status != HttpStatusCode.PreconditionFailed) {
-                return "The server ignores If-Match. $unsafe"
+                return getString(Res.string.data_webdav_ignores_if_match, unsafe)
             }
-            val fetched = fetch(PROBE) ?: return "The server lost a file it just wrote."
+            val fetched = fetch(PROBE) ?: return getString(Res.string.data_webdav_lost_file)
             val listed = propfind(PROBE, depth = "0", folder = false).firstOrNull()?.etag
             if (listed != fetched.etag) {
-                return "The server gives a file one etag when listed and another when read ($listed, ${fetched.etag}). $unsafe"
+                return getString(Res.string.data_webdav_etag_mismatch, listed.toString(), fetched.etag, unsafe)
             }
             val updated = put(PROBE, "4", ifMatch = fetched.etag, mustNotExist = false)
             if (!updated.status.isSuccess()) {
-                return "The server refuses a write over the file's own etag (${updated.status})."
+                return getString(Res.string.data_webdav_refuses_own_etag, updated.status.toString())
             }
             val deleted = send(HttpMethod.Delete, PROBE) { header(HttpHeaders.IfMatch, quoted("korgnote-no-such-version")) }
-            if (deleted.status != HttpStatusCode.PreconditionFailed) return "The server ignores If-Match when deleting. $unsafe"
+            if (deleted.status != HttpStatusCode.PreconditionFailed) return getString(Res.string.data_webdav_ignores_if_match_delete, unsafe)
             return null
         } finally {
             send(HttpMethod.Delete, PROBE)
@@ -344,24 +370,23 @@ private fun isWeak(etag: String) = etag.startsWith("W/")
  * way of signing in, not the password, and saying "wrong password" there sent people looking for a
  * typo that was not there.
  */
-internal fun refusal(challenges: List<String>): String {
+internal suspend fun refusal(challenges: List<String>): String {
     // Quoted values blanked first: a realm such as "Acme, Inc" must not read as a scheme called Inc.
     val schemes = challenges.flatMap { header ->
         SCHEME.findAll(header.replace(QUOTED, "\"\"")).map { it.groupValues[1] }
     }
     if (schemes.isEmpty() || schemes.any { it.equals("Basic", ignoreCase = true) }) {
-        return "The WebDAV server refused the user name or password. Check them in Settings."
+        return getString(Res.string.data_webdav_wrong_password)
     }
     val names = schemes.map { scheme ->
         when (scheme.lowercase()) {
             "digest" -> "Digest"
-            "ntlm", "negotiate" -> "Windows sign-in (NTLM or Kerberos)"
-            "bearer" -> "a token (OAuth)"
+            "ntlm", "negotiate" -> getString(Res.string.data_webdav_sign_in_windows)
+            "bearer" -> getString(Res.string.data_webdav_sign_in_token)
             else -> scheme
         }
     }.distinct()
-    return "The WebDAV server asks to sign in with ${names.joinToString(" or ")}, which KorgNote cannot do " +
-        "yet: it signs in with a user name and password (Basic sign-in) only."
+    return getString(Res.string.data_webdav_unsupported_sign_in, names.joinToString(" ${getString(Res.string.data_or)} "))
 }
 
 /**

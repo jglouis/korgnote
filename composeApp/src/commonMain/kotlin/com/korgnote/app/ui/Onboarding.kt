@@ -67,8 +67,71 @@ import com.korgnote.app.files.notesFolderPickingHint
 import com.korgnote.app.files.notesFolderPlaces
 import com.korgnote.app.files.rememberNotesFolderPicker
 import com.korgnote.common.replica.ReplicaStorage
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.back
+import korgnote.composeapp.generated.resources.notes_onboarding_against
+import korgnote.composeapp.generated.resources.notes_onboarding_all_offline
+import korgnote.composeapp.generated.resources.notes_onboarding_allow_local_network
+import korgnote.composeapp.generated.resources.notes_onboarding_allow_notifications
+import korgnote.composeapp.generated.resources.notes_onboarding_app_password
+import korgnote.composeapp.generated.resources.notes_onboarding_both_offline
+import korgnote.composeapp.generated.resources.notes_onboarding_check_explained
+import korgnote.composeapp.generated.resources.notes_onboarding_check_server
+import korgnote.composeapp.generated.resources.notes_onboarding_checking_server
+import korgnote.composeapp.generated.resources.notes_onboarding_choose_another
+import korgnote.composeapp.generated.resources.notes_onboarding_choose_folder
+import korgnote.composeapp.generated.resources.notes_onboarding_choose_folder_title
+import korgnote.composeapp.generated.resources.notes_onboarding_continue
+import korgnote.composeapp.generated.resources.notes_onboarding_folder_address
+import korgnote.composeapp.generated.resources.notes_onboarding_folder_con
+import korgnote.composeapp.generated.resources.notes_onboarding_folder_count
+import korgnote.composeapp.generated.resources.notes_onboarding_folder_empty
+import korgnote.composeapp.generated.resources.notes_onboarding_folder_pro
+import korgnote.composeapp.generated.resources.notes_onboarding_folder_title
+import korgnote.composeapp.generated.resources.notes_onboarding_folder_unreadable
+import korgnote.composeapp.generated.resources.notes_onboarding_folder_unusable
+import korgnote.composeapp.generated.resources.notes_onboarding_for
+import korgnote.composeapp.generated.resources.notes_onboarding_https_needed
+import korgnote.composeapp.generated.resources.notes_onboarding_install_server
+import korgnote.composeapp.generated.resources.notes_onboarding_intro
+import korgnote.composeapp.generated.resources.notes_onboarding_local_network_computer
+import korgnote.composeapp.generated.resources.notes_onboarding_local_network_server
+import korgnote.composeapp.generated.resources.notes_onboarding_looking
+import korgnote.composeapp.generated.resources.notes_onboarding_merged
+import korgnote.composeapp.generated.resources.notes_onboarding_nextcloud_address
+import korgnote.composeapp.generated.resources.notes_onboarding_no_folder
+import korgnote.composeapp.generated.resources.notes_onboarding_not_now
+import korgnote.composeapp.generated.resources.notes_onboarding_pair_later
+import korgnote.composeapp.generated.resources.notes_onboarding_password
+import korgnote.composeapp.generated.resources.notes_onboarding_reminders
+import korgnote.composeapp.generated.resources.notes_onboarding_reminders_intro
+import korgnote.composeapp.generated.resources.notes_onboarding_reminders_later
+import korgnote.composeapp.generated.resources.notes_onboarding_server_con
+import korgnote.composeapp.generated.resources.notes_onboarding_server_count
+import korgnote.composeapp.generated.resources.notes_onboarding_server_empty
+import korgnote.composeapp.generated.resources.notes_onboarding_server_heading
+import korgnote.composeapp.generated.resources.notes_onboarding_server_pro
+import korgnote.composeapp.generated.resources.notes_onboarding_server_step1
+import korgnote.composeapp.generated.resources.notes_onboarding_server_step2
+import korgnote.composeapp.generated.resources.notes_onboarding_server_step3
+import korgnote.composeapp.generated.resources.notes_onboarding_server_title
+import korgnote.composeapp.generated.resources.notes_onboarding_server_unusable
+import korgnote.composeapp.generated.resources.notes_onboarding_unpaired
+import korgnote.composeapp.generated.resources.notes_onboarding_use_folder
+import korgnote.composeapp.generated.resources.notes_onboarding_use_server
+import korgnote.composeapp.generated.resources.notes_onboarding_user_name
+import korgnote.composeapp.generated.resources.notes_onboarding_webdav_con
+import korgnote.composeapp.generated.resources.notes_onboarding_webdav_heading
+import korgnote.composeapp.generated.resources.notes_onboarding_webdav_intro
+import korgnote.composeapp.generated.resources.notes_onboarding_webdav_pro
+import korgnote.composeapp.generated.resources.notes_onboarding_webdav_title
+import korgnote.composeapp.generated.resources.notes_onboarding_welcome
+import korgnote.composeapp.generated.resources.notes_onboarding_where
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 import org.koin.mp.KoinPlatform
 
@@ -148,7 +211,7 @@ fun Onboarding(
             ) {
                 if (step != OnboardingStep.CHOOSE || onCancel != null) {
                     IconButton(onClick = ::back) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.back))
                     }
                 } else {
                     Spacer(Modifier.height(32.dp))
@@ -189,39 +252,40 @@ internal enum class OnboardingStep { CHOOSE, FOLDER, SERVER, WEBDAV, REMINDERS }
 @Composable
 private fun ChooseStep(changing: Boolean, onFolder: () -> Unit, onServer: () -> Unit, onWebDav: (() -> Unit)? = null) {
     Text(
-        if (changing) "Where are your notes?" else "Welcome to KorgNote",
+        stringResource(if (changing) Res.string.notes_onboarding_where else Res.string.notes_onboarding_welcome),
         style = MaterialTheme.typography.headlineSmall,
     )
-    Text("Your notes stay plain Org files. Where should KorgNote find them?")
+    Text(stringResource(Res.string.notes_onboarding_intro))
     SourceOption(
         icon = Icons.Filled.Folder,
-        title = "A folder on this device",
-        pros = listOf("Nothing else to install.", notesFolderPlaces),
-        cons = listOf("Syncing is up to that app. A note edited on two devices at once ends up as a conflict copy."),
+        title = stringResource(Res.string.notes_onboarding_folder_title),
+        pros = listOf(stringResource(Res.string.notes_onboarding_folder_pro), notesFolderPlaces),
+        cons = listOf(stringResource(Res.string.notes_onboarding_folder_con)),
         onClick = onFolder,
     )
     SourceOption(
         icon = Icons.Filled.Computer,
-        title = "My computer, with the KorgNote server",
-        pros = listOf("Syncs straight with your computer: no cloud, no other app.", "A note edited on both sides is merged."),
-        cons = listOf("The server runs on that computer, and this device must reach it: same Wi-Fi, or a VPN."),
+        title = stringResource(Res.string.notes_onboarding_server_title),
+        pros = listOf(stringResource(Res.string.notes_onboarding_server_pro), stringResource(Res.string.notes_onboarding_merged)),
+        cons = listOf(stringResource(Res.string.notes_onboarding_server_con)),
         onClick = onServer,
     )
     if (onWebDav != null) {
         SourceOption(
             icon = Icons.Filled.Cloud,
-            title = "A WebDAV server (experimental)",
+            title = stringResource(Res.string.notes_onboarding_webdav_title),
             pros = listOf(
-                "Nextcloud, a NAS or a hosting service you already have, so no computer needs to stay on.",
-                "A note edited on both sides is merged.",
+                stringResource(Res.string.notes_onboarding_webdav_pro),
+                stringResource(Res.string.notes_onboarding_merged),
             ),
-            cons = listOf("New, and tried with Nextcloud and Apache only. Over HTTPS, and only with a server that passes a safety check."),
+            cons = listOf(stringResource(Res.string.notes_onboarding_webdav_con)),
             onClick = onWebDav,
         )
     }
     Hint(
-        if (onWebDav != null) "All of them work offline. You can change this later in Settings."
-        else "Both work offline. You can change this later in Settings."
+        stringResource(
+            if (onWebDav != null) Res.string.notes_onboarding_all_offline else Res.string.notes_onboarding_both_offline,
+        )
     )
 }
 
@@ -244,7 +308,7 @@ private fun Point(icon: ImageVector, text: String, good: Boolean) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Icon(
             icon,
-            contentDescription = if (good) "For" else "Against",
+            contentDescription = stringResource(if (good) Res.string.notes_onboarding_for else Res.string.notes_onboarding_against),
             tint = if (good) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
             modifier = Modifier.size(18.dp),
         )
@@ -272,11 +336,11 @@ private fun FolderStep(initial: String?, folders: NoteFolderAccess?, onUse: (Str
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            FolderCheck.Unusable(e.message ?: "It cannot be read.")
+            FolderCheck.Unusable(e.message ?: getString(Res.string.notes_onboarding_folder_unreadable))
         }
     }
 
-    Text("Choose your notes folder", style = MaterialTheme.typography.headlineSmall)
+    Text(stringResource(Res.string.notes_onboarding_choose_folder_title), style = MaterialTheme.typography.headlineSmall)
     Text(notesFolderPickingHint)
     val location = picked
     if (location != null) {
@@ -292,13 +356,12 @@ private fun FolderStep(initial: String?, folders: NoteFolderAccess?, onUse: (Str
                     val status = check
                     Text(
                         when (status) {
-                            FolderCheck.Checking -> "Looking for notes…"
+                            FolderCheck.Checking -> stringResource(Res.string.notes_onboarding_looking)
                             is FolderCheck.Notes -> when (status.count) {
-                                0 -> "No notes yet. New notes will go here."
-                                1 -> "1 note."
-                                else -> "${status.count} notes."
+                                0 -> stringResource(Res.string.notes_onboarding_folder_empty)
+                                else -> pluralStringResource(Res.plurals.notes_onboarding_folder_count, status.count, status.count)
                             }
-                            is FolderCheck.Unusable -> "KorgNote cannot use this folder: ${status.reason}"
+                            is FolderCheck.Unusable -> stringResource(Res.string.notes_onboarding_folder_unusable, status.reason)
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = if (status is FolderCheck.Unusable) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
@@ -309,13 +372,15 @@ private fun FolderStep(initial: String?, folders: NoteFolderAccess?, onUse: (Str
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (location == null) {
-            if (pick != null) Button(onClick = pick) { Text("Choose a folder") }
+            if (pick != null) Button(onClick = pick) { Text(stringResource(Res.string.notes_onboarding_choose_folder)) }
         } else {
-            Button(onClick = { onUse(location) }, enabled = check is FolderCheck.Notes) { Text("Use this folder") }
-            if (pick != null) OutlinedButton(onClick = pick) { Text("Choose another") }
+            Button(onClick = { onUse(location) }, enabled = check is FolderCheck.Notes) {
+                Text(stringResource(Res.string.notes_onboarding_use_folder))
+            }
+            if (pick != null) OutlinedButton(onClick = pick) { Text(stringResource(Res.string.notes_onboarding_choose_another)) }
         }
     }
-    if (pick == null) Hint("Notes cannot be kept in a folder on this device.")
+    if (pick == null) Hint(stringResource(Res.string.notes_onboarding_no_folder))
 }
 
 @Composable
@@ -324,21 +389,21 @@ private fun ServerStep(repo: SettingsRepository, pairing: DevicePairing?, incomi
     val localNetwork = rememberLocalNetworkPermission()
     val uriHandler = LocalUriHandler.current
 
-    Text("Connect to your computer", style = MaterialTheme.typography.headlineSmall)
+    Text(stringResource(Res.string.notes_onboarding_server_heading), style = MaterialTheme.typography.headlineSmall)
     if (!paired) {
-        Numbered(1, "On the computer with your notes, start the KorgNote server.")
-        TextButton(onClick = { uriHandler.openUri(INSTALL_URL) }) { Text("How to install the server") }
-        Numbered(2, "There, open http://localhost:8080/devices and press Show a pairing code.")
-        Numbered(3, "Scan the code with this device, or paste the link shown under it.")
+        Numbered(1, stringResource(Res.string.notes_onboarding_server_step1))
+        TextButton(onClick = { uriHandler.openUri(INSTALL_URL) }) { Text(stringResource(Res.string.notes_onboarding_install_server)) }
+        Numbered(2, stringResource(Res.string.notes_onboarding_server_step2, DEVICES_URL))
+        Numbered(3, stringResource(Res.string.notes_onboarding_server_step3))
     }
     if (localNetwork != null && !localNetwork.granted) {
         OutlinedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Icon(Icons.Filled.Wifi, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Text("Your computer is on your local network. Android asks before an app may reach it.")
+                    Text(stringResource(Res.string.notes_onboarding_local_network_computer))
                 }
-                Button(onClick = { localNetwork.request { } }) { Text("Allow local network") }
+                Button(onClick = { localNetwork.request { } }) { Text(stringResource(Res.string.notes_onboarding_allow_local_network)) }
             }
         }
     }
@@ -351,10 +416,10 @@ private fun ServerStep(repo: SettingsRepository, pairing: DevicePairing?, incomi
         showHowTo = false,
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = onDone, enabled = paired) { Text("Continue") }
-        if (!paired) TextButton(onClick = onDone) { Text("Pair later") }
+        Button(onClick = onDone, enabled = paired) { Text(stringResource(Res.string.notes_onboarding_continue)) }
+        if (!paired) TextButton(onClick = onDone) { Text(stringResource(Res.string.notes_onboarding_pair_later)) }
     }
-    if (!paired) Hint("Without pairing, KorgNote starts empty and syncs once you pair in Settings.")
+    if (!paired) Hint(stringResource(Res.string.notes_onboarding_unpaired))
 }
 
 /**
@@ -376,66 +441,62 @@ private fun WebDavStep(repo: SettingsRepository, api: WebDavSyncApi, onDone: () 
     val result = checked?.takeIf { it.first == account }?.second
     val secure = account.url.startsWith("https://", ignoreCase = true)
 
-    Text("Connect to a WebDAV server", style = MaterialTheme.typography.headlineSmall)
-    Text(
-        "Experimental. KorgNote keeps its own copy of the notes and syncs it with a folder on the " +
-            "server, as it does with the KorgNote server.",
-    )
+    Text(stringResource(Res.string.notes_onboarding_webdav_heading), style = MaterialTheme.typography.headlineSmall)
+    Text(stringResource(Res.string.notes_onboarding_webdav_intro))
     OutlinedTextField(
         value = url,
         onValueChange = { url = it },
-        label = { Text("Folder address") },
+        label = { Text(stringResource(Res.string.notes_onboarding_folder_address)) },
         placeholder = { Text("https://cloud.example.com/remote.php/dav/files/you/notes") },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
-    Hint("On Nextcloud, it is under Files settings, WebDAV, with the notes folder's name added.")
+    Hint(stringResource(Res.string.notes_onboarding_nextcloud_address))
     OutlinedTextField(
         value = username,
         onValueChange = { username = it },
-        label = { Text("User name") },
+        label = { Text(stringResource(Res.string.notes_onboarding_user_name)) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
     OutlinedTextField(
         value = password,
         onValueChange = { password = it },
-        label = { Text("Password") },
+        label = { Text(stringResource(Res.string.notes_onboarding_password)) },
         singleLine = true,
         visualTransformation = PasswordVisualTransformation(),
         modifier = Modifier.fillMaxWidth(),
     )
-    Hint("Nextcloud and most hosting services give an app password for this, apart from your own.")
+    Hint(stringResource(Res.string.notes_onboarding_app_password))
     if (localNetwork != null && !localNetwork.granted) {
         OutlinedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Icon(Icons.Filled.Wifi, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Text("If the server is on your local network, Android asks before an app may reach it.")
+                    Text(stringResource(Res.string.notes_onboarding_local_network_server))
                 }
-                Button(onClick = { localNetwork.request { } }) { Text("Allow local network") }
+                Button(onClick = { localNetwork.request { } }) { Text(stringResource(Res.string.notes_onboarding_allow_local_network)) }
             }
         }
     }
     if (account.url.isNotEmpty() && !secure) {
         Text(
-            "The address must start with https://, or the password would cross the network as it is.",
+            stringResource(Res.string.notes_onboarding_https_needed),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error,
         )
     }
     when (result) {
-        null -> if (checking) Text("Checking the server…", style = MaterialTheme.typography.bodySmall)
+        null -> if (checking) Text(stringResource(Res.string.notes_onboarding_checking_server), style = MaterialTheme.typography.bodySmall)
         is WebDavCheck.Usable -> Text(
             when (result.notes) {
-                0 -> "The server can be used. No notes there yet: new notes will go there."
-                1 -> "The server can be used. 1 note there."
-                else -> "The server can be used. ${result.notes} notes there."
+                0 -> stringResource(Res.string.notes_onboarding_server_empty)
+                else -> pluralStringResource(Res.plurals.notes_onboarding_server_count, result.notes, result.notes)
             },
             style = MaterialTheme.typography.bodySmall,
         )
         is WebDavCheck.Unusable -> Text(
-            "KorgNote cannot use this server. ${result.reason}",
+            stringResource(Res.string.notes_onboarding_server_unusable, result.reason),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error,
         )
@@ -445,7 +506,7 @@ private fun WebDavStep(repo: SettingsRepository, api: WebDavSyncApi, onDone: () 
             Button(onClick = {
                 repo.setWebDavAccount(account)
                 onDone()
-            }) { Text("Use this server") }
+            }) { Text(stringResource(Res.string.notes_onboarding_use_server)) }
         } else {
             Button(
                 onClick = {
@@ -460,13 +521,10 @@ private fun WebDavStep(repo: SettingsRepository, api: WebDavSyncApi, onDone: () 
                     }
                 },
                 enabled = secure && !checking,
-            ) { Text("Check the server") }
+            ) { Text(stringResource(Res.string.notes_onboarding_check_server)) }
         }
     }
-    Hint(
-        "The check writes a hidden file, .korgnote-check, and deletes it again. It makes sure the server " +
-            "refuses a write over a newer version, which is what keeps one device from overwriting another's edits.",
-    )
+    Hint(stringResource(Res.string.notes_onboarding_check_explained))
 }
 
 @Composable
@@ -481,16 +539,16 @@ private fun Numbered(number: Int, text: String) {
 private fun RemindersStep(permission: PermissionAsk?, onDone: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Icon(Icons.Filled.NotificationsActive, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        Text("Reminders", style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(Res.string.notes_onboarding_reminders), style = MaterialTheme.typography.headlineSmall)
     }
-    Text("KorgNote can remind you before timed entries, and sum up your day each morning. For that it needs to show notifications.")
+    Text(stringResource(Res.string.notes_onboarding_reminders_intro))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = { if (permission == null) onDone() else permission.request { onDone() } }) {
-            Text("Allow notifications")
+            Text(stringResource(Res.string.notes_onboarding_allow_notifications))
         }
-        TextButton(onClick = onDone) { Text("Not now") }
+        TextButton(onClick = onDone) { Text(stringResource(Res.string.notes_onboarding_not_now)) }
     }
-    Hint("You can turn them on or off later, in Settings and in the system's settings.")
+    Hint(stringResource(Res.string.notes_onboarding_reminders_later))
 }
 
 @Composable
@@ -499,3 +557,4 @@ private fun Hint(text: String) {
 }
 
 private const val INSTALL_URL = "https://github.com/jglouis/korgnote#install"
+private const val DEVICES_URL = "http://localhost:8080/devices"

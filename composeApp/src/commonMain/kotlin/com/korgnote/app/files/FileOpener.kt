@@ -44,6 +44,7 @@ object NoFileOpener : FileOpener {
 expect fun rememberFolderPicker(onPicked: (String) -> Unit): (() -> Unit)?
 
 /** How to show a folder from [rememberFolderPicker]: a name for it, not the address behind it. */
+@Composable
 expect fun folderLabel(folder: String): String
 
 /** A file chosen in [rememberFilePicker]: the path a link names it by, or why no link can. */

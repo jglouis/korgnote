@@ -1,0 +1,38 @@
+<resources>
+    <string name="agenda_widget_label">Agenda</string>
+    <string name="agenda_widget_description">Ce qui est en retard et la semaine à venir, d’après vos notes</string>
+    <string name="calendar_widget_label">Calendrier</string>
+    <string name="calendar_widget_description">Le mois, avec les jours où vos notes prévoient quelque chose</string>
+
+    <string name="widget_agenda_title">Agenda</string>
+    <string name="widget_nothing_planned">Rien de prévu</string>
+    <string name="widget_open_once">Ouvrez KorgNote une fois pour afficher votre agenda ici.</string>
+    <string name="widget_sync">Synchroniser</string>
+    <string name="widget_syncing">Synchronisation…</string>
+    <string name="widget_previous_month">Mois précédent</string>
+    <string name="widget_next_month">Mois suivant</string>
+    <string name="widget_this_month">Revenir au mois en cours</string>
+    <string name="widget_overdue">En retard</string>
+    <string name="widget_today">Aujourd’hui</string>
+    <string name="widget_tomorrow">Demain</string>
+    <string name="widget_not_synced_yet">Pas encore synchronisé</string>
+    <string name="widget_updated">Mis à jour %1$s</string>
+    <string name="widget_updated_yesterday">Mis à jour hier %1$s</string>
+    <string name="widget_deadline">Échéance</string>
+    <string name="widget_due_in">Échéance dans %1$d j</string>
+    <string name="widget_overdue_by">En retard de %1$d j</string>
+    <string name="widget_scheduled_ago">Prévu il y a %1$d j</string>
+    <string name="widget_closed">Terminé</string>
+    <string name="widget_starts">Début</string>
+    <string name="widget_continues">Suite</string>
+    <string name="widget_ends">Fin</string>
+    <string name="widget_problem_setup">Ouvrez KorgNote pour le configurer</string>
+    <string name="widget_problem_server">Serveur injoignable</string>
+    <string name="widget_problem_folder">Dossier inaccessible</string>
+
+    <string name="widget_preview_status">Mis à jour 08:30</string>
+    <string name="widget_preview_entry_1">Envoyer le rapport trimestriel</string>
+    <string name="widget_preview_entry_2">Revue de conception</string>
+    <string name="widget_preview_entry_3">Dentiste</string>
+    <string name="widget_preview_entry_4">Appeler le plombier</string>
+</resources>

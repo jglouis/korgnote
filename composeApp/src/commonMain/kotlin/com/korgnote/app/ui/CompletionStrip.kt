@@ -56,6 +56,26 @@ import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.complete.CompletionItem
 import com.korgnote.common.org.edit.DraftInsert
 import com.korgnote.common.org.complete.shiftedEnd
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.back
+import korgnote.composeapp.generated.resources.cancel
+import korgnote.composeapp.generated.resources.editor_add_end
+import korgnote.composeapp.generated.resources.editor_add_time
+import korgnote.composeapp.generated.resources.editor_at_time
+import korgnote.composeapp.generated.resources.editor_date
+import korgnote.composeapp.generated.resources.editor_edit_link
+import korgnote.composeapp.generated.resources.editor_insert_checkbox
+import korgnote.composeapp.generated.resources.editor_insert_link
+import korgnote.composeapp.generated.resources.editor_insert_place
+import korgnote.composeapp.generated.resources.editor_insert_schedule
+import korgnote.composeapp.generated.resources.editor_insert_table
+import korgnote.composeapp.generated.resources.editor_insert_tag
+import korgnote.composeapp.generated.resources.editor_no_end
+import korgnote.composeapp.generated.resources.editor_no_time
+import korgnote.composeapp.generated.resources.editor_time_until
+import korgnote.composeapp.generated.resources.editor_until_time
+import korgnote.composeapp.generated.resources.ok
+import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
@@ -137,12 +157,12 @@ fun CompletionStrip(
                         for (what in inserts) {
                             when {
                                 // On a link, the link button is for that link.
-                                what == DraftInsert.LINK && onEditLink != null -> add(Triple("Edit link", what.icon(), onEditLink))
+                                what == DraftInsert.LINK && onEditLink != null -> add(Triple(stringResource(Res.string.editor_edit_link), what.icon(), onEditLink))
                                 what == DraftInsert.LINK && onPickLink != null -> add(Triple(what.label(), what.icon(), onPickLink))
                                 what == DraftInsert.TABLE && onInsertTable != null -> add(Triple(what.label(), what.icon(), onInsertTable))
                                 else -> add(Triple(what.label(), what.icon()) { onInsert(what) })
                             }
-                            if (what == DraftInsert.LINK && onPickDate != null) add(Triple("Date", Icons.Filled.Event, onPickDate))
+                            if (what == DraftInsert.LINK && onPickDate != null) add(Triple(stringResource(Res.string.editor_date), Icons.Filled.Event, onPickDate))
                         }
                     }
                     // Labelled where there is room for all of them; on a phone, icons, so that none
@@ -173,7 +193,7 @@ fun CompletionStrip(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                     ) {
-                        if (onEditLink != null) item { InsertChip("Edit link", Icons.Filled.Link, onEditLink) }
+                        if (onEditLink != null) item { InsertChip(stringResource(Res.string.editor_edit_link), Icons.Filled.Link, onEditLink) }
                         itemsIndexed(items) { index, item ->
                             val selected = index == selectedIndex
                             AssistChip(
@@ -220,14 +240,17 @@ private fun InsertChip(label: String, icon: ImageVector, onClick: () -> Unit) {
     )
 }
 
-private fun DraftInsert.label(): String = when (this) {
-    DraftInsert.LINK -> "Link"
-    DraftInsert.TAG -> "Tag"
-    DraftInsert.SCHEDULE -> "Schedule"
-    DraftInsert.LOCATION -> "Place"
-    DraftInsert.CHECKBOX -> "Checkbox"
-    DraftInsert.TABLE -> "Table"
-}
+@Composable
+private fun DraftInsert.label(): String = stringResource(
+    when (this) {
+        DraftInsert.LINK -> Res.string.editor_insert_link
+        DraftInsert.TAG -> Res.string.editor_insert_tag
+        DraftInsert.SCHEDULE -> Res.string.editor_insert_schedule
+        DraftInsert.LOCATION -> Res.string.editor_insert_place
+        DraftInsert.CHECKBOX -> Res.string.editor_insert_checkbox
+        DraftInsert.TABLE -> Res.string.editor_insert_table
+    },
+)
 
 private fun DraftInsert.icon(): ImageVector = when (this) {
     DraftInsert.LINK -> Icons.Filled.Link
@@ -282,13 +305,13 @@ fun OrgDatePickerDialog(
         PickerStep.DATE -> DatePickerDialog(
             onDismissRequest = onDismiss,
             confirmButton = {
-                TextButton(onClick = { onPick(pickedDate(), initialTime, initialEndTime) }) { Text("OK") }
+                TextButton(onClick = { onPick(pickedDate(), initialTime, initialEndTime) }) { Text(stringResource(Res.string.ok)) }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) }
                     TextButton(onClick = { step = PickerStep.TIME }) {
-                        Text(initialTime?.let { "At ${timeRangeLabel(it, initialEndTime)}" } ?: "Add time")
+                        Text(initialTime?.let { stringResource(Res.string.editor_at_time, timeRangeLabel(it, initialEndTime)) } ?: stringResource(Res.string.editor_add_time))
                     }
                 }
             },
@@ -301,16 +324,16 @@ fun OrgDatePickerDialog(
             title = { Text(pickedDate().toString()) },
             text = { TimePicker(state = timeState) },
             confirmButton = {
-                TextButton(onClick = { onPick(pickedDate(), pickedTime(), pickedEnd()) }) { Text("OK") }
+                TextButton(onClick = { onPick(pickedDate(), pickedTime(), pickedEnd()) }) { Text(stringResource(Res.string.ok)) }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { step = PickerStep.DATE }) { Text("Back") }
+                    TextButton(onClick = { step = PickerStep.DATE }) { Text(stringResource(Res.string.back)) }
                     if (initialTime != null) {
-                        TextButton(onClick = { onPick(pickedDate(), null, null) }) { Text("No time") }
+                        TextButton(onClick = { onPick(pickedDate(), null, null) }) { Text(stringResource(Res.string.editor_no_time)) }
                     }
                     TextButton(onClick = { step = PickerStep.END }) {
-                        Text(pickedEnd()?.let { "Until ${it.hhmm()}" } ?: "Add end")
+                        Text(pickedEnd()?.let { stringResource(Res.string.editor_until_time, it.hhmm()) } ?: stringResource(Res.string.editor_add_end))
                     }
                 }
             },
@@ -329,19 +352,19 @@ fun OrgDatePickerDialog(
             val end = LocalTime(endState.hour, endState.minute)
             AlertDialog(
                 onDismissRequest = onDismiss,
-                title = { Text("${pickedDate()}, ${start.hhmm()} until") },
+                title = { Text(stringResource(Res.string.editor_time_until, pickedDate().toString(), start.hhmm())) },
                 text = { TimePicker(state = endState) },
                 confirmButton = {
                     // An end before its start is not a range; Org would not read it as one.
                     TextButton(enabled = end > start, onClick = { onPick(pickedDate(), start, end) }) {
-                        Text("OK")
+                        Text(stringResource(Res.string.ok))
                     }
                 },
                 dismissButton = {
                     Row {
-                        TextButton(onClick = { step = PickerStep.TIME }) { Text("Back") }
+                        TextButton(onClick = { step = PickerStep.TIME }) { Text(stringResource(Res.string.back)) }
                         if (pickedEnd() != null) {
-                            TextButton(onClick = { onPick(pickedDate(), start, null) }) { Text("No end") }
+                            TextButton(onClick = { onPick(pickedDate(), start, null) }) { Text(stringResource(Res.string.editor_no_end)) }
                         }
                     }
                 },

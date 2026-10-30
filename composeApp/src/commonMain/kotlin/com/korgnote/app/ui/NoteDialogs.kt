@@ -38,7 +38,31 @@ import com.korgnote.common.org.complete.orgStamp
 import com.korgnote.common.org.complete.restamp
 import com.korgnote.common.org.edit.FileKeywords
 import com.korgnote.common.org.template.parseTypedTags
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.author
+import korgnote.composeapp.generated.resources.cancel
+import korgnote.composeapp.generated.resources.delete
+import korgnote.composeapp.generated.resources.notes_create
+import korgnote.composeapp.generated.resources.notes_date
+import korgnote.composeapp.generated.resources.notes_delete_anyway
+import korgnote.composeapp.generated.resources.notes_delete_explained
+import korgnote.composeapp.generated.resources.notes_delete_title
+import korgnote.composeapp.generated.resources.notes_delete_unsynced
+import korgnote.composeapp.generated.resources.notes_details
+import korgnote.composeapp.generated.resources.notes_me
+import korgnote.composeapp.generated.resources.notes_new_note
+import korgnote.composeapp.generated.resources.notes_path
+import korgnote.composeapp.generated.resources.notes_path_hint
+import korgnote.composeapp.generated.resources.notes_pick_date
+import korgnote.composeapp.generated.resources.notes_rename_or_move
+import korgnote.composeapp.generated.resources.notes_tags
+import korgnote.composeapp.generated.resources.notes_tags_placeholder
+import korgnote.composeapp.generated.resources.notes_type_title
+import korgnote.composeapp.generated.resources.rename
+import korgnote.composeapp.generated.resources.save
+import korgnote.composeapp.generated.resources.title
 import kotlinx.datetime.LocalDate
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Asks for a title and shows the file it will make, so the name on disk is never a surprise.
@@ -63,13 +87,13 @@ fun NewNoteDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New note") },
+        title = { Text(stringResource(Res.string.notes_new_note)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Title") },
+                    label = { Text(stringResource(Res.string.title)) },
                     singleLine = true,
                     modifier = Modifier.focusRequester(focus),
                 )
@@ -77,7 +101,7 @@ fun NewNoteDialog(
                 TagsField(tagsText, knownTags) { tagsText = it }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    path ?: "Type a title",
+                    path ?: stringResource(Res.string.notes_type_title),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline,
                 )
@@ -85,9 +109,11 @@ fun NewNoteDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = path != null, onClick = { onCreate(title, parseTypedTags(tagsText.text)) }) { Text("Create") }
+            TextButton(enabled = path != null, onClick = { onCreate(title, parseTypedTags(tagsText.text)) }) {
+                Text(stringResource(Res.string.notes_create))
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
 }
 
@@ -111,8 +137,8 @@ fun TagsField(value: TextFieldValue, knownTags: List<String>, onValueChange: (Te
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text("Tags") },
-        placeholder = { Text("work ecam") },
+        label = { Text(stringResource(Res.string.notes_tags)) },
+        placeholder = { Text(stringResource(Res.string.notes_tags_placeholder)) },
         singleLine = true,
         // Tags are names: a keyboard that capitalises or corrects them makes new, different ones.
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
@@ -174,29 +200,34 @@ fun NoteDetailsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Note details") },
+        title = { Text(stringResource(Res.string.notes_details)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") }, singleLine = true)
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text(stringResource(Res.string.title)) },
+                    singleLine = true,
+                )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = author,
                     onValueChange = { author = it },
-                    label = { Text("Author") },
+                    label = { Text(stringResource(Res.string.author)) },
                     singleLine = true,
                     trailingIcon = if (author.isBlank() && defaultAuthor.isNotBlank()) {
-                        { TextButton(onClick = { author = defaultAuthor }) { Text("Me") } }
+                        { TextButton(onClick = { author = defaultAuthor }) { Text(stringResource(Res.string.notes_me)) } }
                     } else null,
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = date,
                     onValueChange = { date = it },
-                    label = { Text("Date") },
+                    label = { Text(stringResource(Res.string.notes_date)) },
                     singleLine = true,
                     trailingIcon = {
                         IconButton(onClick = { pickingDate = true }) {
-                            Icon(Icons.Filled.Event, contentDescription = "Pick the date")
+                            Icon(Icons.Filled.Event, contentDescription = stringResource(Res.string.notes_pick_date))
                         }
                     },
                 )
@@ -207,9 +238,9 @@ fun NoteDetailsDialog(
         confirmButton = {
             TextButton(onClick = {
                 onSave(FileKeywords(title, author, date, parseTypedTags(tagsText.text)))
-            }) { Text("Save") }
+            }) { Text(stringResource(Res.string.save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
 }
 
@@ -235,20 +266,20 @@ fun RenameNoteDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Rename or move") },
+        title = { Text(stringResource(Res.string.notes_rename_or_move)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = value,
                     onValueChange = { value = it },
-                    label = { Text("Path") },
+                    label = { Text(stringResource(Res.string.notes_path)) },
                     singleLine = true,
                     isError = target == null,
                     modifier = Modifier.focusRequester(focus),
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    if (target == null) "Folders and a name, like notes/idea.org" else target,
+                    target ?: stringResource(Res.string.notes_path_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (target == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
                 )
@@ -257,10 +288,10 @@ fun RenameNoteDialog(
         },
         confirmButton = {
             TextButton(enabled = target != null && target != path, onClick = { onRename(value.text) }) {
-                Text("Rename")
+                Text(stringResource(Res.string.rename))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
 }
 
@@ -277,30 +308,31 @@ fun DeleteNoteDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Delete $path?") },
+        title = { Text(stringResource(Res.string.notes_delete_title, path)) },
         text = {
             Column {
                 if (hasUnsyncedChanges) {
                     Text(
-                        "This note has changes that have not reached the server yet. " +
-                            "They exist only on this device and will be lost.",
+                        stringResource(Res.string.notes_delete_unsynced),
                         color = MaterialTheme.colorScheme.error,
                     )
                     Spacer(Modifier.height(8.dp))
                 }
                 Text(
-                    "It is deleted on every device. The server keeps a copy in .korgnote-trash, " +
-                        "and if someone edits it elsewhere before this reaches the server, it comes back.",
+                    stringResource(Res.string.notes_delete_explained),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
         },
         confirmButton = {
             TextButton(onClick = onDelete) {
-                Text(if (hasUnsyncedChanges) "Delete anyway" else "Delete", color = MaterialTheme.colorScheme.error)
+                Text(
+                    stringResource(if (hasUnsyncedChanges) Res.string.notes_delete_anyway else Res.string.delete),
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
 }
 

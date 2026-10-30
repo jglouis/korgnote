@@ -15,13 +15,21 @@ import android.text.style.StyleSpan
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.edit
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.remind_channel_description
+import korgnote.composeapp.generated.resources.remind_channel_name
+import korgnote.composeapp.generated.resources.remind_more_in_calendar
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlin.time.Clock
+import org.jetbrains.compose.resources.getPluralString
+import org.jetbrains.compose.resources.getString
 
 /**
  * Android reminders: one alarm per reminder, each firing [ReminderReceiver], which posts the
@@ -116,7 +124,7 @@ object ReminderAlarms {
         )
     }
 
-    internal fun post(context: Context, intent: Intent) {
+    internal suspend fun post(context: Context, intent: Intent) {
         val notifications = NotificationManagerCompat.from(context)
         // Without the permission (Android 13+) or with notifications turned off, there is nothing
         // to do; the alarms stay scheduled so that granting it later is enough.
@@ -172,7 +180,7 @@ object ReminderAlarms {
         }
     }
 
-    private fun digestStyle(title: String?, lines: List<ReminderLine>, summary: String?): NotificationCompat.InboxStyle {
+    private suspend fun digestStyle(title: String?, lines: List<ReminderLine>, summary: String?): NotificationCompat.InboxStyle {
         val style = NotificationCompat.InboxStyle().setBigContentTitle(title)
         for (line in lines.take(DIGEST_LINES)) {
             style.addLine(
@@ -183,7 +191,7 @@ object ReminderAlarms {
             )
         }
         val hidden = lines.size - DIGEST_LINES
-        val more = if (hidden > 0) "$hidden more in the calendar" else null
+        val more = if (hidden > 0) getPluralString(Res.plurals.remind_more_in_calendar, hidden, hidden) else null
         listOfNotNull(summary, more).takeIf { it.isNotEmpty() }?.let { style.setSummaryText(it.joinToString(" · ")) }
         return style
     }
@@ -204,22 +212,35 @@ object ReminderAlarms {
         context.resources.getIdentifier("ic_notification", "drawable", context.packageName)
             .takeIf { it != 0 } ?: context.applicationInfo.icon
 
-    private fun ensureChannel(context: Context) {
+    private suspend fun ensureChannel(context: Context) {
         // Channels exist from Android 8; before it, the builder's priority is what counts.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java)
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
+        // Created again each time: for a channel that exists, that only renames it, so its name
+        // follows the language the app is shown in while the user's choices for it stay.
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Agenda reminders", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Before timed entries in your notes, and the morning digest"
+            NotificationChannel(CHANNEL_ID, getString(Res.string.remind_channel_name), NotificationManager.IMPORTANCE_HIGH).apply {
+                description = getString(Res.string.remind_channel_description)
             },
         )
     }
 }
 
-/** Fired by an alarm: posts that reminder's notification. */
+/**
+ * Fired by an alarm: posts that reminder's notification. Its words are read from the app's
+ * resources, which takes a coroutine, so the receiver stays alive until it is posted.
+ */
 class ReminderReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) = ReminderAlarms.post(context, intent)
+    override fun onReceive(context: Context, intent: Intent) {
+        val pending = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                ReminderAlarms.post(context, intent)
+            } finally {
+                pending.finish()
+            }
+        }
+    }
 }
 
 /** Reboot, app update, clock or time-zone change: sets the stored reminders again. */

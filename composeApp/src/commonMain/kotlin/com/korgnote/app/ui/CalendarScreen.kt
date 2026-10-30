@@ -49,6 +49,16 @@ import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.AgendaOptions
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.cal_hide_done
+import korgnote.composeapp.generated.resources.cal_mode_agenda
+import korgnote.composeapp.generated.resources.cal_mode_day
+import korgnote.composeapp.generated.resources.cal_mode_month
+import korgnote.composeapp.generated.resources.cal_mode_week
+import korgnote.composeapp.generated.resources.cal_next
+import korgnote.composeapp.generated.resources.cal_previous
+import korgnote.composeapp.generated.resources.cal_show_done
+import korgnote.composeapp.generated.resources.cal_today
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
@@ -59,6 +69,7 @@ import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
+import org.jetbrains.compose.resources.stringResource
 
 
 /**
@@ -221,7 +232,7 @@ private fun CalendarHeader(
     val navigation = @Composable {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "Today",
+                text = stringResource(Res.string.cal_today),
                 modifier = Modifier
                     .padding(end = 8.dp)
                     .clickable(onClick = onToday),
@@ -230,14 +241,14 @@ private fun CalendarHeader(
             )
             Icon(
                 Icons.Filled.ChevronLeft,
-                contentDescription = "Previous",
+                contentDescription = stringResource(Res.string.cal_previous),
                 modifier = Modifier
                     .size(28.dp)
                     .clickable(onClick = onPrevious)
             )
             Icon(
                 Icons.Filled.ChevronRight,
-                contentDescription = "Next",
+                contentDescription = stringResource(Res.string.cal_next),
                 modifier = Modifier
                     .size(28.dp)
                     .clickable(onClick = onNext)
@@ -250,7 +261,7 @@ private fun CalendarHeader(
                 FilterChip(
                     selected = mode == m,
                     onClick = { onMode(m) },
-                    label = { Text(m.name) }
+                    label = { Text(m.label()) }
                 )
             }
         }
@@ -259,7 +270,7 @@ private fun CalendarHeader(
         IconButton(onClick = onToggleDone) {
             Icon(
                 if (showDone) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                contentDescription = if (showDone) "Hide done" else "Show done",
+                contentDescription = stringResource(if (showDone) Res.string.cal_hide_done else Res.string.cal_show_done),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -301,19 +312,29 @@ internal val OptionalCalendarTargetSaver = Saver<CalendarTarget?, String>(
 
 private fun currentDateTime(): LocalDateTime = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
 
-private val LocalDate.monthTitle get() = month.name.lowercase().replaceFirstChar { it.titlecase() }
+@Composable
+private fun CalendarMode.label(): String = stringResource(
+    when (this) {
+        CalendarMode.Agenda -> Res.string.cal_mode_agenda
+        CalendarMode.Day -> Res.string.cal_mode_day
+        CalendarMode.Week -> Res.string.cal_mode_week
+        CalendarMode.Month -> Res.string.cal_mode_month
+    },
+)
 
 /** What the header says is on screen. */
+@Composable
 private fun CalendarMode.title(anchor: LocalDate): String = when (this) {
-    CalendarMode.Month -> "${anchor.monthTitle} ${anchor.year}"
-    CalendarMode.Day -> "${anchor.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.titlecase() }} ${anchor.day} ${anchor.monthTitle.take(3)} ${anchor.year}"
+    CalendarMode.Month -> "${anchor.month.displayName().capitalised()} ${anchor.year}"
+    CalendarMode.Day -> "${anchor.dayOfWeek.shortName().capitalised()} ${anchor.day} ${anchor.month.shortName()} ${anchor.year}"
     CalendarMode.Week -> rangeTitle(anchor.startOfWeek(), anchor.startOfWeek().plus(6, DateTimeUnit.DAY))
     CalendarMode.Agenda -> rangeTitle(anchor, anchor.plus(AGENDA_LIST_DAYS - 1, DateTimeUnit.DAY))
 }
 
+@Composable
 private fun rangeTitle(first: LocalDate, last: LocalDate): String =
-    if (first.month == last.month) "${first.day}–${last.day} ${first.monthTitle.take(3)} ${first.year}"
-    else "${first.day} ${first.monthTitle.take(3)} – ${last.day} ${last.monthTitle.take(3)} ${last.year}"
+    if (first.month == last.month) "${first.day}–${last.day} ${first.month.shortName()} ${first.year}"
+    else "${first.day} ${first.month.shortName()} – ${last.day} ${last.month.shortName()} ${last.year}"
 
 
 // -----------------------

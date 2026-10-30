@@ -22,6 +22,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.cancel
+import korgnote.composeapp.generated.resources.settings_colour_from_name
+import korgnote.composeapp.generated.resources.settings_no_tags
+import korgnote.composeapp.generated.resources.settings_show_all_tags
+import korgnote.composeapp.generated.resources.settings_show_fewer_tags
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The tags the notes use, each in its colour; tapping one picks another from the palette, or puts
@@ -39,15 +46,8 @@ fun TagColorSettings(knownTags: List<String>, chosen: Map<String, Int>, onChange
     val tags = (knownTags + chosen.keys.filter { it !in knownTags })
     val shown = if (showAll) tags else tags.take(SHOWN_AT_FIRST)
 
-    Text("Tag colours")
-    Text(
-        "Each tag has a colour from its name. Tap one to choose another; it is kept on this device.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.outline,
-    )
-    Spacer(Modifier.height(8.dp))
     if (tags.isEmpty()) {
-        Text("No tags in the notes yet.", style = MaterialTheme.typography.bodySmall)
+        Text(stringResource(Res.string.settings_no_tags), style = MaterialTheme.typography.bodySmall)
         return
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -56,7 +56,10 @@ fun TagColorSettings(knownTags: List<String>, chosen: Map<String, Int>, onChange
     }
     if (tags.size > SHOWN_AT_FIRST) {
         TextButton(onClick = { showAll = !showAll }) {
-            Text(if (showAll) "Show fewer" else "Show all ${tags.size} tags")
+            Text(
+                if (showAll) stringResource(Res.string.settings_show_fewer_tags)
+                else stringResource(Res.string.settings_show_all_tags, tags.size),
+            )
         }
     }
 
@@ -88,9 +91,9 @@ fun TagColorSettings(knownTags: List<String>, chosen: Map<String, Int>, onChange
                 TextButton(onClick = {
                     onChange(chosen - tag)
                     picking = null
-                }) { Text("From its name") }
+                }) { Text(stringResource(Res.string.settings_colour_from_name)) }
             },
-            dismissButton = { TextButton(onClick = { picking = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { picking = null }) { Text(stringResource(Res.string.cancel)) } },
         )
     }
 }

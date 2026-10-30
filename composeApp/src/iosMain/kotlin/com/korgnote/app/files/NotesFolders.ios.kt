@@ -9,6 +9,15 @@ import com.korgnote.common.replica.FolderEntry
 import com.korgnote.common.replica.NoteFolder
 import com.korgnote.common.replica.isListedNotePath
 import com.korgnote.common.replica.requireSafeNotePath
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.files_cannot_write
+import korgnote.composeapp.generated.resources.files_chosen_folder
+import korgnote.composeapp.generated.resources.files_folder_cannot_read
+import korgnote.composeapp.generated.resources.files_folder_missing
+import korgnote.composeapp.generated.resources.files_folder_no_path
+import korgnote.composeapp.generated.resources.files_picking_hint_ios
+import korgnote.composeapp.generated.resources.files_places_ios
+import korgnote.composeapp.generated.resources.files_written_not_found
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.BooleanVar
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -20,6 +29,8 @@ import kotlinx.cinterop.value
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 import platform.Foundation.NSData
 import platform.Foundation.NSDate
 import platform.Foundation.NSError
@@ -61,19 +72,28 @@ class IosNoteFolder(private val location: String) : NoteFolder {
 
     /** The folder, resolved from the bookmark and opened for use the first time it is needed. */
     private val root: NSURL by lazy {
-        val url = resolveBookmark(location) ?: throw IllegalStateException(
-            "The folder cannot be found any more. Choose it again in Settings, under Notes.",
-        )
+        val url = resolveBookmark(location) ?: throw FolderMissing()
         // Kept open for as long as the app runs: the notes are used for all of it.
         url.startAccessingSecurityScopedResource()
         url
     }
 
-    private val rootPath: String get() = root.path ?: throw IllegalStateException("The folder has no path.")
+    /** Thrown while resolving [root], which cannot look up what to say; [rootPath] says it. */
+    private class FolderMissing : IllegalStateException()
+
+    private suspend fun rootPath(): String {
+        val url = try {
+            root
+        } catch (_: FolderMissing) {
+            throw IllegalStateException(getString(Res.string.files_folder_missing))
+        }
+        return url.path ?: throw IllegalStateException(getString(Res.string.files_folder_no_path))
+    }
 
     override suspend fun list(): List<FolderEntry> = withContext(Dispatchers.IO) {
+        val rootPath = rootPath()
         val enumerator = manager.enumeratorAtPath(rootPath)
-            ?: throw IllegalStateException("KorgNote cannot read the folder. Choose it again in Settings, under Notes.")
+            ?: throw IllegalStateException(getString(Res.string.files_folder_cannot_read))
         val found = mutableListOf<FolderEntry>()
         while (true) {
             val next = enumerator.nextObject() as? String ?: break
@@ -97,9 +117,10 @@ class IosNoteFolder(private val location: String) : NoteFolder {
 
     override suspend fun read(path: String): String? = withContext(Dispatchers.IO) {
         requireSafeNotePath(path)
+        val target = urlOf(path)
         coordinated { coordinator, error ->
             var text: String? = null
-            coordinator.coordinateReadingItemAtURL(urlOf(path), options = 0u, error = error) { url ->
+            coordinator.coordinateReadingItemAtURL(target, options = 0u, error = error) { url ->
                 text = url?.let { NSString.stringWithContentsOfURL(it, encoding = NSUTF8StringEncoding, error = null) }
             }
             text
@@ -121,15 +142,16 @@ class IosNoteFolder(private val location: String) : NoteFolder {
             }
             ok
         }
-        if (written != true) throw IllegalStateException("$path cannot be written.")
-        stampAt("$rootPath/$path") ?: throw IllegalStateException("$path was written but cannot be found.")
+        if (written != true) throw IllegalStateException(getString(Res.string.files_cannot_write, path))
+        stampAt("${rootPath()}/$path") ?: throw IllegalStateException(getString(Res.string.files_written_not_found, path))
     }
 
     override suspend fun delete(path: String) {
         withContext(Dispatchers.IO) {
             requireSafeNotePath(path)
+            val target = urlOf(path)
             coordinated { coordinator, error ->
-                coordinator.coordinateWritingItemAtURL(urlOf(path), options = NSFileCoordinatorWritingForDeleting, error = error) { url ->
+                coordinator.coordinateWritingItemAtURL(target, options = NSFileCoordinatorWritingForDeleting, error = error) { url ->
                     url?.let { manager.removeItemAtURL(it, error = null) }
                 }
             }
@@ -138,10 +160,10 @@ class IosNoteFolder(private val location: String) : NoteFolder {
 
     override suspend fun stamp(path: String): FileStamp? = withContext(Dispatchers.IO) {
         requireSafeNotePath(path)
-        stampAt("$rootPath/$path")
+        stampAt("${rootPath()}/$path")
     }
 
-    private fun urlOf(path: String): NSURL = NSURL.fileURLWithPath("$rootPath/$path")
+    private suspend fun urlOf(path: String): NSURL = NSURL.fileURLWithPath("${rootPath()}/$path")
 
     private fun stampAt(absolute: String): FileStamp? {
         val attributes = manager.attributesOfItemAtPath(absolute, error = null) ?: return null
@@ -206,12 +228,13 @@ private fun topViewController(): UIViewController? {
 
 private val labels = mutableMapOf<String, String>()
 
+@Composable
 actual fun notesFolderLabel(location: String): String =
-    labels.getOrPut(location) { resolveBookmark(location)?.lastPathComponent ?: "The chosen folder" }
+    labels.getOrPut(location) { resolveBookmark(location)?.lastPathComponent.orEmpty() }
+        .ifEmpty { stringResource(Res.string.files_chosen_folder) }
 
-internal actual val notesFolderPlaces: String =
-    "On this iPhone, in iCloud Drive, or in Dropbox and other apps that show in Files."
+internal actual val notesFolderPlaces: String
+    @Composable get() = stringResource(Res.string.files_places_ios)
 
-internal actual val notesFolderPickingHint: String =
-    "Choose the folder your .org files are in, or an empty one to start. KorgNote then uses what " +
-        "is in that folder, and nothing else."
+internal actual val notesFolderPickingHint: String
+    @Composable get() = stringResource(Res.string.files_picking_hint_ios)

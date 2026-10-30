@@ -16,12 +16,22 @@ import com.korgnote.common.replica.FolderEntry
 import com.korgnote.common.replica.NoteFolder
 import com.korgnote.common.replica.isListedNotePath
 import com.korgnote.common.replica.requireSafeNotePath
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.files_cannot_create
+import korgnote.composeapp.generated.resources.files_cannot_write
+import korgnote.composeapp.generated.resources.files_folder_access_lost
+import korgnote.composeapp.generated.resources.files_folder_unreadable
+import korgnote.composeapp.generated.resources.files_picking_hint_android
+import korgnote.composeapp.generated.resources.files_places_android
+import korgnote.composeapp.generated.resources.files_written_not_found
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 import java.io.FileNotFoundException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -85,9 +95,9 @@ class SafNoteFolder(private val context: Context, location: String) : NoteFolder
         val id = idOf(path) ?: create(path)
         // "wt", not "w": some versions leave the end of a longer old note behind with "w".
         val out = resolver.openOutputStream(documentUri(id), "wt")
-            ?: throw FileNotFoundException("$path cannot be written.")
+            ?: throw FileNotFoundException(getString(Res.string.files_cannot_write, path))
         out.use { it.write(content.encodeToByteArray()) }
-        query(id)?.stamp ?: throw FileNotFoundException("$path was written but cannot be found.")
+        query(id)?.stamp ?: throw FileNotFoundException(getString(Res.string.files_written_not_found, path))
     }
 
     override suspend fun delete(path: String) {
@@ -112,7 +122,7 @@ class SafNoteFolder(private val context: Context, location: String) : NoteFolder
      * Runs [block] on [path]'s document, looked up again once when its kept id no longer names it:
      * another app may have replaced the file, and some providers give the new one a new id.
      */
-    private fun <T> retryingStaleId(path: String, block: (String) -> T?): T? {
+    private suspend fun <T> retryingStaleId(path: String, block: (String) -> T?): T? {
         requireAccess()
         val id = idOf(path) ?: return null
         val first = try {
@@ -131,7 +141,7 @@ class SafNoteFolder(private val context: Context, location: String) : NoteFolder
     }
 
     /** [path]'s document id, found by name folder by folder when no listing has seen it. */
-    private fun idOf(path: String): String? {
+    private suspend fun idOf(path: String): String? {
         ids[path]?.let { return it }
         var id = rootId
         var walked = ""
@@ -143,7 +153,7 @@ class SafNoteFolder(private val context: Context, location: String) : NoteFolder
     }
 
     /** Creates [path], and the folders above it that are missing, returning its document id. */
-    private fun create(path: String): String {
+    private suspend fun create(path: String): String {
         val names = path.split('/')
         var parent = rootId
         var walked = ""
@@ -155,9 +165,9 @@ class SafNoteFolder(private val context: Context, location: String) : NoteFolder
         return createDocument(parent, "application/octet-stream", names.last()).also { ids[path] = it }
     }
 
-    private fun createDocument(parentId: String, type: String, name: String): String {
+    private suspend fun createDocument(parentId: String, type: String, name: String): String {
         val created = DocumentsContract.createDocument(resolver, documentUri(parentId), type, name)
-            ?: throw FileNotFoundException("$name cannot be created.")
+            ?: throw FileNotFoundException(getString(Res.string.files_cannot_create, name))
         return DocumentsContract.getDocumentId(created)
     }
 
@@ -165,10 +175,10 @@ class SafNoteFolder(private val context: Context, location: String) : NoteFolder
 
     private class Child(val id: String, val name: String, val isFolder: Boolean, val stamp: FileStamp)
 
-    private fun children(parentId: String): List<Child> {
+    private suspend fun children(parentId: String): List<Child> {
         val uri = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parentId)
         val cursor = resolver.query(uri, COLUMNS, null, null, null)
-            ?: throw FileNotFoundException("The folder cannot be read.")
+            ?: throw FileNotFoundException(getString(Res.string.files_folder_unreadable))
         return cursor.use {
             buildList {
                 while (it.moveToNext()) {
@@ -186,9 +196,9 @@ class SafNoteFolder(private val context: Context, location: String) : NoteFolder
         }
 
     /** Throws, saying what to do, once the user has taken KorgNote's access to the folder away. */
-    private fun requireAccess() {
+    private suspend fun requireAccess() {
         val granted = resolver.persistedUriPermissions.any { it.uri == tree && it.isReadPermission && it.isWritePermission }
-        if (!granted) throw SecurityException("KorgNote may no longer use it. Choose it again in Settings, under Notes.")
+        if (!granted) throw SecurityException(getString(Res.string.files_folder_access_lost))
     }
 
     private companion object {
@@ -221,12 +231,11 @@ actual fun rememberNotesFolderPicker(onPicked: (String) -> Unit): (() -> Unit)? 
     return { launcher.launch(null) }
 }
 
+@Composable
 actual fun notesFolderLabel(location: String): String = folderLabel(location)
 
-internal actual val notesFolderPlaces: String =
-    "Sync it with Syncthing, or with Dropbox and others through an app like FolderSync. Or not at all."
+internal actual val notesFolderPlaces: String
+    @Composable get() = stringResource(Res.string.files_places_android)
 
-internal actual val notesFolderPickingHint: String =
-    "Choose the folder your .org files are in, or an empty one to start. Android then asks you to " +
-        "let KorgNote use it.\n\nAndroid does not let apps use Download itself, or the top of the " +
-        "storage: choose or make a folder inside them."
+internal actual val notesFolderPickingHint: String
+    @Composable get() = stringResource(Res.string.files_picking_hint_android)

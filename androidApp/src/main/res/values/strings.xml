@@ -5,4 +5,38 @@
     <string name="agenda_widget_description">What is overdue and the week ahead, from your notes</string>
     <string name="calendar_widget_label">Calendar</string>
     <string name="calendar_widget_description">The month, with the days your notes have something on</string>
+
+    <!-- What the widgets say. -->
+    <string name="widget_agenda_title">Agenda</string>
+    <string name="widget_nothing_planned">Nothing planned</string>
+    <string name="widget_open_once">Open KorgNote once to show your agenda here.</string>
+    <string name="widget_sync">Sync</string>
+    <string name="widget_syncing">Syncing…</string>
+    <string name="widget_previous_month">Previous month</string>
+    <string name="widget_next_month">Next month</string>
+    <string name="widget_this_month">Back to this month</string>
+    <string name="widget_overdue">Overdue</string>
+    <string name="widget_today">Today</string>
+    <string name="widget_tomorrow">Tomorrow</string>
+    <string name="widget_not_synced_yet">Not synced yet</string>
+    <string name="widget_updated">Updated %1$s</string>
+    <string name="widget_updated_yesterday">Updated yesterday %1$s</string>
+    <string name="widget_deadline">Deadline</string>
+    <string name="widget_due_in">Due in %1$d d.</string>
+    <string name="widget_overdue_by">%1$d d. overdue</string>
+    <string name="widget_scheduled_ago">Scheduled %1$d d. ago</string>
+    <string name="widget_closed">Closed</string>
+    <string name="widget_starts">Starts</string>
+    <string name="widget_continues">Continues</string>
+    <string name="widget_ends">Ends</string>
+    <string name="widget_problem_setup">Open KorgNote to set it up</string>
+    <string name="widget_problem_server">Server unreachable</string>
+    <string name="widget_problem_folder">Folder unreachable</string>
+
+    <!-- Only in the widget picker's preview, before there is an agenda to show. -->
+    <string name="widget_preview_status">Updated 08:30</string>
+    <string name="widget_preview_entry_1">Send the quarterly report</string>
+    <string name="widget_preview_entry_2">Design review</string>
+    <string name="widget_preview_entry_3">Dentist</string>
+    <string name="widget_preview_entry_4">Call the plumber</string>
 </resources>

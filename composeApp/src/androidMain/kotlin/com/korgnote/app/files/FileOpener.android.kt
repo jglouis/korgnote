@@ -13,10 +13,20 @@ import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.data_or
+import korgnote.composeapp.generated.resources.files_internal_storage
+import korgnote.composeapp.generated.resources.files_link_access_lost
+import korgnote.composeapp.generated.resources.files_pick_needs_mapping
+import korgnote.composeapp.generated.resources.files_pick_outside_mapping
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Opens linked files from folders chosen in the system picker.
@@ -34,7 +44,7 @@ class AndroidFileOpener(private val context: Context) : FileOpener {
         val found = try {
             withContext(Dispatchers.IO) { find(tree, below) }
         } catch (_: SecurityException) {
-            return FileOpenResult.Failed("KorgNote may no longer read the folder for this link. Choose it again in Settings, under File links.")
+            return FileOpenResult.Failed(getString(Res.string.files_link_access_lost))
         } ?: return FileOpenResult.NotFound
         val (uri, providerType) = found
         val type = providerType.takeUnless { it == null || it == GENERIC_TYPE }
@@ -111,13 +121,17 @@ actual fun rememberFolderPicker(onPicked: (String) -> Unit): (() -> Unit)? {
  * `Internal storage/Sync` for the tree of the shared folder `Sync`; the volume's id in place of
  * "Internal storage" on an SD card, and the folder's own id for other providers.
  */
-actual fun folderLabel(folder: String): String {
+@Composable
+actual fun folderLabel(folder: String): String = folderLabel(folder, stringResource(Res.string.files_internal_storage))
+
+/** [folderLabel], away from composition: [internalStorage] is what the device's own storage is called. */
+private fun folderLabel(folder: String, internalStorage: String): String {
     val uri = Uri.parse(folder)
     val id = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull() ?: return folder
     if (uri.authority != "com.android.externalstorage.documents") return id
     val volume = id.substringBefore(':')
     val path = id.substringAfter(':', "")
-    val root = if (volume == "primary") "Internal storage" else volume
+    val root = if (volume == "primary") internalStorage else volume
     return if (path.isEmpty()) root else "$root/$path"
 }
 
@@ -131,8 +145,9 @@ actual fun rememberFilePicker(mappings: List<FileLinkMapping>, onPicked: (Picked
     val context = LocalContext.current
     val currentMappings by rememberUpdatedState(mappings)
     val currentOnPicked by rememberUpdatedState(onPicked)
+    val scope = rememberCoroutineScope()
     val launcher = rememberLauncherForActivityResult(OpenDocumentIn()) { document ->
-        if (document != null) currentOnPicked(pickedFile(context, document, currentMappings))
+        if (document != null) scope.launch { currentOnPicked(pickedFile(context, document, currentMappings)) }
     }
     return {
         val tree = currentMappings.map { Uri.parse(it.to) }.firstOrNull { it.scheme == "content" }
@@ -143,19 +158,18 @@ actual fun rememberFilePicker(mappings: List<FileLinkMapping>, onPicked: (Picked
     }
 }
 
-private fun pickedFile(context: Context, document: Uri, mappings: List<FileLinkMapping>): PickedFile {
+private suspend fun pickedFile(context: Context, document: Uri, mappings: List<FileLinkMapping>): PickedFile {
     val trees = mappings.filter { Uri.parse(it.to).scheme == "content" }
     if (trees.isEmpty()) {
-        return PickedFile.NotLinkable("Set the folder this file is in under File links, in Settings, then choose it again.")
+        return PickedFile.NotLinkable(getString(Res.string.files_pick_needs_mapping))
     }
     val path = trees.linkPathFor { mapping -> runCatching { below(context, Uri.parse(mapping.to), document) }.getOrNull() }
     return if (path != null) {
         PickedFile.Linkable(path)
     } else {
-        PickedFile.NotLinkable(
-            "That file is not in a folder set under File links. Choose it from inside " +
-                trees.joinToString(" or ") { folderLabel(it.to) } + ", not from Recent or Downloads.",
-        )
+        val internalStorage = getString(Res.string.files_internal_storage)
+        val folders = trees.joinToString(" ${getString(Res.string.data_or)} ") { folderLabel(it.to, internalStorage) }
+        PickedFile.NotLinkable(getString(Res.string.files_pick_outside_mapping, folders))
     }
 }
 

@@ -37,6 +37,18 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.SavedSearch
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.cancel
+import korgnote.composeapp.generated.resources.notes_name
+import korgnote.composeapp.generated.resources.notes_rename_or_remove
+import korgnote.composeapp.generated.resources.notes_rename_saved_search
+import korgnote.composeapp.generated.resources.notes_save_search
+import korgnote.composeapp.generated.resources.notes_saved_searches
+import korgnote.composeapp.generated.resources.notes_saved_searches_empty
+import korgnote.composeapp.generated.resources.remove
+import korgnote.composeapp.generated.resources.rename
+import korgnote.composeapp.generated.resources.save
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The saved searches, for the drawer the search screen opens: a tap runs one, a long-press offers
@@ -52,14 +64,13 @@ fun SavedSearchList(
 ) {
     Column(modifier = modifier) {
         Text(
-            "Saved searches",
+            stringResource(Res.string.notes_saved_searches),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
         )
         if (searches.isEmpty()) {
             Text(
-                "Searches saved with the bookmark in the search field are listed here, to run again " +
-                    "with a tap.",
+                stringResource(Res.string.notes_saved_searches_empty),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(horizontal = 8.dp),
@@ -89,7 +100,7 @@ private fun SavedSearchRow(
                 .fillMaxWidth()
                 .combinedClickable(
                     onClick = { onRun(search) },
-                    onLongClickLabel = "Rename or remove",
+                    onLongClickLabel = stringResource(Res.string.notes_rename_or_remove),
                     onLongClick = { menuOpen = true },
                 )
                 .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -112,8 +123,8 @@ private fun SavedSearchRow(
             }
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            DropdownMenuItem(text = { Text("Rename") }, onClick = { menuOpen = false; onRename(search) })
-            DropdownMenuItem(text = { Text("Remove") }, onClick = { menuOpen = false; onRemove(search) })
+            DropdownMenuItem(text = { Text(stringResource(Res.string.rename)) }, onClick = { menuOpen = false; onRename(search) })
+            DropdownMenuItem(text = { Text(stringResource(Res.string.remove)) }, onClick = { menuOpen = false; onRemove(search) })
         }
     }
 }
@@ -136,13 +147,13 @@ fun SaveSearchDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (renaming) "Rename saved search" else "Save search") },
+        title = { Text(stringResource(if (renaming) Res.string.notes_rename_saved_search else Res.string.notes_save_search)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = value,
                     onValueChange = { value = it },
-                    label = { Text("Name") },
+                    label = { Text(stringResource(Res.string.notes_name)) },
                     singleLine = true,
                     modifier = Modifier.focusRequester(focus),
                 )
@@ -155,8 +166,8 @@ fun SaveSearchDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(value.text) }) { Text(if (renaming) "Rename" else "Save") }
+            TextButton(onClick = { onSave(value.text) }) { Text(stringResource(if (renaming) Res.string.rename else Res.string.save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
 }

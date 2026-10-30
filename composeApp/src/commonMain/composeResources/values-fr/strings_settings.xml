@@ -1,0 +1,71 @@
+<resources>
+    <string name="settings_notes">Notes</string>
+    <string name="settings_notes_in_folder">Dans le dossier %1$s.</string>
+    <string name="settings_notes_on_server">Synchronisées avec le serveur KorgNote de votre ordinateur.</string>
+    <string name="settings_notes_on_webdav_account">Synchronisées avec le dossier WebDAV %1$s, en tant que %2$s. Expérimental.</string>
+    <string name="settings_notes_on_webdav">Synchronisées avec un serveur WebDAV. Expérimental.</string>
+    <string name="settings_change_notes_source">Changer l’emplacement des notes</string>
+    <string name="settings_server">Serveur</string>
+    <string name="settings_server_subtitle">Avec quoi cet appareil synchronise ses notes</string>
+    <string name="settings_local_server">Serveur sur cet ordinateur</string>
+    <string name="settings_local_server_when_unpaired">Utilisé en l’absence d’association.</string>
+    <string name="settings_local_server_this_page">Le serveur d’où vient cette page.</string>
+    <string name="settings_host">Hôte (généralement localhost)</string>
+    <string name="settings_port">Port</string>
+
+    <string name="settings_reminders">Rappels</string>
+    <string name="settings_reminders_subtitle">Des notifications sur cet appareil, programmées d’après l’agenda. Elles fonctionnent hors ligne.</string>
+    <string name="settings_notifications_blocked">KorgNote n’a pas le droit d’afficher des notifications : les rappels restent muets.</string>
+    <string name="settings_allow_notifications">Autoriser les notifications</string>
+    <string name="settings_remind_before">Me prévenir avant les entrées à heure fixe</string>
+    <string name="settings_minutes_before">Minutes avant</string>
+    <string name="settings_digest">Résumé du matin de l’agenda du jour</string>
+    <string name="settings_digest_at">Résumé du matin à</string>
+    <string name="settings_at_time">À %1$s</string>
+
+    <string name="settings_new_notes">Nouvelles notes</string>
+    <string name="settings_new_notes_subtitle">Où vont les nouvelles notes et les notes du jour, et ce qu’elles contiennent au départ</string>
+    <string name="settings_new_notes_folder">Dossier des nouvelles notes (vide pour la racine)</string>
+    <string name="settings_dailies_folder">Dossier des notes du jour (vide pour la racine)</string>
+    <string name="settings_extra_header">Lignes d’en-tête en plus, comme #+TODO:</string>
+    <string name="settings_header_note">Chaque nouvelle note ou note du jour reçoit aussi son propre :ID:, #+TITLE:, #+DATE: et vos étiquettes.</string>
+
+    <string name="settings_tag_colours">Couleurs des étiquettes</string>
+    <string name="settings_tag_colours_subtitle">Chaque étiquette tire sa couleur de son nom. Touchez-en une pour en choisir une autre ; ce choix reste sur cet appareil.</string>
+    <string name="settings_no_tags">Aucune étiquette dans les notes pour l’instant.</string>
+    <string name="settings_show_fewer_tags">Afficher moins</string>
+    <string name="settings_show_all_tags">Afficher les %1$d étiquettes</string>
+    <string name="settings_colour_from_name">D’après son nom</string>
+
+    <string name="settings_file_links">Liens vers des fichiers</string>
+    <string name="settings_file_links_subtitle">Les liens vers des fichiers hors des notes, comme [[file:~/Sync/facture.pdf]], s’ouvrent dans l’application que cet appareil choisit pour le fichier. Si un dossier qu’ils nomment se trouve ailleurs ici, indiquez où.</string>
+    <string name="settings_folder_in_links">Dossier dans les liens</string>
+    <string name="settings_choose_folder">Choisir le dossier</string>
+    <string name="settings_folder_on_device">Dossier sur cet appareil</string>
+    <string name="settings_add_folder">Ajouter un dossier</string>
+    <string name="settings_remove_folder">Retirer ce dossier</string>
+    <string name="settings_is_on_this_device">correspond, sur cet appareil, à</string>
+
+    <string name="settings_error_host_port">Veuillez saisir un hôte et un port valides (1-65535).</string>
+    <string name="settings_error_minutes">Veuillez indiquer combien de minutes avant (0-1440).</string>
+    <string name="settings_error_folder">Veuillez saisir un dossier à l’intérieur des notes, comme inbox ou notes/inbox.</string>
+    <string name="settings_error_daily_folder">Veuillez saisir un dossier à l’intérieur des notes pour les notes du jour, comme daily.</string>
+    <string name="settings_error_file_link_both">Veuillez indiquer pour chaque dossier de liens à la fois son chemin dans les liens et son emplacement sur cet appareil.</string>
+    <string name="settings_error_file_link_start">Veuillez écrire chaque dossier comme dans les liens, en commençant par ~ ou /.</string>
+
+    <string name="settings_pair_title">Associer à un ordinateur</string>
+    <string name="settings_pair_not_a_link">Ce n’est pas un lien d’association KorgNote. Il commence par korgnote://pair.</string>
+    <string name="settings_pairing_with">Association avec %1$s…</string>
+    <string name="settings_the_computer">l’ordinateur</string>
+    <string name="settings_paired_with">Associé à %1$s.</string>
+    <string name="settings_forget_title">Oublier %1$s ?</string>
+    <string name="settings_forget_text">Cet appareil ne se synchronise plus jusqu’à une nouvelle association. Pour lui retirer aussi l’accès côté ordinateur, révoquez-le sur la page Appareils de celui-ci.</string>
+    <string name="settings_forget">Oublier</string>
+    <string name="settings_paired_as">Associé à %1$s sous le nom %2$s.</string>
+    <string name="settings_reached_at">Joignable à %1$s, port %2$d. Certificat %3$s…</string>
+    <string name="settings_pair_how_to">Sur l’ordinateur où tourne le serveur, ouvrez http://localhost:8080/devices, appuyez sur « Show a pairing code » et scannez-le ici.</string>
+    <string name="settings_scan_code">Scanner le code</string>
+    <string name="settings_scan_again">Scanner à nouveau</string>
+    <string name="settings_paste_link">Ou collez le lien d’association</string>
+    <string name="settings_pair">Associer</string>
+</resources>

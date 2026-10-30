@@ -38,6 +38,32 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.sync.DiffHunk
 import com.korgnote.common.sync.DiffLine
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.close
+import korgnote.composeapp.generated.resources.notes_conflict_before_first_heading
+import korgnote.composeapp.generated.resources.notes_conflict_compare
+import korgnote.composeapp.generated.resources.notes_conflict_compare_title
+import korgnote.composeapp.generated.resources.notes_conflict_copy_text
+import korgnote.composeapp.generated.resources.notes_conflict_copy_title
+import korgnote.composeapp.generated.resources.notes_conflict_count
+import korgnote.composeapp.generated.resources.notes_conflict_discard_this
+import korgnote.composeapp.generated.resources.notes_conflict_keep_note
+import korgnote.composeapp.generated.resources.notes_conflict_keep_this
+import korgnote.composeapp.generated.resources.notes_conflict_menu_title
+import korgnote.composeapp.generated.resources.notes_conflict_note_text
+import korgnote.composeapp.generated.resources.notes_conflict_note_text_more
+import korgnote.composeapp.generated.resources.notes_conflict_note_title
+import korgnote.composeapp.generated.resources.notes_conflict_only_in_copy
+import korgnote.composeapp.generated.resources.notes_conflict_only_in_note
+import korgnote.composeapp.generated.resources.notes_conflict_same
+import korgnote.composeapp.generated.resources.notes_conflict_side_folder
+import korgnote.composeapp.generated.resources.notes_conflict_side_server
+import korgnote.composeapp.generated.resources.notes_conflict_use_copy
+import korgnote.composeapp.generated.resources.notes_conflict_use_other
+import korgnote.composeapp.generated.resources.notes_conflict_use_this
+import korgnote.composeapp.generated.resources.notes_conflict_versions
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Notes with an unresolved conflict, for the top bar: nothing while there are none, a warning with
@@ -56,21 +82,21 @@ fun ConflictStatusIcon(conflicts: Map<String, List<String>>, onOpen: (path: Stri
             BadgedBox(badge = { Badge { Text("${conflicts.size}") } }) {
                 Icon(
                     Icons.Filled.SyncProblem,
-                    contentDescription = "Notes with a conflict: ${conflicts.size}",
+                    contentDescription = stringResource(Res.string.notes_conflict_count, conflicts.size),
                     tint = MaterialTheme.colorScheme.error,
                 )
             }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             Text(
-                "Changed in two places at once",
+                stringResource(Res.string.notes_conflict_menu_title),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
             )
             for ((path, copies) in conflicts.entries.sortedBy { it.key }) {
                 DropdownMenuItem(
-                    text = { Text(if (copies.size == 1) path else "$path (${copies.size} versions)") },
+                    text = { Text(if (copies.size == 1) path else stringResource(Res.string.notes_conflict_versions, path, copies.size)) },
                     onClick = { open = false; onOpen(path) },
                 )
             }
@@ -117,6 +143,8 @@ fun ConflictBanner(
     keptSide: String = "server",
 ) {
     val (original, copy, viewingCopy, moreCopies) = conflict
+    val side = keptSideName(keptSide)
+    val copyName = copy.substringAfterLast('/')
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
@@ -128,28 +156,30 @@ fun ConflictBanner(
                 Icon(Icons.Filled.SyncProblem, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    if (viewingCopy) "A conflicting version of $original" else "This note changed in two places at once",
+                    if (viewingCopy) {
+                        stringResource(Res.string.notes_conflict_copy_title, original)
+                    } else {
+                        stringResource(Res.string.notes_conflict_note_title)
+                    },
                     style = MaterialTheme.typography.titleSmall,
                 )
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                if (viewingCopy) {
-                    "It could not be merged with the note, which holds the $keptSide's version."
-                } else {
-                    "This is the $keptSide's version. The one that could not be merged is kept as " +
-                        copy.substringAfterLast('/') +
-                        if (moreCopies > 0) " (and $moreCopies more)." else "."
+                when {
+                    viewingCopy -> stringResource(Res.string.notes_conflict_copy_text, side)
+                    moreCopies > 0 -> pluralStringResource(Res.plurals.notes_conflict_note_text_more, moreCopies, side, copyName, moreCopies)
+                    else -> stringResource(Res.string.notes_conflict_note_text, side, copyName)
                 },
                 style = MaterialTheme.typography.bodySmall,
             )
             FlowRow(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                TextButton(onClick = onCompare) { Text("Compare") }
+                TextButton(onClick = onCompare) { Text(stringResource(Res.string.notes_conflict_compare)) }
                 TextButton(onClick = if (viewingCopy) onUseCopy else onKeepNote) {
-                    Text(if (viewingCopy) "Use this one" else "Keep this one")
+                    Text(stringResource(if (viewingCopy) Res.string.notes_conflict_use_this else Res.string.notes_conflict_keep_this))
                 }
                 TextButton(onClick = if (viewingCopy) onKeepNote else onUseCopy) {
-                    Text(if (viewingCopy) "Discard this one" else "Use the other")
+                    Text(stringResource(if (viewingCopy) Res.string.notes_conflict_discard_this else Res.string.notes_conflict_use_other))
                 }
             }
         }
@@ -176,20 +206,26 @@ fun ConflictCompareDialog(
     val added = MaterialTheme.colorScheme.tertiaryContainer
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Compare versions") },
+        title = { Text(stringResource(Res.string.notes_conflict_compare_title)) },
         text = {
             Column {
-                Text("− only in ${original.substringAfterLast('/')} (the $keptSide's)", style = MaterialTheme.typography.bodySmall)
-                Text("+ only in ${copy.substringAfterLast('/')}", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    stringResource(Res.string.notes_conflict_only_in_note, original.substringAfterLast('/'), keptSideName(keptSide)),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    stringResource(Res.string.notes_conflict_only_in_copy, copy.substringAfterLast('/')),
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 Spacer(Modifier.height(8.dp))
                 if (hunks.isEmpty()) {
-                    Text("The two versions are the same: either can go.")
+                    Text(stringResource(Res.string.notes_conflict_same))
                 }
                 LazyColumn(Modifier.heightIn(max = 420.dp)) {
                     for (hunk in hunks) {
                         item {
                             Text(
-                                hunk.heading ?: "Before the first heading",
+                                hunk.heading ?: stringResource(Res.string.notes_conflict_before_first_heading),
                                 style = MaterialTheme.typography.labelLarge,
                                 modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
                             )
@@ -216,10 +252,15 @@ fun ConflictCompareDialog(
         },
         confirmButton = {
             Row {
-                TextButton(onClick = onKeepNote) { Text("Keep the note") }
-                TextButton(onClick = onUseCopy) { Text("Use the copy") }
+                TextButton(onClick = onKeepNote) { Text(stringResource(Res.string.notes_conflict_keep_note)) }
+                TextButton(onClick = onUseCopy) { Text(stringResource(Res.string.notes_conflict_use_copy)) }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.close)) } },
     )
 }
+
+/** `server` or `folder`, as [ConflictBanner]'s `keptSide` names them, in the app's language. */
+@Composable
+private fun keptSideName(keptSide: String): String =
+    stringResource(if (keptSide == "folder") Res.string.notes_conflict_side_folder else Res.string.notes_conflict_side_server)

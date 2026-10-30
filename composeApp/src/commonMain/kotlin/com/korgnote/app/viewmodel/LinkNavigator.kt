@@ -6,11 +6,24 @@ import androidx.compose.runtime.setValue
 import com.korgnote.common.org.link.OrgBacklink
 import com.korgnote.common.org.link.OrgLinkIndex
 import com.korgnote.common.org.link.OrgLinkResolution
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.vm_link_emacs_only
+import korgnote.composeapp.generated.resources.vm_link_file_beside_notes
+import korgnote.composeapp.generated.resources.vm_link_kbd
+import korgnote.composeapp.generated.resources.vm_link_no_app
+import korgnote.composeapp.generated.resources.vm_link_not_found
+import korgnote.composeapp.generated.resources.vm_link_open_in_browser
+import korgnote.composeapp.generated.resources.vm_link_search_missed
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.getString
 
 /**
  * Links between notes (T21): following them, the backlinks into the open note, and the way back.
  */
 class LinkNavigator(
+    /** Where a message is looked up in the app's language before it is shown. */
+    private val scope: CoroutineScope,
     private val library: NoteLibrary,
     private val note: OpenNote,
     /** Opens a note, at a character offset in it when there is one. */
@@ -99,24 +112,21 @@ class LinkNavigator(
             is OrgLinkResolution.Note -> {
                 from?.let { rememberHere(it) }
                 open(resolved.path, resolved.offset)
-                showMessage(
-                    resolved.missedSearch
-                        ?.let { "\"$it\" is not in ${resolved.path} any more; opened the note instead." }
-                        .orEmpty()
-                )
+                val missed = resolved.missedSearch
+                if (missed == null) showMessage("") else say { getString(Res.string.vm_link_search_missed, missed, resolved.path) }
                 true
             }
             is OrgLinkResolution.NotFound -> {
-                showMessage("Nothing in the notes matches [[$target]].")
+                say { getString(Res.string.vm_link_not_found, target) }
                 false
             }
             is OrgLinkResolution.NotANote -> {
-                showMessage(whyNotANote(target))
+                say { whyNotANote(target) }
                 false
             }
             // Web links are opened by the platform before they get here; this is the fallback.
             is OrgLinkResolution.External -> {
-                showMessage("Open $target in a browser.")
+                say { getString(Res.string.vm_link_open_in_browser, target) }
                 false
             }
         }
@@ -124,19 +134,23 @@ class LinkNavigator(
 
     /** A web or mail link the device has no app for. */
     fun onExternalLinkFailed(target: String) {
-        showMessage("Nothing on this device opens $target.")
+        say { getString(Res.string.vm_link_no_app, target) }
+    }
+
+    /** Shows the message [text] looks up, once it has. */
+    private fun say(text: suspend () -> String) {
+        scope.launch { showMessage(text()) }
     }
 
     /** Why [target], a link to something other than a note, leads nowhere here. */
-    private fun whyNotANote(target: String): String =
+    private suspend fun whyNotANote(target: String): String =
         when (val scheme = SCHEME.find(target.trim())?.groupValues?.get(1)?.lowercase()) {
             // A file elsewhere on the machine is opened through File links, before it gets here;
             // one kept beside the notes never reaches this device.
-            null, "file", "file+sys", "file+emacs" ->
-                "[[$target]] is a file kept beside the notes, and only notes are synced to this device."
+            null, "file", "file+sys", "file+emacs" -> getString(Res.string.vm_link_file_beside_notes, target)
             // Its keys are usually in the description, `[[kbd:][C-c C-c]]`, leaving nothing to quote.
-            "kbd" -> "A kbd: link names keys to press in Emacs; it does not lead anywhere."
-            else -> "[[$target]] is a $scheme: link, which only Emacs can follow."
+            "kbd" -> getString(Res.string.vm_link_kbd)
+            else -> getString(Res.string.vm_link_emacs_only, target, scheme)
         }
 
     /** Returns to where the last followed link was tapped. */

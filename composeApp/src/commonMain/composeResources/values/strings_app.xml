@@ -1,0 +1,55 @@
+<resources>
+    <!-- The app's frame: navigation, the files drawer, the note's top bar and buttons. -->
+    <string name="app_file">File</string>
+    <string name="app_search">Search</string>
+    <string name="app_files">Files</string>
+    <string name="app_new_note">New note</string>
+    <string name="app_todays_daily">Today's daily</string>
+    <string name="app_filter_files">Filter files</string>
+    <string name="app_filter_files_hint">Part of a file name</string>
+    <string name="app_open_drawer">Open drawer</string>
+    <string name="app_new_table">New table</string>
+    <string name="app_scroll_to_end">Scroll to the end of the file</string>
+    <string name="app_add_heading_at_end">Add a heading at the end of the file</string>
+    <string name="app_discard_element">Discard changes to this element</string>
+    <string name="app_save_element">Save this element</string>
+    <string name="app_select_file">Select an .org file to view its content</string>
+
+    <!-- The calendar. -->
+    <string name="cal_today">Today</string>
+    <string name="cal_previous">Previous</string>
+    <string name="cal_next">Next</string>
+    <string name="cal_mode_agenda">Agenda</string>
+    <string name="cal_mode_day">Day</string>
+    <string name="cal_mode_week">Week</string>
+    <string name="cal_mode_month">Month</string>
+    <string name="cal_show_done">Show done</string>
+    <string name="cal_hide_done">Hide done</string>
+    <string name="cal_overdue">Overdue</string>
+    <string name="cal_nothing_planned">Nothing planned</string>
+    <string name="cal_all_day">all day</string>
+    <!-- Each kind of date, and how it stands relative to today; d. is days. -->
+    <string name="cal_kind_deadline">Deadline</string>
+    <string name="cal_kind_scheduled">Scheduled</string>
+    <string name="cal_kind_closed">Closed</string>
+    <string name="cal_kind_timestamp">Timestamp</string>
+    <string name="cal_status_due_in">Due in %1$d d.</string>
+    <string name="cal_status_overdue">%1$d d. overdue</string>
+    <string name="cal_status_scheduled_ago">Scheduled %1$d d. ago</string>
+    <string name="cal_status_starts">Starts</string>
+    <string name="cal_status_continues">Continues</string>
+    <string name="cal_status_ends">Ends</string>
+    <!-- A status before an entry's title: "Deadline: Submit the report". -->
+    <string name="cal_status_prefix">%1$s:</string>
+
+    <!-- Reminders and the morning digest. -->
+    <string name="remind_all_day">All day</string>
+    <string name="remind_one_entry">1 entry</string>
+    <string name="remind_entries">%1$d entries</string>
+    <plurals name="remind_more_in_calendar">
+        <item quantity="one">%1$d more in the calendar</item>
+        <item quantity="other">%1$d more in the calendar</item>
+    </plurals>
+    <string name="remind_channel_name">Agenda reminders</string>
+    <string name="remind_channel_description">Before timed entries in your notes, and the morning digest</string>
+</resources>

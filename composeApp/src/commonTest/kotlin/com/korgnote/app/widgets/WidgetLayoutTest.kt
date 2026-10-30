@@ -1,12 +1,16 @@
 package com.korgnote.app.widgets
 
+import com.korgnote.app.ui.KeywordSwatches
 import com.korgnote.app.ui.monthWeeks
 import com.korgnote.common.org.agenda.agendaEntries
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.Month
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 
 /** What the home-screen widgets show, with today pinned to Wednesday 23 September 2026. */
 class WidgetLayoutTest {
@@ -76,20 +80,66 @@ class WidgetLayoutTest {
 
     @Test
     fun sectionsAreNamedFromToday() {
-        assertEquals("Overdue", widgetSectionTitle(null, today))
-        assertEquals("Today", widgetSectionTitle(today, today))
-        assertEquals("Tomorrow", widgetSectionTitle(LocalDate(2026, 9, 24), today))
-        assertEquals("Fri 25 Sep", widgetSectionTitle(LocalDate(2026, 9, 25), today))
+        assertEquals("Overdue", widgetSectionTitle(null, today, English))
+        assertEquals("Today", widgetSectionTitle(today, today, English))
+        assertEquals("Tomorrow", widgetSectionTitle(LocalDate(2026, 9, 24), today, English))
+        assertEquals("Fri 25 Sep", widgetSectionTitle(LocalDate(2026, 9, 25), today, English))
     }
 
     @Test
     fun theUpdatedLabelSaysMoreTheOlderItIs() {
         val now = LocalDateTime(2026, 9, 23, 18, 0)
 
-        assertEquals("Not synced yet", updatedLabel(null, now))
-        assertEquals("Updated 14:32", updatedLabel(LocalDateTime(2026, 9, 23, 14, 32), now))
-        assertEquals("Updated yesterday 09:05", updatedLabel(LocalDateTime(2026, 9, 22, 9, 5), now))
-        assertEquals("Updated Sat 20:00", updatedLabel(LocalDateTime(2026, 9, 19, 20, 0), now))
-        assertEquals("Updated 3 Sep", updatedLabel(LocalDateTime(2026, 9, 3, 8, 0), now))
+        assertEquals("Not synced yet", updatedLabel(null, now, English))
+        assertEquals("Updated 14:32", updatedLabel(LocalDateTime(2026, 9, 23, 14, 32), now, English))
+        assertEquals("Updated yesterday 09:05", updatedLabel(LocalDateTime(2026, 9, 22, 9, 5), now, English))
+        assertEquals("Updated Sat 20:00", updatedLabel(LocalDateTime(2026, 9, 19, 20, 0), now, English))
+        assertEquals("Updated 3 Sep", updatedLabel(LocalDateTime(2026, 9, 3, 8, 0), now, English))
+    }
+
+    @Test
+    fun theMonthIsTitledInTheWidgetsWords() {
+        assertEquals("September 2026", monthTitle(today, English))
+    }
+
+    @Test
+    fun aKeywordIsItsOwnLabelBesideTheTitle() {
+        val overdue = widgetAgenda(entries, today).widgetSections(today).first().occurrences.single()
+
+        assertEquals("[#A] Send the report", overdue.plainTitle())
+        assertEquals("Scheduled 2 d. ago", overdue.widgetStatus(today, English))
+    }
+
+    @Test
+    fun eachOpenKeywordHasAColourOfItsOwnAndAFinishedOneIsGrey() {
+        val swatches = widgetAgenda(
+            agendaEntries(mapOf("a.org" to "#+TODO: TODO EVENT | DONE\n* TODO a <2026-09-23 Wed>\n* EVENT b <2026-09-24 Thu>\n* DONE c <2026-09-22 Tue>\n")),
+            today,
+        ).widgetKeywordSwatches()
+
+        assertNotEquals(swatches.of("TODO", done = false), swatches.of("EVENT", done = false))
+        assertEquals(KeywordSwatches.DONE, swatches.of("DONE", done = true))
+        assertNull(swatches.of("WAITING", done = false))
+    }
+
+    /** The words as the English widget has them. */
+    private object English : WidgetWords {
+        override val overdue = "Overdue"
+        override val today = "Today"
+        override val tomorrow = "Tomorrow"
+        override val notSyncedYet = "Not synced yet"
+        override fun updated(whenSynced: String) = "Updated $whenSynced"
+        override fun updatedYesterday(time: String) = "Updated yesterday $time"
+        override fun weekdayShort(day: DayOfWeek) = day.name.take(3).lowercase().replaceFirstChar { it.titlecase() }
+        override fun month(month: Month) = month.name.lowercase().replaceFirstChar { it.titlecase() }
+        override fun monthShort(month: Month) = month(month).take(3)
+        override val deadline = "Deadline"
+        override fun dueIn(days: Int) = "Due in $days d."
+        override fun overdueBy(days: Int) = "$days d. overdue"
+        override fun scheduledAgo(days: Int) = "Scheduled $days d. ago"
+        override val closed = "Closed"
+        override val starts = "Starts"
+        override val continues = "Continues"
+        override val ends = "Ends"
     }
 }

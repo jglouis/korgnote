@@ -1,0 +1,170 @@
+<resources>
+    <!-- Onboarding -->
+    <string name="notes_onboarding_where">Where are your notes?</string>
+    <string name="notes_onboarding_welcome">Welcome to KorgNote</string>
+    <string name="notes_onboarding_intro">Your notes stay plain Org files. Where should KorgNote find them?</string>
+    <string name="notes_onboarding_folder_title">A folder on this device</string>
+    <string name="notes_onboarding_folder_pro">Nothing else to install.</string>
+    <string name="notes_onboarding_folder_con">Syncing is up to that app. A note edited on two devices at once ends up as a conflict copy.</string>
+    <string name="notes_onboarding_server_title">My computer, with the KorgNote server</string>
+    <string name="notes_onboarding_server_pro">Syncs straight with your computer: no cloud, no other app.</string>
+    <string name="notes_onboarding_merged">A note edited on both sides is merged.</string>
+    <string name="notes_onboarding_server_con">The server runs on that computer, and this device must reach it: same Wi-Fi, or a VPN.</string>
+    <string name="notes_onboarding_webdav_title">A WebDAV server (experimental)</string>
+    <string name="notes_onboarding_webdav_pro">Nextcloud, a NAS or a hosting service you already have, so no computer needs to stay on.</string>
+    <string name="notes_onboarding_webdav_con">New, and tried with Nextcloud and Apache only. Over HTTPS, and only with a server that passes a safety check.</string>
+    <string name="notes_onboarding_all_offline">All of them work offline. You can change this later in Settings.</string>
+    <string name="notes_onboarding_both_offline">Both work offline. You can change this later in Settings.</string>
+    <string name="notes_onboarding_for">For</string>
+    <string name="notes_onboarding_against">Against</string>
+    <string name="notes_onboarding_folder_unreadable">It cannot be read.</string>
+    <string name="notes_onboarding_choose_folder_title">Choose your notes folder</string>
+    <string name="notes_onboarding_looking">Looking for notes…</string>
+    <string name="notes_onboarding_folder_empty">No notes yet. New notes will go here.</string>
+    <plurals name="notes_onboarding_folder_count">
+        <item quantity="one">%1$d note.</item>
+        <item quantity="other">%1$d notes.</item>
+    </plurals>
+    <string name="notes_onboarding_folder_unusable">KorgNote cannot use this folder: %1$s</string>
+    <string name="notes_onboarding_choose_folder">Choose a folder</string>
+    <string name="notes_onboarding_use_folder">Use this folder</string>
+    <string name="notes_onboarding_choose_another">Choose another</string>
+    <string name="notes_onboarding_no_folder">Notes cannot be kept in a folder on this device.</string>
+    <string name="notes_onboarding_server_heading">Connect to your computer</string>
+    <string name="notes_onboarding_server_step1">On the computer with your notes, start the KorgNote server.</string>
+    <string name="notes_onboarding_install_server">How to install the server</string>
+    <string name="notes_onboarding_server_step2">There, open %1$s and press Show a pairing code.</string>
+    <string name="notes_onboarding_server_step3">Scan the code with this device, or paste the link shown under it.</string>
+    <string name="notes_onboarding_local_network_computer">Your computer is on your local network. Android asks before an app may reach it.</string>
+    <string name="notes_onboarding_allow_local_network">Allow local network</string>
+    <string name="notes_onboarding_continue">Continue</string>
+    <string name="notes_onboarding_pair_later">Pair later</string>
+    <string name="notes_onboarding_unpaired">Without pairing, KorgNote starts empty and syncs once you pair in Settings.</string>
+    <string name="notes_onboarding_webdav_heading">Connect to a WebDAV server</string>
+    <string name="notes_onboarding_webdav_intro">Experimental. KorgNote keeps its own copy of the notes and syncs it with a folder on the server, as it does with the KorgNote server.</string>
+    <string name="notes_onboarding_folder_address">Folder address</string>
+    <string name="notes_onboarding_nextcloud_address">On Nextcloud, it is under Files settings, WebDAV, with the notes folder's name added.</string>
+    <string name="notes_onboarding_user_name">User name</string>
+    <string name="notes_onboarding_password">Password</string>
+    <string name="notes_onboarding_app_password">Nextcloud and most hosting services give an app password for this, apart from your own.</string>
+    <string name="notes_onboarding_local_network_server">If the server is on your local network, Android asks before an app may reach it.</string>
+    <string name="notes_onboarding_https_needed">The address must start with https://, or the password would cross the network as it is.</string>
+    <string name="notes_onboarding_checking_server">Checking the server…</string>
+    <string name="notes_onboarding_server_empty">The server can be used. No notes there yet: new notes will go there.</string>
+    <plurals name="notes_onboarding_server_count">
+        <item quantity="one">The server can be used. %1$d note there.</item>
+        <item quantity="other">The server can be used. %1$d notes there.</item>
+    </plurals>
+    <string name="notes_onboarding_server_unusable">KorgNote cannot use this server. %1$s</string>
+    <string name="notes_onboarding_use_server">Use this server</string>
+    <string name="notes_onboarding_check_server">Check the server</string>
+    <string name="notes_onboarding_check_explained">The check writes a hidden file, .korgnote-check, and deletes it again. It makes sure the server refuses a write over a newer version, which is what keeps one device from overwriting another's edits.</string>
+    <string name="notes_onboarding_reminders">Reminders</string>
+    <string name="notes_onboarding_reminders_intro">KorgNote can remind you before timed entries, and sum up your day each morning. For that it needs to show notifications.</string>
+    <string name="notes_onboarding_allow_notifications">Allow notifications</string>
+    <string name="notes_onboarding_not_now">Not now</string>
+    <string name="notes_onboarding_reminders_later">You can turn them on or off later, in Settings and in the system's settings.</string>
+
+    <!-- Note dialogs -->
+    <string name="notes_new_note">New note</string>
+    <string name="notes_type_title">Type a title</string>
+    <string name="notes_create">Create</string>
+    <string name="notes_tags">Tags</string>
+    <string name="notes_tags_placeholder">work ecam</string>
+    <string name="notes_details">Note details</string>
+    <string name="notes_me">Me</string>
+    <string name="notes_date">Date</string>
+    <string name="notes_pick_date">Pick the date</string>
+    <string name="notes_rename_or_move">Rename or move</string>
+    <string name="notes_path">Path</string>
+    <string name="notes_path_hint">Folders and a name, like notes/idea.org</string>
+    <string name="notes_delete_title">Delete %1$s?</string>
+    <string name="notes_delete_unsynced">This note has changes that have not reached the server yet. They exist only on this device and will be lost.</string>
+    <string name="notes_delete_explained">It is deleted on every device. The server keeps a copy in .korgnote-trash, and if someone edits it elsewhere before this reaches the server, it comes back.</string>
+    <string name="notes_delete_anyway">Delete anyway</string>
+
+    <!-- Links -->
+    <string name="notes_link_add">Add a link</string>
+    <string name="notes_link_edit">Edit link</string>
+    <string name="notes_link_label">Label</string>
+    <string name="notes_link_label_placeholder">Shown instead of where it goes</string>
+    <string name="notes_link_web">Web</string>
+    <string name="notes_note">Note</string>
+    <string name="notes_link_file">File</string>
+    <string name="notes_link_address">Address</string>
+    <string name="notes_link_no_note">No note chosen yet</string>
+    <string name="notes_link_choose">Choose…</string>
+    <string name="notes_link_change">Change…</string>
+    <string name="notes_link_choose_file">Choose a file…</string>
+    <string name="notes_link_remove">Remove link</string>
+    <string name="notes_link_to">Link to</string>
+    <string name="notes_link_to_target">Link to %1$s</string>
+    <string name="notes_link_query_placeholder">Note or heading</string>
+    <string name="notes_link_nothing_matches">Nothing matches.</string>
+    <string name="notes_link_web_or_file">Web or file link…</string>
+    <string name="notes_heading">Heading</string>
+
+    <!-- Search -->
+    <string name="notes_saved_searches">Saved searches</string>
+    <string name="notes_saved_searches_empty">Searches saved with the bookmark in the search field are listed here, to run again with a tap.</string>
+    <string name="notes_rename_or_remove">Rename or remove</string>
+    <string name="notes_rename_saved_search">Rename saved search</string>
+    <string name="notes_save_search">Save search</string>
+    <string name="notes_name">Name</string>
+    <string name="notes_search_label">Search notes</string>
+    <string name="notes_search_placeholder">words, or tag:work</string>
+    <string name="notes_remove_saved_search">Remove saved search</string>
+    <string name="notes_search_hint">Type to search every note. Words match anywhere — body text, headings and file names. `tag:work` keeps only headings carrying that tag, and tags are inherited, so a tag on a parent heading counts for everything under it. Quote a phrase to search for it whole. The bookmark in the field keeps a search to run again from the saved searches.</string>
+    <string name="notes_search_nothing">Nothing matched "%1$s".</string>
+    <plurals name="notes_search_results">
+        <item quantity="one">%1$d result</item>
+        <item quantity="other">%1$d results</item>
+    </plurals>
+
+    <!-- Pinned notes -->
+    <string name="notes_unpin">Unpin</string>
+    <string name="notes_pinned">Pinned</string>
+
+    <!-- Status icons -->
+    <string name="notes_folder_unreachable">Cannot use the notes folder: %1$s Edits are kept until it can be used again.</string>
+    <string name="notes_sync_last">Last synced %1$s, at %2$s.</string>
+    <string name="notes_sync_running">Syncing with the server…</string>
+    <string name="notes_sync_tap">Tap to sync now.</string>
+    <string name="notes_sync_never">Not synced yet. Tap to sync now.</string>
+    <string name="notes_sync_age_now">now</string>
+    <string name="notes_sync_age_minutes">%1$dm</string>
+    <string name="notes_sync_age_hours">%1$dh</string>
+    <string name="notes_sync_age_days">%1$dd</string>
+    <string name="notes_sync_ago_now">just now</string>
+    <string name="notes_sync_ago_minutes">%1$d min ago</string>
+    <string name="notes_sync_ago_hours">%1$d h ago</string>
+    <string name="notes_sync_ago_day">a day ago</string>
+    <string name="notes_sync_ago_days">%1$d days ago</string>
+
+    <!-- Conflicts -->
+    <string name="notes_conflict_count">Notes with a conflict: %1$d</string>
+    <string name="notes_conflict_menu_title">Changed in two places at once</string>
+    <string name="notes_conflict_versions">%1$s (%2$d versions)</string>
+    <string name="notes_conflict_side_server">server</string>
+    <string name="notes_conflict_side_folder">folder</string>
+    <string name="notes_conflict_copy_title">A conflicting version of %1$s</string>
+    <string name="notes_conflict_note_title">This note changed in two places at once</string>
+    <string name="notes_conflict_copy_text">It could not be merged with the note, which holds the %1$s's version.</string>
+    <string name="notes_conflict_note_text">This is the %1$s's version. The one that could not be merged is kept as %2$s.</string>
+    <plurals name="notes_conflict_note_text_more">
+        <item quantity="one">This is the %1$s's version. The one that could not be merged is kept as %2$s (and %3$d more).</item>
+        <item quantity="other">This is the %1$s's version. The one that could not be merged is kept as %2$s (and %3$d more).</item>
+    </plurals>
+    <string name="notes_conflict_compare">Compare</string>
+    <string name="notes_conflict_use_this">Use this one</string>
+    <string name="notes_conflict_keep_this">Keep this one</string>
+    <string name="notes_conflict_discard_this">Discard this one</string>
+    <string name="notes_conflict_use_other">Use the other</string>
+    <string name="notes_conflict_compare_title">Compare versions</string>
+    <string name="notes_conflict_only_in_note">− only in %1$s (the %2$s's)</string>
+    <string name="notes_conflict_only_in_copy">+ only in %1$s</string>
+    <string name="notes_conflict_same">The two versions are the same: either can go.</string>
+    <string name="notes_conflict_before_first_heading">Before the first heading</string>
+    <string name="notes_conflict_keep_note">Keep the note</string>
+    <string name="notes_conflict_use_copy">Use the copy</string>
+</resources>

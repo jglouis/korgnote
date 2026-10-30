@@ -54,6 +54,25 @@ import com.korgnote.app.widgets.CalendarTarget
 import com.korgnote.app.widgets.WidgetSyncs
 import com.korgnote.common.org.edit.TableGrid
 import org.koin.compose.viewmodel.koinViewModel
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.app_add_heading_at_end
+import korgnote.composeapp.generated.resources.app_discard_element
+import korgnote.composeapp.generated.resources.app_file
+import korgnote.composeapp.generated.resources.app_files
+import korgnote.composeapp.generated.resources.app_filter_files
+import korgnote.composeapp.generated.resources.app_filter_files_hint
+import korgnote.composeapp.generated.resources.app_new_note
+import korgnote.composeapp.generated.resources.app_new_table
+import korgnote.composeapp.generated.resources.app_open_drawer
+import korgnote.composeapp.generated.resources.app_save_element
+import korgnote.composeapp.generated.resources.app_scroll_to_end
+import korgnote.composeapp.generated.resources.app_search
+import korgnote.composeapp.generated.resources.app_select_file
+import korgnote.composeapp.generated.resources.app_todays_daily
+import korgnote.composeapp.generated.resources.back
+import korgnote.composeapp.generated.resources.calendar
+import korgnote.composeapp.generated.resources.settings
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The app: the welcome screens until it is known where the notes are, then the notes. Settings can
@@ -241,7 +260,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     if (insertingTable) {
         TableEditorDialog(
             initial = TableGrid.starter(),
-            title = "New table",
+            title = stringResource(Res.string.app_new_table),
             onSave = { grid ->
                 insertingTable = false
                 vm.completion.insertTable(grid)
@@ -363,15 +382,15 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                     } else Column(modifier = Modifier.padding(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "Files",
+                                stringResource(Res.string.app_files),
                                 style = MaterialTheme.typography.titleMedium,
                                 modifier = Modifier.weight(1f),
                             )
                             IconButton(onClick = { creatingNote = true }) {
-                                Icon(Icons.AutoMirrored.Filled.NoteAdd, contentDescription = "New note")
+                                Icon(Icons.AutoMirrored.Filled.NoteAdd, contentDescription = stringResource(Res.string.app_new_note))
                             }
                             IconButton(onClick = { openToday() }) {
-                                Icon(Icons.Filled.Today, contentDescription = "Today's daily")
+                                Icon(Icons.Filled.Today, contentDescription = stringResource(Res.string.app_todays_daily))
                             }
                         }
                         // Above the filter, so it never scrolls away or filters out.
@@ -390,8 +409,8 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                         OutlinedTextField(
                             value = vm.search.filterQuery,
                             onValueChange = { vm.search.onFilterQueryChanged(it) },
-                            label = { Text("Filter files") },
-                            placeholder = { Text("Part of a file name") },
+                            label = { Text(stringResource(Res.string.app_filter_files)) },
+                            placeholder = { Text(stringResource(Res.string.app_filter_files_hint)) },
                             singleLine = true
                         )
                         Spacer(Modifier.width(8.dp))
@@ -507,14 +526,14 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                             },
                             navigationIcon = {
                                 IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                    Icon(Icons.Filled.Menu, contentDescription = "Open drawer")
+                                    Icon(Icons.Filled.Menu, contentDescription = stringResource(Res.string.app_open_drawer))
                                 }
                             },
                             actions = {
                                 // Back from a followed link, to where it was tapped.
                                 if (vm.links.canGoBack) {
                                     IconButton(onClick = { vm.links.goBack() }) {
-                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(Res.string.back))
                                     }
                                 }
                                 statusIcons()
@@ -555,12 +574,12 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                     ) {
                                         Icon(
                                             Icons.Filled.KeyboardDoubleArrowDown,
-                                            contentDescription = "Scroll to the end of the file",
+                                            contentDescription = stringResource(Res.string.app_scroll_to_end),
                                         )
                                     }
                                 }
                                 FloatingActionButton(onClick = { vm.editor.addAtEnd() }) {
-                                    Icon(Icons.Filled.Add, contentDescription = "Add a heading at the end of the file")
+                                    Icon(Icons.Filled.Add, contentDescription = stringResource(Res.string.app_add_heading_at_end))
                                 }
                             }
                         }
@@ -585,13 +604,13 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                             ) {
                                 // Saving an element is explicit: edits stay local until this is pressed.
                                 IconButton(onClick = { vm.editor.cancel() }) {
-                                    Icon(Icons.Filled.Close, contentDescription = "Discard changes to this element")
+                                    Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.app_discard_element))
                                 }
                                 FilledIconButton(
                                     onClick = { scope.launch { vm.editor.commit() } },
                                     modifier = Modifier.padding(end = 4.dp),
                                 ) {
-                                    Icon(Icons.Filled.Save, contentDescription = "Save this element")
+                                    Icon(Icons.Filled.Save, contentDescription = stringResource(Res.string.app_save_element))
                                 }
                             }
                         } else if (!wide && WindowInsets.ime.getBottom(LocalDensity.current) == 0) NavigationBar {
@@ -702,7 +721,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                 }
 
                                 if (vm.note.content.isBlank()) {
-                                    Text("Select an .org file to view its content")
+                                    Text(stringResource(Res.string.app_select_file))
                                 } else {
                                     OrgDocumentView(
                                         // weight, not wrap: the lazy list needs a bounded height to
@@ -835,12 +854,14 @@ private enum class BottomItem {
     FILE, SEARCH, CALENDAR, SETTINGS;
 
     @Composable
-    fun getLabel() = when (this) {
-        FILE -> "File"
-        SEARCH -> "Search"
-        CALENDAR -> "Calendar"
-        SETTINGS -> "Settings"
-    }
+    fun getLabel() = stringResource(
+        when (this) {
+            FILE -> Res.string.app_file
+            SEARCH -> Res.string.app_search
+            CALENDAR -> Res.string.calendar
+            SETTINGS -> Res.string.settings
+        },
+    )
 
     fun getIconRes() = when (this) {
         FILE -> Icons.Filled.Description

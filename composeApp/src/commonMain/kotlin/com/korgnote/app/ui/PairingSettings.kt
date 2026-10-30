@@ -29,7 +29,26 @@ import com.korgnote.app.data.DevicePairing
 import com.korgnote.app.data.PairingResult
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.common.pairing.PairingLink
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.cancel
+import korgnote.composeapp.generated.resources.settings_forget
+import korgnote.composeapp.generated.resources.settings_forget_text
+import korgnote.composeapp.generated.resources.settings_forget_title
+import korgnote.composeapp.generated.resources.settings_pair
+import korgnote.composeapp.generated.resources.settings_pair_how_to
+import korgnote.composeapp.generated.resources.settings_pair_not_a_link
+import korgnote.composeapp.generated.resources.settings_pair_title
+import korgnote.composeapp.generated.resources.settings_paired_as
+import korgnote.composeapp.generated.resources.settings_paired_with
+import korgnote.composeapp.generated.resources.settings_pairing_with
+import korgnote.composeapp.generated.resources.settings_paste_link
+import korgnote.composeapp.generated.resources.settings_reached_at
+import korgnote.composeapp.generated.resources.settings_scan_again
+import korgnote.composeapp.generated.resources.settings_scan_code
+import korgnote.composeapp.generated.resources.settings_the_computer
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Pairing this device with the computer its notes are on: scanning the QR code from the server's
@@ -47,6 +66,8 @@ fun PairingSettings(
     onIncomingLinkUsed: () -> Unit = {},
     /** Says where the code is shown; off where the screen around it already says so. */
     showHowTo: Boolean = true,
+    /** Its own heading; off where a section around it already has one. */
+    showTitle: Boolean = true,
 ) {
     val scope = rememberCoroutineScope()
     var paired by remember { mutableStateOf(repo.getPairedServer()) }
@@ -56,27 +77,25 @@ fun PairingSettings(
     var forgetting by remember { mutableStateOf(false) }
     val deviceName = rememberDeviceName()
 
-    fun pairWith(text: String) {
+    fun pairWith(text: String) = scope.launch {
         val link = PairingLink.parse(text)
         if (link == null) {
-            message = "That is not a KorgNote pairing link. It starts with korgnote://pair."
-            return
+            message = getString(Res.string.settings_pair_not_a_link)
+            return@launch
         }
-        if (pairing == null) return
-        scope.launch {
-            busy = true
-            message = "Pairing with ${link.serverName.ifBlank { "the computer" }}…"
-            message = when (val result = pairing.pair(link, deviceName)) {
-                is PairingResult.Paired -> {
-                    paired = result.server
-                    pasted = ""
-                    onChanged()
-                    "Paired with ${result.server.serverName}."
-                }
-                is PairingResult.Failed -> result.reason
+        if (pairing == null) return@launch
+        busy = true
+        message = getString(Res.string.settings_pairing_with, link.serverName.ifBlank { getString(Res.string.settings_the_computer) })
+        message = when (val result = pairing.pair(link, deviceName)) {
+            is PairingResult.Paired -> {
+                paired = result.server
+                pasted = ""
+                onChanged()
+                getString(Res.string.settings_paired_with, result.server.serverName)
             }
-            busy = false
+            is PairingResult.Failed -> result.reason
         }
+        busy = false
     }
 
     LaunchedEffect(incomingLink) {
@@ -90,8 +109,8 @@ fun PairingSettings(
     if (forgetting) {
         AlertDialog(
             onDismissRequest = { forgetting = false },
-            title = { Text("Forget ${paired?.serverName ?: "the computer"}?") },
-            text = { Text("This device stops syncing until it is paired again. To make its access stop on the computer too, revoke it on the Devices page there.") },
+            title = { Text(stringResource(Res.string.settings_forget_title, paired?.serverName ?: stringResource(Res.string.settings_the_computer))) },
+            text = { Text(stringResource(Res.string.settings_forget_text)) },
             confirmButton = {
                 TextButton(onClick = {
                     repo.setPairedServer(null)
@@ -99,27 +118,30 @@ fun PairingSettings(
                     forgetting = false
                     message = null
                     onChanged()
-                }) { Text("Forget") }
+                }) { Text(stringResource(Res.string.settings_forget)) }
             },
-            dismissButton = { TextButton(onClick = { forgetting = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { forgetting = false }) { Text(stringResource(Res.string.cancel)) } },
         )
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Pair with a computer")
+        if (showTitle) Text(stringResource(Res.string.settings_pair_title), style = MaterialTheme.typography.titleSmall)
         val current = paired
         if (current != null) {
-            Text("Paired with ${current.serverName} as $deviceName.", style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(Res.string.settings_paired_as, current.serverName, deviceName), style = MaterialTheme.typography.bodyMedium)
             Text(
-                "Reached at ${current.addresses.joinToString(" or ")}, port ${current.port}. " +
-                    "Certificate ${current.fingerprint.chunked(4).take(4).joinToString(" ")}…",
+                stringResource(
+                    Res.string.settings_reached_at,
+                    current.addresses.joinToString(", "),
+                    current.port,
+                    current.fingerprint.chunked(4).take(4).joinToString(" "),
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
             )
         } else if (showHowTo) {
             Text(
-                "On the computer the server runs on, open http://localhost:8080/devices, " +
-                    "press Show a pairing code, and scan it here.",
+                stringResource(Res.string.settings_pair_how_to),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
             )
@@ -128,21 +150,21 @@ fun PairingSettings(
             if (scan != null) {
                 Button(onClick = scan, enabled = !busy && pairing != null) {
                     Icon(Icons.Filled.QrCodeScanner, contentDescription = null)
-                    Text(if (current == null) "  Scan the code" else "  Scan again")
+                    Text("  " + stringResource(if (current == null) Res.string.settings_scan_code else Res.string.settings_scan_again))
                 }
             }
             if (current != null) {
-                OutlinedButton(onClick = { forgetting = true }, enabled = !busy) { Text("Forget") }
+                OutlinedButton(onClick = { forgetting = true }, enabled = !busy) { Text(stringResource(Res.string.settings_forget)) }
             }
         }
         OutlinedTextField(
             value = pasted,
             onValueChange = { pasted = it },
-            label = { Text("Or paste the pairing link") },
+            label = { Text(stringResource(Res.string.settings_paste_link)) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
             trailingIcon = {
-                TextButton(onClick = { pairWith(pasted) }, enabled = pasted.isNotBlank() && !busy && pairing != null) { Text("Pair") }
+                TextButton(onClick = { pairWith(pasted) }, enabled = pasted.isNotBlank() && !busy && pairing != null) { Text(stringResource(Res.string.settings_pair)) }
             },
             modifier = Modifier.fillMaxWidth(),
         )

@@ -72,14 +72,14 @@ class WidgetSyncWorker(context: Context, params: WorkerParameters) : CoroutineWo
 /**
  * Syncs the notes where they are kept, as the app does when it opens — the replica with the
  * server, or a look at the folder — and keeps the agenda they now have for the widgets. Null when
- * that got through, or else what to say on the widget instead.
+ * that got through, or else which of [WidgetStore]'s problems stopped it.
  *
  * What has been read is kept either way: offline, the replica still holds the notes as last synced,
  * which is what the widget showed already.
  */
 private suspend fun syncNotes(context: Context): String? {
     val koin = KoinPlatform.getKoin()
-    val source = koin.get<SettingsRepository>().chosenNotesSource() ?: return "Open KorgNote to set it up"
+    val source = koin.get<SettingsRepository>().chosenNotesSource() ?: return WidgetStore.PROBLEM_SETUP
     var synced: Instant? = null
     var problem: String? = null
     val store = when (source) {
@@ -91,7 +91,7 @@ private suspend fun syncNotes(context: Context): String? {
                 throw e
             } catch (t: Throwable) {
                 println("[DEBUG_LOG][WidgetSync] Sync failed: ${t.message}")
-                problem = "Server unreachable"
+                problem = WidgetStore.PROBLEM_SERVER
             }
             koin.get<DocumentStore>()
         }
@@ -104,7 +104,7 @@ private suspend fun syncNotes(context: Context): String? {
                 throw e
             } catch (t: Throwable) {
                 println("[DEBUG_LOG][WidgetSync] WebDAV sync failed: ${t.message}")
-                problem = "Server unreachable"
+                problem = WidgetStore.PROBLEM_SERVER
             }
             koin.get<DocumentStore>(WEBDAV)
         }
@@ -112,7 +112,7 @@ private suspend fun syncNotes(context: Context): String? {
             // Only read here, never written, so it never makes a conflict copy to name.
             val storage = FolderNoteStorage(koin.get<NoteFolderAccess>().open(source.location)) { "" }
             storage.rescan()
-            if (storage.problem == null) synced = Clock.System.now() else problem = "Folder unreachable"
+            if (storage.problem == null) synced = Clock.System.now() else problem = WidgetStore.PROBLEM_FOLDER
             DocumentStore(storage)
         }
     }

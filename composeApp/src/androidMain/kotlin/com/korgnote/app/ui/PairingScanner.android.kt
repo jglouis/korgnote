@@ -10,6 +10,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.data_pairing_scan_prompt
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * ZXing's scanner, which reads the code on the device itself: no Play services, nothing sent
@@ -18,6 +21,7 @@ import com.journeyapps.barcodescanner.ScanOptions
 @Composable
 actual fun rememberPairingScanner(onScanned: (String) -> Unit): (() -> Unit)? {
     val current by rememberUpdatedState(onScanned)
+    val prompt by rememberUpdatedState(stringResource(Res.string.data_pairing_scan_prompt))
     val launcher = rememberLauncherForActivityResult(ScanContract()) { result ->
         result.contents?.let { current(it) }
     }
@@ -25,7 +29,7 @@ actual fun rememberPairingScanner(onScanned: (String) -> Unit): (() -> Unit)? {
         launcher.launch(
             ScanOptions()
                 .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                .setPrompt("The pairing code on the computer's Devices page")
+                .setPrompt(prompt)
                 .setBeepEnabled(false)
                 .setOrientationLocked(false),
         )

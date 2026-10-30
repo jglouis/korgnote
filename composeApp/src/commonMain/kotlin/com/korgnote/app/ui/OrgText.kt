@@ -91,6 +91,17 @@ import com.korgnote.common.org.toOrgString
 import com.korgnote.common.org.edit.Progress
 import com.korgnote.common.org.edit.STATISTICS_COOKIE
 import com.korgnote.common.org.edit.progressOf
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.editor_collapse_drawer
+import korgnote.composeapp.generated.resources.editor_current_keyword
+import korgnote.composeapp.generated.resources.editor_edit_table
+import korgnote.composeapp.generated.resources.editor_expand_drawer
+import korgnote.composeapp.generated.resources.editor_keywords
+import korgnote.composeapp.generated.resources.editor_keywords_with_done
+import korgnote.composeapp.generated.resources.editor_no_keyword
+import korgnote.composeapp.generated.resources.editor_progress_done
+import korgnote.composeapp.generated.resources.editor_show_on_map
+import org.jetbrains.compose.resources.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 
@@ -294,7 +305,7 @@ private fun RenderNode(
 
         is OrgTable -> OrgTableView(
             node,
-            modifier = if (onEditTable == null) Modifier else Modifier.clickable(onClickLabel = "Edit table") { onEditTable(node) },
+            modifier = if (onEditTable == null) Modifier else Modifier.clickable(onClickLabel = stringResource(Res.string.editor_edit_table)) { onEditTable(node) },
         )
 
         is OrgTableRow -> OrgTableView(OrgTable(listOf(node)))
@@ -366,7 +377,7 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: (
                 IconButton(onClick = { uriHandler.openUri(googleMapsUrl(location)) }, modifier = Modifier.size(44.dp)) {
                     Icon(
                         Icons.Filled.Place,
-                        contentDescription = "Show $location on a map",
+                        contentDescription = stringResource(Res.string.editor_show_on_map, location),
                         tint = OrgColors.link,
                         modifier = Modifier.size(24.dp),
                     )
@@ -397,10 +408,11 @@ private fun ProgressPill(progress: Progress, percent: Boolean) {
     val complete = progress.total > 0 && progress.done >= progress.total
     val color = if (complete) OrgColors.todo else MaterialTheme.colorScheme.primary
     val label = if (percent) "${progress.percent}%" else "${progress.done}/${progress.total}"
+    val description = stringResource(Res.string.editor_progress_done, label)
     Surface(
         color = color.copy(alpha = 0.10f),
         shape = RoundedCornerShape(50),
-        modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "$label done" },
+        modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = description },
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -449,7 +461,7 @@ private fun TodoKeywordMenu(
     fun Item(keyword: String) = DropdownMenuItem(
         text = { Text(keyword, color = todoConfig.colorFor(keyword) ?: Color.Unspecified, fontWeight = FontWeight.Bold) },
         trailingIcon = if (keyword == current) {
-            { Icon(Icons.Filled.Check, contentDescription = "Current keyword") }
+            { Icon(Icons.Filled.Check, contentDescription = stringResource(Res.string.editor_current_keyword)) }
         } else null,
         onClick = { onPick(keyword) },
     )
@@ -459,7 +471,7 @@ private fun TodoKeywordMenu(
         if (todoConfig.todo.isNotEmpty() && todoConfig.done.isNotEmpty()) HorizontalDivider()
         todoConfig.done.forEach { Item(it) }
         HorizontalDivider()
-        DropdownMenuItem(text = { Text("No keyword") }, onClick = { onPick(null) })
+        DropdownMenuItem(text = { Text(stringResource(Res.string.editor_no_keyword)) }, onClick = { onPick(null) })
     }
 }
 
@@ -680,10 +692,14 @@ private fun TodoKeywordsView(keywords: OrgTodoConfig) {
             )
         }
     }
+    val description = if (keywords.done.isEmpty()) {
+        stringResource(Res.string.editor_keywords, keywords.todo.joinToString(", "))
+    } else {
+        stringResource(Res.string.editor_keywords_with_done, keywords.todo.joinToString(", "), keywords.done.joinToString(", "))
+    }
     FlowRow(
         modifier = Modifier.padding(vertical = 2.dp).semantics {
-            contentDescription = "Keywords: " + keywords.todo.joinToString(", ") +
-                if (keywords.done.isEmpty()) "" else ", done: " + keywords.done.joinToString(", ")
+            contentDescription = description
         },
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -727,7 +743,7 @@ private fun OrgDrawerView(name: String, lines: List<String>, showId: Boolean = f
         ) {
             Icon(
                 imageVector = if (expanded) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight,
-                contentDescription = if (expanded) "Collapse drawer" else "Expand drawer",
+                contentDescription = stringResource(if (expanded) Res.string.editor_collapse_drawer else Res.string.editor_expand_drawer),
                 tint = OrgColors.drawer,
                 modifier = Modifier.width(16.dp)
             )

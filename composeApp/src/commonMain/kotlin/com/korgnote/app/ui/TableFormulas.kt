@@ -45,6 +45,37 @@ import com.korgnote.common.org.table.formulaCells
 import com.korgnote.common.org.table.formulaSyntaxProblem
 import com.korgnote.common.org.table.recalculate
 import com.korgnote.common.org.table.rowsAboveTotal
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.cancel
+import korgnote.composeapp.generated.resources.close
+import korgnote.composeapp.generated.resources.delete
+import korgnote.composeapp.generated.resources.editor_add_formula
+import korgnote.composeapp.generated.resources.editor_apply_fix
+import korgnote.composeapp.generated.resources.editor_as_computed
+import korgnote.composeapp.generated.resources.editor_as_written
+import korgnote.composeapp.generated.resources.editor_cells
+import korgnote.composeapp.generated.resources.editor_column
+import korgnote.composeapp.generated.resources.editor_column_number
+import korgnote.composeapp.generated.resources.editor_computes
+import korgnote.composeapp.generated.resources.editor_decimals
+import korgnote.composeapp.generated.resources.editor_done
+import korgnote.composeapp.generated.resources.editor_edit
+import korgnote.composeapp.generated.resources.editor_edit_formula
+import korgnote.composeapp.generated.resources.editor_every_row
+import korgnote.composeapp.generated.resources.editor_expression_placeholder
+import korgnote.composeapp.generated.resources.editor_fills
+import korgnote.composeapp.generated.resources.editor_formulas
+import korgnote.composeapp.generated.resources.editor_gives
+import korgnote.composeapp.generated.resources.editor_last_row
+import korgnote.composeapp.generated.resources.editor_new_formula
+import korgnote.composeapp.generated.resources.editor_no_formula_yet
+import korgnote.composeapp.generated.resources.editor_one_cell
+import korgnote.composeapp.generated.resources.editor_picker
+import korgnote.composeapp.generated.resources.editor_recalculate
+import korgnote.composeapp.generated.resources.editor_row
+import korgnote.composeapp.generated.resources.editor_row_number
+import korgnote.composeapp.generated.resources.editor_rows_above
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * A table's formulas, each in words — its columns called by their headers — with what is wrong with
@@ -62,19 +93,18 @@ internal fun TableFormulasDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Formulas") },
+        title = { Text(stringResource(Res.string.editor_formulas)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (grid.formulas.isEmpty()) {
                     Text(
-                        "No formula yet. A formula fills cells from others: a total under a column, or a column " +
-                            "computed from others in every row.",
+                        stringResource(Res.string.editor_no_formula_yet),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
                 for (note in notes.filter { it.formula < 0 }) {
                     NoteLine(note)
-                    if (note.kind == FormulaNote.Kind.Outdated) TextButton(onClick = onRecalculate) { Text("Recalculate") }
+                    if (note.kind == FormulaNote.Kind.Outdated) TextButton(onClick = onRecalculate) { Text(stringResource(Res.string.editor_recalculate)) }
                 }
                 grid.formulas.forEachIndexed { index, formula ->
                     if (index > 0 || notes.any { it.formula < 0 }) HorizontalDivider()
@@ -84,21 +114,21 @@ internal fun TableFormulasDialog(
                         NoteLine(note)
                         note.fix?.let { fix ->
                             TextButton(onClick = { onChange(grid.withFormulas(grid.formulas.toMutableList().also { it[index] = fix })) }) {
-                                Text("Apply fix")
+                                Text(stringResource(Res.string.editor_apply_fix))
                             }
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { onEdit(index) }) { Text("Edit") }
+                        TextButton(onClick = { onEdit(index) }) { Text(stringResource(Res.string.editor_edit)) }
                         TextButton(onClick = { onChange(grid.withFormulas(grid.formulas.filterIndexed { i, _ -> i != index })) }) {
-                            Text("Delete")
+                            Text(stringResource(Res.string.delete))
                         }
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onEdit(null) }) { Text("Add formula") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        confirmButton = { TextButton(onClick = { onEdit(null) }) { Text(stringResource(Res.string.editor_add_formula)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.close)) } },
     )
 }
 
@@ -134,7 +164,8 @@ internal fun FormulaEditorDialog(
     onDismiss: () -> Unit,
 ) {
     val names = remember(grid) { columnNames(grid.rows) }
-    fun columnLabel(column: Int) = names.getOrNull(column - 1)?.takeIf { it.isNotBlank() } ?: "Column $column"
+    @Composable
+    fun columnLabel(column: Int) = names.getOrNull(column - 1)?.takeIf { it.isNotBlank() } ?: stringResource(Res.string.editor_column_number, column)
     val dataLines = grid.rows.indices.filter { grid.rows[it] != null }
 
     val initialTarget = initial.substringBefore('=').trim()
@@ -179,40 +210,40 @@ internal fun FormulaEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initialRight.isEmpty()) "New formula" else "Edit formula") },
+        title = { Text(stringResource(if (initialRight.isEmpty()) Res.string.editor_new_formula else Res.string.editor_edit_formula)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Fills", style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(Res.string.editor_fills), style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = kind == TargetKind.Column, onClick = { kind = TargetKind.Column }, label = { Text("Every row") })
-                    FilterChip(selected = kind == TargetKind.Cell, onClick = { kind = TargetKind.Cell }, label = { Text("One cell") })
+                    FilterChip(selected = kind == TargetKind.Column, onClick = { kind = TargetKind.Column }, label = { Text(stringResource(Res.string.editor_every_row)) })
+                    FilterChip(selected = kind == TargetKind.Cell, onClick = { kind = TargetKind.Cell }, label = { Text(stringResource(Res.string.editor_one_cell)) })
                     if (cellTarget == null && columnTarget == null && initialTarget.isNotEmpty()) {
-                        FilterChip(selected = kind == TargetKind.Other, onClick = { kind = TargetKind.Other }, label = { Text("As written") })
+                        FilterChip(selected = kind == TargetKind.Other, onClick = { kind = TargetKind.Other }, label = { Text(stringResource(Res.string.editor_as_written)) })
                     }
                 }
                 when (kind) {
                     TargetKind.Other -> OutlinedTextField(
                         value = otherTarget,
                         onValueChange = { otherTarget = it },
-                        label = { Text("Cells") },
+                        label = { Text(stringResource(Res.string.editor_cells)) },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                         modifier = Modifier.fillMaxWidth(),
                     )
                     else -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Picker(
-                            label = "Column",
+                            label = stringResource(Res.string.editor_column),
                             shown = columnLabel(column),
                             options = (1..grid.columnCount).map { it to columnLabel(it) },
                             onPick = { column = it },
                         )
                         if (kind == TargetKind.Cell) {
                             Picker(
-                                label = "Row",
-                                shown = if (row == ">") "Last row" else "Row $row",
-                                options = listOf(">" to "Last row") + dataLines.mapIndexed { i, line ->
+                                label = stringResource(Res.string.editor_row),
+                                shown = if (row == ">") stringResource(Res.string.editor_last_row) else stringResource(Res.string.editor_row_number, row),
+                                options = listOf(">" to stringResource(Res.string.editor_last_row)) + dataLines.mapIndexed { i, line ->
                                     val first = grid.rows[line]!!.firstOrNull { it.isNotBlank() }.orEmpty()
-                                    "${i + 1}" to "Row ${i + 1}" + if (first.isNotEmpty()) " · ${first.take(24)}" else ""
+                                    "${i + 1}" to stringResource(Res.string.editor_row_number, "${i + 1}") + if (first.isNotEmpty()) " · ${first.take(24)}" else ""
                                 },
                                 onPick = { row = it },
                             )
@@ -222,8 +253,8 @@ internal fun FormulaEditorDialog(
                 OutlinedTextField(
                     value = expression,
                     onValueChange = { expression = it },
-                    label = { Text("Computes") },
-                    placeholder = { Text("Tap a column below, or write \$2 * 1.21") },
+                    label = { Text(stringResource(Res.string.editor_computes)) },
+                    placeholder = { Text(stringResource(Res.string.editor_expression_placeholder)) },
                     textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                     isError = syntax != null,
                     modifier = Modifier.fillMaxWidth(),
@@ -233,15 +264,15 @@ internal fun FormulaEditorDialog(
                 }
                 ChipRow {
                     if (kind == TargetKind.Cell) {
-                        AssistChip(onClick = { insert(rowsAboveTotal(grid.rows)) }, label = { Text("Rows above") })
+                        AssistChip(onClick = { insert(rowsAboveTotal(grid.rows)) }, label = { Text(stringResource(Res.string.editor_rows_above)) })
                     }
                     for ((label, function) in FUNCTIONS) {
                         AssistChip(onClick = { insert("$function()", cursorBack = 1) }, label = { Text(label) })
                     }
                 }
-                Text("Decimals", style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(Res.string.editor_decimals), style = MaterialTheme.typography.labelLarge)
                 ChipRow {
-                    FilterChip(selected = decimals == null, onClick = { decimals = null }, label = { Text("As computed") })
+                    FilterChip(selected = decimals == null, onClick = { decimals = null }, label = { Text(stringResource(Res.string.editor_as_computed)) })
                     for (d in 0..3) FilterChip(selected = decimals == d, onClick = { decimals = d }, label = { Text("$d") })
                 }
                 if (expression.text.isNotBlank()) {
@@ -256,10 +287,10 @@ internal fun FormulaEditorDialog(
         },
         confirmButton = {
             TextButton(onClick = { onSave(formula) }, enabled = expression.text.isNotBlank() && target.isNotEmpty() && syntax == null) {
-                Text("Done")
+                Text(stringResource(Res.string.editor_done))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
 }
 
@@ -286,12 +317,12 @@ private fun Preview(grid: TableGrid, index: Int?, formula: String) {
                     .sortedWith(compareBy({ it.line }, { it.column }))
                     .map { result.rows[it.line]!![it.column] }
                 val shown = values.take(PREVIEWED).joinToString(", ") + if (values.size > PREVIEWED) ", …" else ""
-                "Gives $shown" to null
+                shown to null
             }
         }
     }
     if (problem != null) Text(problem, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-    if (text != null) Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+    if (text != null) Text(stringResource(Res.string.editor_gives, text), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
 }
 
 @Composable
@@ -303,7 +334,7 @@ private fun ChipRow(content: @Composable () -> Unit) {
 private fun <T> Picker(label: String, shown: String, options: List<Pair<T, String>>, onPick: (T) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick = { open = true }) { Text("$label: $shown", maxLines = 1) }
+        OutlinedButton(onClick = { open = true }) { Text(stringResource(Res.string.editor_picker, label, shown), maxLines = 1) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             for ((value, text) in options) {
                 DropdownMenuItem(text = { Text(text) }, onClick = { open = false; onPick(value) })

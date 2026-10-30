@@ -13,6 +13,9 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.notes_folder_unreachable
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The notes folder's state, for the top bar: nothing while it can be read and written, which is
@@ -25,7 +28,7 @@ import androidx.compose.runtime.Composable
 @Composable
 fun FolderStatusIcon(unreachable: String?, onRetry: () -> Unit) {
     if (unreachable == null) return
-    val description = "Cannot use the notes folder: $unreachable Edits are kept until it can be used again."
+    val description = stringResource(Res.string.notes_folder_unreachable, unreachable)
     TooltipBox(
         positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
         tooltip = { PlainTooltip { Text(description) } },

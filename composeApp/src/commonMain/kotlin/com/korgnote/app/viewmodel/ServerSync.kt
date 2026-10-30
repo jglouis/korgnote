@@ -9,6 +9,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.korgnote.common.replica.SyncEngine
 import com.korgnote.common.replica.SyncReport
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.vm_server_conflict
+import korgnote.composeapp.generated.resources.vm_server_unreachable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -18,6 +21,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import org.jetbrains.compose.resources.getString
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -224,21 +228,17 @@ class ServerSync(
      * Says which notes just took the server's version, since the text on screen changes under the
      * reader. True when there was something to say.
      */
-    private fun reportConflicts(report: SyncReport): Boolean {
+    private suspend fun reportConflicts(report: SyncReport): Boolean {
         if (report.conflicted.isEmpty()) return false
-        val names = report.conflicted.joinToString(", ")
-        showMessage(
-            "$names also changed on the server. The server's version is kept; yours is " +
-                "saved beside it as a .sync-conflict- copy."
-        )
+        showMessage(getString(Res.string.vm_server_conflict, report.conflicted.joinToString(", ")))
         return true
     }
 
-    private fun reason(t: Throwable): String {
+    private suspend fun reason(t: Throwable): String {
         // Reached, and refused: what to do about it is not checking the connection.
         if (t is NotPairedException || t is WebDavRefusedException || t is WebDavException) return t.message.orEmpty()
         val msg = t.message ?: ""
         val simple = t::class.simpleName ?: "Error"
-        return "Cannot reach the server. Please check Settings and your connection. ($simple: $msg)"
+        return getString(Res.string.vm_server_unreachable, simple, msg)
     }
 }

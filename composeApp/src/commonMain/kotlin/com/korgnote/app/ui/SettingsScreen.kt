@@ -8,21 +8,35 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -36,6 +50,8 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.DevicePairing
@@ -49,13 +65,58 @@ import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.files.FileLinkMapping
 import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.common.fs.NotePaths
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.author
+import korgnote.composeapp.generated.resources.cancel
+import korgnote.composeapp.generated.resources.ok
+import korgnote.composeapp.generated.resources.save
+import korgnote.composeapp.generated.resources.saved
+import korgnote.composeapp.generated.resources.settings
+import korgnote.composeapp.generated.resources.settings_allow_notifications
+import korgnote.composeapp.generated.resources.settings_at_time
+import korgnote.composeapp.generated.resources.settings_change_notes_source
+import korgnote.composeapp.generated.resources.settings_digest
+import korgnote.composeapp.generated.resources.settings_digest_at
+import korgnote.composeapp.generated.resources.settings_dailies_folder
+import korgnote.composeapp.generated.resources.settings_error_daily_folder
+import korgnote.composeapp.generated.resources.settings_error_folder
+import korgnote.composeapp.generated.resources.settings_error_host_port
+import korgnote.composeapp.generated.resources.settings_error_minutes
+import korgnote.composeapp.generated.resources.settings_extra_header
+import korgnote.composeapp.generated.resources.settings_file_links
+import korgnote.composeapp.generated.resources.settings_file_links_subtitle
+import korgnote.composeapp.generated.resources.settings_header_note
+import korgnote.composeapp.generated.resources.settings_host
+import korgnote.composeapp.generated.resources.settings_local_server
+import korgnote.composeapp.generated.resources.settings_local_server_this_page
+import korgnote.composeapp.generated.resources.settings_local_server_when_unpaired
+import korgnote.composeapp.generated.resources.settings_minutes_before
+import korgnote.composeapp.generated.resources.settings_new_notes
+import korgnote.composeapp.generated.resources.settings_new_notes_folder
+import korgnote.composeapp.generated.resources.settings_new_notes_subtitle
+import korgnote.composeapp.generated.resources.settings_notes
+import korgnote.composeapp.generated.resources.settings_notes_in_folder
+import korgnote.composeapp.generated.resources.settings_notes_on_server
+import korgnote.composeapp.generated.resources.settings_notes_on_webdav
+import korgnote.composeapp.generated.resources.settings_notes_on_webdav_account
+import korgnote.composeapp.generated.resources.settings_notifications_blocked
+import korgnote.composeapp.generated.resources.settings_port
+import korgnote.composeapp.generated.resources.settings_remind_before
+import korgnote.composeapp.generated.resources.settings_reminders
+import korgnote.composeapp.generated.resources.settings_reminders_subtitle
+import korgnote.composeapp.generated.resources.settings_server
+import korgnote.composeapp.generated.resources.settings_server_subtitle
+import korgnote.composeapp.generated.resources.settings_tag_colours
+import korgnote.composeapp.generated.resources.settings_tag_colours_subtitle
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalTime
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * The app's settings, saved together. The save button shows only once something has changed, and
- * stays at the bottom of the screen however far down the change was.
+ * The app's settings, in sections, saved together. The save button shows only once something has
+ * changed, and stays at the bottom of the screen however far down the change was.
  *
  * Scrolls itself, so that the button can stay put: the screen hosting it must not scroll.
  */
@@ -78,7 +139,7 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     var host by remember { mutableStateOf("") }
     var portText by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<StringResource?>(null) }
     var saving by remember { mutableStateOf(false) }
     var saved by remember { mutableStateOf(false) }
     var remindersOn by remember { mutableStateOf(true) }
@@ -125,38 +186,38 @@ fun SettingsScreen(
         val state = rememberTimePickerState(initialHour = digestTime.hour, initialMinute = digestTime.minute, is24Hour = true)
         AlertDialog(
             onDismissRequest = { pickingDigestTime = false },
-            title = { Text("Morning digest at") },
+            title = { Text(stringResource(Res.string.settings_digest_at)) },
             text = { TimePicker(state = state) },
             confirmButton = {
                 TextButton(onClick = {
                     digestTime = LocalTime(state.hour, state.minute)
                     pickingDigestTime = false
-                }) { Text("OK") }
+                }) { Text(stringResource(Res.string.ok)) }
             },
-            dismissButton = { TextButton(onClick = { pickingDigestTime = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { pickingDigestTime = false }) { Text(stringResource(Res.string.cancel)) } },
         )
     }
 
     fun save() {
         val port = portText.toIntOrNull()
         if (usesLocalServer && (host.isBlank() || port == null || port !in 1..65535)) {
-            error = "Please enter a valid host and port (1-65535)."
+            error = Res.string.settings_error_host_port
             return
         }
         val lead = leadText.toIntOrNull()
         if (remindersOn && (lead == null || lead !in 0..1440)) {
-            error = "Please enter how many minutes before (0-1440)."
+            error = Res.string.settings_error_minutes
             return
         }
         val folder = newNotesFolder.trim().trim('/')
         // Checked as a note path would be, so a bad folder is refused here and not by the server.
         if (folder.isNotEmpty() && NotePaths.normalize("$folder/x.org") == null) {
-            error = "Please enter a folder inside the notes, like inbox or notes/inbox."
+            error = Res.string.settings_error_folder
             return
         }
         val daily = dailyFolder.trim().trim('/')
         if (daily.isNotEmpty() && NotePaths.normalize("$daily/x.org") == null) {
-            error = "Please enter a folder inside the notes for dailies, like daily."
+            error = Res.string.settings_error_daily_folder
             return
         }
         fileLinkMappingsError(fileLinks)?.let {
@@ -200,165 +261,190 @@ fun SettingsScreen(
     }
 
     Box(modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            // The server's settings and pairing are only for the server; a folder or a WebDAV
-            // server shows its state beside where the notes are.
-            val onServer = notesSource == NotesSource.Server
-            if (onChangeNotesSource != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Notes", modifier = Modifier.weight(1f))
-                    if (!onServer) serverStatus()
-                }
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            // A column of cards reads badly when stretched across a desktop window.
+            Column(Modifier.widthIn(max = 720.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
-                    when (notesSource) {
-                        is NotesSource.Folder -> "In the folder ${notesFolderLabel(notesSource.location)}."
-                        NotesSource.Server -> "Synced with the KorgNote server on your computer."
-                        NotesSource.WebDav -> repo.getWebDavAccount()
-                            ?.let { "Synced with the WebDAV folder ${it.url}, as ${it.username}. Experimental." }
-                            ?: "Synced with a WebDAV server. Experimental."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline,
+                    stringResource(Res.string.settings),
+                    style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp),
                 )
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = onChangeNotesSource) { Text("Change where notes are") }
-                if (onServer) Spacer(Modifier.height(24.dp))
-            }
-            // Whether the server can be reached, and what conflicts syncing left, next to its
-            // settings: there is no bar above them.
-            if (onServer) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Server", modifier = Modifier.weight(1f))
-                    serverStatus()
+
+                // The server's settings and pairing are only for the server; a folder or a WebDAV
+                // server shows its state beside where the notes are.
+                val onServer = notesSource == NotesSource.Server
+                if (onChangeNotesSource != null) {
+                    SettingsSection(
+                        icon = if (notesSource is NotesSource.Folder) Icons.Filled.Folder else Icons.Filled.Sync,
+                        title = stringResource(Res.string.settings_notes),
+                        subtitle = when (notesSource) {
+                            is NotesSource.Folder -> stringResource(Res.string.settings_notes_in_folder, notesFolderLabel(notesSource.location))
+                            NotesSource.Server -> stringResource(Res.string.settings_notes_on_server)
+                            NotesSource.WebDav -> repo.getWebDavAccount()
+                                ?.let { stringResource(Res.string.settings_notes_on_webdav_account, it.url, it.username) }
+                                ?: stringResource(Res.string.settings_notes_on_webdav)
+                        },
+                        trailing = { if (!onServer) serverStatus() },
+                    ) {
+                        OutlinedButton(onClick = onChangeNotesSource) { Text(stringResource(Res.string.settings_change_notes_source)) }
+                    }
                 }
-                Spacer(Modifier.height(8.dp))
-            }
-            if (canPair && onServer) {
-                val incomingLink by PairingLinks.pending.collectAsState()
-                PairingSettings(
-                    repo,
-                    pairing,
-                    onChanged = { onSaved?.invoke() },
-                    incomingLink = incomingLink,
-                    onIncomingLinkUsed = { PairingLinks.pending.value = null },
-                )
-            }
-
-            // Only where there is a computer of this device's own to run a server: not on a phone.
-            if (usesLocalServer) {
-                Spacer(Modifier.height(24.dp))
-                Text("Server on this computer")
-                Text(
-                    if (canPair) "Used when not paired." else "The server this page comes from.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline,
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = host,
-                    onValueChange = { host = it },
-                    label = { Text("Host (usually localhost)") },
-                    singleLine = true
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = portText,
-                    onValueChange = { portText = it.filter { ch -> ch.isDigit() } },
-                    label = { Text("Port") },
-                    singleLine = true
-                )
-            }
-
-            Spacer(Modifier.height(24.dp))
-            Text("Reminders")
-            Text(
-                "Notifications on this device, scheduled from the agenda. They work offline.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline,
-            )
-            Spacer(Modifier.height(8.dp))
-            // Turned down on the welcome screens, or never asked: this is where to change one's mind.
-            val notifications = rememberNotificationPermission()
-            if (notifications != null && !notifications.granted && (remindersOn || digestOn)) {
-                Text(
-                    "KorgNote may not show notifications, so reminders stay silent.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                OutlinedButton(onClick = { notifications.request { } }) { Text("Allow notifications") }
-                Spacer(Modifier.height(8.dp))
-            }
-            LabelledSwitch("Remind me before timed entries", remindersOn) { remindersOn = it }
-            if (remindersOn) {
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = leadText,
-                    onValueChange = { leadText = it.filter { ch -> ch.isDigit() }.take(4) },
-                    label = { Text("Minutes before") },
-                    singleLine = true,
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            LabelledSwitch("Morning digest of the day's agenda", digestOn) { digestOn = it }
-            if (digestOn) {
-                OutlinedButton(onClick = { pickingDigestTime = true }) {
-                    Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                    Text("At ${digestTime.hhmm()}")
+                // Whether the server can be reached, and what conflicts syncing left, next to its
+                // settings: there is no bar above them.
+                if (onServer && (canPair || usesLocalServer)) {
+                    SettingsSection(
+                        icon = Icons.Filled.Computer,
+                        title = stringResource(Res.string.settings_server),
+                        subtitle = stringResource(Res.string.settings_server_subtitle),
+                        trailing = serverStatus,
+                    ) {
+                        if (canPair) {
+                            val incomingLink by PairingLinks.pending.collectAsState()
+                            PairingSettings(
+                                repo,
+                                pairing,
+                                onChanged = { onSaved?.invoke() },
+                                incomingLink = incomingLink,
+                                onIncomingLinkUsed = { PairingLinks.pending.value = null },
+                            )
+                        }
+                        // Only where there is a computer of this device's own to run a server: not on a phone.
+                        if (usesLocalServer) {
+                            if (canPair) SectionDivider()
+                            Text(stringResource(Res.string.settings_local_server), style = MaterialTheme.typography.titleSmall)
+                            Hint(
+                                stringResource(
+                                    if (canPair) Res.string.settings_local_server_when_unpaired else Res.string.settings_local_server_this_page,
+                                ),
+                            )
+                            OutlinedTextField(
+                                modifier = Modifier.fillMaxWidth(),
+                                value = host,
+                                onValueChange = { host = it },
+                                label = { Text(stringResource(Res.string.settings_host)) },
+                                singleLine = true,
+                            )
+                            OutlinedTextField(
+                                modifier = Modifier.fillMaxWidth(),
+                                value = portText,
+                                onValueChange = { portText = it.filter { ch -> ch.isDigit() } },
+                                label = { Text(stringResource(Res.string.settings_port)) },
+                                singleLine = true,
+                            )
+                        }
+                    }
+                } else if (onServer) {
+                    // Nothing to set, but somewhere to see the server's state.
+                    SettingsSection(
+                        icon = Icons.Filled.Computer,
+                        title = stringResource(Res.string.settings_server),
+                        subtitle = stringResource(Res.string.settings_server_subtitle),
+                        trailing = serverStatus,
+                    ) {}
                 }
+
+                SettingsSection(
+                    icon = Icons.Filled.Notifications,
+                    title = stringResource(Res.string.settings_reminders),
+                    subtitle = stringResource(Res.string.settings_reminders_subtitle),
+                ) {
+                    // Turned down on the welcome screens, or never asked: this is where to change one's mind.
+                    val notifications = rememberNotificationPermission()
+                    if (notifications != null && !notifications.granted && (remindersOn || digestOn)) {
+                        Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    stringResource(Res.string.settings_notifications_blocked),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                                OutlinedButton(onClick = { notifications.request { } }) {
+                                    Text(stringResource(Res.string.settings_allow_notifications))
+                                }
+                            }
+                        }
+                    }
+                    SwitchRow(stringResource(Res.string.settings_remind_before), remindersOn) { remindersOn = it }
+                    if (remindersOn) {
+                        OutlinedTextField(
+                            modifier = Modifier.fillMaxWidth(),
+                            value = leadText,
+                            onValueChange = { leadText = it.filter { ch -> ch.isDigit() }.take(4) },
+                            label = { Text(stringResource(Res.string.settings_minutes_before)) },
+                            singleLine = true,
+                        )
+                    }
+                    SwitchRow(stringResource(Res.string.settings_digest), digestOn) { digestOn = it }
+                    if (digestOn) {
+                        OutlinedButton(onClick = { pickingDigestTime = true }) {
+                            Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                            Text(stringResource(Res.string.settings_at_time, digestTime.hhmm()))
+                        }
+                    }
+                }
+
+                SettingsSection(
+                    icon = Icons.Filled.EditNote,
+                    title = stringResource(Res.string.settings_new_notes),
+                    subtitle = stringResource(Res.string.settings_new_notes_subtitle),
+                ) {
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = newNotesFolder,
+                        onValueChange = { newNotesFolder = it },
+                        label = { Text(stringResource(Res.string.settings_new_notes_folder)) },
+                        placeholder = { Text("inbox") },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = dailyFolder,
+                        onValueChange = { dailyFolder = it },
+                        label = { Text(stringResource(Res.string.settings_dailies_folder)) },
+                        placeholder = { Text(NoteTemplateSettings.DEFAULT_DAILY_FOLDER) },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = author,
+                        onValueChange = { author = it },
+                        label = { Text(stringResource(Res.string.author)) },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = extraHeader,
+                        onValueChange = { extraHeader = it },
+                        label = { Text(stringResource(Res.string.settings_extra_header)) },
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                        minLines = 2,
+                    )
+                    Hint(stringResource(Res.string.settings_header_note))
+                }
+
+                SettingsSection(
+                    icon = Icons.Filled.Palette,
+                    title = stringResource(Res.string.settings_tag_colours),
+                    subtitle = stringResource(Res.string.settings_tag_colours_subtitle),
+                ) {
+                    TagColorSettings(knownTags, tagColors) { tagColors = it }
+                }
+
+                SettingsSection(
+                    icon = Icons.Filled.Link,
+                    title = stringResource(Res.string.settings_file_links),
+                    subtitle = stringResource(Res.string.settings_file_links_subtitle),
+                ) {
+                    FileLinkSettings(fileLinks) { fileLinks = it }
+                }
+                // Room to scroll the last field out from under the button.
+                Spacer(Modifier.height(80.dp))
             }
-
-            Spacer(Modifier.height(24.dp))
-            Text("New notes")
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = newNotesFolder,
-                onValueChange = { newNotesFolder = it },
-                label = { Text("Folder for new notes (empty for the top)") },
-                placeholder = { Text("inbox") },
-                singleLine = true,
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = dailyFolder,
-                onValueChange = { dailyFolder = it },
-                label = { Text("Folder for dailies (empty for the top)") },
-                placeholder = { Text(NoteTemplateSettings.DEFAULT_DAILY_FOLDER) },
-                singleLine = true,
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = author,
-                onValueChange = { author = it },
-                label = { Text("Author") },
-                singleLine = true,
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
-                value = extraHeader,
-                onValueChange = { extraHeader = it },
-                label = { Text("Extra header lines, such as #+TODO:") },
-                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                minLines = 2,
-            )
-            Text(
-                "Each new note and daily also gets its own :ID:, #+TITLE:, #+DATE: and your tags.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline,
-            )
-
-            Spacer(Modifier.height(24.dp))
-            TagColorSettings(knownTags, tagColors) { tagColors = it }
-
-            Spacer(Modifier.height(24.dp))
-            FileLinkSettings(fileLinks) { fileLinks = it }
-            // Room to scroll the last field out from under the button.
-            Spacer(Modifier.height(96.dp))
         }
         Column(
             modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
@@ -367,24 +453,78 @@ fun SettingsScreen(
         ) {
             error?.let {
                 Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
-                    Text(it, color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.padding(12.dp))
+                    Text(stringResource(it), color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.padding(12.dp))
                 }
             }
             AnimatedVisibility(visible = changed || saved, enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut()) {
                 ExtendedFloatingActionButton(
                     onClick = { if (!saving) save() },
                     icon = { Icon(if (saved) Icons.Filled.Check else Icons.Filled.Save, contentDescription = null) },
-                    text = { Text(if (saved) "Saved" else "Save") },
+                    text = { Text(stringResource(if (saved) Res.string.saved else Res.string.save)) },
                 )
             }
         }
     }
 }
 
+/**
+ * One section of Settings: a card with an icon, a title and what the section is for, then its
+ * fields. [trailing] sits at the title's end, for a state such as the server's.
+ */
 @Composable
-private fun LabelledSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onChange)
+private fun SettingsSection(
+    icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+    trailing: @Composable () -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = CircleShape, modifier = Modifier.size(40.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                }
+                Spacer(Modifier.width(16.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium)
+                    subtitle?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                trailing()
+            }
+            content()
+        }
     }
 }
+
+/** A setting turned on and off: the whole row toggles it, not only the switch. */
+@Composable
+private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onChange)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, modifier = Modifier.weight(1f).padding(end = 16.dp), style = MaterialTheme.typography.bodyLarge)
+        Switch(checked = checked, onCheckedChange = null)
+    }
+}
+
+/** A line under a setting saying more about it. */
+@Composable
+private fun Hint(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun SectionDivider() = HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

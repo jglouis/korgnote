@@ -1,5 +1,6 @@
 package com.korgnote.app.widget
 
+import android.appwidget.AppWidgetManager
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
@@ -12,11 +13,14 @@ import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.appwidget.compose
 import androidx.glance.appwidget.cornerRadius
+import androidx.glance.appwidget.state.getAppWidgetState
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.background
@@ -30,6 +34,7 @@ import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
+import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
@@ -42,6 +47,7 @@ import com.korgnote.app.widgets.widgetAgenda
 import com.korgnote.app.widgets.widgetCount
 import com.korgnote.common.org.agenda.AgendaIndex
 import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
@@ -63,6 +69,12 @@ class CalendarWidget : GlanceAppWidget() {
         }
     }
 
+    /** The widget picker's picture of it, on a few made-up entries. */
+    override suspend fun providePreview(context: Context, widgetCategory: Int) {
+        val state = WidgetState.preview(context)
+        provideContent { GlanceTheme { CalendarContent(context, state, state.now.date) } }
+    }
+
     companion object {
         internal val SHOWN_MONTH = stringPreferencesKey("shownMonth")
     }
@@ -72,14 +84,24 @@ class CalendarWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = CalendarWidget()
 }
 
-/** The arrows and Today: shows another month in the one widget they were tapped on. */
+/**
+ * The arrows and Today: shows another month in the one widget they were tapped on.
+ *
+ * Drawn here and now, and handed to the launcher straight away. Glance redraws a widget from a
+ * WorkManager job, which a phone may put off for a long while when the app has not been opened
+ * lately — and a tap that seems to do nothing is a broken button. The job is asked for all the
+ * same, so that a session still open goes on from the new month rather than the old one.
+ */
 class ShowMonth : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val month = parameters[MONTH]
         updateAppWidgetState(context, glanceId) { prefs ->
             if (month.isNullOrEmpty()) prefs.remove(CalendarWidget.SHOWN_MONTH) else prefs[CalendarWidget.SHOWN_MONTH] = month
         }
-        CalendarWidget().update(context, glanceId)
+        val widget = CalendarWidget()
+        runCatching { widget.drawNow(context, glanceId) }
+            .onFailure { println("[DEBUG_LOG][CalendarWidget] Drawing the month at once failed: ${it.message}") }
+        widget.update(context, glanceId)
     }
 
     companion object {
@@ -91,27 +113,39 @@ class ShowMonth : ActionCallback {
     }
 }
 
+/**
+ * Draws [glanceId]'s widget as it now stands and hands it to the launcher, without the session a
+ * Glance update waits for. Only for a widget with no list in it: a list's rows need the session.
+ */
+private suspend fun GlanceAppWidget.drawNow(context: Context, glanceId: GlanceId) {
+    val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(glanceId)
+    val launcher = AppWidgetManager.getInstance(context)
+    val state = getAppWidgetState(context, PreferencesGlanceStateDefinition, glanceId)
+    val views = compose(context, glanceId, options = launcher.getAppWidgetOptions(appWidgetId), state = state)
+    launcher.updateAppWidget(appWidgetId, views)
+}
+
 @Composable
 private fun CalendarContent(context: Context, state: WidgetState, shown: LocalDate) {
     val today = state.now.date
     val thisMonth = shown.year == today.year && shown.month == today.month
     val agenda = state.entries?.let { widgetAgenda(it, today) }
+    val words = AndroidWidgetWords(context)
     WidgetFrame {
         WidgetHeader {
-            WidgetIcon(R.drawable.ic_widget_previous, "Previous month", ShowMonth.to(shown.minus(1, DateTimeUnit.MONTH)))
+            WidgetIcon(
+                R.drawable.ic_widget_previous,
+                context.getString(R.string.widget_previous_month),
+                ShowMonth.to(shown.minus(1, DateTimeUnit.MONTH)),
+            )
             WidgetTitle(
-                monthTitle(shown),
+                monthTitle(shown, words),
                 actionStartActivity(WidgetIntents.openCalendar(context, CalendarMode.Month, if (thisMonth) today else shown)),
                 GlanceModifier.defaultWeight().padding(horizontal = 4.dp),
             )
-            if (!thisMonth) {
-                Text(
-                    "Today",
-                    GlanceModifier.padding(horizontal = 6.dp).clickable(ShowMonth.to(null)),
-                    style = TextStyle(color = GlanceTheme.colors.primary, fontSize = 13.sp, fontWeight = FontWeight.Bold),
-                )
-            }
-            WidgetIcon(R.drawable.ic_widget_next, "Next month", ShowMonth.to(shown.plus(1, DateTimeUnit.MONTH)))
+            // An icon rather than the word, which left the month's name no room.
+            if (!thisMonth) WidgetIcon(R.drawable.ic_widget_today, context.getString(R.string.widget_this_month), ShowMonth.to(null))
+            WidgetIcon(R.drawable.ic_widget_next, context.getString(R.string.widget_next_month), ShowMonth.to(shown.plus(1, DateTimeUnit.MONTH)))
             SyncButton()
         }
         StatusLine(state)
@@ -119,7 +153,7 @@ private fun CalendarContent(context: Context, state: WidgetState, shown: LocalDa
             NotLoadedYet(context)
         } else {
             Row(GlanceModifier.fillMaxWidth()) {
-                for (day in listOf("M", "T", "W", "T", "F", "S", "S")) {
+                for (day in DayOfWeek.entries.map { words.weekdayShort(it).take(1).uppercase() }) {
                     Text(
                         day,
                         GlanceModifier.defaultWeight(),

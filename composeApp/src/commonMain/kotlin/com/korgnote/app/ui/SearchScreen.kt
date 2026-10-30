@@ -38,6 +38,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.search.SearchHit
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.notes_remove_saved_search
+import korgnote.composeapp.generated.resources.notes_save_search
+import korgnote.composeapp.generated.resources.notes_saved_searches
+import korgnote.composeapp.generated.resources.notes_search_hint
+import korgnote.composeapp.generated.resources.notes_search_label
+import korgnote.composeapp.generated.resources.notes_search_nothing
+import korgnote.composeapp.generated.resources.notes_search_placeholder
+import korgnote.composeapp.generated.resources.notes_search_results
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Search across every note in the replica.
@@ -70,23 +81,23 @@ fun SearchScreen(
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (onShowSaved != null) {
                 IconButton(onClick = onShowSaved) {
-                    Icon(Icons.Filled.Bookmarks, contentDescription = "Saved searches")
+                    Icon(Icons.Filled.Bookmarks, contentDescription = stringResource(Res.string.notes_saved_searches))
                 }
             }
             OutlinedTextField(
                 value = query,
                 onValueChange = onQueryChange,
                 modifier = Modifier.weight(1f).focusRequester(focus),
-                label = { Text("Search notes") },
-                placeholder = { Text("words, or tag:work") },
+                label = { Text(stringResource(Res.string.notes_search_label)) },
+                placeholder = { Text(stringResource(Res.string.notes_search_placeholder)) },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 trailingIcon = if (onToggleSaved != null && query.isNotBlank()) {
                     {
                         IconButton(onClick = onToggleSaved) {
                             if (saved) {
-                                Icon(Icons.Filled.Bookmark, contentDescription = "Remove saved search")
+                                Icon(Icons.Filled.Bookmark, contentDescription = stringResource(Res.string.notes_remove_saved_search))
                             } else {
-                                Icon(Icons.Filled.BookmarkBorder, contentDescription = "Save search")
+                                Icon(Icons.Filled.BookmarkBorder, contentDescription = stringResource(Res.string.notes_save_search))
                             }
                         }
                     }
@@ -100,19 +111,13 @@ fun SearchScreen(
         Spacer(Modifier.height(8.dp))
 
         when {
-            query.isBlank() -> Hint(
-                "Type to search every note. Words match anywhere — body text, headings and file " +
-                    "names. `tag:work` keeps only headings carrying that tag, and tags are " +
-                    "inherited, so a tag on a parent heading counts for everything under it. " +
-                    "Quote a phrase to search for it whole. The bookmark in the field keeps a " +
-                    "search to run again from the saved searches."
-            )
+            query.isBlank() -> Hint(stringResource(Res.string.notes_search_hint))
 
-            results.isEmpty() -> Hint("Nothing matched \"$query\".")
+            results.isEmpty() -> Hint(stringResource(Res.string.notes_search_nothing, query))
 
             else -> {
                 Text(
-                    text = if (results.size == 1) "1 result" else "${results.size} results",
+                    text = pluralStringResource(Res.plurals.notes_search_results, results.size, results.size),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.outline,
                 )

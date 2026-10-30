@@ -1,13 +1,23 @@
 package com.korgnote.app.notifications
 
 import com.korgnote.app.ui.buildOrgInlineString
+import com.korgnote.app.ui.capitalised
 import com.korgnote.app.ui.hhmm
+import com.korgnote.app.ui.monthNames
 import com.korgnote.app.ui.timeLabel
+import com.korgnote.app.ui.weekdayNames
 import com.korgnote.common.org.agenda.*
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.cal_kind_deadline
+import korgnote.composeapp.generated.resources.cal_kind_scheduled
+import korgnote.composeapp.generated.resources.remind_all_day
+import korgnote.composeapp.generated.resources.remind_entries
+import korgnote.composeapp.generated.resources.remind_one_entry
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.datetime.*
 import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.minutes
+import org.jetbrains.compose.resources.getString
 
 /*
  * Local reminders from the agenda (T18): worked out here, the same on every platform, and handed
@@ -77,6 +87,36 @@ data class Reminder(
 @Serializable
 data class ReminderLine(val lead: String, val text: String)
 
+/**
+ * The words reminders are written in: English unless loaded by [reminderWords] in the language the
+ * app is shown in. [entries] is a count of two or more, as `%1$d entries`.
+ */
+data class ReminderWords(
+    val deadline: String = "Deadline",
+    val scheduled: String = "Scheduled",
+    val allDay: String = "All day",
+    val oneEntry: String = "1 entry",
+    val entries: String = "%1\$d entries",
+    /** Monday first. */
+    val weekdays: List<String> = DayOfWeek.entries.map { it.name.lowercase().capitalised() },
+    /** January first. */
+    val months: List<String> = Month.entries.map { it.name.lowercase().capitalised() },
+) {
+    internal fun count(entries: Int): String =
+        if (entries == 1) oneEntry else this.entries.replace("%1\$d", entries.toString())
+}
+
+/** [ReminderWords] in the language the app is shown in. */
+suspend fun reminderWords(): ReminderWords = ReminderWords(
+    deadline = getString(Res.string.cal_kind_deadline),
+    scheduled = getString(Res.string.cal_kind_scheduled),
+    allDay = getString(Res.string.remind_all_day),
+    oneEntry = getString(Res.string.remind_one_entry),
+    entries = getString(Res.string.remind_entries),
+    weekdays = weekdayNames(),
+    months = monthNames(),
+)
+
 /** How far ahead reminders are planned; the next time the app runs moves the window on. */
 const val REMINDER_HORIZON_DAYS = 14
 
@@ -94,7 +134,12 @@ const val MAX_REMINDERS = 60
  * Soonest first matters for the cap: when there are more than fit, it is next month's that wait for
  * a later run, not tomorrow's.
  */
-fun planReminders(entries: List<AgendaEntry>, now: LocalDateTime, settings: ReminderSettings): List<Reminder> {
+fun planReminders(
+    entries: List<AgendaEntry>,
+    now: LocalDateTime,
+    settings: ReminderSettings,
+    words: ReminderWords = ReminderWords(),
+): List<Reminder> {
     val today = now.date
     val last = today.plus(REMINDER_HORIZON_DAYS, DateTimeUnit.DAY)
     // Nothing is carried over: a reminder is for something that is about to happen, and what is
@@ -114,7 +159,7 @@ fun planReminders(entries: List<AgendaEntry>, now: LocalDateTime, settings: Remi
                 id = "entry:${occurrence.entry.file}:${occurrence.entry.stamp.range.first}:${occurrence.date}",
                 at = at,
                 title = occurrence.entry.plainHeadline(),
-                body = listOfNotNull(occurrence.timeLabel(), occurrence.entry.kind.word(), occurrence.entry.file)
+                body = listOfNotNull(occurrence.timeLabel(), occurrence.entry.kind.word(words), occurrence.entry.file)
                     .joinToString(" · "),
                 file = occurrence.entry.file,
                 offset = occurrence.entry.headingOffset,
@@ -125,14 +170,14 @@ fun planReminders(entries: List<AgendaEntry>, now: LocalDateTime, settings: Remi
         for ((date, onDay) in occurrences.groupBy { it.date }) {
             val at = LocalDateTime(date, settings.digestTime)
             if (at <= now) continue
-            val lines = onDay.map { it.digestLine() }
+            val lines = onDay.map { it.digestLine(words) }
             reminders += Reminder(
                 id = "digest:$date",
                 at = at,
-                title = date.digestTitle(),
+                title = date.digestTitle(words),
                 body = lines.joinToString("\n") { "${it.lead} · ${it.text}" },
                 lines = lines,
-                summary = if (onDay.size == 1) "1 entry" else "${onDay.size} entries",
+                summary = words.count(onDay.size),
             )
         }
     }
@@ -143,20 +188,19 @@ fun planReminders(entries: List<AgendaEntry>, now: LocalDateTime, settings: Remi
 private fun AgendaEntry.plainHeadline(): String =
     listOfNotNull(todo, buildOrgInlineString(title, viewMode = true).text).joinToString(" ")
 
-private fun AgendaKind.word(): String? = when (this) {
-    AgendaKind.Deadline -> "Deadline"
-    AgendaKind.Scheduled -> "Scheduled"
+private fun AgendaKind.word(words: ReminderWords): String? = when (this) {
+    AgendaKind.Deadline -> words.deadline
+    AgendaKind.Scheduled -> words.scheduled
     AgendaKind.Timestamp, AgendaKind.Closed -> null
 }
 
-private fun AgendaOccurrence.digestLine(): ReminderLine =
-    ReminderLine(lead = timeLabel() ?: entry.kind.word() ?: "All day", text = entry.plainHeadline())
+private fun AgendaOccurrence.digestLine(words: ReminderWords): ReminderLine =
+    ReminderLine(lead = timeLabel() ?: entry.kind.word(words) ?: words.allDay, text = entry.plainHeadline())
 
-/** "Thursday 24 September": the morning the digest is for, as a heading. */
-private fun LocalDate.digestTitle(): String {
-    fun String.word() = lowercase().replaceFirstChar { it.titlecase() }
-    return "${dayOfWeek.name.word()} $day ${month.name.word()}"
-}
+/** "Thursday 24 September", "Jeudi 24 septembre": the morning the digest is for, as a heading. */
+private fun LocalDate.digestTitle(words: ReminderWords): String =
+    "${words.weekdays[dayOfWeek.ordinal].capitalised()} $day ${words.months[month.ordinal]}"
+
 
 /** Wall-clock arithmetic, in UTC so that no daylight-saving jump moves the result. */
 private fun LocalDateTime.minusMinutes(minutes: Int): LocalDateTime =

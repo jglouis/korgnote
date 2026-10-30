@@ -1,0 +1,79 @@
+<resources>
+    <!-- Messages from the view models: the message line, and what an open note says. -->
+    <string name="vm_edit_conflict">This part of the note also changed elsewhere while you were editing it; nothing was written.</string>
+    <string name="vm_finish_editing_first">Save or discard the element you are editing first.</string>
+    <string name="vm_table_changed">The note changed while the table was open, so the table was not saved.</string>
+    <string name="vm_note_title_needed">A note needs a title with at least one letter or digit.</string>
+    <string name="vm_note_exists">There is already a note called %1$s.</string>
+    <string name="vm_not_a_note_path">"%1$s" is not a note path: use folders and a name, like notes/idea.org.</string>
+    <string name="vm_link_search_missed">"%1$s" is not in %2$s any more; opened the note instead.</string>
+    <string name="vm_link_not_found">Nothing in the notes matches [[%1$s]].</string>
+    <string name="vm_link_open_in_browser">Open %1$s in a browser.</string>
+    <string name="vm_link_no_app">Nothing on this device opens %1$s.</string>
+    <string name="vm_link_file_beside_notes">[[%1$s]] is a file kept beside the notes, and only notes are synced to this device.</string>
+    <string name="vm_link_kbd">A kbd: link names keys to press in Emacs; it does not lead anywhere.</string>
+    <string name="vm_link_emacs_only">[[%1$s]] is a %2$s: link, which only Emacs can follow.</string>
+    <string name="vm_file_link_unsupported_target">[[%1$s]] is not a file this app can open.</string>
+    <string name="vm_file_not_on_device">%1$s is not on this device. If it is somewhere else here, say where in Settings, under File links.</string>
+    <string name="vm_file_not_in_mapped_folder">%1$s is not on this device, in the folder set for %2$s.</string>
+    <string name="vm_file_no_app">No app on this device opens %1$s.</string>
+    <string name="vm_file_needs_mapping">No folder on this device is set for %1$s. Choose one in Settings, under File links.</string>
+    <string name="vm_file_links_unsupported">Files cannot be opened from links on this device.</string>
+    <string name="vm_folder_conflict">%1$s changed in the folder while you were editing it. That version is kept; yours is saved beside it as a .sync-conflict- copy.</string>
+    <string name="vm_server_conflict">%1$s also changed on the server. The server's version is kept; yours is saved beside it as a .sync-conflict- copy.</string>
+    <string name="vm_server_unreachable">Cannot reach the server. Please check Settings and your connection. (%1$s: %2$s)</string>
+
+    <!-- Pairing with the KorgNote server, and what its API says. -->
+    <string name="data_not_paired">This device is not paired with a computer yet. Pair it in Settings.</string>
+    <string name="data_pairing_revoked">The computer no longer knows this device. Pair it again in Settings.</string>
+    <string name="data_pairing_server_said">The server said %1$s.</string>
+    <string name="data_pairing_unreachable">Could not reach %1$s at %2$s, or it did not show the certificate the code names. Is this device on the same network, and is the code from this computer's Devices page?</string>
+    <string name="data_pairing_unreachable_unnamed">Could not reach the computer at %1$s, or it did not show the certificate the code names. Is this device on the same network, and is the code from this computer's Devices page?</string>
+    <string name="data_pairing_scan_prompt">The pairing code on the computer's Devices page</string>
+    <string name="data_device_name_desktop">Desktop</string>
+    <string name="data_device_name_web">Web browser</string>
+    <!-- Between the last two of several choices: "10.0.0.5 or 192.168.1.20". -->
+    <string name="data_or">or</string>
+
+    <!-- WebDAV. -->
+    <string name="data_webdav_not_set_up">No WebDAV server is set up yet. Set one up in Settings.</string>
+    <string name="data_webdav_no_folder">There is no folder at %1$s.</string>
+    <string name="data_webdav_list_failed">The WebDAV server answered %1$s when listing %2$s.</string>
+    <string name="data_webdav_list_failed_top">The WebDAV server answered %1$s when listing the notes folder.</string>
+    <string name="data_webdav_listed_without_etag">The WebDAV server lists %1$s without an etag.</string>
+    <string name="data_webdav_sent_without_etag">The WebDAV server sent %1$s without an etag.</string>
+    <string name="data_webdav_not_a_folder">This address is not a WebDAV folder.</string>
+    <string name="data_webdav_unreachable">Cannot reach the server: %1$s</string>
+    <string name="data_webdav_unsafe">KorgNote cannot sync with it safely: edits made on two devices could overwrite each other.</string>
+    <string name="data_webdav_cannot_write">KorgNote cannot write in this folder (%1$s).</string>
+    <string name="data_webdav_ignores_if_none_match">The server ignores If-None-Match. %1$s</string>
+    <string name="data_webdav_ignores_if_match">The server ignores If-Match. %1$s</string>
+    <string name="data_webdav_lost_file">The server lost a file it just wrote.</string>
+    <string name="data_webdav_etag_mismatch">The server gives a file one etag when listed and another when read (%1$s, %2$s). %3$s</string>
+    <string name="data_webdav_refuses_own_etag">The server refuses a write over the file's own etag (%1$s).</string>
+    <string name="data_webdav_ignores_if_match_delete">The server ignores If-Match when deleting. %1$s</string>
+    <string name="data_webdav_wrong_password">The WebDAV server refused the user name or password. Check them in Settings.</string>
+    <string name="data_webdav_sign_in_windows">Windows sign-in (NTLM or Kerberos)</string>
+    <string name="data_webdav_sign_in_token">a token (OAuth)</string>
+    <string name="data_webdav_unsupported_sign_in">The WebDAV server asks to sign in with %1$s, which KorgNote cannot do yet: it signs in with a user name and password (Basic sign-in) only.</string>
+
+    <!-- Folders and files on this device. -->
+    <string name="files_folder_access_lost">KorgNote may no longer use it. Choose it again in Settings, under Notes.</string>
+    <string name="files_folder_missing">The folder cannot be found any more. Choose it again in Settings, under Notes.</string>
+    <string name="files_folder_cannot_read">KorgNote cannot read the folder. Choose it again in Settings, under Notes.</string>
+    <string name="files_folder_unreadable">The folder cannot be read.</string>
+    <string name="files_folder_no_path">The folder has no path.</string>
+    <string name="files_cannot_write">%1$s cannot be written.</string>
+    <string name="files_written_not_found">%1$s was written but cannot be found.</string>
+    <string name="files_cannot_create">%1$s cannot be created.</string>
+    <string name="files_chosen_folder">The chosen folder</string>
+    <string name="files_internal_storage">Internal storage</string>
+    <string name="files_places_android">Sync it with Syncthing, or with Dropbox and others through an app like FolderSync. Or not at all.</string>
+    <string name="files_picking_hint_android">Choose the folder your .org files are in, or an empty one to start. Android then asks you to let KorgNote use it.\n\nAndroid does not let apps use Download itself, or the top of the storage: choose or make a folder inside them.</string>
+    <string name="files_places_ios">On this iPhone, in iCloud Drive, or in Dropbox and other apps that show in Files.</string>
+    <string name="files_picking_hint_ios">Choose the folder your .org files are in, or an empty one to start. KorgNote then uses what is in that folder, and nothing else.</string>
+    <string name="files_link_access_lost">KorgNote may no longer read the folder for this link. Choose it again in Settings, under File links.</string>
+    <string name="files_pick_needs_mapping">Set the folder this file is in under File links, in Settings, then choose it again.</string>
+    <string name="files_pick_outside_mapping">That file is not in a folder set under File links. Choose it from inside %1$s, not from Recent or Downloads.</string>
+    <string name="files_link_picker_title">Link to a file</string>
+</resources>

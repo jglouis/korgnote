@@ -26,6 +26,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.viewmodel.pinLabels
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.notes_pinned
+import korgnote.composeapp.generated.resources.notes_unpin
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The pinned notes, one row each, for the top of the drawer: a tap opens the note, a long-press
@@ -63,7 +67,7 @@ private fun PinnedNoteRow(
                 .fillMaxWidth()
                 .combinedClickable(
                     onClick = { onOpen(path) },
-                    onLongClickLabel = "Unpin",
+                    onLongClickLabel = stringResource(Res.string.notes_unpin),
                     onLongClick = { menuOpen = true },
                 )
                 .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -71,7 +75,7 @@ private fun PinnedNoteRow(
         ) {
             Icon(
                 Icons.Filled.PushPin,
-                contentDescription = "Pinned",
+                contentDescription = stringResource(Res.string.notes_pinned),
                 tint = MaterialTheme.colorScheme.primary,
             )
             Spacer(Modifier.width(8.dp))
@@ -79,7 +83,7 @@ private fun PinnedNoteRow(
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             DropdownMenuItem(
-                text = { Text("Unpin") },
+                text = { Text(stringResource(Res.string.notes_unpin)) },
                 onClick = { menuOpen = false; onUnpin(path) },
             )
         }

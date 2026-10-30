@@ -1,0 +1,138 @@
+<resources>
+    <!-- The note's reading and editing view: its elements, tables and their formulas, the insert strip. -->
+    <string name="editor_edit">Edit</string>
+    <string name="editor_open">Open</string>
+    <string name="editor_more_actions">More actions</string>
+    <string name="editor_expand">Expand</string>
+    <string name="editor_collapse">Collapse</string>
+    <string name="editor_expand_heading">Expand %1$s</string>
+    <string name="editor_collapse_heading">Collapse %1$s</string>
+    <string name="editor_note_details">Note details</string>
+    <string name="editor_linked_from">Linked from (%1$d)</string>
+    <string name="editor_add_heading">Add heading</string>
+    <string name="editor_add_heading_below">Add heading below</string>
+    <string name="editor_add_subheading">Add sub-heading</string>
+    <string name="editor_move_up">Move up</string>
+    <string name="editor_move_down">Move down</string>
+    <string name="editor_move_left">Move left</string>
+    <string name="editor_move_right">Move right</string>
+    <string name="editor_promote">Promote</string>
+    <string name="editor_demote">Demote</string>
+    <string name="editor_delete_heading">Delete heading</string>
+    <string name="editor_delete_heading_title">Delete this heading?</string>
+    <string name="editor_this_heading">This heading</string>
+    <string name="editor_delete_heading_text">%1$s and its body will be deleted.</string>
+    <plurals name="editor_delete_heading_text_subheadings">
+        <item quantity="one">%1$s and its body, with %2$d sub-heading, will be deleted.</item>
+        <item quantity="other">%1$s and its body, with %2$d sub-headings, will be deleted.</item>
+    </plurals>
+    <string name="editor_editing_element">Editing element</string>
+
+    <!-- The insert strip and the date picker behind it. -->
+    <string name="editor_edit_link">Edit link</string>
+    <string name="editor_date">Date</string>
+    <string name="editor_insert_link">Link</string>
+    <string name="editor_insert_tag">Tag</string>
+    <string name="editor_insert_schedule">Schedule</string>
+    <string name="editor_insert_place">Place</string>
+    <string name="editor_insert_checkbox">Checkbox</string>
+    <string name="editor_insert_table">Table</string>
+    <string name="editor_at_time">At %1$s</string>
+    <string name="editor_add_time">Add time</string>
+    <string name="editor_no_time">No time</string>
+    <string name="editor_until_time">Until %1$s</string>
+    <string name="editor_add_end">Add end</string>
+    <string name="editor_time_until">%1$s, %2$s until</string>
+    <string name="editor_no_end">No end</string>
+
+    <!-- What the reading view draws around the text. -->
+    <string name="editor_show_on_map">Show %1$s on a map</string>
+    <string name="editor_progress_done">%1$s done</string>
+    <string name="editor_current_keyword">Current keyword</string>
+    <string name="editor_no_keyword">No keyword</string>
+    <string name="editor_keywords">Keywords: %1$s</string>
+    <string name="editor_keywords_with_done">Keywords: %1$s, done: %2$s</string>
+    <string name="editor_expand_drawer">Expand drawer</string>
+    <string name="editor_collapse_drawer">Collapse drawer</string>
+
+    <!-- The file tree. -->
+    <string name="editor_folder">Folder</string>
+    <string name="editor_folder_open">Folder open</string>
+    <string name="editor_file">File</string>
+    <string name="editor_note_actions">Note actions</string>
+    <string name="editor_note_with_conflict">Note with a conflict</string>
+    <string name="editor_conflicting_version">Conflicting version</string>
+    <string name="editor_pin">Pin</string>
+    <string name="editor_unpin">Unpin</string>
+    <string name="editor_rename_or_move">Rename or move</string>
+
+    <!-- The table editor. -->
+    <string name="editor_edit_table">Edit table</string>
+    <string name="editor_discard_changes">Discard changes</string>
+    <string name="editor_recalculate">Recalculate</string>
+    <string name="editor_recalculated">Recalculated.</string>
+    <string name="editor_already_up_to_date">Already up to date.</string>
+    <plurals name="editor_not_recalculated">
+        <item quantity="one">Not recalculated: a formula cannot be computed.</item>
+        <item quantity="other">Not recalculated: %1$d formulas cannot be computed.</item>
+    </plurals>
+    <string name="editor_row">Row</string>
+    <string name="editor_column">Column</string>
+    <string name="editor_formulas">Formulas</string>
+    <string name="editor_formulas_count">Formulas (%1$d)</string>
+    <string name="editor_discard_table_title">Discard this table?</string>
+    <string name="editor_discard_table_text">What was changed in it since it was opened will be lost.</string>
+    <string name="editor_discard">Discard</string>
+    <string name="editor_keep_editing">Keep editing</string>
+    <!-- The parts of the line above the table, joined with " · ": the first is capitalised. -->
+    <plurals name="editor_summary_problems">
+        <item quantity="one">a formula cannot be computed</item>
+        <item quantity="other">%1$d formulas cannot be computed</item>
+    </plurals>
+    <string name="editor_summary_outdated">cells are out of date</string>
+    <plurals name="editor_summary_suggestions">
+        <item quantity="one">a suggestion</item>
+        <item quantity="other">%1$d suggestions</item>
+    </plurals>
+    <string name="editor_summary">%1$s. Tap to see the formulas.</string>
+    <string name="editor_rule">Rule</string>
+    <string name="editor_cell">Row %1$d, column %2$d</string>
+    <string name="editor_cell_computed">Row %1$d, column %2$d, computed</string>
+    <string name="editor_row_actions">Row %1$d actions</string>
+    <string name="editor_column_actions">Column %1$d actions</string>
+    <string name="editor_insert_row_above">Insert row above</string>
+    <string name="editor_insert_row_below">Insert row below</string>
+    <string name="editor_insert_line_below">Insert line below</string>
+    <string name="editor_delete_line">Delete line</string>
+    <string name="editor_delete_row">Delete row</string>
+    <string name="editor_insert_column_left">Insert column left</string>
+    <string name="editor_insert_column_right">Insert column right</string>
+    <string name="editor_delete_column">Delete column</string>
+    <string name="editor_sum_at_bottom">Sum at bottom</string>
+    <string name="editor_average_at_bottom">Average at bottom</string>
+    <string name="editor_formula_for_column">Formula for this column…</string>
+
+    <!-- A table's formulas. -->
+    <string name="editor_no_formula_yet">No formula yet. A formula fills cells from others: a total under a column, or a column computed from others in every row.</string>
+    <string name="editor_apply_fix">Apply fix</string>
+    <string name="editor_add_formula">Add formula</string>
+    <string name="editor_new_formula">New formula</string>
+    <string name="editor_edit_formula">Edit formula</string>
+    <string name="editor_column_number">Column %1$d</string>
+    <string name="editor_row_number">Row %1$s</string>
+    <string name="editor_last_row">Last row</string>
+    <string name="editor_fills">Fills</string>
+    <string name="editor_every_row">Every row</string>
+    <string name="editor_one_cell">One cell</string>
+    <string name="editor_as_written">As written</string>
+    <string name="editor_cells">Cells</string>
+    <string name="editor_computes">Computes</string>
+    <string name="editor_expression_placeholder">Tap a column below, or write $2 * 1.21</string>
+    <string name="editor_rows_above">Rows above</string>
+    <string name="editor_decimals">Decimals</string>
+    <string name="editor_as_computed">As computed</string>
+    <string name="editor_done">Done</string>
+    <string name="editor_gives">Gives %1$s</string>
+    <!-- A picker's button: what it picks, and what is picked. -->
+    <string name="editor_picker">%1$s: %2$s</string>
+</resources>

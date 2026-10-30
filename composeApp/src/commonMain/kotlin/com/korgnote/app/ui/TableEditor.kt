@@ -60,8 +60,50 @@ import com.korgnote.common.org.table.FormulaNote
 import com.korgnote.common.org.table.Recalculation
 import com.korgnote.common.org.table.formulaCells
 import com.korgnote.common.org.table.reviewFormulas
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.editor_already_up_to_date
+import korgnote.composeapp.generated.resources.editor_average_at_bottom
+import korgnote.composeapp.generated.resources.editor_cell
+import korgnote.composeapp.generated.resources.editor_cell_computed
+import korgnote.composeapp.generated.resources.editor_column
+import korgnote.composeapp.generated.resources.editor_column_actions
+import korgnote.composeapp.generated.resources.editor_delete_column
+import korgnote.composeapp.generated.resources.editor_delete_line
+import korgnote.composeapp.generated.resources.editor_delete_row
+import korgnote.composeapp.generated.resources.editor_discard
+import korgnote.composeapp.generated.resources.editor_discard_changes
+import korgnote.composeapp.generated.resources.editor_discard_table_text
+import korgnote.composeapp.generated.resources.editor_discard_table_title
+import korgnote.composeapp.generated.resources.editor_edit_table
+import korgnote.composeapp.generated.resources.editor_formula_for_column
+import korgnote.composeapp.generated.resources.editor_formulas
+import korgnote.composeapp.generated.resources.editor_formulas_count
+import korgnote.composeapp.generated.resources.editor_insert_column_left
+import korgnote.composeapp.generated.resources.editor_insert_column_right
+import korgnote.composeapp.generated.resources.editor_insert_line_below
+import korgnote.composeapp.generated.resources.editor_insert_row_above
+import korgnote.composeapp.generated.resources.editor_insert_row_below
+import korgnote.composeapp.generated.resources.editor_keep_editing
+import korgnote.composeapp.generated.resources.editor_move_down
+import korgnote.composeapp.generated.resources.editor_move_left
+import korgnote.composeapp.generated.resources.editor_move_right
+import korgnote.composeapp.generated.resources.editor_move_up
+import korgnote.composeapp.generated.resources.editor_not_recalculated
+import korgnote.composeapp.generated.resources.editor_recalculate
+import korgnote.composeapp.generated.resources.editor_recalculated
+import korgnote.composeapp.generated.resources.editor_row
+import korgnote.composeapp.generated.resources.editor_row_actions
+import korgnote.composeapp.generated.resources.editor_rule
+import korgnote.composeapp.generated.resources.editor_sum_at_bottom
+import korgnote.composeapp.generated.resources.editor_summary
+import korgnote.composeapp.generated.resources.editor_summary_outdated
+import korgnote.composeapp.generated.resources.editor_summary_problems
+import korgnote.composeapp.generated.resources.editor_summary_suggestions
+import korgnote.composeapp.generated.resources.save
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * A table edited cell by cell, over the whole screen.
@@ -77,13 +119,13 @@ import kotlinx.coroutines.launch
 @Composable
 fun TableEditorDialog(
     initial: TableGrid,
-    title: String = "Edit table",
+    title: String = stringResource(Res.string.editor_edit_table),
     onSave: (TableGrid) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var grid by remember { mutableStateOf(initial) }
     // What the last Recalculate did, until the table changes again.
-    var status by remember { mutableStateOf<String?>(null) }
+    var status by remember { mutableStateOf<TableStatus?>(null) }
     var showingFormulas by remember { mutableStateOf(false) }
     // The formula open in its editor: its place in the list, or null for a new one, and its text.
     var editingFormula by remember { mutableStateOf<Pair<Int?, String>?>(null) }
@@ -100,11 +142,11 @@ fun TableEditorDialog(
             is Recalculation.Done -> {
                 val changed = result.rows != grid.rows
                 update(grid.copy(rows = result.rows))
-                status = if (changed) "Recalculated." else "Already up to date."
+                status = if (changed) TableStatus.Recalculated else TableStatus.UpToDate
             }
             is Recalculation.Failed -> {
                 val failing = result.problems.distinctBy { it.formula }.size
-                status = "Not recalculated: " + (if (failing == 1) "a formula cannot" else "$failing formulas cannot") + " be computed."
+                status = TableStatus.Failed(failing)
                 showingFormulas = true
             }
         }
@@ -123,13 +165,13 @@ fun TableEditorDialog(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, contentDescription = "Discard changes") }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.editor_discard_changes)) }
                     Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                    if (grid.formulas.isNotEmpty()) TextButton(onClick = ::recalculate) { Text("Recalculate") }
-                    TextButton(onClick = { onSave(grid) }) { Text("Save") }
+                    if (grid.formulas.isNotEmpty()) TextButton(onClick = ::recalculate) { Text(stringResource(Res.string.editor_recalculate)) }
+                    TextButton(onClick = { onSave(grid) }) { Text(stringResource(Res.string.save)) }
                 }
                 HorizontalDivider()
-                (status ?: formulaSummary(notes))?.let { message ->
+                (status?.text() ?: formulaSummary(notes))?.let { message ->
                     Text(
                         message,
                         style = MaterialTheme.typography.bodyMedium,
@@ -168,15 +210,15 @@ fun TableEditorDialog(
                     OutlinedButton(onClick = { update(grid.withRowInserted(grid.rows.size)) }) {
                         Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Row")
+                        Text(stringResource(Res.string.editor_row))
                     }
                     OutlinedButton(onClick = { update(grid.withColumnInserted(grid.columnCount)) }) {
                         Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Column")
+                        Text(stringResource(Res.string.editor_column))
                     }
                     OutlinedButton(onClick = { showingFormulas = true }) {
-                        Text(if (grid.formulas.isEmpty()) "Formulas" else "Formulas (${grid.formulas.size})")
+                        Text(if (grid.formulas.isEmpty()) stringResource(Res.string.editor_formulas) else stringResource(Res.string.editor_formulas_count, grid.formulas.size))
                     }
                 }
             }
@@ -185,10 +227,10 @@ fun TableEditorDialog(
     if (confirmingDiscard) {
         AlertDialog(
             onDismissRequest = { confirmingDiscard = false },
-            title = { Text("Discard this table?") },
-            text = { Text("What was changed in it since it was opened will be lost.") },
-            confirmButton = { TextButton(onClick = { confirmingDiscard = false; onDismiss() }) { Text("Discard") } },
-            dismissButton = { TextButton(onClick = { confirmingDiscard = false }) { Text("Keep editing") } },
+            title = { Text(stringResource(Res.string.editor_discard_table_title)) },
+            text = { Text(stringResource(Res.string.editor_discard_table_text)) },
+            confirmButton = { TextButton(onClick = { confirmingDiscard = false; onDismiss() }) { Text(stringResource(Res.string.editor_discard)) } },
+            dismissButton = { TextButton(onClick = { confirmingDiscard = false }) { Text(stringResource(Res.string.editor_keep_editing)) } },
         )
     }
     if (showingFormulas) {
@@ -215,18 +257,34 @@ fun TableEditorDialog(
     }
 }
 
+/** What the last Recalculate did. */
+private sealed interface TableStatus {
+    data object Recalculated : TableStatus
+    data object UpToDate : TableStatus
+    /** It did nothing: this many formulas cannot be computed. */
+    data class Failed(val formulas: Int) : TableStatus
+}
+
+@Composable
+private fun TableStatus.text(): String = when (this) {
+    TableStatus.Recalculated -> stringResource(Res.string.editor_recalculated)
+    TableStatus.UpToDate -> stringResource(Res.string.editor_already_up_to_date)
+    is TableStatus.Failed -> pluralStringResource(Res.plurals.editor_not_recalculated, formulas, formulas)
+}
+
 /** What the review found, in a line: what cannot be computed comes first. Null when nothing did. */
+@Composable
 private fun formulaSummary(notes: List<FormulaNote>): String? {
     val problems = notes.filter { it.kind == FormulaNote.Kind.Problem }.distinctBy { it.formula }.size
     val outdated = notes.any { it.kind == FormulaNote.Kind.Outdated }
     val suggestions = notes.count { it.kind == FormulaNote.Kind.Suggestion }
     val parts = buildList {
-        if (problems > 0) add(if (problems == 1) "A formula cannot be computed" else "$problems formulas cannot be computed")
-        if (outdated) add("cells are out of date")
-        if (suggestions > 0) add(if (suggestions == 1) "a suggestion" else "$suggestions suggestions")
+        if (problems > 0) add(pluralStringResource(Res.plurals.editor_summary_problems, problems, problems))
+        if (outdated) add(stringResource(Res.string.editor_summary_outdated))
+        if (suggestions > 0) add(pluralStringResource(Res.plurals.editor_summary_suggestions, suggestions, suggestions))
     }
     if (parts.isEmpty()) return null
-    return parts.joinToString(" · ").replaceFirstChar { it.uppercase() } + ". Tap to see the formulas."
+    return stringResource(Res.string.editor_summary, parts.joinToString(" · ")).replaceFirstChar { it.uppercase() }
 }
 
 @Composable
@@ -260,18 +318,20 @@ private fun TableGridEditor(
                 RowMenu(row, if (cells == null) null else rowNumbers[row], grid, onChange)
                 if (cells == null) {
                     // A rule: a line across the table, as the reading view draws it.
+                    val ruleDescription = stringResource(Res.string.editor_rule)
                     Box(
                         Modifier
                             .width(CELL_WIDTH * grid.columnCount.coerceAtLeast(1))
                             .height(2.dp)
                             .background(MaterialTheme.colorScheme.outline)
-                            .semantics { contentDescription = "Rule" },
+                            .semantics { contentDescription = ruleDescription },
                     )
                 } else {
                     cells.forEachIndexed { column, text ->
                         val formula = computed[FormulaCell(row, column)]
                         if (formula != null) {
                             // Filled by a formula: what it computed, shaded, and its formula a tap away.
+                            val computedDescription = stringResource(Res.string.editor_cell_computed, row + 1, column + 1)
                             Text(
                                 text,
                                 style = MaterialTheme.typography.bodyMedium,
@@ -284,7 +344,7 @@ private fun TableGridEditor(
                                     .border(0.5.dp, lineColor)
                                     .clickable { onComputedCell(formula) }
                                     .padding(horizontal = 8.dp, vertical = 10.dp)
-                                    .semantics { contentDescription = "Row ${row + 1}, column ${column + 1}, computed" },
+                                    .semantics { contentDescription = computedDescription },
                             )
                             return@forEachIndexed
                         }
@@ -292,6 +352,7 @@ private fun TableGridEditor(
                         // it before the keyboard shrinks the screen, which can leave it underneath.
                         val requester = remember { BringIntoViewRequester() }
                         val scope = rememberCoroutineScope()
+                        val cellDescription = stringResource(Res.string.editor_cell, row + 1, column + 1)
                         BasicTextField(
                             value = text,
                             onValueChange = { onChange(grid.withCell(row, column, it)) },
@@ -312,7 +373,7 @@ private fun TableGridEditor(
                                 .width(CELL_WIDTH)
                                 .border(0.5.dp, lineColor)
                                 .padding(horizontal = 8.dp, vertical = 10.dp)
-                                .semantics { contentDescription = "Row ${row + 1}, column ${column + 1}" },
+                                .semantics { contentDescription = cellDescription },
                         )
                     }
                 }
@@ -328,7 +389,7 @@ private fun RowMenu(row: Int, number: Int?, grid: TableGrid, onChange: (TableGri
         if (number != null) Text("@$number", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
         Box {
             IconButton(onClick = { open = true }) {
-                Icon(Icons.Filled.MoreVert, contentDescription = "Row ${row + 1} actions")
+                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(Res.string.editor_row_actions, row + 1))
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 fun item(label: String, enabled: Boolean = true, change: () -> TableGrid) = @Composable {
@@ -338,12 +399,12 @@ private fun RowMenu(row: Int, number: Int?, grid: TableGrid, onChange: (TableGri
                         onClick = { open = false; onChange(change()) },
                     )
                 }
-                item("Insert row above") { grid.withRowInserted(row) }()
-                item("Insert row below") { grid.withRowInserted(row + 1) }()
-                item("Insert line below") { grid.withRuleInserted(row + 1) }()
-                item("Move up", enabled = row > 0) { grid.withRowMoved(row, up = true) }()
-                item("Move down", enabled = row < grid.rows.lastIndex) { grid.withRowMoved(row, up = false) }()
-                item(if (grid.rows[row] == null) "Delete line" else "Delete row") { grid.withRowRemoved(row) }()
+                item(stringResource(Res.string.editor_insert_row_above)) { grid.withRowInserted(row) }()
+                item(stringResource(Res.string.editor_insert_row_below)) { grid.withRowInserted(row + 1) }()
+                item(stringResource(Res.string.editor_insert_line_below)) { grid.withRuleInserted(row + 1) }()
+                item(stringResource(Res.string.editor_move_up), enabled = row > 0) { grid.withRowMoved(row, up = true) }()
+                item(stringResource(Res.string.editor_move_down), enabled = row < grid.rows.lastIndex) { grid.withRowMoved(row, up = false) }()
+                item(stringResource(if (grid.rows[row] == null) Res.string.editor_delete_line else Res.string.editor_delete_row)) { grid.withRowRemoved(row) }()
             }
         }
     }
@@ -354,7 +415,7 @@ private fun ColumnMenu(column: Int, grid: TableGrid, onChange: (TableGrid) -> Un
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) {
-            Icon(Icons.Filled.MoreHoriz, contentDescription = "Column ${column + 1} actions")
+            Icon(Icons.Filled.MoreHoriz, contentDescription = stringResource(Res.string.editor_column_actions, column + 1))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             fun item(label: String, enabled: Boolean = true, change: () -> TableGrid) = @Composable {
@@ -364,15 +425,15 @@ private fun ColumnMenu(column: Int, grid: TableGrid, onChange: (TableGrid) -> Un
                     onClick = { open = false; onChange(change()) },
                 )
             }
-            item("Insert column left") { grid.withColumnInserted(column) }()
-            item("Insert column right") { grid.withColumnInserted(column + 1) }()
-            item("Move left", enabled = column > 0) { grid.withColumnMoved(column, left = true) }()
-            item("Move right", enabled = column < grid.columnCount - 1) { grid.withColumnMoved(column, left = false) }()
-            item("Delete column", enabled = grid.columnCount > 1) { grid.withColumnRemoved(column) }()
+            item(stringResource(Res.string.editor_insert_column_left)) { grid.withColumnInserted(column) }()
+            item(stringResource(Res.string.editor_insert_column_right)) { grid.withColumnInserted(column + 1) }()
+            item(stringResource(Res.string.editor_move_left), enabled = column > 0) { grid.withColumnMoved(column, left = true) }()
+            item(stringResource(Res.string.editor_move_right), enabled = column < grid.columnCount - 1) { grid.withColumnMoved(column, left = false) }()
+            item(stringResource(Res.string.editor_delete_column), enabled = grid.columnCount > 1) { grid.withColumnRemoved(column) }()
             HorizontalDivider()
-            item("Sum at bottom") { grid.withSummary(column, "vsum") }()
-            item("Average at bottom") { grid.withSummary(column, "vmean") }()
-            DropdownMenuItem(text = { Text("Formula for this column…") }, onClick = { open = false; onColumnFormula(column + 1) })
+            item(stringResource(Res.string.editor_sum_at_bottom)) { grid.withSummary(column, "vsum") }()
+            item(stringResource(Res.string.editor_average_at_bottom)) { grid.withSummary(column, "vmean") }()
+            DropdownMenuItem(text = { Text(stringResource(Res.string.editor_formula_for_column)) }, onClick = { open = false; onColumnFormula(column + 1) })
         }
     }
 }

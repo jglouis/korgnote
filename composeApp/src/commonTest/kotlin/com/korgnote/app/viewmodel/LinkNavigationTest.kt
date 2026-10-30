@@ -6,11 +6,15 @@ import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlin.test.*
+import kotlin.time.Duration.Companion.seconds
 
 /** Following links and coming back (T21), through the view model; the rules are in `OrgLinksTest`. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -55,6 +59,12 @@ class LinkNavigationTest {
     private suspend fun openDaily() {
         viewModel.server.load()
         viewModel.onFileSelected("daily/today.org")
+    }
+
+    /** The message line once something is on it: a link's message is looked up in the app's language first. */
+    private suspend fun shownMessage(): String = withContext(Dispatchers.Default) {
+        withTimeout(5.seconds) { while (viewModel.lastErrorMessage.isEmpty()) delay(5) }
+        viewModel.lastErrorMessage
     }
 
     private fun elementAt(text: String, marker: String) =
@@ -116,7 +126,8 @@ class LinkNavigationTest {
         assertFalse(viewModel.links.follow("id:missing"))
 
         assertEquals("Selected: daily/today.org", viewModel.note.label)
-        assertTrue(viewModel.lastErrorMessage.contains("Nothing in the notes"), viewModel.lastErrorMessage)
+        val message = shownMessage()
+        assertTrue(message.contains("Nothing in the notes"), message)
         assertFalse(viewModel.links.canGoBack)
     }
 
@@ -132,7 +143,8 @@ class LinkNavigationTest {
         )) {
             viewModel.clearError()
             assertFalse(viewModel.links.follow(link), link)
-            assertTrue(viewModel.lastErrorMessage.contains(reason), viewModel.lastErrorMessage)
+            val message = shownMessage()
+            assertTrue(message.contains(reason), message)
         }
         assertEquals("Selected: daily/today.org", viewModel.note.label)
         assertFalse(viewModel.links.canGoBack)
@@ -156,7 +168,8 @@ class LinkNavigationTest {
         viewModel.links.follow("file:../project.org::*Renamed")
 
         assertEquals("Selected: project.org", viewModel.note.label)
-        assertTrue(viewModel.lastErrorMessage.contains("*Renamed"), viewModel.lastErrorMessage)
+        val message = shownMessage()
+        assertTrue(message.contains("*Renamed"), message)
     }
 
     @Test

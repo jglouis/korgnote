@@ -7,7 +7,9 @@ import com.korgnote.app.notifications.NotificationScheduler
 import com.korgnote.app.notifications.Reminder
 import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.app.notifications.ReminderTarget
+import com.korgnote.app.notifications.ReminderWords
 import com.korgnote.app.notifications.planReminders
+import com.korgnote.app.notifications.reminderWords
 import com.korgnote.app.widgets.AgendaWidgets
 import com.korgnote.app.widgets.NoAgendaWidgets
 import com.korgnote.common.org.OrgTodoConfig
@@ -68,6 +70,20 @@ class NoteAgenda(
     /** Opens the file an agenda entry comes from, at its heading. */
     fun openEntry(entry: AgendaEntry) = open(entry.file, entry.headingOffset)
 
+    /** What reminders say, in the app's language once loaded; English until then. */
+    private var reminderWords = ReminderWords()
+
+    init {
+        scope.launch {
+            runCatching { reminderWords() }
+                .onSuccess {
+                    reminderWords = it
+                    refreshReminders()
+                }
+                .onFailure { println("[DEBUG_LOG][NoteAgenda] Loading the reminders' words failed: ${it.message}") }
+        }
+    }
+
     /** The reminders last handed to [notifications]; null until the notes have been read once. */
     private var plannedReminders: List<Reminder>? = null
 
@@ -85,7 +101,7 @@ class NoteAgenda(
         // Before the replica has been read the agenda is empty, and replacing with that would
         // cancel every reminder the device holds until the notes arrive.
         if (!library.loaded) return
-        val plan = planReminders(index.entries, now(), reminderSettings())
+        val plan = planReminders(index.entries, now(), reminderSettings(), reminderWords)
         if (plan == plannedReminders) return
         plannedReminders = plan
         scope.launch {

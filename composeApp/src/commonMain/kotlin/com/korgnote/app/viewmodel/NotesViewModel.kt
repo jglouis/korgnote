@@ -53,6 +53,12 @@ import com.korgnote.common.replica.SyncEngine
 import com.korgnote.common.sync.DiffHunk
 import com.korgnote.common.sync.conflictCopyOriginal
 import com.korgnote.common.sync.diffHunks
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.vm_finish_editing_first
+import korgnote.composeapp.generated.resources.vm_not_a_note_path
+import korgnote.composeapp.generated.resources.vm_note_exists
+import korgnote.composeapp.generated.resources.vm_note_title_needed
+import korgnote.composeapp.generated.resources.vm_table_changed
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +70,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import org.jetbrains.compose.resources.getString
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.ExperimentalUuidApi
@@ -163,6 +170,7 @@ class NotesViewModel(
     )
 
     val links: LinkNavigator = LinkNavigator(
+        viewModelScope,
         library,
         note,
         open = ::open,
@@ -528,7 +536,7 @@ class NotesViewModel(
     suspend fun setOpenNoteKeywords(keywords: FileKeywords) {
         if (note.path == null) return
         if (editor.editingIndex != null) {
-            showMessage("Save or discard the element you are editing first.")
+            showMessage(getString(Res.string.vm_finish_editing_first))
             return
         }
         val updated = withFileKeywords(note.content, keywords)
@@ -555,7 +563,7 @@ class NotesViewModel(
     fun beginTableEdit(offsetInDocument: Int) {
         val path = note.path ?: return
         if (editor.editingIndex != null) {
-            showMessage("Save or discard the element you are editing first.")
+            viewModelScope.launch { showMessage(getString(Res.string.vm_finish_editing_first)) }
             return
         }
         val content = note.content
@@ -583,7 +591,7 @@ class NotesViewModel(
         val unchanged = note.path == edit.path && end <= content.length &&
             content.substring(edit.range.first, end) == edit.original
         if (!unchanged) {
-            showMessage("The note changed while the table was open, so the table was not saved.")
+            showMessage(getString(Res.string.vm_table_changed))
             return
         }
         note.content = replaceOrgTable(content, edit.range, grid)
@@ -605,11 +613,11 @@ class NotesViewModel(
     suspend fun createNote(title: String, tags: List<String> = emptyList()): String? {
         val path = newNotePathFor(title)
         if (path == null) {
-            lastErrorMessage = "A note needs a title with at least one letter or digit."
+            lastErrorMessage = getString(Res.string.vm_note_title_needed)
             return null
         }
         if (!store.create(path, headOfNewNote(title, tags))) {
-            lastErrorMessage = "There is already a note called $path."
+            lastErrorMessage = getString(Res.string.vm_note_exists, path)
             return null
         }
         openNewNote(path)
@@ -666,7 +674,7 @@ class NotesViewModel(
     suspend fun renameNote(from: String, to: String): Boolean {
         val target = NotePaths.normalize(to)
         if (target == null) {
-            lastErrorMessage = "\"$to\" is not a note path: use folders and a name, like notes/idea.org."
+            lastErrorMessage = getString(Res.string.vm_not_a_note_path, to)
             return false
         }
         if (target == from) return true
@@ -674,7 +682,7 @@ class NotesViewModel(
         // The element editor holds offsets into the note being moved; finish nothing half-way.
         if (wasOpen) editor.cancel()
         if (!store.rename(from, target)) {
-            lastErrorMessage = "There is already a note called $target."
+            lastErrorMessage = getString(Res.string.vm_note_exists, target)
             return false
         }
         folds.move(from, target)

@@ -19,6 +19,10 @@ import com.korgnote.common.org.withOrgSubtreesSwapped
 import com.korgnote.common.org.withoutOrgSubtree
 import com.korgnote.common.sync.MergeResult
 import com.korgnote.common.sync.merge
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.vm_edit_conflict
+import korgnote.composeapp.generated.resources.vm_finish_editing_first
+import org.jetbrains.compose.resources.getString
 
 /**
  * Editing a single element of the open note — a heading and its own body — as a draft that is
@@ -204,7 +208,7 @@ class ElementEditor(
         val edited = element?.let { content.replaceOrgElement(it, original, draft) }
         val updated = newer.let { if (edited == null || it == null) edited else rebased(edited, it) }
         if (updated == null) {
-            showMessage("This part of the note also changed elsewhere while you were editing it; nothing was written.")
+            showMessage(getString(Res.string.vm_edit_conflict))
             return
         }
         note.content = updated
@@ -304,7 +308,7 @@ class ElementEditor(
      */
     private suspend fun restructure(newIndexOf: ((Int) -> Int)? = null, edit: (String) -> String?): Boolean {
         if (editingIndex != null) {
-            showMessage("Save or discard the element you are editing first.")
+            showMessage(getString(Res.string.vm_finish_editing_first))
             return false
         }
         val foldedBefore = folds.folded

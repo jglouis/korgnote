@@ -28,6 +28,11 @@ object WidgetStore {
     private const val KEY_SYNCING = "syncing"
     private const val KEY_PROBLEM = "problem"
 
+    /** What can stop a widget's sync, kept as these rather than as words, which [WidgetState] puts in the phone's language. */
+    const val PROBLEM_SETUP = "setup"
+    const val PROBLEM_SERVER = "server"
+    const val PROBLEM_FOLDER = "folder"
+
     private val serializer = ListSerializer(AgendaEntry.serializer())
 
     /** Entries an older version wrote may carry what this one no longer reads; the rest still serves. */

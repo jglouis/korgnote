@@ -30,6 +30,23 @@ import com.korgnote.app.viewmodel.LinkEdit
 import com.korgnote.common.org.edit.LinkKind
 import com.korgnote.common.org.edit.linkKindOf
 import com.korgnote.common.org.link.LinkTarget
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.cancel
+import korgnote.composeapp.generated.resources.notes_link_add
+import korgnote.composeapp.generated.resources.notes_link_address
+import korgnote.composeapp.generated.resources.notes_link_change
+import korgnote.composeapp.generated.resources.notes_link_choose
+import korgnote.composeapp.generated.resources.notes_link_choose_file
+import korgnote.composeapp.generated.resources.notes_link_edit
+import korgnote.composeapp.generated.resources.notes_link_file
+import korgnote.composeapp.generated.resources.notes_link_label
+import korgnote.composeapp.generated.resources.notes_link_label_placeholder
+import korgnote.composeapp.generated.resources.notes_link_no_note
+import korgnote.composeapp.generated.resources.notes_link_remove
+import korgnote.composeapp.generated.resources.notes_link_web
+import korgnote.composeapp.generated.resources.notes_note
+import korgnote.composeapp.generated.resources.save
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * A link as a form rather than as `[[…][…]]`: the words it shows, and where it goes — a web
@@ -95,27 +112,31 @@ fun LinkEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (edit.isNew) "Add a link" else "Edit link") },
+        title = { Text(stringResource(if (edit.isNew) Res.string.notes_link_add else Res.string.notes_link_edit)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("Label") },
-                    placeholder = { Text("Shown instead of where it goes") },
+                    label = { Text(stringResource(Res.string.notes_link_label)) },
+                    placeholder = { Text(stringResource(Res.string.notes_link_label_placeholder)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for ((k, label) in listOf(LinkKind.WEB to "Web", LinkKind.NOTE to "Note", LinkKind.FILE to "File")) {
-                        FilterChip(selected = kind == k, onClick = { kind = k }, label = { Text(label) })
+                    for ((k, label) in listOf(
+                        LinkKind.WEB to Res.string.notes_link_web,
+                        LinkKind.NOTE to Res.string.notes_note,
+                        LinkKind.FILE to Res.string.notes_link_file,
+                    )) {
+                        FilterChip(selected = kind == k, onClick = { kind = k }, label = { Text(stringResource(label)) })
                     }
                 }
                 when (kind) {
                     LinkKind.WEB -> OutlinedTextField(
                         value = address,
                         onValueChange = { address = it },
-                        label = { Text("Address") },
+                        label = { Text(stringResource(Res.string.notes_link_address)) },
                         placeholder = { Text("https://…") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(
@@ -127,7 +148,7 @@ fun LinkEditorDialog(
                     )
                     LinkKind.NOTE -> Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            noteShown ?: "No note chosen yet",
+                            noteShown ?: stringResource(Res.string.notes_link_no_note),
                             style = MaterialTheme.typography.bodyLarge,
                             color = if (noteShown == null) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
                             maxLines = 2,
@@ -135,7 +156,7 @@ fun LinkEditorDialog(
                             modifier = Modifier.weight(1f),
                         )
                         TextButton(onClick = { choosingNote = linkTargets() }) {
-                            Text(if (noteShown == null) "Choose…" else "Change…")
+                            Text(stringResource(if (noteShown == null) Res.string.notes_link_choose else Res.string.notes_link_change))
                         }
                     }
                     LinkKind.FILE -> Column {
@@ -145,14 +166,14 @@ fun LinkEditorDialog(
                                 filePath = it
                                 fileProblem = null
                             },
-                            label = { Text("File") },
+                            label = { Text(stringResource(Res.string.notes_link_file)) },
                             placeholder = { Text("~/Sync/invoice.pdf") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
                             modifier = Modifier.fillMaxWidth(),
                         )
                         if (pickFile != null) {
-                            TextButton(onClick = pickFile) { Text("Choose a file…") }
+                            TextButton(onClick = pickFile) { Text(stringResource(Res.string.notes_link_choose_file)) }
                         }
                         fileProblem?.let {
                             Text(
@@ -176,12 +197,12 @@ fun LinkEditorDialog(
                         LinkKind.NOTE -> onSave(original, description, pickedNote)
                     }
                 },
-            ) { Text("Save") }
+            ) { Text(stringResource(Res.string.save)) }
         },
         dismissButton = {
             Row {
-                if (!edit.isNew) TextButton(onClick = onRemove) { Text("Remove link") }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                if (!edit.isNew) TextButton(onClick = onRemove) { Text(stringResource(Res.string.notes_link_remove)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) }
             }
         },
     )

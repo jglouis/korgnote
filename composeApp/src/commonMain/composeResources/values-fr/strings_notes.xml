@@ -1,0 +1,170 @@
+<resources>
+    <!-- Onboarding -->
+    <string name="notes_onboarding_where">Où sont vos notes ?</string>
+    <string name="notes_onboarding_welcome">Bienvenue dans KorgNote</string>
+    <string name="notes_onboarding_intro">Vos notes restent de simples fichiers Org. Où KorgNote doit-il les trouver ?</string>
+    <string name="notes_onboarding_folder_title">Un dossier sur cet appareil</string>
+    <string name="notes_onboarding_folder_pro">Rien d’autre à installer.</string>
+    <string name="notes_onboarding_folder_con">La synchronisation dépend de cette app. Une note modifiée sur deux appareils à la fois finit en copie de conflit.</string>
+    <string name="notes_onboarding_server_title">Mon ordinateur, avec le serveur KorgNote</string>
+    <string name="notes_onboarding_server_pro">Synchronisation directe avec votre ordinateur : ni cloud, ni autre app.</string>
+    <string name="notes_onboarding_merged">Une note modifiée des deux côtés est fusionnée.</string>
+    <string name="notes_onboarding_server_con">Le serveur tourne sur cet ordinateur, et cet appareil doit pouvoir le joindre : même Wi-Fi, ou un VPN.</string>
+    <string name="notes_onboarding_webdav_title">Un serveur WebDAV (expérimental)</string>
+    <string name="notes_onboarding_webdav_pro">Nextcloud, un NAS ou un hébergeur que vous avez déjà : aucun ordinateur n’a besoin de rester allumé.</string>
+    <string name="notes_onboarding_webdav_con">Nouveau, et testé uniquement avec Nextcloud et Apache. En HTTPS, et seulement avec un serveur qui passe un contrôle de sécurité.</string>
+    <string name="notes_onboarding_all_offline">Tous fonctionnent hors ligne. Vous pourrez changer cela plus tard dans les Réglages.</string>
+    <string name="notes_onboarding_both_offline">Les deux fonctionnent hors ligne. Vous pourrez changer cela plus tard dans les Réglages.</string>
+    <string name="notes_onboarding_for">Pour</string>
+    <string name="notes_onboarding_against">Contre</string>
+    <string name="notes_onboarding_folder_unreadable">Il est illisible.</string>
+    <string name="notes_onboarding_choose_folder_title">Choisissez votre dossier de notes</string>
+    <string name="notes_onboarding_looking">Recherche des notes…</string>
+    <string name="notes_onboarding_folder_empty">Pas encore de notes. Les nouvelles notes iront ici.</string>
+    <plurals name="notes_onboarding_folder_count">
+        <item quantity="one">%1$d note.</item>
+        <item quantity="other">%1$d notes.</item>
+    </plurals>
+    <string name="notes_onboarding_folder_unusable">KorgNote ne peut pas utiliser ce dossier : %1$s</string>
+    <string name="notes_onboarding_choose_folder">Choisir un dossier</string>
+    <string name="notes_onboarding_use_folder">Utiliser ce dossier</string>
+    <string name="notes_onboarding_choose_another">Choisir un autre</string>
+    <string name="notes_onboarding_no_folder">Les notes ne peuvent pas être gardées dans un dossier sur cet appareil.</string>
+    <string name="notes_onboarding_server_heading">Connexion à votre ordinateur</string>
+    <string name="notes_onboarding_server_step1">Sur l’ordinateur qui contient vos notes, lancez le serveur KorgNote.</string>
+    <string name="notes_onboarding_install_server">Comment installer le serveur</string>
+    <string name="notes_onboarding_server_step2">Là, ouvrez %1$s et appuyez sur « Show a pairing code ».</string>
+    <string name="notes_onboarding_server_step3">Scannez le code avec cet appareil, ou collez le lien affiché en dessous.</string>
+    <string name="notes_onboarding_local_network_computer">Votre ordinateur est sur votre réseau local. Android demande l’autorisation avant qu’une app puisse le joindre.</string>
+    <string name="notes_onboarding_allow_local_network">Autoriser le réseau local</string>
+    <string name="notes_onboarding_continue">Continuer</string>
+    <string name="notes_onboarding_pair_later">Associer plus tard</string>
+    <string name="notes_onboarding_unpaired">Sans association, KorgNote démarre vide et se synchronise dès que vous l’associez dans les Réglages.</string>
+    <string name="notes_onboarding_webdav_heading">Connexion à un serveur WebDAV</string>
+    <string name="notes_onboarding_webdav_intro">Expérimental. KorgNote garde sa propre copie des notes et la synchronise avec un dossier du serveur, comme avec le serveur KorgNote.</string>
+    <string name="notes_onboarding_folder_address">Adresse du dossier</string>
+    <string name="notes_onboarding_nextcloud_address">Sur Nextcloud, elle se trouve dans Paramètres de Fichiers, WebDAV, suivie du nom du dossier des notes.</string>
+    <string name="notes_onboarding_user_name">Nom d’utilisateur</string>
+    <string name="notes_onboarding_password">Mot de passe</string>
+    <string name="notes_onboarding_app_password">Nextcloud et la plupart des hébergeurs fournissent pour cela un mot de passe d’application, distinct du vôtre.</string>
+    <string name="notes_onboarding_local_network_server">Si le serveur est sur votre réseau local, Android demande l’autorisation avant qu’une app puisse le joindre.</string>
+    <string name="notes_onboarding_https_needed">L’adresse doit commencer par https://, sinon le mot de passe circulerait en clair sur le réseau.</string>
+    <string name="notes_onboarding_checking_server">Vérification du serveur…</string>
+    <string name="notes_onboarding_server_empty">Le serveur est utilisable. Pas encore de notes : les nouvelles notes iront là.</string>
+    <plurals name="notes_onboarding_server_count">
+        <item quantity="one">Le serveur est utilisable. %1$d note s’y trouve.</item>
+        <item quantity="other">Le serveur est utilisable. %1$d notes s’y trouvent.</item>
+    </plurals>
+    <string name="notes_onboarding_server_unusable">KorgNote ne peut pas utiliser ce serveur. %1$s</string>
+    <string name="notes_onboarding_use_server">Utiliser ce serveur</string>
+    <string name="notes_onboarding_check_server">Vérifier le serveur</string>
+    <string name="notes_onboarding_check_explained">La vérification écrit un fichier caché, .korgnote-check, puis le supprime. Elle s’assure que le serveur refuse d’écrire par-dessus une version plus récente : c’est ce qui empêche un appareil d’écraser les modifications d’un autre.</string>
+    <string name="notes_onboarding_reminders">Rappels</string>
+    <string name="notes_onboarding_reminders_intro">KorgNote peut vous prévenir avant les entrées à heure fixe, et résumer votre journée chaque matin. Pour cela, il doit afficher des notifications.</string>
+    <string name="notes_onboarding_allow_notifications">Autoriser les notifications</string>
+    <string name="notes_onboarding_not_now">Pas maintenant</string>
+    <string name="notes_onboarding_reminders_later">Vous pourrez les activer ou les désactiver plus tard, dans les Réglages et dans les réglages du système.</string>
+
+    <!-- Note dialogs -->
+    <string name="notes_new_note">Nouvelle note</string>
+    <string name="notes_type_title">Saisissez un titre</string>
+    <string name="notes_create">Créer</string>
+    <string name="notes_tags">Étiquettes</string>
+    <string name="notes_tags_placeholder">travail ecam</string>
+    <string name="notes_details">Détails de la note</string>
+    <string name="notes_me">Moi</string>
+    <string name="notes_date">Date</string>
+    <string name="notes_pick_date">Choisir la date</string>
+    <string name="notes_rename_or_move">Renommer ou déplacer</string>
+    <string name="notes_path">Chemin</string>
+    <string name="notes_path_hint">Des dossiers et un nom, comme notes/idee.org</string>
+    <string name="notes_delete_title">Supprimer %1$s ?</string>
+    <string name="notes_delete_unsynced">Cette note a des modifications qui ne sont pas encore arrivées sur le serveur. Elles n’existent que sur cet appareil et seront perdues.</string>
+    <string name="notes_delete_explained">Elle est supprimée sur tous les appareils. Le serveur en garde une copie dans .korgnote-trash, et si quelqu’un la modifie ailleurs avant que la suppression n’arrive au serveur, elle revient.</string>
+    <string name="notes_delete_anyway">Supprimer quand même</string>
+
+    <!-- Links -->
+    <string name="notes_link_add">Ajouter un lien</string>
+    <string name="notes_link_edit">Modifier le lien</string>
+    <string name="notes_link_label">Libellé</string>
+    <string name="notes_link_label_placeholder">Affiché à la place de la destination</string>
+    <string name="notes_link_web">Web</string>
+    <string name="notes_note">Note</string>
+    <string name="notes_link_file">Fichier</string>
+    <string name="notes_link_address">Adresse</string>
+    <string name="notes_link_no_note">Aucune note choisie</string>
+    <string name="notes_link_choose">Choisir…</string>
+    <string name="notes_link_change">Changer…</string>
+    <string name="notes_link_choose_file">Choisir un fichier…</string>
+    <string name="notes_link_remove">Retirer le lien</string>
+    <string name="notes_link_to">Lier à</string>
+    <string name="notes_link_to_target">Lier à %1$s</string>
+    <string name="notes_link_query_placeholder">Note ou titre</string>
+    <string name="notes_link_nothing_matches">Aucun résultat.</string>
+    <string name="notes_link_web_or_file">Lien web ou fichier…</string>
+    <string name="notes_heading">Titre</string>
+
+    <!-- Search -->
+    <string name="notes_saved_searches">Recherches enregistrées</string>
+    <string name="notes_saved_searches_empty">Les recherches enregistrées avec le signet du champ de recherche s’affichent ici, pour les relancer d’un toucher.</string>
+    <string name="notes_rename_or_remove">Renommer ou retirer</string>
+    <string name="notes_rename_saved_search">Renommer la recherche enregistrée</string>
+    <string name="notes_save_search">Enregistrer la recherche</string>
+    <string name="notes_name">Nom</string>
+    <string name="notes_search_label">Rechercher dans les notes</string>
+    <string name="notes_search_placeholder">mots, ou tag:work</string>
+    <string name="notes_remove_saved_search">Retirer la recherche enregistrée</string>
+    <string name="notes_search_hint">Saisissez du texte pour rechercher dans toutes les notes. Les mots sont trouvés partout : texte, titres et noms de fichiers. `tag:work` ne garde que les titres portant cette étiquette, et les étiquettes se transmettent : une étiquette sur un titre parent vaut pour tout ce qu’il contient. Mettez une expression entre guillemets pour la rechercher telle quelle. Le signet du champ garde une recherche pour la relancer depuis les recherches enregistrées.</string>
+    <string name="notes_search_nothing">Aucun résultat pour « %1$s ».</string>
+    <plurals name="notes_search_results">
+        <item quantity="one">%1$d résultat</item>
+        <item quantity="other">%1$d résultats</item>
+    </plurals>
+
+    <!-- Pinned notes -->
+    <string name="notes_unpin">Désépingler</string>
+    <string name="notes_pinned">Épinglée</string>
+
+    <!-- Status icons -->
+    <string name="notes_folder_unreachable">Impossible d’utiliser le dossier des notes : %1$s Les modifications sont conservées jusqu’à ce qu’il soit de nouveau utilisable.</string>
+    <string name="notes_sync_last">Dernière synchronisation %1$s, à %2$s.</string>
+    <string name="notes_sync_running">Synchronisation avec le serveur…</string>
+    <string name="notes_sync_tap">Touchez pour synchroniser maintenant.</string>
+    <string name="notes_sync_never">Pas encore synchronisé. Touchez pour synchroniser maintenant.</string>
+    <string name="notes_sync_age_now">maint.</string>
+    <string name="notes_sync_age_minutes">%1$d min</string>
+    <string name="notes_sync_age_hours">%1$d h</string>
+    <string name="notes_sync_age_days">%1$d j</string>
+    <string name="notes_sync_ago_now">à l’instant</string>
+    <string name="notes_sync_ago_minutes">il y a %1$d min</string>
+    <string name="notes_sync_ago_hours">il y a %1$d h</string>
+    <string name="notes_sync_ago_day">il y a un jour</string>
+    <string name="notes_sync_ago_days">il y a %1$d jours</string>
+
+    <!-- Conflicts -->
+    <string name="notes_conflict_count">Notes en conflit : %1$d</string>
+    <string name="notes_conflict_menu_title">Modifiées à deux endroits à la fois</string>
+    <string name="notes_conflict_versions">%1$s (%2$d versions)</string>
+    <string name="notes_conflict_side_server">serveur</string>
+    <string name="notes_conflict_side_folder">dossier</string>
+    <string name="notes_conflict_copy_title">Une version en conflit de %1$s</string>
+    <string name="notes_conflict_note_title">Cette note a été modifiée à deux endroits à la fois</string>
+    <string name="notes_conflict_copy_text">Elle n’a pas pu être fusionnée avec la note, qui contient la version du %1$s.</string>
+    <string name="notes_conflict_note_text">Voici la version du %1$s. Celle qui n’a pas pu être fusionnée est conservée sous %2$s.</string>
+    <plurals name="notes_conflict_note_text_more">
+        <item quantity="one">Voici la version du %1$s. Celle qui n’a pas pu être fusionnée est conservée sous %2$s (et %3$d autre).</item>
+        <item quantity="other">Voici la version du %1$s. Celle qui n’a pas pu être fusionnée est conservée sous %2$s (et %3$d autres).</item>
+    </plurals>
+    <string name="notes_conflict_compare">Comparer</string>
+    <string name="notes_conflict_use_this">Utiliser celle-ci</string>
+    <string name="notes_conflict_keep_this">Garder celle-ci</string>
+    <string name="notes_conflict_discard_this">Abandonner celle-ci</string>
+    <string name="notes_conflict_use_other">Utiliser l’autre</string>
+    <string name="notes_conflict_compare_title">Comparer les versions</string>
+    <string name="notes_conflict_only_in_note">− seulement dans %1$s (celle du %2$s)</string>
+    <string name="notes_conflict_only_in_copy">+ seulement dans %1$s</string>
+    <string name="notes_conflict_same">Les deux versions sont identiques : vous pouvez garder l’une ou l’autre.</string>
+    <string name="notes_conflict_before_first_heading">Avant le premier titre</string>
+    <string name="notes_conflict_keep_note">Garder la note</string>
+    <string name="notes_conflict_use_copy">Utiliser la copie</string>
+</resources>

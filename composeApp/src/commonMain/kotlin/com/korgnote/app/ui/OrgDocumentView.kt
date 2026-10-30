@@ -50,7 +50,32 @@ import com.korgnote.common.org.previousSibling
 import com.korgnote.common.org.sliceOf
 import com.korgnote.common.org.subtreeEnd
 import com.korgnote.common.org.toOrgDocument
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.cancel
+import korgnote.composeapp.generated.resources.delete
+import korgnote.composeapp.generated.resources.editor_add_heading
+import korgnote.composeapp.generated.resources.editor_add_heading_below
+import korgnote.composeapp.generated.resources.editor_add_subheading
+import korgnote.composeapp.generated.resources.editor_collapse_heading
+import korgnote.composeapp.generated.resources.editor_delete_heading
+import korgnote.composeapp.generated.resources.editor_delete_heading_text
+import korgnote.composeapp.generated.resources.editor_delete_heading_text_subheadings
+import korgnote.composeapp.generated.resources.editor_delete_heading_title
+import korgnote.composeapp.generated.resources.editor_demote
+import korgnote.composeapp.generated.resources.editor_edit
+import korgnote.composeapp.generated.resources.editor_editing_element
+import korgnote.composeapp.generated.resources.editor_expand_heading
+import korgnote.composeapp.generated.resources.editor_linked_from
+import korgnote.composeapp.generated.resources.editor_more_actions
+import korgnote.composeapp.generated.resources.editor_move_down
+import korgnote.composeapp.generated.resources.editor_move_up
+import korgnote.composeapp.generated.resources.editor_note_details
+import korgnote.composeapp.generated.resources.editor_open
+import korgnote.composeapp.generated.resources.editor_promote
+import korgnote.composeapp.generated.resources.editor_this_heading
 import kotlinx.coroutines.delay
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -213,9 +238,9 @@ fun OrgDocumentView(
                                 // Inner targets — a checkbox, a link, a drawer's toggle — are
                                 // clickables of their own and take their tap first; anything
                                 // else in the element edits it. A scroll never becomes a tap.
-                                onClickLabel = "Edit",
+                                onClickLabel = stringResource(Res.string.editor_edit),
                                 onClick = { onEditElement?.invoke(index) },
-                                onLongClickLabel = "More actions",
+                                onLongClickLabel = stringResource(Res.string.editor_more_actions),
                                 onLongClick = { menuOpen = true },
                             ),
                         verticalAlignment = Alignment.Top,
@@ -259,11 +284,11 @@ fun OrgDocumentView(
                         }
                         if (editDetails != null && element.isPreamble) NoteDetailsButton(editDetails)
                         if (foldable && onToggleFold != null) {
-                            val action = if (folded) "Expand" else "Collapse"
+                            val foldDescription = stringResource(if (folded) Res.string.editor_expand_heading else Res.string.editor_collapse_heading, element.title)
                             IconButton(
                                 onClick = { onToggleFold(index) },
                                 modifier = Modifier.size(32.dp)
-                                    .semantics { contentDescription = "$action ${element.title}" },
+                                    .semantics { contentDescription = foldDescription },
                             ) {
                                 Icon(
                                     if (folded) Icons.Filled.ChevronRight else Icons.Filled.ExpandMore,
@@ -383,7 +408,7 @@ private const val LANDING_FADE_MILLIS = 1300
 @Composable
 private fun NoteDetailsButton(onClick: () -> Unit) {
     IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
-        Icon(Icons.Filled.EditNote, contentDescription = "Note details", tint = MaterialTheme.colorScheme.outline)
+        Icon(Icons.Filled.EditNote, contentDescription = stringResource(Res.string.editor_note_details), tint = MaterialTheme.colorScheme.outline)
     }
 }
 
@@ -396,7 +421,7 @@ private fun BacklinksSection(backlinks: List<OrgBacklink>, onOpen: (OrgBacklink)
     Column(modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp)) {
         HorizontalDivider()
         Text(
-            "Linked from (${backlinks.size})",
+            stringResource(Res.string.editor_linked_from, backlinks.size),
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.outline,
             modifier = Modifier.padding(vertical = 8.dp),
@@ -405,7 +430,7 @@ private fun BacklinksSection(backlinks: List<OrgBacklink>, onOpen: (OrgBacklink)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClickLabel = "Open") { onOpen(backlink) }
+                    .clickable(onClickLabel = stringResource(Res.string.editor_open)) { onOpen(backlink) }
                     .padding(vertical = 6.dp),
             ) {
                 Text(backlink.context, style = MaterialTheme.typography.bodyMedium, color = OrgColors.link)
@@ -448,28 +473,28 @@ private fun ElementMenu(
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         if (onAddHeadingBelow != null) {
             DropdownMenuItem(
-                text = { Text(if (isPreamble) "Add heading" else "Add heading below") },
+                text = { Text(stringResource(if (isPreamble) Res.string.editor_add_heading else Res.string.editor_add_heading_below)) },
                 onClick = { onDismiss(); onAddHeadingBelow() },
             )
         }
         // The preamble is not a heading, so there is nothing to put a child under.
         if (onAddSubheading != null && !isPreamble) {
             DropdownMenuItem(
-                text = { Text("Add sub-heading") },
+                text = { Text(stringResource(Res.string.editor_add_subheading)) },
                 onClick = { onDismiss(); onAddSubheading() },
             )
         }
         if (!isPreamble) {
             HorizontalDivider()
-            Item("Move up", onMoveUp)
-            Item("Move down", onMoveDown)
-            Item("Promote", onPromote)
-            Item("Demote", onDemote)
+            Item(stringResource(Res.string.editor_move_up), onMoveUp)
+            Item(stringResource(Res.string.editor_move_down), onMoveDown)
+            Item(stringResource(Res.string.editor_promote), onPromote)
+            Item(stringResource(Res.string.editor_demote), onDemote)
         }
         if (onDelete != null && !isPreamble) {
             HorizontalDivider()
             DropdownMenuItem(
-                text = { Text("Delete heading", color = MaterialTheme.colorScheme.error) },
+                text = { Text(stringResource(Res.string.editor_delete_heading), color = MaterialTheme.colorScheme.error) },
                 onClick = { onDismiss(); onDelete() },
             )
         }
@@ -489,24 +514,21 @@ private fun DeleteSectionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Delete this heading?") },
+        title = { Text(stringResource(Res.string.editor_delete_heading_title)) },
         text = {
+            val heading = title.ifBlank { stringResource(Res.string.editor_this_heading) }
             Text(
-                buildString {
-                    append(title.ifBlank { "This heading" })
-                    append(" and its body")
-                    when (subheadings) {
-                        0 -> append(" will be deleted.")
-                        1 -> append(", with 1 sub-heading, will be deleted.")
-                        else -> append(", with $subheadings sub-headings, will be deleted.")
-                    }
+                if (subheadings == 0) {
+                    stringResource(Res.string.editor_delete_heading_text, heading)
+                } else {
+                    pluralStringResource(Res.plurals.editor_delete_heading_text_subheadings, subheadings, heading, subheadings)
                 },
             )
         },
         confirmButton = {
-            TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            TextButton(onClick = onDelete) { Text(stringResource(Res.string.delete), color = MaterialTheme.colorScheme.error) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
 }
 
@@ -573,7 +595,7 @@ private fun OrgElementEditor(
                 // time on every keystroke, just to decide whether to show a placeholder.
                 visualTransformation = VisualTransformation.None,
                 interactionSource = interactionSource,
-                label = { Text("Editing element") },
+                label = { Text(stringResource(Res.string.editor_editing_element)) },
             )
         },
     )

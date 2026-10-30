@@ -5,8 +5,16 @@ import com.korgnote.app.files.FileOpenResult
 import com.korgnote.app.files.FileOpener
 import com.korgnote.app.files.covering
 import com.korgnote.common.org.link.fileLinkPath
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.vm_file_link_unsupported_target
+import korgnote.composeapp.generated.resources.vm_file_links_unsupported
+import korgnote.composeapp.generated.resources.vm_file_needs_mapping
+import korgnote.composeapp.generated.resources.vm_file_no_app
+import korgnote.composeapp.generated.resources.vm_file_not_in_mapped_folder
+import korgnote.composeapp.generated.resources.vm_file_not_on_device
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.getString
 
 /**
  * Links to files outside the notes — `[[file:~/Sync/invoice.pdf]]` — opened in the app the device
@@ -28,7 +36,7 @@ class FileLinks(
 
     /** [open], waited for: the message to show, empty when the file was opened. */
     suspend fun openNow(target: String): String {
-        val path = fileLinkPath(target) ?: return "[[$target]] is not a file this app can open."
+        val path = fileLinkPath(target) ?: return getString(Res.string.vm_file_link_unsupported_target, target)
         val covered = mappings().covering(path)
         val result = if (covered == null) {
             opener.openAsWritten(path)
@@ -38,14 +46,13 @@ class FileLinks(
         return when (result) {
             FileOpenResult.Opened -> ""
             FileOpenResult.NotFound -> if (covered == null) {
-                "$path is not on this device. If it is somewhere else here, say where in Settings, under File links."
+                getString(Res.string.vm_file_not_on_device, path)
             } else {
-                "$path is not on this device, in the folder set for ${covered.first.from}."
+                getString(Res.string.vm_file_not_in_mapped_folder, path, covered.first.from)
             }
-            FileOpenResult.NoApp -> "No app on this device opens ${path.substringAfterLast('/')}."
-            FileOpenResult.NeedsMapping ->
-                "No folder on this device is set for $path. Choose one in Settings, under File links."
-            FileOpenResult.Unsupported -> "Files cannot be opened from links on this device."
+            FileOpenResult.NoApp -> getString(Res.string.vm_file_no_app, path.substringAfterLast('/'))
+            FileOpenResult.NeedsMapping -> getString(Res.string.vm_file_needs_mapping, path)
+            FileOpenResult.Unsupported -> getString(Res.string.vm_file_links_unsupported)
             is FileOpenResult.Failed -> result.reason
         }
     }

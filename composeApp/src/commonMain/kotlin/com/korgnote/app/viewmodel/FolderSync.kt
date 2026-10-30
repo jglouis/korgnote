@@ -5,11 +5,14 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.korgnote.common.replica.FolderNoteStorage
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.vm_folder_conflict
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.getString
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -121,10 +124,7 @@ class FolderSync(
         val conflicted = storage.takeConflicts()
         unreachable = storage.problem
         if (conflicted.isEmpty()) return
-        showMessage(
-            "${conflicted.joinToString(", ")} changed in the folder while you were editing it. " +
-                "That version is kept; yours is saved beside it as a .sync-conflict- copy.",
-        )
+        showMessage(getString(Res.string.vm_folder_conflict, conflicted.joinToString(", ")))
         onReplicaChanged()
     }
 

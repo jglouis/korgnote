@@ -1,0 +1,50 @@
+<resources>
+    <string name="app_file">Fichier</string>
+    <string name="app_search">Recherche</string>
+    <string name="app_files">Fichiers</string>
+    <string name="app_new_note">Nouvelle note</string>
+    <string name="app_todays_daily">Note du jour</string>
+    <string name="app_filter_files">Filtrer les fichiers</string>
+    <string name="app_filter_files_hint">Partie d’un nom de fichier</string>
+    <string name="app_open_drawer">Ouvrir le menu</string>
+    <string name="app_new_table">Nouveau tableau</string>
+    <string name="app_scroll_to_end">Aller à la fin du fichier</string>
+    <string name="app_add_heading_at_end">Ajouter un titre à la fin du fichier</string>
+    <string name="app_discard_element">Annuler les modifications de cet élément</string>
+    <string name="app_save_element">Enregistrer cet élément</string>
+    <string name="app_select_file">Choisissez un fichier .org pour afficher son contenu</string>
+
+    <string name="cal_today">Aujourd’hui</string>
+    <string name="cal_previous">Précédent</string>
+    <string name="cal_next">Suivant</string>
+    <string name="cal_mode_agenda">Agenda</string>
+    <string name="cal_mode_day">Jour</string>
+    <string name="cal_mode_week">Semaine</string>
+    <string name="cal_mode_month">Mois</string>
+    <string name="cal_show_done">Afficher les tâches terminées</string>
+    <string name="cal_hide_done">Masquer les tâches terminées</string>
+    <string name="cal_overdue">En retard</string>
+    <string name="cal_nothing_planned">Rien de prévu</string>
+    <string name="cal_all_day">jour entier</string>
+    <string name="cal_kind_deadline">Échéance</string>
+    <string name="cal_kind_scheduled">Prévu</string>
+    <string name="cal_kind_closed">Terminé</string>
+    <string name="cal_kind_timestamp">Événement</string>
+    <string name="cal_status_due_in">Dans %1$d j</string>
+    <string name="cal_status_overdue">%1$d j de retard</string>
+    <string name="cal_status_scheduled_ago">Prévu il y a %1$d j</string>
+    <string name="cal_status_starts">Début</string>
+    <string name="cal_status_continues">En cours</string>
+    <string name="cal_status_ends">Fin</string>
+    <string name="cal_status_prefix">%1$s :</string>
+
+    <string name="remind_all_day">Toute la journée</string>
+    <string name="remind_one_entry">1 entrée</string>
+    <string name="remind_entries">%1$d entrées</string>
+    <plurals name="remind_more_in_calendar">
+        <item quantity="one">%1$d autre dans le calendrier</item>
+        <item quantity="other">%1$d autres dans le calendrier</item>
+    </plurals>
+    <string name="remind_channel_name">Rappels de l’agenda</string>
+    <string name="remind_channel_description">Avant les entrées à heure fixe de vos notes, et le résumé du matin</string>
+</resources>

@@ -6,6 +6,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.korgnote.app.data.InMemorySettingsRepository
@@ -60,6 +62,8 @@ class AppDeadLinkTest {
         // At the start of the line, where the link is; the text's node is as wide as the screen.
         onNodeWithText("C-c C-c").performTouchInput { click(Offset(4f, centerY)) }
 
+        // The message is looked up in the app's language before it shows.
+        waitUntilAtLeastOneExists(hasText("names keys to press in Emacs", substring = true))
         onNodeWithText("names keys to press in Emacs", substring = true).assertIsDisplayed()
         assertEquals("keys.org", viewModel.note.path)
     }
@@ -72,6 +76,7 @@ class AppDeadLinkTest {
         runOnIdle { viewModel.links.follow("id:missing") }
 
         // Clearing the message once shown must not take the snackbar down with it.
+        waitUntilAtLeastOneExists(hasText("Nothing in the notes matches", substring = true))
         onNodeWithText("Nothing in the notes matches", substring = true).assertIsDisplayed()
     }
 }

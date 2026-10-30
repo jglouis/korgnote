@@ -61,3 +61,28 @@ object TagColors {
         return palette[(hash.toUInt() % palette.size.toUInt()).toInt()]
     }
 }
+
+/**
+ * The colour of each TODO keyword in the agenda, the calendar's and the home-screen widget's alike.
+ *
+ * Hashing the name, as tags do, gives `TODO` and `EVENT` the same colour. The open keywords take
+ * [palette] in alphabetical order instead, which only moves when a keyword is added; a finished one
+ * is grey, whatever it is.
+ */
+class KeywordSwatches(openKeywords: Collection<String>) {
+    private val index = openKeywords.distinct().sorted().withIndex().associate { (i, keyword) -> keyword to i }
+
+    /** [keyword]'s colour, or null when it is no keyword the agenda has open. */
+    fun of(keyword: String, done: Boolean): TagColors.Swatch? {
+        if (done) return DONE
+        val i = index[keyword] ?: return null
+        return palette[i % palette.size]
+    }
+
+    companion object {
+        /** Away from the agenda kinds' own colours, so a keyword's edge does not vanish into its chip's tint. */
+        val palette = listOf(5, 10, 7, 1, 8, 11, 6, 0).map { TagColors.palette[it] }
+
+        val DONE = TagColors.Swatch(0x9E9E9E, 0x9E9E9E)
+    }
+}

@@ -11,10 +11,16 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.data_or
+import korgnote.composeapp.generated.resources.data_pairing_server_said
+import korgnote.composeapp.generated.resources.data_pairing_unreachable
+import korgnote.composeapp.generated.resources.data_pairing_unreachable_unnamed
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import org.jetbrains.compose.resources.getString
 
 /**
  * The computer this device is paired with: where it may be, the certificate it must show, and the
@@ -129,7 +135,9 @@ class DevicePairing(
                     continue
                 }
                 if (response.status != HttpStatusCode.OK) {
-                    return@use PairingResult.Failed(response.bodyAsText().ifBlank { "The server said ${response.status}." })
+                    return@use PairingResult.Failed(
+                        response.bodyAsText().ifBlank { getString(Res.string.data_pairing_server_said, response.status.toString()) },
+                    )
                 }
                 val answer = response.body<PairResponse>()
                 val server = PairedServer(
@@ -147,10 +155,10 @@ class DevicePairing(
             }
             // The platform's own words are no help here: an address with nothing at it and a server
             // showing another certificate both end the connection, and neither is worth a stack.
+            val addresses = link.addresses.joinToString(" ${getString(Res.string.data_or)} ")
             PairingResult.Failed(
-                "Could not reach ${link.serverName.ifBlank { "the computer" }} at ${link.addresses.joinToString(" or ")}, " +
-                    "or it did not show the certificate the code names. Is this device on the same network, " +
-                    "and is the code from this computer's Devices page?",
+                if (link.serverName.isBlank()) getString(Res.string.data_pairing_unreachable_unnamed, addresses)
+                else getString(Res.string.data_pairing_unreachable, link.serverName, addresses),
             )
         }
     }

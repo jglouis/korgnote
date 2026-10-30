@@ -210,6 +210,10 @@ class CalendarLayoutTest {
         assertEquals("2 d. overdue", labels["Missed"])
         assertEquals("Scheduled 5 d. ago", labels["Late"])
         assertNull(labels["Meeting"])
+        val statuses = agenda.shownOn(today, today, showDone = true).associate { it.entry.title to it.status(today) }
+        assertEquals(AgendaStatus.DueIn(3), statuses["Due soon"])
+        assertEquals(AgendaStatus.Overdue(2), statuses["Missed"])
+        assertEquals(AgendaStatus.ScheduledAgo(5), statuses["Late"])
         assertEquals("10:00–11:30", agenda.on(today).first { it.entry.title == "Meeting" }.timeLabel())
     }
 

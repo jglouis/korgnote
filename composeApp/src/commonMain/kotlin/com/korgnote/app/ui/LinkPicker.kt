@@ -35,6 +35,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.link.LinkTarget
 import com.korgnote.common.org.link.matching
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.cancel
+import korgnote.composeapp.generated.resources.notes_heading
+import korgnote.composeapp.generated.resources.notes_link_nothing_matches
+import korgnote.composeapp.generated.resources.notes_link_query_placeholder
+import korgnote.composeapp.generated.resources.notes_link_to
+import korgnote.composeapp.generated.resources.notes_link_to_target
+import korgnote.composeapp.generated.resources.notes_link_web_or_file
+import korgnote.composeapp.generated.resources.notes_note
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Finds where a link goes, among every note and every heading in them, as org-roam's node finder
@@ -59,20 +69,20 @@ fun LinkPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Link to") },
+        title = { Text(stringResource(Res.string.notes_link_to)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = { Text("Note or heading") },
+                    placeholder = { Text(stringResource(Res.string.notes_link_query_placeholder)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
                 if (shown.isEmpty()) {
                     Text(
-                        "Nothing matches.",
+                        stringResource(Res.string.notes_link_nothing_matches),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.padding(top = 12.dp),
@@ -86,8 +96,10 @@ fun LinkPickerDialog(
                 }
             }
         },
-        confirmButton = { if (onTypeLink != null) TextButton(onClick = onTypeLink) { Text("Web or file link…") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = {
+            if (onTypeLink != null) TextButton(onClick = onTypeLink) { Text(stringResource(Res.string.notes_link_web_or_file)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
 }
 
@@ -95,12 +107,13 @@ fun LinkPickerDialog(
 private fun LinkTargetRow(target: LinkTarget, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().clickable(onClickLabel = "Link to ${target.title}", onClick = onClick)
+        modifier = Modifier.fillMaxWidth()
+            .clickable(onClickLabel = stringResource(Res.string.notes_link_to_target, target.title), onClick = onClick)
             .padding(vertical = 8.dp),
     ) {
         Icon(
             if (target.isNote) Icons.Outlined.Description else Icons.AutoMirrored.Filled.Notes,
-            contentDescription = if (target.isNote) "Note" else "Heading",
+            contentDescription = stringResource(if (target.isNote) Res.string.notes_note else Res.string.notes_heading),
             tint = MaterialTheme.colorScheme.outline,
             modifier = Modifier.size(20.dp),
         )

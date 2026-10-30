@@ -34,6 +34,17 @@ import androidx.compose.ui.unit.dp
 import com.korgnote.app.files.FileLinkMapping
 import com.korgnote.app.files.folderLabel
 import com.korgnote.app.files.rememberFolderPicker
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.settings_add_folder
+import korgnote.composeapp.generated.resources.settings_choose_folder
+import korgnote.composeapp.generated.resources.settings_error_file_link_both
+import korgnote.composeapp.generated.resources.settings_error_file_link_start
+import korgnote.composeapp.generated.resources.settings_folder_in_links
+import korgnote.composeapp.generated.resources.settings_folder_on_device
+import korgnote.composeapp.generated.resources.settings_is_on_this_device
+import korgnote.composeapp.generated.resources.settings_remove_folder
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The folders file links name, each with where it is on this device: chosen in the system's picker
@@ -50,23 +61,15 @@ internal fun FileLinkSettings(mappings: List<FileLinkMapping>, onChange: (List<F
         choosingFor = null
     }
 
-    Text("File links")
-    Text(
-        "Links to files outside the notes, like [[file:~/Sync/invoice.pdf]], open in the app this " +
-            "device picks for the file. Where a folder they name is somewhere else here, say where.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.outline,
-    )
     for ((row, mapping) in mappings.withIndex()) {
         fun update(changed: FileLinkMapping) = onChange(mappings.mapIndexed { i, m -> if (i == row) changed else m })
-        Spacer(Modifier.height(8.dp))
         FileLinkMappingRow(
             from = { modifier ->
                 OutlinedTextField(
                     modifier = modifier,
                     value = mapping.from,
                     onValueChange = { update(mapping.copy(from = it)) },
-                    label = { Text("Folder in links") },
+                    label = { Text(stringResource(Res.string.settings_folder_in_links)) },
                     placeholder = { Text("~/Sync") },
                     singleLine = true,
                 )
@@ -77,7 +80,7 @@ internal fun FileLinkSettings(mappings: List<FileLinkMapping>, onChange: (List<F
                         Icon(Icons.Filled.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            if (mapping.to.isBlank()) "Choose the folder" else folderLabel(mapping.to),
+                            if (mapping.to.isBlank()) stringResource(Res.string.settings_choose_folder) else folderLabel(mapping.to),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -87,7 +90,7 @@ internal fun FileLinkSettings(mappings: List<FileLinkMapping>, onChange: (List<F
                         modifier = modifier,
                         value = mapping.to,
                         onValueChange = { update(mapping.copy(to = it)) },
-                        label = { Text("Folder on this device") },
+                        label = { Text(stringResource(Res.string.settings_folder_on_device)) },
                         placeholder = { Text("/home/me/Sync") },
                         singleLine = true,
                     )
@@ -97,7 +100,7 @@ internal fun FileLinkSettings(mappings: List<FileLinkMapping>, onChange: (List<F
         )
     }
     TextButton(onClick = { onChange(mappings + FileLinkMapping("", "")) }) {
-        Text("Add a folder")
+        Text(stringResource(Res.string.settings_add_folder))
     }
 }
 
@@ -114,7 +117,7 @@ private fun FileLinkMappingRow(
 ) {
     val remove = @Composable {
         IconButton(onClick = onRemove) {
-            Icon(Icons.Filled.Close, contentDescription = "Remove this folder")
+            Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.settings_remove_folder))
         }
     }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -123,7 +126,7 @@ private fun FileLinkMappingRow(
                 from(Modifier.weight(1f))
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = "is, on this device,",
+                    contentDescription = stringResource(Res.string.settings_is_on_this_device),
                     modifier = Modifier.padding(horizontal = 8.dp),
                     tint = MaterialTheme.colorScheme.primary,
                 )
@@ -148,7 +151,7 @@ private fun FileLinkMappingRow(
                             tint = MaterialTheme.colorScheme.primary,
                         )
                         Text(
-                            "is, on this device,",
+                            stringResource(Res.string.settings_is_on_this_device),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline,
                         )
@@ -164,13 +167,12 @@ private fun FileLinkMappingRow(
  * Why [mappings] cannot be saved, or null when they can. Rows left wholly empty are not a mistake;
  * the screen drops them.
  */
-internal fun fileLinkMappingsError(mappings: List<FileLinkMapping>): String? {
+internal fun fileLinkMappingsError(mappings: List<FileLinkMapping>): StringResource? {
     val filled = mappings.filter { it.from.isNotBlank() || it.to.isNotBlank() }
     return when {
-        filled.any { it.from.isBlank() || it.to.isBlank() } ->
-            "Please give each file-link folder both its path in links and its place on this device."
+        filled.any { it.from.isBlank() || it.to.isBlank() } -> Res.string.settings_error_file_link_both
         filled.any { !it.from.trim().startsWith("~") && !it.from.trim().startsWith("/") } ->
-            "Please write each folder in links as the links do, starting with ~ or /."
+            Res.string.settings_error_file_link_start
         else -> null
     }
 }

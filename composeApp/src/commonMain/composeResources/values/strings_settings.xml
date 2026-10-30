@@ -1,0 +1,72 @@
+<resources>
+    <!-- The Settings screen and the panels in it. -->
+    <string name="settings_notes">Notes</string>
+    <string name="settings_notes_in_folder">In the folder %1$s.</string>
+    <string name="settings_notes_on_server">Synced with the KorgNote server on your computer.</string>
+    <string name="settings_notes_on_webdav_account">Synced with the WebDAV folder %1$s, as %2$s. Experimental.</string>
+    <string name="settings_notes_on_webdav">Synced with a WebDAV server. Experimental.</string>
+    <string name="settings_change_notes_source">Change where notes are</string>
+    <string name="settings_server">Server</string>
+    <string name="settings_server_subtitle">Where this device syncs its notes</string>
+    <string name="settings_local_server">Server on this computer</string>
+    <string name="settings_local_server_when_unpaired">Used when not paired.</string>
+    <string name="settings_local_server_this_page">The server this page comes from.</string>
+    <string name="settings_host">Host (usually localhost)</string>
+    <string name="settings_port">Port</string>
+
+    <string name="settings_reminders">Reminders</string>
+    <string name="settings_reminders_subtitle">Notifications on this device, scheduled from the agenda. They work offline.</string>
+    <string name="settings_notifications_blocked">KorgNote may not show notifications, so reminders stay silent.</string>
+    <string name="settings_allow_notifications">Allow notifications</string>
+    <string name="settings_remind_before">Remind me before timed entries</string>
+    <string name="settings_minutes_before">Minutes before</string>
+    <string name="settings_digest">Morning digest of the day's agenda</string>
+    <string name="settings_digest_at">Morning digest at</string>
+    <string name="settings_at_time">At %1$s</string>
+
+    <string name="settings_new_notes">New notes</string>
+    <string name="settings_new_notes_subtitle">Where new notes and dailies go, and what they start with</string>
+    <string name="settings_new_notes_folder">Folder for new notes (empty for the top)</string>
+    <string name="settings_dailies_folder">Folder for dailies (empty for the top)</string>
+    <string name="settings_extra_header">Extra header lines, such as #+TODO:</string>
+    <string name="settings_header_note">Each new note and daily also gets its own :ID:, #+TITLE:, #+DATE: and your tags.</string>
+
+    <string name="settings_tag_colours">Tag colours</string>
+    <string name="settings_tag_colours_subtitle">Each tag has a colour from its name. Tap one to choose another; it is kept on this device.</string>
+    <string name="settings_no_tags">No tags in the notes yet.</string>
+    <string name="settings_show_fewer_tags">Show fewer</string>
+    <string name="settings_show_all_tags">Show all %1$d tags</string>
+    <string name="settings_colour_from_name">From its name</string>
+
+    <string name="settings_file_links">File links</string>
+    <string name="settings_file_links_subtitle">Links to files outside the notes, like [[file:~/Sync/invoice.pdf]], open in the app this device picks for the file. Where a folder they name is somewhere else here, say where.</string>
+    <string name="settings_folder_in_links">Folder in links</string>
+    <string name="settings_choose_folder">Choose the folder</string>
+    <string name="settings_folder_on_device">Folder on this device</string>
+    <string name="settings_add_folder">Add a folder</string>
+    <string name="settings_remove_folder">Remove this folder</string>
+    <string name="settings_is_on_this_device">is, on this device,</string>
+
+    <string name="settings_error_host_port">Please enter a valid host and port (1-65535).</string>
+    <string name="settings_error_minutes">Please enter how many minutes before (0-1440).</string>
+    <string name="settings_error_folder">Please enter a folder inside the notes, like inbox or notes/inbox.</string>
+    <string name="settings_error_daily_folder">Please enter a folder inside the notes for dailies, like daily.</string>
+    <string name="settings_error_file_link_both">Please give each file-link folder both its path in links and its place on this device.</string>
+    <string name="settings_error_file_link_start">Please write each folder in links as the links do, starting with ~ or /.</string>
+
+    <string name="settings_pair_title">Pair with a computer</string>
+    <string name="settings_pair_not_a_link">That is not a KorgNote pairing link. It starts with korgnote://pair.</string>
+    <string name="settings_pairing_with">Pairing with %1$s…</string>
+    <string name="settings_the_computer">the computer</string>
+    <string name="settings_paired_with">Paired with %1$s.</string>
+    <string name="settings_forget_title">Forget %1$s?</string>
+    <string name="settings_forget_text">This device stops syncing until it is paired again. To make its access stop on the computer too, revoke it on the Devices page there.</string>
+    <string name="settings_forget">Forget</string>
+    <string name="settings_paired_as">Paired with %1$s as %2$s.</string>
+    <string name="settings_reached_at">Reached at %1$s, port %2$d. Certificate %3$s…</string>
+    <string name="settings_pair_how_to">On the computer the server runs on, open http://localhost:8080/devices, press Show a pairing code, and scan it here.</string>
+    <string name="settings_scan_code">Scan the code</string>
+    <string name="settings_scan_again">Scan again</string>
+    <string name="settings_paste_link">Or paste the pairing link</string>
+    <string name="settings_pair">Pair</string>
+</resources>

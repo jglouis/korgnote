@@ -20,10 +20,13 @@ fun interface NoteFolderAccess {
 expect fun rememberNotesFolderPicker(onPicked: (String) -> Unit): (() -> Unit)?
 
 /** The folder at [location], as the user would recognise it: `Internal storage/Sync/org`. */
+@Composable
 expect fun notesFolderLabel(location: String): String
 
 /** Where a notes folder can be, said for this platform, for the welcome screen's choice. */
 internal expect val notesFolderPlaces: String
+    @Composable get
 
 /** What to pick in the folder picker, and what it will not let you pick, said for this platform. */
 internal expect val notesFolderPickingHint: String
+    @Composable get

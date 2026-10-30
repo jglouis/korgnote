@@ -11,6 +11,7 @@ import com.korgnote.app.di.initKoin
 import com.korgnote.app.notifications.AndroidNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
 import com.korgnote.app.widget.AndroidAgendaWidgets
+import com.korgnote.app.widget.WidgetPreviews
 import com.korgnote.app.widgets.AgendaWidgets
 import org.koin.dsl.module
 
@@ -28,5 +29,6 @@ class KorgNoteApplication : Application() {
             single<FileOpener> { AndroidFileOpener(this@KorgNoteApplication) }
         }
         initKoin(extraModules = listOf(androidModule))
+        WidgetPreviews.publish(this)
     }
 }

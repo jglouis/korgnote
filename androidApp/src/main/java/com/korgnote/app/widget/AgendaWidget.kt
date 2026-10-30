@@ -27,13 +27,17 @@ import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
+import com.korgnote.androidapp.R
 import com.korgnote.app.ui.CalendarMode
-import com.korgnote.app.ui.statusLabel
+import com.korgnote.app.ui.KeywordSwatches
 import com.korgnote.app.ui.timeLabel
-import com.korgnote.app.widgets.plainHeadline
+import com.korgnote.app.widgets.of
+import com.korgnote.app.widgets.plainTitle
 import com.korgnote.app.widgets.widgetAgenda
+import com.korgnote.app.widgets.widgetKeywordSwatches
 import com.korgnote.app.widgets.widgetSectionTitle
 import com.korgnote.app.widgets.widgetSections
+import com.korgnote.app.widgets.widgetStatus
 import com.korgnote.common.org.agenda.AgendaOccurrence
 import kotlinx.datetime.LocalDate
 
@@ -49,6 +53,12 @@ class AgendaWidget : GlanceAppWidget() {
             GlanceTheme { AgendaContent(context, currentWidgetState(context, first)) }
         }
     }
+
+    /** The widget picker's picture of it, on a few made-up entries. */
+    override suspend fun providePreview(context: Context, widgetCategory: Int) {
+        val state = WidgetState.preview(context)
+        provideContent { GlanceTheme { AgendaContent(context, state) } }
+    }
 }
 
 class AgendaWidgetReceiver : GlanceAppWidgetReceiver() {
@@ -58,10 +68,11 @@ class AgendaWidgetReceiver : GlanceAppWidgetReceiver() {
 @Composable
 private fun AgendaContent(context: Context, state: WidgetState) {
     val today = state.now.date
+    val words = AndroidWidgetWords(context)
     WidgetFrame {
         WidgetHeader {
             WidgetTitle(
-                "Agenda",
+                context.getString(R.string.widget_agenda_title),
                 actionStartActivity(WidgetIntents.openCalendar(context, CalendarMode.Agenda, today)),
                 GlanceModifier.defaultWeight(),
             )
@@ -72,14 +83,16 @@ private fun AgendaContent(context: Context, state: WidgetState) {
         if (entries == null) {
             NotLoadedYet(context)
         } else {
-            val sections = widgetAgenda(entries, today).widgetSections(today)
+            val agenda = widgetAgenda(entries, today)
+            val sections = agenda.widgetSections(today)
+            val swatches = agenda.widgetKeywordSwatches()
             LazyColumn(GlanceModifier.fillMaxWidth()) {
                 for (section in sections) {
-                    item { SectionTitle(widgetSectionTitle(section.date, today), section.date, today) }
+                    item { SectionTitle(widgetSectionTitle(section.date, today, words), section.date, today) }
                     if (section.occurrences.isEmpty()) {
                         item {
                             Text(
-                                "Nothing planned",
+                                context.getString(R.string.widget_nothing_planned),
                                 GlanceModifier.padding(bottom = 2.dp),
                                 style = TextStyle(color = GlanceTheme.colors.outline, fontSize = 12.sp),
                             )
@@ -87,7 +100,7 @@ private fun AgendaContent(context: Context, state: WidgetState) {
                     }
                     // Room for a time only in a section that has one, as in the app.
                     val timeWidth = if (section.occurrences.any { it.timeLabel() != null }) 76.dp else 0.dp
-                    items(section.occurrences) { AgendaRow(context, it, today, timeWidth) }
+                    items(section.occurrences) { AgendaRow(context, it, today, timeWidth, swatches, words) }
                 }
             }
         }
@@ -112,7 +125,14 @@ private fun SectionTitle(title: String, date: LocalDate?, today: LocalDate) {
 }
 
 @Composable
-private fun AgendaRow(context: Context, occurrence: AgendaOccurrence, today: LocalDate, timeWidth: Dp) {
+private fun AgendaRow(
+    context: Context,
+    occurrence: AgendaOccurrence,
+    today: LocalDate,
+    timeWidth: Dp,
+    swatches: KeywordSwatches,
+    words: AndroidWidgetWords,
+) {
     val accent = occurrence.entry.kind.accent()
     Row(
         GlanceModifier
@@ -132,14 +152,23 @@ private fun AgendaRow(context: Context, occurrence: AgendaOccurrence, today: Loc
             )
         }
         Column(GlanceModifier.defaultWeight()) {
-            occurrence.statusLabel(today)?.let {
+            occurrence.widgetStatus(today, words)?.let {
                 Text(it, style = TextStyle(color = accent, fontSize = 11.sp, fontWeight = FontWeight.Bold), maxLines = 1)
             }
-            Text(
-                occurrence.plainHeadline(),
-                style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 13.sp),
-                maxLines = 2,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val keyword = occurrence.entry.todo
+                val swatch = swatches.of(occurrence)
+                if (keyword != null && swatch != null) {
+                    KeywordLabel(keyword, swatch)
+                    Spacer(GlanceModifier.width(6.dp))
+                }
+                Text(
+                    // A keyword the agenda does not know as one stays in the title, as the app shows it.
+                    if (keyword != null && swatch == null) "$keyword ${occurrence.plainTitle()}" else occurrence.plainTitle(),
+                    style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 13.sp),
+                    maxLines = 2,
+                )
+            }
         }
     }
 }

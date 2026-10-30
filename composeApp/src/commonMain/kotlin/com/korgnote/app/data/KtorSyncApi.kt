@@ -23,9 +23,13 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.encodeURLPathPart
 import io.ktor.http.HttpStatusCode
 import io.ktor.utils.io.readLine
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.data_not_paired
+import korgnote.composeapp.generated.resources.data_pairing_revoked
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import org.jetbrains.compose.resources.getString
 
 @Serializable
 private data class WireEntry(val path: String, val size: Long, val mtime: Long, val etag: String)
@@ -86,13 +90,13 @@ class KtorSyncApi(
                 failure = e
             }
         }
-        throw failure ?: NotPairedException("This device is not paired with a computer yet. Pair it in Settings.")
+        throw failure ?: NotPairedException(getString(Res.string.data_not_paired))
     }
 
     /** This response, unless it is the server refusing this device, which is worth saying as that. */
     private suspend fun HttpResponse.unlessRefused(): HttpResponse {
         if (status == HttpStatusCode.Unauthorized) {
-            throw NotPairedException(bodyAsText().ifBlank { "The computer no longer knows this device. Pair it again in Settings." })
+            throw NotPairedException(bodyAsText().ifBlank { getString(Res.string.data_pairing_revoked) })
         }
         return this
     }

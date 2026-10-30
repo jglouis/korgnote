@@ -77,11 +77,31 @@ import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaKind
 import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.DaySpan
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.cal_all_day
+import korgnote.composeapp.generated.resources.cal_kind_closed
+import korgnote.composeapp.generated.resources.cal_kind_deadline
+import korgnote.composeapp.generated.resources.cal_kind_scheduled
+import korgnote.composeapp.generated.resources.cal_kind_timestamp
+import korgnote.composeapp.generated.resources.cal_nothing_planned
+import korgnote.composeapp.generated.resources.cal_overdue
+import korgnote.composeapp.generated.resources.cal_status_continues
+import korgnote.composeapp.generated.resources.cal_status_due_in
+import korgnote.composeapp.generated.resources.cal_status_ends
+import korgnote.composeapp.generated.resources.cal_status_overdue
+import korgnote.composeapp.generated.resources.cal_status_prefix
+import korgnote.composeapp.generated.resources.cal_status_scheduled_ago
+import korgnote.composeapp.generated.resources.cal_status_starts
+import korgnote.composeapp.generated.resources.cal_today
+import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.Month
 import kotlin.math.abs
 import kotlin.math.pow
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
 
 // --- How each kind looks -----------------------------------------------------------------------
 
@@ -103,6 +123,41 @@ fun AgendaKind.icon(): ImageVector = when (this) {
     AgendaKind.Scheduled -> Icons.Filled.Schedule
     AgendaKind.Timestamp -> Icons.Filled.Event
     AgendaKind.Closed -> Icons.Filled.CheckCircle
+}
+
+/** The kind's name, for a screen reader where the icon stands for it. */
+@Composable
+fun AgendaKind.label(): String = stringResource(
+    when (this) {
+        AgendaKind.Deadline -> Res.string.cal_kind_deadline
+        AgendaKind.Scheduled -> Res.string.cal_kind_scheduled
+        AgendaKind.Timestamp -> Res.string.cal_kind_timestamp
+        AgendaKind.Closed -> Res.string.cal_kind_closed
+    },
+)
+
+/** The words for a status, and the number of days that goes in them. */
+private val AgendaStatus.words: Pair<StringResource, Int?>
+    get() = when (this) {
+        AgendaStatus.Deadline -> Res.string.cal_kind_deadline to null
+        is AgendaStatus.DueIn -> Res.string.cal_status_due_in to days
+        is AgendaStatus.Overdue -> Res.string.cal_status_overdue to days
+        is AgendaStatus.ScheduledAgo -> Res.string.cal_status_scheduled_ago to days
+        AgendaStatus.Closed -> Res.string.cal_kind_closed to null
+        AgendaStatus.Starts -> Res.string.cal_status_starts to null
+        AgendaStatus.Continues -> Res.string.cal_status_continues to null
+        AgendaStatus.Ends -> Res.string.cal_status_ends to null
+    }
+
+/** "Due in 3 d.", "Dans 3 j": the status in the language the app is shown in. */
+@Composable
+fun AgendaStatus.label(): String = words.let { (text, days) ->
+    if (days == null) stringResource(text) else stringResource(text, days)
+}
+
+/** [label], away from composition: for a widget, say. */
+suspend fun AgendaStatus.text(): String = words.let { (text, days) ->
+    if (days == null) getString(text) else getString(text, days)
 }
 
 /**
@@ -130,24 +185,19 @@ private fun Modifier.dimmedIfDone(occurrence: AgendaOccurrence) = if (occurrence
  * edge in its colour; the agenda and the day view, which spell it out, write it in the same
  * colour, which is how the colours are learnt.
  *
- * Hashing the name, as tags do, gives `TODO` and `EVENT` the same colour. The open keywords take
- * [KEYWORD_PALETTE] in alphabetical order instead, which only moves when a keyword is added; a
- * finished one is grey, whatever it is.
+ * The colours are [KeywordSwatches]', which the home-screen widget's labels share.
  */
 class KeywordColors(keywords: Collection<String>) {
-    private val index = keywords.sorted().withIndex().associate { (i, keyword) -> keyword to i }
+    private val swatches = KeywordSwatches(keywords)
 
     /** [entry]'s keyword colour, or null when it has no keyword. */
     fun of(entry: AgendaEntry): Color? {
         val keyword = entry.todo ?: return null
         if (entry.done) return OrgColors.done
-        val swatch = KEYWORD_PALETTE[(index[keyword] ?: return null) % KEYWORD_PALETTE.size]
+        val swatch = swatches.of(keyword, done = false) ?: return null
         return Color(0xFF000000.toInt() or if (OrgColors.dark) swatch.dark else swatch.light)
     }
 }
-
-/** Away from the kinds' own colours, so an edge does not vanish into its chip's tint. */
-private val KEYWORD_PALETTE = listOf(5, 10, 7, 1, 8, 11, 6, 0).map { TagColors.palette[it] }
 
 @Composable
 private fun rememberKeywordColors(agenda: AgendaIndex) = remember(agenda) {
@@ -185,10 +235,6 @@ private fun AgendaOccurrence.headline(
     append(AnnotatedString(title.text, title.spanStyles))
 }
 
-private val LocalDate.shortWeekday get() = dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.titlecase() }
-private val LocalDate.longWeekday get() = dayOfWeek.name.lowercase().replaceFirstChar { it.titlecase() }
-private val LocalDate.monthName get() = month.name.lowercase().replaceFirstChar { it.titlecase() }
-
 // --- Agenda list -------------------------------------------------------------------------------
 
 /**
@@ -212,8 +258,9 @@ fun AgendaListView(
                 val isToday = date == today
                 Text(
                     text = when {
-                        date == null -> "Overdue"
-                        else -> "${date.longWeekday} ${date.day} ${date.monthName}" + if (isToday) " · Today" else ""
+                        date == null -> stringResource(Res.string.cal_overdue)
+                        else -> "${date.dayOfWeek.displayName().capitalised()} ${date.day} ${date.month.displayName()}" +
+                            if (isToday) " · ${stringResource(Res.string.cal_today)}" else ""
                     },
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = if (isToday || date == null) FontWeight.Bold else FontWeight.SemiBold,
@@ -228,7 +275,7 @@ fun AgendaListView(
             if (section.occurrences.isEmpty()) {
                 item(key = "empty-${section.date}") {
                     Text(
-                        "Nothing planned",
+                        stringResource(Res.string.cal_nothing_planned),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
@@ -263,12 +310,12 @@ private fun AgendaRow(occurrence: AgendaOccurrence, today: LocalDate, leading: D
             if (time != null) {
                 Text(time, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
             } else {
-                Icon(occurrence.entry.kind.icon(), contentDescription = occurrence.entry.kind.name, tint = accent, modifier = Modifier.size(16.dp))
+                Icon(occurrence.entry.kind.icon(), contentDescription = occurrence.entry.kind.label(), tint = accent, modifier = Modifier.size(16.dp))
             }
         }
         Column(Modifier.weight(1f)) {
-            occurrence.statusLabel(today)?.let {
-                Text(it, style = MaterialTheme.typography.labelSmall, color = accent, fontWeight = FontWeight.SemiBold)
+            occurrence.status(today)?.let {
+                Text(it.label(), style = MaterialTheme.typography.labelSmall, color = accent, fontWeight = FontWeight.SemiBold)
             }
             Text(
                 occurrence.headline(keywordColor = keywordColor),
@@ -353,7 +400,7 @@ fun TimeGridView(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(date.shortWeekday, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                Text(date.dayOfWeek.shortName(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                                 DayNumber(date, isToday = date == today)
                             }
                         }
@@ -371,7 +418,7 @@ fun TimeGridView(
             if (allDay.any { it.isNotEmpty() }) {
                 Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
                     Text(
-                        "all day",
+                        stringResource(Res.string.cal_all_day),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.width(GUTTER_WIDTH).padding(top = 2.dp),
@@ -697,7 +744,7 @@ private fun EventChip(
     maxLines: Int = 1,
 ) {
     val accent = occurrence.entry.kind.accent()
-    val status = occurrence.statusLabel(today)
+    val status = occurrence.status(today)?.label()
     val r = 3.dp
     val (shape, inset) = when (occurrence.span) {
         DaySpan.Single -> RoundedCornerShape(r) to PaddingValues(horizontal = 1.dp)
@@ -729,7 +776,7 @@ private fun EventChip(
         Text(
             text = when {
                 !compact && status != null && occurrence.entry.kind == AgendaKind.Deadline ->
-                    occurrence.headline(prefix = "$status:", keywordColor = keywordColor)
+                    occurrence.headline(prefix = stringResource(Res.string.cal_status_prefix, status), keywordColor = keywordColor)
                 else -> occurrence.headline(keywordColor = keywordColor, titleOnly = compact)
             },
             modifier = Modifier.keywordDescription(occurrence, compact),
@@ -794,9 +841,9 @@ fun MonthView(
     val keywordColors = rememberKeywordColors(agenda)
     Column(modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth()) {
-            for (d in listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")) {
+            for (d in DayOfWeek.entries) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    Text(d, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                    Text(d.shortName(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                 }
             }
         }

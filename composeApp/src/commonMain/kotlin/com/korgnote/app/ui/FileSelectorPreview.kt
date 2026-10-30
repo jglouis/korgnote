@@ -38,6 +38,20 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.tooling.preview.Preview
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.delete
+import korgnote.composeapp.generated.resources.editor_collapse
+import korgnote.composeapp.generated.resources.editor_conflicting_version
+import korgnote.composeapp.generated.resources.editor_expand
+import korgnote.composeapp.generated.resources.editor_file
+import korgnote.composeapp.generated.resources.editor_folder
+import korgnote.composeapp.generated.resources.editor_folder_open
+import korgnote.composeapp.generated.resources.editor_note_actions
+import korgnote.composeapp.generated.resources.editor_note_with_conflict
+import korgnote.composeapp.generated.resources.editor_pin
+import korgnote.composeapp.generated.resources.editor_rename_or_move
+import korgnote.composeapp.generated.resources.editor_unpin
+import org.jetbrains.compose.resources.stringResource
 
 // A simple in-memory model for preview/demo purposes
 interface Node {
@@ -149,7 +163,7 @@ private fun TreeFolderItem(
             Spacer(Modifier.width((depth * 16).dp))
             Icon(
                 imageVector = if (expanded) Icons.Filled.FolderOpen else Icons.Filled.Folder,
-                contentDescription = if (expanded) "Folder open" else "Folder"
+                contentDescription = stringResource(if (expanded) Res.string.editor_folder_open else Res.string.editor_folder)
             )
             Spacer(Modifier.width(8.dp))
             Text(
@@ -159,7 +173,7 @@ private fun TreeFolderItem(
             )
             Icon(
                 imageVector = Icons.Filled.ExpandMore,
-                contentDescription = if (expanded) "Collapse" else "Expand",
+                contentDescription = stringResource(if (expanded) Res.string.editor_collapse else Res.string.editor_expand),
                 modifier = Modifier.rotate(rotation)
             )
         }
@@ -191,7 +205,7 @@ private fun TreeFileItem(
                 .fillMaxWidth()
                 .combinedClickable(
                     onClick = { onFileSelected(file.path) },
-                    onLongClickLabel = if (hasMenu) "Note actions" else null,
+                    onLongClickLabel = if (hasMenu) stringResource(Res.string.editor_note_actions) else null,
                     onLongClick = if (hasMenu) ({ menuOpen = true }) else null,
                 )
                 .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -199,15 +213,15 @@ private fun TreeFileItem(
         ) {
             Spacer(Modifier.width((depth * 16).dp))
             when (conflict) {
-                null -> Icon(imageVector = Icons.Filled.Description, contentDescription = "File")
+                null -> Icon(imageVector = Icons.Filled.Description, contentDescription = stringResource(Res.string.editor_file))
                 FileConflict.NOTE -> Icon(
                     Icons.Filled.SyncProblem,
-                    contentDescription = "Note with a conflict",
+                    contentDescription = stringResource(Res.string.editor_note_with_conflict),
                     tint = MaterialTheme.colorScheme.error,
                 )
                 FileConflict.COPY -> Icon(
                     Icons.Filled.SyncProblem,
-                    contentDescription = "Conflicting version",
+                    contentDescription = stringResource(Res.string.editor_conflicting_version),
                     tint = MaterialTheme.colorScheme.outline,
                 )
             }
@@ -221,19 +235,19 @@ private fun TreeFileItem(
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             if (onTogglePin != null) {
                 DropdownMenuItem(
-                    text = { Text(if (pinned) "Unpin" else "Pin") },
+                    text = { Text(stringResource(if (pinned) Res.string.editor_unpin else Res.string.editor_pin)) },
                     onClick = { menuOpen = false; onTogglePin(file.path) },
                 )
             }
             if (onRename != null) {
                 DropdownMenuItem(
-                    text = { Text("Rename or move") },
+                    text = { Text(stringResource(Res.string.editor_rename_or_move)) },
                     onClick = { menuOpen = false; onRename(file.path) },
                 )
             }
             if (onDelete != null) {
                 DropdownMenuItem(
-                    text = { Text("Delete") },
+                    text = { Text(stringResource(Res.string.delete)) },
                     onClick = { menuOpen = false; onDelete(file.path) },
                 )
             }

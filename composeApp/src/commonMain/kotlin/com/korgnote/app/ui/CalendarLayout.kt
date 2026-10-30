@@ -267,34 +267,58 @@ fun AgendaOccurrence.timeLabel(): String? = time?.let { start ->
 
 fun LocalTime.hhmm(): String = "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
 
+/** What [status] says, before it is put in the words of the language the app is shown in. */
+sealed interface AgendaStatus {
+    data object Deadline : AgendaStatus
+    data class DueIn(val days: Int) : AgendaStatus
+    data class Overdue(val days: Int) : AgendaStatus
+    data class ScheduledAgo(val days: Int) : AgendaStatus
+    data object Closed : AgendaStatus
+    data object Starts : AgendaStatus
+    data object Continues : AgendaStatus
+    data object Ends : AgendaStatus
+}
+
 /**
  * What kind of date this is and how it stands relative to today, as `org-agenda` says it:
- * "Deadline", "Due in 3 d.", "Scheduled 2 d. ago", or which day of a range it is — or null for a plain
- * appointment or scheduled item on its own day, where the date says it all.
+ * a deadline, due in 3 days, scheduled 2 days ago, or which day of a range it is — or null for a
+ * plain appointment or scheduled item on its own day, where the date says it all.
  */
-fun AgendaOccurrence.statusLabel(today: LocalDate): String? {
+fun AgendaOccurrence.status(today: LocalDate): AgendaStatus? {
     val until = daysUntilDeadline
     return when (entry.kind) {
         AgendaKind.Deadline -> when {
-            until == null || until == 0 -> "Deadline"
-            until > 0 -> "Due in $until d."
-            else -> "${-until} d. overdue"
+            until == null || until == 0 -> AgendaStatus.Deadline
+            until > 0 -> AgendaStatus.DueIn(until)
+            else -> AgendaStatus.Overdue(-until)
         }
 
         AgendaKind.Scheduled -> if (isCarriedOver) {
-            val late = entry.stamp.start.daysUntil(today)
-            "Scheduled $late d. ago"
-        } else spanLabel()
+            AgendaStatus.ScheduledAgo(entry.stamp.start.daysUntil(today))
+        } else spanStatus()
 
-        AgendaKind.Closed -> "Closed"
-        AgendaKind.Timestamp -> spanLabel()
+        AgendaKind.Closed -> AgendaStatus.Closed
+        AgendaKind.Timestamp -> spanStatus()
     }
 }
 
 /** Where in a multi-day range this day is, or null for a single day. */
-private fun AgendaOccurrence.spanLabel(): String? = when (span) {
+private fun AgendaOccurrence.spanStatus(): AgendaStatus? = when (span) {
     DaySpan.Single -> null
-    DaySpan.Start -> "Starts"
-    DaySpan.Middle -> "Continues"
-    DaySpan.End -> "Ends"
+    DaySpan.Start -> AgendaStatus.Starts
+    DaySpan.Middle -> AgendaStatus.Continues
+    DaySpan.End -> AgendaStatus.Ends
+}
+
+/** [status] in English: "Deadline", "Due in 3 d.", "Scheduled 2 d. ago". */
+fun AgendaOccurrence.statusLabel(today: LocalDate): String? = when (val status = status(today)) {
+    null -> null
+    AgendaStatus.Deadline -> "Deadline"
+    is AgendaStatus.DueIn -> "Due in ${status.days} d."
+    is AgendaStatus.Overdue -> "${status.days} d. overdue"
+    is AgendaStatus.ScheduledAgo -> "Scheduled ${status.days} d. ago"
+    AgendaStatus.Closed -> "Closed"
+    AgendaStatus.Starts -> "Starts"
+    AgendaStatus.Continues -> "Continues"
+    AgendaStatus.Ends -> "Ends"
 }

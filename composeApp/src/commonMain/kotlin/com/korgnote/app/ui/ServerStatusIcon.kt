@@ -41,6 +41,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.notes_sync_age_days
+import korgnote.composeapp.generated.resources.notes_sync_age_hours
+import korgnote.composeapp.generated.resources.notes_sync_age_minutes
+import korgnote.composeapp.generated.resources.notes_sync_age_now
+import korgnote.composeapp.generated.resources.notes_sync_ago_day
+import korgnote.composeapp.generated.resources.notes_sync_ago_days
+import korgnote.composeapp.generated.resources.notes_sync_ago_hours
+import korgnote.composeapp.generated.resources.notes_sync_ago_minutes
+import korgnote.composeapp.generated.resources.notes_sync_ago_now
+import korgnote.composeapp.generated.resources.notes_sync_last
+import korgnote.composeapp.generated.resources.notes_sync_never
+import korgnote.composeapp.generated.resources.notes_sync_running
+import korgnote.composeapp.generated.resources.notes_sync_tap
 import kotlinx.coroutines.delay
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -52,6 +66,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The server's state, for the top bar, as one cloud: turning arrows while a sync runs, a ticked
@@ -116,7 +131,7 @@ fun ServerStatusIcon(
                         SyncState.SYNCED -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Outlined.CloudDone, contentDescription = description, modifier = Modifier.size(20.dp))
                             Text(
-                                syncAgeLabel(lastSynced!!, now),
+                                syncAgeOf(lastSynced!!, now).label(),
                                 fontSize = 10.sp,
                                 lineHeight = 11.sp,
                                 style = MaterialTheme.typography.labelSmall,
@@ -155,36 +170,69 @@ private val MIN_SPIN = 700.milliseconds
 /** How often the age under the cloud is brought up to date. */
 private val AGE_TICK = 20.seconds
 
+@Composable
 private fun syncDescription(state: SyncState, unreachable: String?, lastSynced: Instant?, now: Instant): String {
-    val last = lastSynced?.let { "Last synced ${syncAgeSentence(it, now)}, at ${clockTime(it)}." }
+    val last = lastSynced?.let { stringResource(Res.string.notes_sync_last, syncAgeOf(it, now).sentence(), clockTime(it)) }
     return when (state) {
-        SyncState.SYNCING -> "Syncing with the server…"
+        SyncState.SYNCING -> stringResource(Res.string.notes_sync_running)
         SyncState.OFFLINE -> listOfNotNull(unreachable, last).joinToString(" ")
-        SyncState.SYNCED -> "$last Tap to sync now."
-        SyncState.NEVER -> "Not synced yet. Tap to sync now."
+        SyncState.SYNCED -> "$last ${stringResource(Res.string.notes_sync_tap)}"
+        SyncState.NEVER -> stringResource(Res.string.notes_sync_never)
     }
 }
 
-/** The age of the last sync as the cloud shows it: `now`, `5m`, `3h`, `2d`. */
-internal fun syncAgeLabel(lastSynced: Instant, now: Instant): String {
+/** How long ago the last sync was, in the largest whole unit it has reached. */
+internal data class SyncAge(val span: Span, val count: Long) {
+    enum class Span { NOW, MINUTES, HOURS, DAYS }
+}
+
+internal fun syncAgeOf(lastSynced: Instant, now: Instant): SyncAge {
     val age = (now - lastSynced).coerceAtLeast(Duration.ZERO)
     return when {
-        age < 1.minutes -> "now"
-        age < 1.hours -> "${age.inWholeMinutes}m"
-        age < 1.days -> "${age.inWholeHours}h"
-        else -> "${age.inWholeDays}d"
+        age < 1.minutes -> SyncAge(SyncAge.Span.NOW, 0)
+        age < 1.hours -> SyncAge(SyncAge.Span.MINUTES, age.inWholeMinutes)
+        age < 1.days -> SyncAge(SyncAge.Span.HOURS, age.inWholeHours)
+        else -> SyncAge(SyncAge.Span.DAYS, age.inWholeDays)
     }
+}
+
+/** The age as the cloud shows it: `now`, `5m`, `3h`, `2d`. */
+@Composable
+private fun SyncAge.label(): String = when (span) {
+    SyncAge.Span.NOW -> stringResource(Res.string.notes_sync_age_now)
+    SyncAge.Span.MINUTES -> stringResource(Res.string.notes_sync_age_minutes, count)
+    SyncAge.Span.HOURS -> stringResource(Res.string.notes_sync_age_hours, count)
+    SyncAge.Span.DAYS -> stringResource(Res.string.notes_sync_age_days, count)
 }
 
 /** The same in words, for the tooltip and screen readers: `just now`, `5 min ago`, `3 h ago`. */
+@Composable
+private fun SyncAge.sentence(): String = when (span) {
+    SyncAge.Span.NOW -> stringResource(Res.string.notes_sync_ago_now)
+    SyncAge.Span.MINUTES -> stringResource(Res.string.notes_sync_ago_minutes, count)
+    SyncAge.Span.HOURS -> stringResource(Res.string.notes_sync_ago_hours, count)
+    SyncAge.Span.DAYS -> if (count == 1L) stringResource(Res.string.notes_sync_ago_day) else stringResource(Res.string.notes_sync_ago_days, count)
+}
+
+/** [SyncAge.label] in English. */
+internal fun syncAgeLabel(lastSynced: Instant, now: Instant): String {
+    val age = syncAgeOf(lastSynced, now)
+    return when (age.span) {
+        SyncAge.Span.NOW -> "now"
+        SyncAge.Span.MINUTES -> "${age.count}m"
+        SyncAge.Span.HOURS -> "${age.count}h"
+        SyncAge.Span.DAYS -> "${age.count}d"
+    }
+}
+
+/** [SyncAge.sentence] in English. */
 internal fun syncAgeSentence(lastSynced: Instant, now: Instant): String {
-    val age = (now - lastSynced).coerceAtLeast(Duration.ZERO)
-    return when {
-        age < 1.minutes -> "just now"
-        age < 1.hours -> "${age.inWholeMinutes} min ago"
-        age < 1.days -> "${age.inWholeHours} h ago"
-        age.inWholeDays == 1L -> "a day ago"
-        else -> "${age.inWholeDays} days ago"
+    val age = syncAgeOf(lastSynced, now)
+    return when (age.span) {
+        SyncAge.Span.NOW -> "just now"
+        SyncAge.Span.MINUTES -> "${age.count} min ago"
+        SyncAge.Span.HOURS -> "${age.count} h ago"
+        SyncAge.Span.DAYS -> if (age.count == 1L) "a day ago" else "${age.count} days ago"
     }
 }
 

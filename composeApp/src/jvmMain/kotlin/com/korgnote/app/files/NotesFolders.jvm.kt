@@ -7,8 +7,11 @@ import androidx.compose.runtime.Composable
 @Composable
 actual fun rememberNotesFolderPicker(onPicked: (String) -> Unit): (() -> Unit)? = null
 
+@Composable
 actual fun notesFolderLabel(location: String): String = location
 
-internal actual val notesFolderPlaces: String = ""
+internal actual val notesFolderPlaces: String
+    @Composable get() = ""
 
-internal actual val notesFolderPickingHint: String = ""
+internal actual val notesFolderPickingHint: String
+    @Composable get() = ""

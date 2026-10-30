@@ -4,8 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.files_link_picker_title
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.stringResource
 import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
@@ -48,9 +51,10 @@ object DesktopFileOpener : FileOpener {
 actual fun rememberFilePicker(mappings: List<FileLinkMapping>, onPicked: (PickedFile) -> Unit): (() -> Unit)? {
     val currentMappings by rememberUpdatedState(mappings)
     val currentOnPicked by rememberUpdatedState(onPicked)
+    val title by rememberUpdatedState(stringResource(Res.string.files_link_picker_title))
     return remember {
         {
-            val dialog = FileDialog(null as Frame?, "Link to a file", FileDialog.LOAD)
+            val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD)
             currentMappings.firstOrNull { it.to.isNotBlank() }?.let { dialog.directory = DesktopFileOpener.expandHome(it.to.trim()) }
             // Modal: it returns once a file is chosen or the dialog is closed.
             dialog.isVisible = true
@@ -69,4 +73,5 @@ internal fun desktopLinkPath(path: String, mappings: List<FileLinkMapping>): Str
 @Composable
 actual fun rememberFolderPicker(onPicked: (String) -> Unit): (() -> Unit)? = null
 
+@Composable
 actual fun folderLabel(folder: String): String = folder

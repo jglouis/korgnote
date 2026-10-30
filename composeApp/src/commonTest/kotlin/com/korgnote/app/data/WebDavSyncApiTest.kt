@@ -131,7 +131,7 @@ class WebDavSyncApiTest {
     }
 
     @Test
-    fun theWaysToSignInAreReadFromEveryShapeOfChallenge() {
+    fun theWaysToSignInAreReadFromEveryShapeOfChallenge() = runTest {
         val wrongPassword = "The WebDAV server refused the user name or password. Check them in Settings."
         // Basic among others, in one header or several: the password is what was refused.
         assertEquals(wrongPassword, refusal(listOf("""Digest realm="a", nonce="n", Basic realm="a"""")))
