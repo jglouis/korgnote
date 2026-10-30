@@ -120,6 +120,13 @@ clients within seconds. SSE over WebSocket because it is one-directional, surviv
 reconnects natively, and needs no extra dependency. Clients must treat it as a *hint* —
 correctness always comes from the manifest diff.
 
+A quiet stream sends a `: ping` comment every 30 s. A connection can die without either end
+hearing of it (a phone asleep, or moved to another network), and then looks exactly like one with
+nothing to say; a client that has seen a heartbeat takes 90 s of silence as a dead connection. A
+stream lost after it opened is reported as such, never retried at another of the server's
+addresses: the client reconnects and runs a full cycle, since the stream missed whatever changed
+meanwhile. Coming back to the app runs one too, for the same reason.
+
 ### Auth
 
 `Authorization: Bearer <token>`, token stored alongside host/port in settings and read by

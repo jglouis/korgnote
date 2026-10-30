@@ -153,19 +153,8 @@ class ServerSync(
                 // A retry that reached the server wakes this early, and the backoff starts over.
                 if (withTimeoutOrNull(backoff) { wake.receive() } != null) backoff = 1.seconds
                 // Catch up on whatever was missed while disconnected; the stream is only a hint.
-                // Not runCatching: it would swallow cancellation and keep the loop alive after the
-                // view model is gone.
-                try {
-                    reportConflicts(syncOnce())
-                    unreachable = null
-                    onReplicaChanged()
-                } catch (catchUpFailed: Throwable) {
-                    // Cancellation must still cancel; anything else just means still offline, and
-                    // the next reconnection will try again.
-                    currentCoroutineContext().ensureActive()
-                    unreachable = reason(catchUpFailed)
-                    println("[DEBUG_LOG][ServerSync] Catch-up sync failed: ${catchUpFailed.message}")
-                }
+                // Offline, the next reconnection tries again.
+                catchUp("Catch-up sync")
             }
         }
     }
@@ -202,7 +191,29 @@ class ServerSync(
      * Pushes what just changed, if the server can be reached; offline, it waits for the next sync.
      * No message either way: a created, renamed or deleted note needs none to say it was sent.
      */
-    override suspend fun pushQuietly() {
+    override suspend fun pushQuietly() = catchUp("Sync after a file change")
+
+    /**
+     * Catches up with changes made while the app was away. The stream may have been cut meanwhile
+     * without either end knowing, and the app has no other way to hear of them; and if it was cut,
+     * waking it saves waiting out its backoff.
+     *
+     * Not at start, which the first [load] covers before [watch] begins, nor after [stop].
+     */
+    override fun onResume() {
+        if (!watching) return
+        scope.launch { catchUp("Sync on returning to the app") }
+        wake.trySend(Unit)
+    }
+
+    /**
+     * One sync, with no message either way, then shows what the replica holds; marks the server
+     * [unreachable] when it cannot be reached.
+     *
+     * Not runCatching: it would swallow cancellation, and keep a loop alive after the view model is
+     * gone.
+     */
+    private suspend fun catchUp(what: String) {
         try {
             reportConflicts(syncOnce())
             unreachable = null
@@ -210,7 +221,7 @@ class ServerSync(
         } catch (t: Throwable) {
             currentCoroutineContext().ensureActive()
             unreachable = reason(t)
-            println("[DEBUG_LOG][ServerSync] Sync after a file change failed: ${t.message}")
+            println("[DEBUG_LOG][ServerSync] $what failed: ${t.message}")
         }
     }
 

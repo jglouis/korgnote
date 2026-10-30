@@ -216,4 +216,49 @@ class ServerSyncTest {
         assertFalse(server.retrying)
         assertNull(message)
     }
+
+    @Test
+    fun returningToTheAppCatchesUpWithWhatADeadStreamMissed() = runTest {
+        api.holdStream = true
+        val server = serverSync()
+        server.load()
+        server.watch()
+        runCurrent()
+
+        // Written elsewhere while the connection was dead: no event will ever say so.
+        api.files["missed.org"] = "* Written while away\n"
+        after(10 * 60_000)
+        assertNull(store.read("missed.org"), "the stream alone never brings it in")
+
+        server.onResume()
+        runCurrent()
+
+        assertEquals("* Written while away\n", store.read("missed.org"))
+        assertNull(server.unreachable)
+    }
+
+    @Test
+    fun theResumeAtStartLeavesTheSyncToTheFirstLoad() = runTest {
+        val server = serverSync()
+
+        server.onResume()
+        runCurrent()
+
+        assertEquals(0, api.manifestRequests)
+    }
+
+    @Test
+    fun returningToTheAppReconnectsTheStreamWithoutWaitingOutTheBackoff() = runTest {
+        api.dropStream = true
+        val server = serverSync()
+        server.watch()
+        after(30_000)
+        val opened = api.streamOpened
+
+        api.dropStream = false
+        server.onResume()
+        runCurrent()
+
+        assertEquals(opened + 1, api.streamOpened, "reconnected at once, not up to 30 s later")
+    }
 }

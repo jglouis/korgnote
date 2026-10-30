@@ -6,6 +6,7 @@ import com.korgnote.common.replica.RemoteEntry
 import com.korgnote.common.replica.RemoteFile
 import com.korgnote.common.replica.RemoteManifest
 import com.korgnote.common.replica.SyncApi
+import kotlinx.coroutines.awaitCancellation
 
 /** A stand-in server for the view-model tests: a map of files with etags derived from content. */
 class FakeSyncApi(val files: MutableMap<String, String> = mutableMapOf()) : SyncApi {
@@ -19,7 +20,10 @@ class FakeSyncApi(val files: MutableMap<String, String> = mutableMapOf()) : Sync
 
     private fun etagOf(path: String) = "e-$path-${files[path]?.length ?: 0}"
 
+    var manifestRequests = 0
+
     override suspend fun manifest(since: Long?): RemoteManifest {
+        manifestRequests++
         requireOnline()
         return RemoteManifest(
             generation = generation,
@@ -51,12 +55,16 @@ class FakeSyncApi(val files: MutableMap<String, String> = mutableMapOf()) : Sync
     var streamOpened = 0
     var dropStream = false
 
+    /** Keeps the stream open and silent once its events are out: a connection that died without a word. */
+    var holdStream = false
+
     override suspend fun events(onChange: suspend (path: String, deleted: Boolean) -> Unit) {
         streamOpened++
         requireOnline()
         if (dropStream) throw RuntimeException("stream dropped")
         pending.forEach { (path, deleted) -> onChange(path, deleted) }
         pending.clear()
+        if (holdStream) awaitCancellation()
     }
 
     val deletes = mutableListOf<String>()
