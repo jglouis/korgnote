@@ -47,6 +47,17 @@ class LineDiffTest {
     }
 
     @Test
+    fun contextReachingBackAcrossAHeadingDoesNotChangeTheLabel() {
+        // The change is the first line under * Ideas; its context starts in * Work.
+        val first = "* Work\n** TODO Call Alice\n\n* Ideas\nSome idea.\n"
+        val second = first.replace("Some idea.", "Some idea, edited.")
+
+        val hunks = diffHunks(first, second)
+
+        assertEquals(listOf("* Ideas"), hunks.map { it.heading })
+    }
+
+    @Test
     fun aChangeAboveTheFirstHeadingHasNoHeading() {
         val hunks = diffHunks("#+TITLE: A\n\n* H\n", "#+TITLE: B\n\n* H\n", context = 0)
         assertEquals(listOf<String?>(null), hunks.map { it.heading })

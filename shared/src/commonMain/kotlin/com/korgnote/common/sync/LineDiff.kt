@@ -10,7 +10,7 @@ data class DiffLine(val kind: Kind, val text: String) {
  * falls under so a long note's differences can be told apart at a glance.
  */
 data class DiffHunk(
-    /** The nearest heading line at or above the hunk's first line, or null above the first heading. */
+    /** The nearest heading line at or above the hunk's first change, or null above the first heading. */
     val heading: String?,
     val lines: List<DiffLine>,
 )
@@ -54,8 +54,11 @@ fun diffHunks(first: String, second: String, context: Int = 2): List<DiffHunk> {
     }
 
     return ranges.map { range ->
+        // From the first change, not the first line shown: the context above a change can reach back
+        // across a heading into the section before it.
+        val firstChange = range.first { lines[it].kind != DiffLine.Kind.SAME }
         // Lines the second version dropped still count: they were under that heading in the first.
-        val heading = (range.first downTo 0).asSequence()
+        val heading = (firstChange downTo 0).asSequence()
             .map { lines[it] }
             .firstOrNull { it.kind != DiffLine.Kind.ADDED && it.text.isOrgHeading() }
             ?.text
