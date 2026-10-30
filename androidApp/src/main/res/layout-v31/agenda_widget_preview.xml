@@ -55,15 +55,20 @@
         android:orientation="horizontal"
         android:paddingVertical="3dp">
 
-        <View
+        <FrameLayout
             android:layout_width="3dp"
             android:layout_height="30dp"
             android:layout_marginEnd="8dp"
             android:background="@color/widget_preview_error" />
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="6dp"
+            android:layout_marginBottom="1dp"
             android:background="@drawable/widget_preview_keyword_1"
             android:paddingHorizontal="5dp"
             android:paddingVertical="1dp"
@@ -71,14 +76,14 @@
             android:textColor="@color/widget_preview_keyword_1"
             android:textSize="10sp"
             android:textStyle="bold" />
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:maxLines="2"
-            android:text="@string/widget_preview_entry_1"
-            android:textColor="@color/widget_preview_text"
-            android:textSize="13sp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxLines="2"
+                android:text="@string/widget_preview_entry_1"
+                android:textColor="@color/widget_preview_text"
+                android:textSize="13sp" />
+        </LinearLayout>
     </LinearLayout>
 
     <LinearLayout
@@ -88,7 +93,7 @@
         android:orientation="horizontal"
         android:paddingVertical="3dp">
 
-        <View
+        <FrameLayout
             android:layout_width="3dp"
             android:layout_height="30dp"
             android:layout_marginEnd="8dp"
@@ -99,14 +104,19 @@
             android:text="10:00–11:00"
             android:textColor="@color/widget_preview_text"
             android:textSize="12sp" />
-        <TextView
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:maxLines="2"
-            android:text="@string/widget_preview_entry_2"
-            android:textColor="@color/widget_preview_text"
-            android:textSize="13sp" />
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxLines="2"
+                android:text="@string/widget_preview_entry_2"
+                android:textColor="@color/widget_preview_text"
+                android:textSize="13sp" />
+        </LinearLayout>
     </LinearLayout>
 
     <TextView
@@ -126,15 +136,20 @@
         android:orientation="horizontal"
         android:paddingVertical="3dp">
 
-        <View
+        <FrameLayout
             android:layout_width="3dp"
             android:layout_height="30dp"
             android:layout_marginEnd="8dp"
             android:background="@color/widget_preview_accent" />
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="6dp"
+            android:layout_marginBottom="1dp"
             android:background="@drawable/widget_preview_keyword_2"
             android:paddingHorizontal="5dp"
             android:paddingVertical="1dp"
@@ -142,14 +157,14 @@
             android:textColor="@color/widget_preview_keyword_2"
             android:textSize="10sp"
             android:textStyle="bold" />
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:maxLines="2"
-            android:text="@string/widget_preview_entry_4"
-            android:textColor="@color/widget_preview_text"
-            android:textSize="13sp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxLines="2"
+                android:text="@string/widget_preview_entry_4"
+                android:textColor="@color/widget_preview_text"
+                android:textSize="13sp" />
+        </LinearLayout>
     </LinearLayout>
 
     <LinearLayout
@@ -159,7 +174,7 @@
         android:orientation="horizontal"
         android:paddingVertical="3dp">
 
-        <View
+        <FrameLayout
             android:layout_width="3dp"
             android:layout_height="30dp"
             android:layout_marginEnd="8dp"
@@ -170,13 +185,18 @@
             android:text="14:30"
             android:textColor="@color/widget_preview_text"
             android:textSize="12sp" />
-        <TextView
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:maxLines="2"
-            android:text="@string/widget_preview_entry_3"
-            android:textColor="@color/widget_preview_text"
-            android:textSize="13sp" />
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxLines="2"
+                android:text="@string/widget_preview_entry_3"
+                android:textColor="@color/widget_preview_text"
+                android:textSize="13sp" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

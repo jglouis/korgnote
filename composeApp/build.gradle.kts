@@ -15,6 +15,8 @@ kotlin {
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
         namespace = "com.korgnote.app"
+        // Without it the app's strings, which Compose resources keep, are left out of the APK.
+        androidResources { enable = true }
     }
 
     listOf(

@@ -152,23 +152,27 @@ private fun AgendaRow(
             )
         }
         Column(GlanceModifier.defaultWeight()) {
-            occurrence.widgetStatus(today, words)?.let {
-                Text(it, style = TextStyle(color = accent, fontSize = 11.sp, fontWeight = FontWeight.Bold), maxLines = 1)
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val keyword = occurrence.entry.todo
-                val swatch = swatches.of(occurrence)
-                if (keyword != null && swatch != null) {
-                    KeywordLabel(keyword, swatch)
-                    Spacer(GlanceModifier.width(6.dp))
+            // The keyword's label goes on the status line, leaving the title the row's whole width.
+            val keyword = occurrence.entry.todo
+            val swatch = swatches.of(occurrence)
+            val status = occurrence.widgetStatus(today, words)
+            if ((keyword != null && swatch != null) || status != null) {
+                Row(GlanceModifier.padding(bottom = 1.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (keyword != null && swatch != null) {
+                        KeywordLabel(keyword, swatch)
+                        if (status != null) Spacer(GlanceModifier.width(6.dp))
+                    }
+                    status?.let {
+                        Text(it, style = TextStyle(color = accent, fontSize = 11.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+                    }
                 }
-                Text(
-                    // A keyword the agenda does not know as one stays in the title, as the app shows it.
-                    if (keyword != null && swatch == null) "$keyword ${occurrence.plainTitle()}" else occurrence.plainTitle(),
-                    style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 13.sp),
-                    maxLines = 2,
-                )
             }
+            Text(
+                // A keyword the agenda does not know as one stays in the title, as the app shows it.
+                if (keyword != null && swatch == null) "$keyword ${occurrence.plainTitle()}" else occurrence.plainTitle(),
+                style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 13.sp),
+                maxLines = 2,
+            )
         }
     }
 }
