@@ -1,0 +1,4 @@
+* Capture: share links, text and Google Maps places to KorgNote, or capture an event from your calendar.
+* Choose the inbox, a note, a new note or a heading; places become :LOCATION:, events SCHEDULED:.
+* Headings starting with a capitalised word keep it.
+* Settings shows when the notes last synced.
