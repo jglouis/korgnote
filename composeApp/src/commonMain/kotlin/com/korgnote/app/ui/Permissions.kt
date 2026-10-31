@@ -24,3 +24,10 @@ expect fun rememberNotificationPermission(): PermissionAsk?
  */
 @Composable
 expect fun rememberLocalNetworkPermission(): PermissionAsk?
+
+/**
+ * Reading the phone's calendar, for capturing one of its events. Null where there is no calendar to
+ * read: desktop and web.
+ */
+@Composable
+expect fun rememberCalendarPermission(): PermissionAsk?

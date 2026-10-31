@@ -540,7 +540,7 @@ private fun DeleteSectionDialog(
  * it out is cheap.
  */
 @Composable
-private fun OrgElementEditor(
+internal fun OrgElementEditor(
     elementKey: Int,
     value: TextFieldValue,
     onValueChange: (TextFieldValue) -> Unit,

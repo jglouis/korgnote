@@ -7,5 +7,6 @@
     <exclude domain="file" path="KorgNote" />
     <exclude domain="file" path="KorgNote-webdav" />
     <exclude domain="file" path="agenda-widget.json" />
+    <exclude domain="file" path="capture-queue" />
     <exclude domain="sharedpref" path="korgnote_reminders.xml" />
 </full-backup-content>

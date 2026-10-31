@@ -35,4 +35,13 @@
     <string name="widget_preview_entry_2">Revue de conception</string>
     <string name="widget_preview_entry_3">Dentiste</string>
     <string name="widget_preview_entry_4">Appeler le plombier</string>
+
+    <!-- Capturer depuis d’autres apps. -->
+    <string name="capture_label">Capturer dans KorgNote</string>
+    <string name="capture_shortcut_short">Capturer</string>
+    <string name="capture_event_shortcut_short">Événement</string>
+    <string name="capture_event_shortcut_long">Capturer un événement</string>
+    <string name="capture_shortcut_long">Capturer une note</string>
+    <string name="capture_set_up_first">Choisissez d’abord où sont vos notes, puis capturez à nouveau.</string>
+    <string name="capture_saved">Capturé dans %1$s</string>
 </resources>

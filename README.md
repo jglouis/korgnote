@@ -177,6 +177,9 @@ port forwarding or a proxy in TCP passthrough mode.
 - **Editing:** tap a heading to edit it, long-press to move, promote, demote or delete it.
   Suggestions above the keyboard for keywords, tags, dates and links.
 - **Tasks:** change TODO states from a menu. Repeating tasks move to their next date when done.
+- **Capture:** share a link, selected text or a Google Maps place from any app to KorgNote, or pick
+  an event from your phone's calendar, Google Calendar's included. It goes to your inbox, another
+  note, or under a heading, in one step.
 - **Tables:** edit them as a grid. `#+TBLFM` formulas are computed the same way as in Emacs.
 - **Search** by words and tags, save searches by name, and pin the notes you use most.
 - **Offline first:** the app keeps working without a connection and syncs when it can.

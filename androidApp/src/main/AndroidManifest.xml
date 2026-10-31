@@ -12,6 +12,9 @@
     <!-- Reminders on time: exact alarms, granted without asking to an agenda app on 13+ and by
          default on 12. See ReminderAlarms for why inexact ones are not good enough. -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- Capturing an event from the phone's calendar, Google Calendar's included: asked for when
+         "From the calendar" is first used, never at the start. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission
         android:name="android.permission.SCHEDULE_EXACT_ALARM"
         android:maxSdkVersion="32" />
@@ -46,6 +49,60 @@
                 <category android:name="android.intent.category.BROWSABLE" />
 
                 <data android:scheme="korgnote" android:host="pair" />
+            </intent-filter>
+        </activity>
+
+        <!-- Capturing from other apps, in a task of its own over them, gone from Recents once done. -->
+        <activity
+            android:name="com.korgnote.app.capture.CaptureActivity"
+            android:exported="true"
+            android:label="@string/capture_label"
+            android:theme="@style/Theme.KorgNote.Capture"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- A page, a place, text: whatever another app shares. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <!-- An invitation shared as a calendar file, or opened from a mail. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="text/calendar" />
+                <data android:mimeType="text/x-vcalendar" />
+                <data android:mimeType="application/ics" />
+            </intent-filter>
+            <!-- Text selected in any app: "Capture in KorgNote" in the selection's menu. -->
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <!-- korgnote://capture?url=…&title=…&body=…, org-protocol's capture for Android. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="korgnote" android:host="capture" />
+            </intent-filter>
+            <!-- The launcher's shortcuts, published by CaptureShortcut. -->
+            <intent-filter>
+                <action android:name="com.korgnote.app.CAPTURE" />
+                <action android:name="com.korgnote.app.CAPTURE_EVENT" />
+
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
 

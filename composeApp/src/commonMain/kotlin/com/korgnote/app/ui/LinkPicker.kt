@@ -3,6 +3,8 @@ package com.korgnote.app.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -11,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material3.AlertDialog
@@ -61,6 +64,12 @@ fun LinkPickerDialog(
     onPick: (LinkTarget) -> Unit,
     onTypeLink: (() -> Unit)?,
     onDismiss: () -> Unit,
+    /** What the picker is for; "Link to" when null. */
+    title: String? = null,
+    /** Offers a new note named after what was typed, as the first row: where it is picked to go. */
+    onNew: ((String) -> Unit)? = null,
+    /** That row's words, for what was typed. */
+    newLabel: @Composable (String) -> String = { it },
 ) {
     var query by remember { mutableStateOf("") }
     val shown = remember(targets, query) { targets.matching(query, currentPath) }
@@ -69,7 +78,7 @@ fun LinkPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.notes_link_to)) },
+        title = { Text(title ?: stringResource(Res.string.notes_link_to)) },
         text = {
             Column {
                 OutlinedTextField(
@@ -80,7 +89,17 @@ fun LinkPickerDialog(
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
-                if (shown.isEmpty()) {
+                if (onNew != null && query.isNotBlank()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable { onNew(query.trim()) }.padding(top = 12.dp, bottom = 4.dp),
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.NoteAdd, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text(newLabel(query.trim()), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                if (shown.isEmpty() && onNew == null) {
                     Text(
                         stringResource(Res.string.notes_link_nothing_matches),
                         style = MaterialTheme.typography.bodyMedium,

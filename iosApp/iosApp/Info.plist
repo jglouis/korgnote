@@ -6,7 +6,14 @@
         <string>KorgNote</string>
         <key>CADisableMinimumFrameDurationOnPhone</key>
         <true/>
-        <!-- korgnote://pair?… links, which the server's pairing QR code carries. -->
+        <!-- Asked the first time "From the calendar" is used in the capture sheet. -->
+        <key>NSCalendarsFullAccessUsageDescription</key>
+        <string>KorgNote lists your calendar's events, Google Calendar's included, so you can capture one into your notes.</string>
+        <!-- The App Group the share extension queues captures in; the same key in its Info.plist. -->
+        <key>KorgNoteAppGroup</key>
+        <string>group.com.korgnote.korgnote.korgnote$(TEAM_ID)</string>
+        <!-- korgnote://pair?… links, which the server's pairing QR code carries, and
+             korgnote://capture?… ones, from Shortcuts or a bookmarklet. -->
         <key>CFBundleURLTypes</key>
         <array>
             <dict>

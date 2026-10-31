@@ -237,5 +237,5 @@ a tapped day or title opens the app's calendar there (`CalendarTaps`).
 - **CalDAV export** so the same agenda appears in your phone's native calendar app. This is
   read-only publishing of `AgendaOccurrence`s and does not affect the sync design; it is
   the cheapest way to get your Org agenda in front of other tools.
-- **Capture**: create a dated entry from the calendar into an inbox file — natural once
-  `PUT` can create files ([05](05-sync-protocol.md), D11).
+- **Capture**: create a dated entry from the calendar into an inbox file. Capture from other apps
+  is in [10](10-capture.md); from the calendar, and from the phone's own calendar, not yet.

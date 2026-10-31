@@ -5,6 +5,12 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.uikit.OnFocusBehavior
 import androidx.compose.ui.window.ComposeUIViewController
+import com.korgnote.app.capture.CaptureLinks
+import com.korgnote.app.capture.CaptureQueueFolder
+import com.korgnote.app.capture.DeviceCalendar
+import com.korgnote.app.capture.IosDeviceCalendar
+import com.korgnote.app.capture.IosCaptureQueueFolder
+import com.korgnote.app.capture.iosCaptureQueueDirectory
 import com.korgnote.app.data.PairingLinks
 import com.korgnote.app.data.PersistentSettingsRepository
 import com.korgnote.app.data.SettingsRepository
@@ -40,6 +46,9 @@ fun MainViewController(): UIViewController {
         single<ReplicaStorage>(WEBDAV) { FileSystemReplicaStorage(webDavReplica) }
         single<NotificationScheduler> { IosNotificationScheduler() }
         single<NoteFolderAccess> { NoteFolderAccess(::IosNoteFolder) }
+        // Shared with the share extension, which queues what it captures there for the app to file.
+        single<DeviceCalendar> { IosDeviceCalendar() }
+        single<CaptureQueueFolder> { IosCaptureQueueFolder(iosCaptureQueueDirectory(fallback = replica.substringBeforeLast('/'))) }
     }
     initKoin(extraModules = listOf(iosModule))
     installReminderTapHandler()
@@ -54,11 +63,12 @@ fun MainViewController(): UIViewController {
 }
 
 /**
- * A `korgnote:` link the app was opened with — the Camera app offers to open the pairing QR code's
- * link here — handed to Settings. Whether it was a pairing link.
+ * A `korgnote:` link the app was opened with: the pairing QR code's, which the Camera app offers to
+ * open here, handed to Settings; or a `korgnote://capture` one, from Shortcuts or a bookmarklet, shown
+ * in the capture sheet. Whether it was either.
  */
 @Suppress("unused")
-fun openUrl(url: String): Boolean = PairingLinks.offer(url)
+fun openUrl(url: String): Boolean = PairingLinks.offer(url) || CaptureLinks.offer(url)
 
 /**
  * Marks the folder at [path], made if missing, as left out of iCloud and computer backups. Logged

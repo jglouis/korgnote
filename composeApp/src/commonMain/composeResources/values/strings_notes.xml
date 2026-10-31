@@ -167,4 +167,28 @@
     <string name="notes_conflict_before_first_heading">Before the first heading</string>
     <string name="notes_conflict_keep_note">Keep the note</string>
     <string name="notes_conflict_use_copy">Use the copy</string>
+    <!-- Capture -->
+    <string name="capture_add_location">Location</string>
+    <string name="capture_add_link">Link</string>
+    <string name="capture_add_time">Scheduled</string>
+    <string name="capture_add_text">Text</string>
+    <string name="capture_nothing_to_add">Choose what to add to the heading.</string>
+    <string name="capture_reading_notes">Reading the notes…</string>
+    <string name="capture_pick_event">Pick an event</string>
+    <string name="capture_calendar_search">Search the events</string>
+    <string name="capture_calendar_allow_text">KorgNote reads this phone's calendar, Google Calendar's events included, only to list them here.</string>
+    <string name="capture_calendar_allow">Allow</string>
+    <string name="capture_reading_calendar">Reading the calendar…</string>
+    <string name="capture_calendar_none">No events in the last week or the next two months.</string>
+    <string name="capture_all_day">All day</string>
+    <string name="capture_add_to_it">Add to it</string>
+    <string name="capture_new_entry_under">Sub-entry</string>
+    <string name="capture_new_note">New note: %1$s</string>
+    <string name="capture_new_note_named">New note “%1$s”</string>
+    <string name="capture_save_to">Save to %1$s</string>
+    <string name="capture_where_to">Where should it go?</string>
+    <string name="capture_destination">Destination</string>
+    <string name="capture_capture">Capture</string>
+    <string name="capture_no_keyword">None</string>
+    <string name="capture_event">Capture an event</string>
 </resources>

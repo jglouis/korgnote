@@ -1,5 +1,9 @@
 package com.korgnote.app.di
 
+import com.korgnote.app.capture.CaptureFiler
+import com.korgnote.app.capture.CaptureQueue
+import com.korgnote.app.capture.CaptureQueueFolder
+import com.korgnote.app.capture.InMemoryCaptureQueueFolder
 import com.korgnote.app.data.CertificatePins
 import com.korgnote.app.data.DevicePairing
 import com.korgnote.app.data.KtorSyncApi
@@ -67,6 +71,14 @@ val appModule = module {
     single<DocumentStore>(WEBDAV) { DocumentStore(get<ReplicaStorage>(WEBDAV)) }
     single<SyncEngine>(WEBDAV) { SyncEngine(get(WEBDAV), get<WebDavSyncApi>(WEBDAV), ::conflictTimestamp) }
 
+    // Captures wait in a queue each platform keeps — the App Group's on iOS, which the share
+    // extension adds to — and only the app files them, into whichever notes are in use.
+    single { CaptureQueue(getOrNull<CaptureQueueFolder>() ?: InMemoryCaptureQueueFolder()) }
+    single {
+        val settings = get<SettingsRepository>()
+        CaptureFiler(get(), settings::getNewNotesFolder, settings::getNoteTemplate)
+    }
+
     // Which of the sources the notes are in: the server's replica, the WebDAV one, or a folder of
     // the user's.
     single { NotesSourceChoice(get(), get()) }
@@ -100,6 +112,7 @@ val appModule = module {
             fileLinkMappings = settings::getFileLinkMappings,
             fileOpener = getOrNull<FileOpener>() ?: NoFileOpener,
             folder = folder,
+            captures = get(),
         )
     }
 }

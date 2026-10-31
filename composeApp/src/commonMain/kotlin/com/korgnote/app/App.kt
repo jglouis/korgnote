@@ -33,6 +33,14 @@ import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.data.offersNotesFolder
 import com.korgnote.app.ui.*
 import com.korgnote.app.data.DevicePairing
+import com.korgnote.app.capture.CaptureLinks
+import com.korgnote.app.capture.DeviceCalendar
+import com.korgnote.common.org.capture.SharedContent
+import androidx.compose.material.icons.filled.Event
+import org.koin.compose.getKoin
+import korgnote.composeapp.generated.resources.capture_event
+import com.korgnote.app.capture.CaptureQueue
+import com.korgnote.app.capture.CaptureSignals
 import com.korgnote.app.data.PairingLinks
 import com.korgnote.app.viewmodel.LinkEdit
 import org.koin.mp.KoinPlatform
@@ -121,8 +129,14 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     LaunchedEffect(vm) {
         choice.active = vm.server
         vm.server.load()
+        // What was captured while the app was closed — on iOS, from the share sheet — goes in now.
+        vm.fileCaptures()
         // Then follow changes made elsewhere for the rest of the session.
         vm.server.watch()
+    }
+    // A capture queued by this process, from the share sheet on Android or a link here, goes in at once.
+    LaunchedEffect(vm) {
+        CaptureSignals.queued.collect { vm.fileCaptures() }
     }
     // A tapped reminder opens its note at the heading, whatever screen was showing.
     LaunchedEffect(Unit) {
@@ -144,10 +158,14 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     LifecycleResumeEffect(vm) {
         vm.agenda.refreshReminders()
         vm.server.onResume()
+        // The share sheet may have queued captures while the app was in the background.
+        scope.launch { vm.fileCaptures() }
         onPauseOrDispose { vm.server.onPause() }
     }
     // At most one of these is open; each names the note it is about.
     var creatingNote by remember { mutableStateOf(false) }
+    // The drawer's "Capture an event": the capture sheet, open on the phone's calendar.
+    var capturingEvent by remember { mutableStateOf(false) }
     var editingDetails by remember { mutableStateOf(false) }
     // The notes and headings a link can go to, while the link picker is open.
     var pickingLink by remember { mutableStateOf<List<LinkTarget>?>(null) }
@@ -223,6 +241,33 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     OnBack(enabled = selectedScreen == BottomItem.FILE && vm.links.canGoBack) { vm.links.goBack() }
     OnBack(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
 
+    // A `korgnote://capture` link, or the drawer's event: what is captured, shown before it is saved.
+    val captureLink by CaptureLinks.pending.collectAsState()
+    val filer = vm.captureFiler
+    if (filer != null && (captureLink != null || capturingEvent)) {
+        val queue = koinInject<CaptureQueue>()
+        val done = {
+            CaptureLinks.pending.value = null
+            capturingEvent = false
+        }
+        CaptureSheet(
+            shared = captureLink?.shared ?: SharedContent(),
+            store = vm.captureStore,
+            filer = filer,
+            // The notes the app has parsed already, rather than every note read again.
+            destinations = { vm.captureDestinations() },
+            calendar = getKoin().getOrNull<DeviceCalendar>(),
+            startWithCalendar = capturingEvent,
+            onDismiss = done,
+            onSave = { request ->
+                done()
+                scope.launch {
+                    queue.add(request)
+                    vm.fileCaptures()
+                }
+            },
+        )
+    }
     if (creatingNote) {
         NewNoteDialog(
             pathFor = vm::newNotePathFor,
@@ -380,19 +425,25 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                             modifier = Modifier.padding(8.dp),
                         )
                     } else Column(modifier = Modifier.padding(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                stringResource(Res.string.app_files),
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.weight(1f),
-                            )
-                            IconButton(onClick = { creatingNote = true }) {
-                                Icon(Icons.AutoMirrored.Filled.NoteAdd, contentDescription = stringResource(Res.string.app_new_note))
-                            }
-                            IconButton(onClick = { openToday() }) {
-                                Icon(Icons.Filled.Today, contentDescription = stringResource(Res.string.app_todays_daily))
+                        // What the drawer does besides opening notes, each a button that says what it does:
+                        // three bare icons in a row were not obvious, and more were coming.
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        ) {
+                            DrawerAction(Icons.AutoMirrored.Filled.NoteAdd, stringResource(Res.string.app_new_note)) { creatingNote = true }
+                            DrawerAction(Icons.Filled.Today, stringResource(Res.string.app_todays_daily)) { openToday() }
+                            // In the app, what there is to capture is what is not in the notes yet: an event.
+                            DrawerAction(Icons.Filled.Event, stringResource(Res.string.capture_event)) {
+                                capturingEvent = true
+                                scope.launch { drawerState.close() }
                             }
                         }
+                        Text(
+                            stringResource(Res.string.app_files),
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                        )
                         // Above the filter, so it never scrolls away or filters out.
                         PinnedNotes(
                             paths = vm.pins.shown,
@@ -876,5 +927,15 @@ private enum class BottomItem {
         SEARCH -> Icons.Filled.Search
         CALENDAR -> Icons.Filled.CalendarMonth
         SETTINGS -> Icons.Filled.Settings
+    }
+}
+
+/** One of the drawer's actions: an icon and what it does, as a button that looks like one. */
+@Composable
+private fun DrawerAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    FilledTonalButton(onClick = onClick, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge)
     }
 }

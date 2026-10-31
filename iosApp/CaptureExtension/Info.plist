@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>CFBundleDisplayName</key>
+        <string>KorgNote</string>
+        <!-- The App Group the app files captures from; the same key in the app's Info.plist. -->
+        <key>KorgNoteAppGroup</key>
+        <string>group.com.korgnote.korgnote.korgnote$(TEAM_ID)</string>
+        <key>NSExtension</key>
+        <dict>
+            <key>NSExtensionAttributes</key>
+            <dict>
+                <!-- A link, text, or a calendar file: what a page, a place, a selection or an
+                     invitation is shared as. -->
+                <key>NSExtensionActivationRule</key>
+                <string>SUBQUERY (extensionItems, $item, SUBQUERY ($item.attachments, $attachment, ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url" OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.plain-text" OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.calendar-event").@count &gt;= 1).@count &gt;= 1</string>
+            </dict>
+            <key>NSExtensionPointIdentifier</key>
+            <string>com.apple.share-services</string>
+            <key>NSExtensionPrincipalClass</key>
+            <string>$(PRODUCT_MODULE_NAME).ShareViewController</string>
+        </dict>
+    </dict>
+</plist>

@@ -6,7 +6,44 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C0DE0000000000000000A00C /* CaptureExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C0DE0000000000000000A001 /* CaptureExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		C0DE0000000000000000A00D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5000E964C2AF08F3F10329AB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C0DE0000000000000000A004;
+			remoteInfo = CaptureExtension;
+		};
+		C0DE0000000000000000B00D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5000E964C2AF08F3F10329AB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6ABE3D632F9ED08A306DFB19;
+			remoteInfo = iosApp;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C0DE0000000000000000A00B /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C0DE0000000000000000A00C /* CaptureExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		C0DE0000000000000000B001 /* CaptureUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CaptureUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0DE0000000000000000A001 /* CaptureExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CaptureExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		966B53EE27984749AEB866CE /* korgnote.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = korgnote.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -17,6 +54,13 @@
 				Info.plist,
 			);
 			target = 6ABE3D632F9ED08A306DFB19 /* iosApp */;
+		};
+		C0DE0000000000000000A002 /* Exceptions for "CaptureExtension" folder in "CaptureExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = C0DE0000000000000000A004 /* CaptureExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -34,10 +78,37 @@
 			path = Configuration;
 			sourceTree = "<group>";
 		};
+		C0DE0000000000000000A003 /* CaptureExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C0DE0000000000000000A002 /* Exceptions for "CaptureExtension" folder in "CaptureExtension" target */,
+			);
+			path = CaptureExtension;
+			sourceTree = "<group>";
+		};
+		C0DE0000000000000000B003 /* CaptureUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CaptureUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		FF79EE58215378AC25D22257 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0DE0000000000000000A006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0DE0000000000000000B006 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -52,6 +123,8 @@
 			children = (
 				381F6F7FB6FD62EB4B1A2FDF /* Configuration */,
 				A9C344785E1ED3675EFFF435 /* iosApp */,
+				C0DE0000000000000000A003 /* CaptureExtension */,
+				C0DE0000000000000000B003 /* CaptureUITests */,
 				4FEC1B5CFF5286E602F58C0B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -60,6 +133,8 @@
 			isa = PBXGroup;
 			children = (
 				966B53EE27984749AEB866CE /* korgnote.app */,
+				C0DE0000000000000000A001 /* CaptureExtension.appex */,
+				C0DE0000000000000000B001 /* CaptureUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -75,10 +150,12 @@
 				6AAB0FEBC5229E9C268A18C7 /* Sources */,
 				FF79EE58215378AC25D22257 /* Frameworks */,
 				7D9A1BE71024FEA6B661C19B /* Resources */,
+				C0DE0000000000000000A00B /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				C0DE0000000000000000A00E /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A9C344785E1ED3675EFFF435 /* iosApp */,
@@ -89,6 +166,51 @@
 			productName = iosApp;
 			productReference = 966B53EE27984749AEB866CE /* korgnote.app */;
 			productType = "com.apple.product-type.application";
+		};
+		C0DE0000000000000000A004 /* CaptureExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0DE0000000000000000A008 /* Build configuration list for PBXNativeTarget "CaptureExtension" */;
+			buildPhases = (
+				C0DE0000000000000000A005 /* Sources */,
+				C0DE0000000000000000A006 /* Frameworks */,
+				C0DE0000000000000000A007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				C0DE0000000000000000A003 /* CaptureExtension */,
+			);
+			name = CaptureExtension;
+			packageProductDependencies = (
+			);
+			productName = CaptureExtension;
+			productReference = C0DE0000000000000000A001 /* CaptureExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		C0DE0000000000000000B004 /* CaptureUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0DE0000000000000000B008 /* Build configuration list for PBXNativeTarget "CaptureUITests" */;
+			buildPhases = (
+				C0DE0000000000000000B005 /* Sources */,
+				C0DE0000000000000000B006 /* Frameworks */,
+				C0DE0000000000000000B007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C0DE0000000000000000B00E /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				C0DE0000000000000000B003 /* CaptureUITests */,
+			);
+			name = CaptureUITests;
+			packageProductDependencies = (
+			);
+			productName = CaptureUITests;
+			productReference = C0DE0000000000000000B001 /* CaptureUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
@@ -102,6 +224,13 @@
 				TargetAttributes = {
 					6ABE3D632F9ED08A306DFB19 = {
 						CreatedOnToolsVersion = 16.2;
+					};
+					C0DE0000000000000000A004 = {
+						CreatedOnToolsVersion = 16.2;
+					};
+					C0DE0000000000000000B004 = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = 6ABE3D632F9ED08A306DFB19;
 					};
 				};
 			};
@@ -120,12 +249,28 @@
 			projectRoot = "";
 			targets = (
 				6ABE3D632F9ED08A306DFB19 /* iosApp */,
+				C0DE0000000000000000A004 /* CaptureExtension */,
+				C0DE0000000000000000B004 /* CaptureUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		7D9A1BE71024FEA6B661C19B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0DE0000000000000000A007 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0DE0000000000000000B007 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -164,7 +309,34 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C0DE0000000000000000A005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0DE0000000000000000B005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C0DE0000000000000000A00E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C0DE0000000000000000A004 /* CaptureExtension */;
+			targetProxy = C0DE0000000000000000A00D /* PBXContainerItemProxy */;
+		};
+		C0DE0000000000000000B00E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6ABE3D632F9ED08A306DFB19 /* iosApp */;
+			targetProxy = C0DE0000000000000000B00D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		4A928AA7C880706B0E779C64 /* Debug */ = {
@@ -302,6 +474,7 @@
 				DEVELOPMENT_TEAM = "${TEAM_ID}";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = Configuration/iosApp.entitlements;
 				INFOPLIST_FILE = iosApp/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -330,6 +503,7 @@
 				DEVELOPMENT_TEAM = "${TEAM_ID}";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = Configuration/iosApp.entitlements;
 				INFOPLIST_FILE = iosApp/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -343,6 +517,88 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C0DE0000000000000000A009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				ARCHS = arm64;
+				CODE_SIGN_ENTITLEMENTS = Configuration/CaptureExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CaptureExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = KorgNote;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.korgnote.korgnote.korgnote$(TEAM_ID).capture";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C0DE0000000000000000A00A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				ARCHS = arm64;
+				CODE_SIGN_ENTITLEMENTS = Configuration/CaptureExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CaptureExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = KorgNote;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.korgnote.korgnote.korgnote$(TEAM_ID).capture";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C0DE0000000000000000B009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.korgnote.korgnote.korgnote$(TEAM_ID).uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = iosApp;
+			};
+			name = Debug;
+		};
+		C0DE0000000000000000B00A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.korgnote.korgnote.korgnote$(TEAM_ID).uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = iosApp;
 			};
 			name = Release;
 		};
@@ -363,6 +619,24 @@
 			buildConfigurations = (
 				0011C092B932505845EC1313 /* Debug */,
 				0C9DE14D0D84DD34A0848561 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C0DE0000000000000000A008 /* Build configuration list for PBXNativeTarget "CaptureExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0DE0000000000000000A009 /* Debug */,
+				C0DE0000000000000000A00A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C0DE0000000000000000B008 /* Build configuration list for PBXNativeTarget "CaptureUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0DE0000000000000000B009 /* Debug */,
+				C0DE0000000000000000B00A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -39,4 +39,13 @@
     <string name="widget_preview_entry_2">Design review</string>
     <string name="widget_preview_entry_3">Dentist</string>
     <string name="widget_preview_entry_4">Call the plumber</string>
+
+    <!-- Capturing from other apps: the share sheet's and the text selection's entry, and the launcher's shortcut. -->
+    <string name="capture_label">Capture in KorgNote</string>
+    <string name="capture_shortcut_short">Capture</string>
+    <string name="capture_event_shortcut_short">Event</string>
+    <string name="capture_event_shortcut_long">Capture an event</string>
+    <string name="capture_shortcut_long">Capture a note</string>
+    <string name="capture_set_up_first">Choose where your notes are first, then capture again.</string>
+    <string name="capture_saved">Captured into %1$s</string>
 </resources>

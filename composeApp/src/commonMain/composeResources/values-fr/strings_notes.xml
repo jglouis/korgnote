@@ -167,4 +167,28 @@
     <string name="notes_conflict_before_first_heading">Avant le premier titre</string>
     <string name="notes_conflict_keep_note">Garder la note</string>
     <string name="notes_conflict_use_copy">Utiliser la copie</string>
+    <!-- Capture -->
+    <string name="capture_add_location">Lieu</string>
+    <string name="capture_add_link">Lien</string>
+    <string name="capture_add_time">Planifié</string>
+    <string name="capture_add_text">Texte</string>
+    <string name="capture_nothing_to_add">Choisissez ce qu’il faut ajouter au titre.</string>
+    <string name="capture_reading_notes">Lecture des notes…</string>
+    <string name="capture_pick_event">Choisir un événement</string>
+    <string name="capture_calendar_search">Chercher un événement</string>
+    <string name="capture_calendar_allow_text">KorgNote lit l’agenda de ce téléphone, événements de Google Agenda compris, uniquement pour les afficher ici.</string>
+    <string name="capture_calendar_allow">Autoriser</string>
+    <string name="capture_reading_calendar">Lecture de l’agenda…</string>
+    <string name="capture_calendar_none">Aucun événement la semaine passée ni dans les deux prochains mois.</string>
+    <string name="capture_all_day">Toute la journée</string>
+    <string name="capture_add_to_it">Ajouter</string>
+    <string name="capture_new_entry_under">Sous-entrée</string>
+    <string name="capture_new_note">Nouvelle note : %1$s</string>
+    <string name="capture_new_note_named">Nouvelle note « %1$s »</string>
+    <string name="capture_save_to">Enregistrer dans %1$s</string>
+    <string name="capture_where_to">Où le ranger ?</string>
+    <string name="capture_destination">Destination</string>
+    <string name="capture_capture">Capture</string>
+    <string name="capture_no_keyword">Aucun</string>
+    <string name="capture_event">Capturer un événement</string>
 </resources>

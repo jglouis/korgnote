@@ -76,3 +76,6 @@ private tailrec fun Context.activity(): Activity? = when (this) {
     is ContextWrapper -> baseContext.activity()
     else -> null
 }
+
+@Composable
+actual fun rememberCalendarPermission(): PermissionAsk? = rememberRuntimePermission(Manifest.permission.READ_CALENDAR)

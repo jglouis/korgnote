@@ -16,6 +16,7 @@ import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.app.widgets.AgendaWidgets
 import com.korgnote.app.widgets.NoAgendaWidgets
 import com.korgnote.app.data.NoteTemplateSettings
+import com.korgnote.app.capture.CaptureFiler
 import com.korgnote.app.data.SavedSearch
 import com.korgnote.common.fs.NotePaths
 import com.korgnote.common.org.OrgCheckboxItem
@@ -138,6 +139,8 @@ class NotesViewModel(
      * replica: there is then no server to sync with, only the folder to keep looking at.
      */
     folder: FolderNoteStorage? = null,
+    /** Files what was captured — shared from another app, or by a link — into these notes; none in the tests. */
+    private val captures: CaptureFiler? = null,
 ) : ViewModel() {
 
     /** The one message line: why something could not be done, or what was done instead. */
@@ -628,6 +631,28 @@ class NotesViewModel(
         }
         openNewNote(path)
         return path
+    }
+
+    /** The filer captures go through, with these notes' templates and inbox; null where nothing captures. */
+    val captureFiler: CaptureFiler? get() = captures
+
+    /** Every note and heading a capture can go to, from the notes the app has read already. */
+    fun captureDestinations(): List<LinkTarget> = captures?.destinationsAmong(linkTargetsOf(library.documents)).orEmpty()
+
+    /** The notes captures are filed into: the ones on screen. */
+    val captureStore: DocumentStore get() = store
+
+    /**
+     * Files the captures waiting into the notes, then shows and pushes the notes they went into. Run
+     * when the notes are first shown and whenever the app comes back, since the share sheet may
+     * have queued some meanwhile, and when this process queues one.
+     */
+    suspend fun fileCaptures() {
+        val filer = captures ?: return
+        filer.offerHeadings(linkTargetsOf(library.documents))
+        if (filer.fileWaiting(store).isEmpty()) return
+        showFromReplica()
+        server.pushQuietly()
     }
 
     /** Where today's daily is, in the daily folder Settings names. */

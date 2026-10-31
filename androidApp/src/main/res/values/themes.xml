@@ -1,4 +1,12 @@
 <resources>
     <!-- The window behind the Compose content, shown before it draws; dark in res/values-night. -->
     <style name="Theme.KorgNote" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- The capture sheet: a dialog over the app that shared, with nothing of KorgNote's behind it. -->
+    <style name="Theme.KorgNote.Capture" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+    </style>
 </resources>

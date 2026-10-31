@@ -6,6 +6,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.korgnote.app.capture.eventStore
+import platform.EventKit.EKAuthorizationStatusFullAccess
+import platform.EventKit.EKEntityType
+import platform.EventKit.EKEventStore
 import platform.UserNotifications.UNAuthorizationOptionAlert
 import platform.UserNotifications.UNAuthorizationOptionSound
 import platform.UserNotifications.UNAuthorizationStatusAuthorized
@@ -44,3 +48,25 @@ actual fun rememberNotificationPermission(): PermissionAsk? {
 // gives in its Info.plist.
 @Composable
 actual fun rememberLocalNetworkPermission(): PermissionAsk? = null
+
+// Full access, which reading the events needs; asked with the reason in the Info.plist.
+@Composable
+actual fun rememberCalendarPermission(): PermissionAsk? {
+    var granted by remember {
+        mutableStateOf(EKEventStore.authorizationStatusForEntityType(EKEntityType.EKEntityTypeEvent) == EKAuthorizationStatusFullAccess)
+    }
+    return remember {
+        object : PermissionAsk {
+            override val granted: Boolean get() = granted
+
+            override fun request(onDone: (Boolean) -> Unit) {
+                eventStore.requestFullAccessToEventsWithCompletion { ok, _ ->
+                    dispatch_async(dispatch_get_main_queue()) {
+                        granted = ok
+                        onDone(ok)
+                    }
+                }
+            }
+        }
+    }
+}

@@ -9,3 +9,6 @@ actual fun rememberNotificationPermission(): PermissionAsk? = null
 
 @Composable
 actual fun rememberLocalNetworkPermission(): PermissionAsk? = null
+
+@Composable
+actual fun rememberCalendarPermission(): PermissionAsk? = null
