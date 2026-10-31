@@ -2,7 +2,10 @@ package com.korgnote.common.org.link
 
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.orgElements
+import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.corpusTodoKeywords
 import com.korgnote.common.org.orgHeadingOf
+import com.korgnote.common.org.todoKeywordsOf
 import com.korgnote.common.org.sliceOf
 
 /** Where a link leads, as far as the notes can say. */
@@ -49,7 +52,15 @@ data class OrgBacklink(
  * across saves is a thing to keep correct (G7), and a scan of this corpus is cheap. The `:ID:`
  * table is the one thing computed ahead, because every `id:` link and every backlink needs it.
  */
-class OrgLinkIndex(private val notes: Map<String, String>) {
+class OrgLinkIndex(
+    private val notes: Map<String, String>,
+    /** The keywords a note that declares none is read with; see [corpusTodoKeywords]. */
+    fallback: OrgTodoConfig? = null,
+) {
+    private val fallback: OrgTodoConfig by lazy { fallback ?: corpusTodoKeywords(notes.values) }
+
+    /** The keywords [text]'s headings are read with, so that a title is the title Org sees. */
+    private fun keywordsOf(text: String): OrgTodoConfig = todoKeywordsOf(text, fallback)
 
     /** `:ID:` value → where it is declared. */
     private val ids: Map<String, OrgLinkResolution.Note> by lazy {
@@ -114,10 +125,11 @@ class OrgLinkIndex(private val notes: Map<String, String>) {
             val text = notes.getValue(source)
             if (!text.contains("[[")) continue
             val elements by lazy { text.orgElements() }
+            val keywords by lazy { keywordsOf(text) }
             for (m in OrgSyntax.link.findAll(text)) {
                 val target = targetPathOf(m.groupValues[1], from = source) ?: continue
                 val element = elements.lastOrNull { it.start <= m.range.first }
-                val context = element?.takeUnless { it.isPreamble }?.let { orgHeadingOf(it.title.prependStars()).title }
+                val context = element?.takeUnless { it.isPreamble }?.let { orgHeadingOf(it.title.prependStars(), keywords).title }
                     ?: source
                 found.getOrPut(target) { mutableListOf() } += OrgBacklink(source, m.range.first, context)
             }
@@ -201,12 +213,12 @@ class OrgLinkIndex(private val notes: Map<String, String>) {
 
     private fun headingOffset(text: String, title: String): Int? {
         val wanted = title.normalised()
+        val keywords = keywordsOf(text)
         return text.orgElements().firstOrNull { element ->
             if (element.isPreamble) return@firstOrNull false
             val line = element.sliceOf(text).substringBefore('\n')
-            val heading = orgHeadingOf(line)
-            // Both spellings: the parser takes any leading capitalised word for a keyword, so
-            // `* NASA plans` is titled `plans` — a link naming the whole line must still find it.
+            val heading = orgHeadingOf(line, keywords)
+            // Both spellings: Org leaves the keyword out of the title, but a link may have kept it.
             heading.title.normalised() == wanted ||
                 listOfNotNull(heading.todo, heading.title).joinToString(" ").normalised() == wanted
         }?.start

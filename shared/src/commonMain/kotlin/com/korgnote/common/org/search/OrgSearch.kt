@@ -2,7 +2,11 @@ package com.korgnote.common.org.search
 
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.orgElements
+import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
+import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.corpusTodoKeywords
 import com.korgnote.common.org.orgHeadingOf
+import com.korgnote.common.org.todoKeywordsOf
 import com.korgnote.common.org.sliceOf
 
 /**
@@ -131,6 +135,8 @@ fun searchOrgFile(
     text: String,
     query: SearchQuery,
     limit: Int = Int.MAX_VALUE,
+    /** The keywords a file that declares none is read with, so its breadcrumbs keep their titles whole. */
+    fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS,
 ): List<SearchHit> {
     if (query.isEmpty || limit <= 0) return emptyList()
     val hits = mutableListOf<SearchHit>()
@@ -158,6 +164,7 @@ fun searchOrgFile(
     if ((query.text + query.tags).any { !text.contains(it, ignoreCase = true) }) return hits
 
     val fileTags = fileTagsOf(text)
+    val keywords = todoKeywordsOf(text, fallback)
     val ancestors = mutableListOf<Heading>()
     var line = 1
 
@@ -165,7 +172,7 @@ fun searchOrgFile(
         val slice = element.sliceOf(text)
         if (!element.isPreamble) {
             val headingLine = slice.lineSequence().firstOrNull().orEmpty()
-            val heading = orgHeadingOf(headingLine)
+            val heading = orgHeadingOf(headingLine, keywords)
             while (ancestors.isNotEmpty() && ancestors.last().level >= element.level) ancestors.removeAt(ancestors.size - 1)
             ancestors += Heading(element.level, heading.title, heading.tags)
         }
@@ -209,19 +216,29 @@ fun searchOrgFile(
  * dependency to keep correct on every save. `OrgSearchTests` pins the corpus-sized case — main
  * code cannot link to a test class, so that name is written out rather than referenced.
  */
-fun searchOrg(files: Map<String, String>, query: SearchQuery, limit: Int = DEFAULT_SEARCH_LIMIT): List<SearchHit> {
+fun searchOrg(
+    files: Map<String, String>,
+    query: SearchQuery,
+    limit: Int = DEFAULT_SEARCH_LIMIT,
+    fallback: OrgTodoConfig = corpusTodoKeywords(files.values),
+): List<SearchHit> {
     if (query.isEmpty) return emptyList()
     val hits = mutableListOf<SearchHit>()
     for (path in files.keys.sorted()) {
         if (hits.size >= limit) break
-        hits += searchOrgFile(path, files.getValue(path), query, limit - hits.size)
+        hits += searchOrgFile(path, files.getValue(path), query, limit - hits.size, fallback)
     }
     return hits
 }
 
 /** Convenience for the common case: parse the user's input and run it. */
-fun searchOrg(files: Map<String, String>, query: String, limit: Int = DEFAULT_SEARCH_LIMIT): List<SearchHit> =
-    searchOrg(files, SearchQuery.parse(query), limit)
+fun searchOrg(
+    files: Map<String, String>,
+    query: String,
+    limit: Int = DEFAULT_SEARCH_LIMIT,
+    fallback: OrgTodoConfig = corpusTodoKeywords(files.values),
+): List<SearchHit> =
+    searchOrg(files, SearchQuery.parse(query), limit, fallback)
 
 /** Enough to fill a long screen several times over; past this, narrow the query instead. */
 const val DEFAULT_SEARCH_LIMIT = 200

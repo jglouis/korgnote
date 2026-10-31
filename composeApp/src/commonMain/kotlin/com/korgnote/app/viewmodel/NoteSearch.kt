@@ -124,7 +124,7 @@ class NoteSearch(
      * them. If a corpus ever makes this visible, the fix is an index, not a thread.
      */
     private fun refreshSearch() {
-        results = searchOrg(library.texts(), query)
+        results = searchOrg(library.texts(), query, fallback = library.corpusKeywords)
     }
 
     /** Opens the file a result is in, at the element containing it. */

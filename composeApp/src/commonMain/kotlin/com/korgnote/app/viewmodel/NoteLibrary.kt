@@ -9,7 +9,9 @@ import com.korgnote.app.ui.Node
 import com.korgnote.common.fs.TreeUtils
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgTodoConfig
-import com.korgnote.common.org.complete.DEFAULT_TODO_KEYWORDS
+import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
+import com.korgnote.common.org.readWith
+import com.korgnote.common.org.todoKeywordsOf
 import com.korgnote.common.org.corpusTodoKeywords
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.replica.DocumentStore
@@ -81,17 +83,19 @@ class NoteLibrary(private val store: DocumentStore) {
      * Rereads every note from the replica, on [parseOn]. A note whose text has not changed keeps its
      * parse: a sync usually brings one note, and parsing all of them again took seconds on a phone,
      * with the screen frozen while the main thread did it.
+     *
+     * Each note's headings are read with its own keywords, or with [corpusKeywords] when it declares
+     * none; a kept parse is read again only if the corpus's keywords changed under it.
      */
     suspend fun reload(parseOn: CoroutineDispatcher = Dispatchers.Default) {
         val previous = parsed.toMap()
         val paths = store.paths()
-        val fresh = withContext(parseOn) {
-            buildMap {
-                for (path in paths) {
-                    val text = store.read(path) ?: continue
-                    put(path, previous[path]?.takeIf { it.text == text } ?: text.toOrgDocument())
-                }
-            }
+        val (fresh, corpus) = withContext(parseOn) {
+            val texts = buildMap { for (path in paths) store.read(path)?.let { put(path, it) } }
+            val corpus = corpusTodoKeywords(texts.values)
+            texts.mapValues { (path, text) ->
+                previous[path]?.takeIf { it.text == text }?.readWith(corpus) ?: text.toOrgDocument(corpus)
+            } to corpus
         }
         parsed.clear()
         parsed.putAll(fresh)
@@ -99,14 +103,25 @@ class NoteLibrary(private val store: DocumentStore) {
         tree = mapRootToUiFolder(TreeUtils.buildFromPaths(paths, rootName = "Documents"))
         conflicts = conflictsIn(paths)
         loaded = true
-        keywords = null
+        keywords = corpus
     }
 
-    /** Replaces one note with [document], as just saved; the tree is unchanged since the path is. */
+    /**
+     * Replaces one note with [document], as just saved; the tree is unchanged since the path is.
+     *
+     * When the save changed what the note declares with `#+TODO:`, the notes that declare nothing
+     * are read again with what the notes now declare, so a keyword added here is one there too.
+     */
     fun put(path: String, document: OrgDocument) {
-        parsed[path] = document
+        val before = parsed.put(path, document)
         keywords = null
+        if (before == null || declaredKeywords(before.text) != declaredKeywords(document.text)) {
+            val corpus = corpusKeywords
+            for (entry in parsed.entries) entry.setValue(entry.value.readWith(corpus))
+        }
     }
+
+    private fun declaredKeywords(text: String) = todoKeywordsOf(text, NO_KEYWORDS)
 
     private fun mapSharedToUi(node: SharedNode): Node {
         return when (node) {
@@ -121,3 +136,6 @@ class NoteLibrary(private val store: DocumentStore) {
 
     private fun mapRootToUiFolder(shared: SharedFolder): Folder = mapSharedToUi(shared) as Folder
 }
+
+/** No keywords at all: what [todoKeywordsOf] falls back on to say only what a note declares. */
+private val NO_KEYWORDS = OrgTodoConfig(emptySet(), emptySet())

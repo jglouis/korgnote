@@ -363,7 +363,7 @@ class NotesViewModel(
         // those over the edit: the rest of the note is saved as it was.
         note.content = updateStatisticsCookies(note.content, todoKeywords, before = store.read(path))
         store.save(path, note.content)
-        library.put(path, note.content.toOrgDocument())
+        library.put(path, note.content.toOrgDocument(library.corpusKeywords))
         refreshDerivedViews()
         server.push()
     }
@@ -377,7 +377,7 @@ class NotesViewModel(
      */
     fun toggleCheckboxAt(offsetInDocument: Int, scope: CoroutineScope? = null) {
         val file = note.path ?: return
-        val document = note.content.toOrgDocument()
+        val document = note.content.toOrgDocument(library.corpusKeywords)
         val item = document.nodeAt<OrgCheckboxItem>(offsetInDocument) ?: return
         val updated = document.tickAsOrgDoes(item).withStatistics(since = document)
         note.content = updated.text
@@ -400,7 +400,7 @@ class NotesViewModel(
      */
     fun setTodoAt(offsetInDocument: Int, keyword: String?, scope: CoroutineScope? = null) {
         val file = note.path ?: return
-        val document = note.content.toOrgDocument()
+        val document = note.content.toOrgDocument(library.corpusKeywords)
         val heading = document.nodeAt<OrgSection>(offsetInDocument) ?: return
         val updated = document.changeTodoState(heading, keyword, now(), todoKeywords).withStatistics(since = document)
         if (updated.text == document.text) return
@@ -416,7 +416,7 @@ class NotesViewModel(
      * under them, as Org updates them.
      */
     private fun OrgDocument.withStatistics(since: OrgDocument): OrgDocument =
-        updateStatisticsCookies(text, todoKeywords, before = since.text).let { if (it == text) this else it.toOrgDocument() }
+        updateStatisticsCookies(text, todoKeywords, before = since.text).let { if (it == text) this else it.toOrgDocument(todoFallback) }
 
     /**
      * Every note and heading a link can go to, for the heading-link picker: the open note as it
@@ -425,7 +425,7 @@ class NotesViewModel(
      */
     fun linkTargets(): List<LinkTarget> {
         val documents = library.documents.toMutableMap()
-        note.path?.let { documents[it] = note.content.toOrgDocument() }
+        note.path?.let { documents[it] = note.content.toOrgDocument(library.corpusKeywords) }
         return linkTargetsOf(documents).filter { target ->
             !(target.isNote && target.path == note.path) && target.title.isNotBlank()
         }
@@ -472,7 +472,7 @@ class NotesViewModel(
             val updated = target.offset?.let { withHeadingId(before, it, id) } ?: withFileId(before, id)
             if (updated != before) {
                 store.save(path, updated)
-                library.put(path, updated.toOrgDocument())
+                library.put(path, updated.toOrgDocument(library.corpusKeywords))
                 refreshDerivedViewsSoon()
                 server.pushQuietly()
             }
@@ -573,7 +573,7 @@ class NotesViewModel(
             return
         }
         val content = note.content
-        val table = content.toOrgDocument().nodeAt<OrgTable>(offsetInDocument) ?: return
+        val table = content.toOrgDocument(library.corpusKeywords).nodeAt<OrgTable>(offsetInDocument) ?: return
         val formulas = tableFormulaLine(content, table.range.last + 1)
         val end = formulas?.range?.let { it.last + 1 } ?: (table.range.last + 1)
         tableEdit = TableEdit(path, table.range, content.substring(table.range.first, end), TableGrid.of(table, formulas?.formulas.orEmpty()))

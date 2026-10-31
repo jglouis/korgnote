@@ -108,7 +108,7 @@ class CompletionController(
             value == null || dismissed -> emptyList()
             // A selection is not a caret: completing over one would silently delete it.
             !value.selection.collapsed -> emptyList()
-            else -> complete(value.text.toOrgDocument(), value.selection.start, context)
+            else -> complete(value.text.toOrgDocument(context.todoKeywords), value.selection.start, context)
         }
         // The list is rebuilt under the selection on every keystroke, so it starts from the top.
         selectedIndex = 0

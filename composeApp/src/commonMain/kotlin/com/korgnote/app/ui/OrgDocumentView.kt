@@ -249,7 +249,7 @@ fun OrgDocumentView(
                         Box(modifier = Modifier.weight(1f)) {
                             // Folded, only the heading line shows, as `org-cycle` leaves it.
                             val shown = if (folded) slice.substringBefore('\n') else slice
-                            val document = remember(shown) { shown.toOrgDocument() }
+                            val document = remember(shown, todoKeywords) { shown.toOrgDocument(todoKeywords) }
                             OrgText(
                                 content = document,
                                 todoKeywords = todoKeywords,

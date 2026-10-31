@@ -27,6 +27,7 @@ import com.korgnote.common.org.OrgSpanKind
 import com.korgnote.common.org.orgSpansForLine
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.parseTodoConfigFrom
 import com.korgnote.common.org.srcBlockSpans
 import com.korgnote.common.org.todoKeywordsOf
@@ -86,7 +87,7 @@ object OrgColors {
 }
 
 /** TODO keywords used when nothing better is known: Org's own. */
-val DefaultOrgTodoConfig = OrgTodoConfig(setOf("TODO"), setOf("DONE"))
+val DefaultOrgTodoConfig = DEFAULT_TODO_KEYWORDS
 
 /**
  * The keywords [text] declares with `#+TODO:`, or [fallback] when it declares none.

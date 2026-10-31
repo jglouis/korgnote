@@ -13,12 +13,10 @@ import com.korgnote.common.org.agenda.OrgTimeUnit
 import com.korgnote.common.org.agenda.OrgTimestamp
 import com.korgnote.common.org.agenda.RepeatKind
 import com.korgnote.common.org.agenda.parseOrgTimestamp
-import com.korgnote.common.org.complete.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.complete.orgStamp
 import com.korgnote.common.org.complete.restamp
 import com.korgnote.common.org.complete.shiftedEnd
 import com.korgnote.common.org.toOrgDocument
-import com.korgnote.common.org.todoKeywordsOf
 import com.korgnote.common.org.todoSequencesOf
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDateTime
@@ -42,7 +40,7 @@ import kotlinx.datetime.plus
  * Invariant I4 of `docs/04-org-core.md`: `doc.replace(r, s).text == doc.text.replaceRange(r, s)`.
  */
 fun OrgDocument.replace(range: IntRange, replacement: String): OrgDocument =
-    text.replaceRange(range, replacement).toOrgDocument()
+    text.replaceRange(range, replacement).toOrgDocument(todoFallback)
 
 /** Every node in the document, parents before children. */
 fun OrgDocument.allNodes(): List<OrgNode> {
@@ -122,7 +120,7 @@ fun OrgDocument.tickAsOrgDoes(item: OrgCheckboxItem): OrgDocument {
         val marker = markerRangeIn(line) ?: continue
         updated = updated.replaceRange(marker, "[$mark]")
     }
-    return if (updated == text) this else updated.toOrgDocument()
+    return if (updated == text) this else updated.toOrgDocument(todoFallback)
 }
 
 private fun OrgCheckboxItem.mark(): Char = if (checked) 'X' else if (partial) '-' else ' '
@@ -202,7 +200,7 @@ fun OrgDocument.changeTodoState(
     heading: OrgSection,
     keyword: String?,
     at: LocalDateTime,
-    keywords: OrgTodoConfig = todoKeywordsOf(text, DEFAULT_TODO_KEYWORDS),
+    keywords: OrgTodoConfig = todoKeywords,
 ): OrgDocument {
     val previous = heading.todo?.takeIf { it.isNotEmpty() }
     if (previous == keyword) return this

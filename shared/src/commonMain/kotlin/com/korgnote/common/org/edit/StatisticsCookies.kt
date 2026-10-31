@@ -54,7 +54,7 @@ fun updateStatisticsCookies(text: String, todoKeywords: OrgTodoConfig, before: S
     if (!STATISTICS_COOKIE.containsMatchIn(text)) return text
     val changed = before?.let { changedRegion(it, text) }
     if (before != null && changed == null) return text
-    val document = text.toOrgDocument()
+    val document = text.toOrgDocument(todoKeywords)
     val edits = mutableListOf<Pair<IntRange, String>>()
     for (node in document.allNodes()) {
         // Over the change: it starts before where the change ends, and ends at or after where it

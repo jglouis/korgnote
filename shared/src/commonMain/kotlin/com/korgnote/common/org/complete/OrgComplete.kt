@@ -3,6 +3,7 @@ package com.korgnote.common.org.complete
 import com.korgnote.common.org.OrgBlock
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgSyntax
+import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.agenda.parseOrgTimestamp
 import com.korgnote.common.org.edit.nodeAt
@@ -46,9 +47,6 @@ data class CompletionContext(
     val author: String = "",
     val today: LocalDate,
 )
-
-/** What Org assumes when a document names no workflow of its own. */
-val DEFAULT_TODO_KEYWORDS = OrgTodoConfig(todo = setOf("TODO"), done = setOf("DONE"))
 
 /**
  * One suggestion.

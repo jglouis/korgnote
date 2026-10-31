@@ -38,6 +38,20 @@ data class OrgDocument(
      */
     var text: String = ""
         internal set
+
+    /**
+     * The TODO keywords this document's headings were read with: its own `#+TODO:` lines, or
+     * [todoFallback] when it has none. A heading's [OrgSection.todo] is one of them or null.
+     */
+    var todoKeywords: OrgTodoConfig = DEFAULT_TODO_KEYWORDS
+        internal set
+
+    /**
+     * The keywords it was told to fall back on, kept so that an edit's re-parse reads its headings
+     * the same way. See [toOrgDocument].
+     */
+    var todoFallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS
+        internal set
 }
 
 /**
@@ -166,7 +180,7 @@ data class OrgTableRow(val cells: List<OrgNode>, val isRule: Boolean = false) : 
  */
 data class OrgHeading(
     val level: Int,
-    /** The TODO-like keyword, or `""` when the heading has none. */
+    /** The heading's TODO keyword, one of those it was read with; null when it has none. */
     val todo: String?,
     val title: String,
     val tags: List<String>,
@@ -174,13 +188,24 @@ data class OrgHeading(
     val priority: Char? = null,
 )
 
-/** Splits a heading line — with or without its leading stars — into [OrgHeading]. */
-fun orgHeadingOf(line: String): OrgHeading {
+/**
+ * Splits a heading line — with or without its leading stars — into [OrgHeading].
+ *
+ * The first word is the heading's keyword only when it is one of [keywords], as in Org: the file's
+ * `#+TODO:` lines decide, so `* NASA plans` is titled `NASA plans` wherever `NASA` is not declared.
+ * Pass the file's keywords ([todoKeywordsOf]), not a guess: a keyword missed here is a word of the
+ * title, and setting one would then put a second keyword in front of it.
+ */
+fun orgHeadingOf(line: String, keywords: OrgTodoConfig): OrgHeading {
     val trimmed = line.trim()
     val m = headingLineRegex.find(trimmed)
     val level = m?.groupValues?.getOrNull(1)?.length?.coerceAtLeast(1) ?: 1
-    val todo = m?.groupValues?.getOrNull(2)
-    var title = m?.groupValues?.getOrNull(3)?.ifBlank { null } ?: trimmed
+    var rest = m?.groupValues?.getOrNull(2)
+    val word = rest?.let { headingKeywordRegex.find(it) }
+    val todo = word?.groupValues?.get(1)?.takeIf { it in keywords.todo || it in keywords.done }
+    if (todo != null) rest = rest!!.substring(word.value.length)
+    // A heading that is only its keyword, `* TODO`, has an empty title, as in Org.
+    var title = if (todo != null) rest.orEmpty() else rest?.ifBlank { null } ?: trimmed
     // Trailing :tag1:tag2: are stripped from the title and kept separately
     val tags = headingTagsRegex.find(title)?.let { tm ->
         title = title.substring(0, tm.range.first).trimEnd()
@@ -194,7 +219,8 @@ fun orgHeadingOf(line: String): OrgHeading {
     return OrgHeading(level = level, todo = todo, title = title, tags = tags, priority = priority)
 }
 
-private val headingLineRegex = Regex("^(\\*+)\\s+(?:(${OrgSyntax.TODO_WORD})\\s+)?(.*)")
+private val headingLineRegex = Regex("^(\\*+)\\s+(.*)")
+private val headingKeywordRegex = Regex("^(${OrgSyntax.TODO_WORD})(?:\\s+|$)")
 private val headingTagsRegex = Regex("\\s+:([\\p{L}\\p{N}_@#%]+(?::[\\p{L}\\p{N}_@#%]+)*):\\s*$")
 
 // True when the line is part of a table (starts with '|' after optional indentation).
@@ -218,9 +244,17 @@ fun parseOrgTable(lines: List<String>): OrgTable {
     return OrgTable(rows)
 }
 
-// Parse a String into a very small subset of Org-mode constructs supported by the data model above.
-fun String.toOrgDocument(): OrgDocument {
+/**
+ * Parses this text into an [OrgDocument].
+ *
+ * Its headings are read with the keywords it declares with `#+TODO:`, or with [fallback] when it
+ * declares none: what the editor-wide setting would hold, which for the app is what the other notes
+ * declare ([corpusTodoKeywords]). A slice of a note, which never holds the note's `#+TODO:` lines,
+ * must be given the note's keywords here.
+ */
+fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDocument {
     val source = this
+    val keywords = todoKeywordsOf(source, fallback)
     val lines = source.split('\n')
     val children = mutableListOf<OrgNode>()
     val metadata = mutableListOf<String>()
@@ -533,7 +567,7 @@ fun String.toOrgDocument(): OrgDocument {
         // starts with a star, as `*bold* text` does, is a paragraph.
         if (OrgSyntax.heading.containsMatchIn(line)) {
             flushParagraph()
-            val heading = orgHeadingOf(line)
+            val heading = orgHeadingOf(line, keywords)
             // A heading ends every open heading at its level or deeper; what remains is its parent.
             closeSectionsDownTo(heading.level, i)
             openSections.add(OpenSection(i, heading))
@@ -573,6 +607,8 @@ fun String.toOrgDocument(): OrgDocument {
 
     val document = OrgDocument(children, metadata)
     document.text = source
+    document.todoKeywords = keywords
+    document.todoFallback = fallback
     document.range = if (source.isEmpty()) IntRange.EMPTY else 0 until source.length
     return document
 }
@@ -645,6 +681,9 @@ fun String.isNumeric(): Boolean = isNotEmpty() && numericCellRegex.matches(this)
 
 /** The TODO keywords a file declares: those still to do, and those that mark an entry done. */
 data class OrgTodoConfig(val todo: Set<String>, val done: Set<String>)
+
+/** What Org assumes when a document names no workflow of its own. */
+val DEFAULT_TODO_KEYWORDS = OrgTodoConfig(todo = setOf("TODO"), done = setOf("DONE"))
 
 /**
  * Each `#+TODO:` line among [lines] (see [OrgSyntax.todoKeywordsLine]) as the sequence it declares,
@@ -720,7 +759,14 @@ fun corpusTodoKeywords(texts: Iterable<String>): OrgTodoConfig {
 // blank lines, trailing whitespace, and indentation elsewhere in the file - untouched.
 // Returns null if there is no such checkbox (ordinal out of range).
 // Convenience helpers to classify a section's state according to document metadata.
-fun OrgDocument.todoConfig(): OrgTodoConfig = parseTodoConfigFrom(this.metadata)
+fun OrgDocument.todoConfig(): OrgTodoConfig = todoKeywords
+
+/**
+ * This document as it reads when its text declares no keywords and the fallback is [fallback]:
+ * itself when that changes nothing, because it declares its own or was read with the same.
+ */
+fun OrgDocument.readWith(fallback: OrgTodoConfig): OrgDocument =
+    if (todoFallback == fallback || todoKeywords != todoFallback) this else text.toOrgDocument(fallback)
 fun OrgSection.isTodo(doc: OrgDocument): Boolean = this.todo != null && this.todo in doc.todoConfig().todo
 fun OrgSection.isDone(doc: OrgDocument): Boolean = this.todo != null && this.todo in doc.todoConfig().done
 

@@ -1,7 +1,7 @@
 package com.korgnote.common.org.agenda
 
 import com.korgnote.common.org.OrgSyntax
-import com.korgnote.common.org.complete.DEFAULT_TODO_KEYWORDS
+import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.orgHeadingOf
 import com.korgnote.common.org.OrgTodoConfig
@@ -136,25 +136,21 @@ fun agendaEntries(path: String, text: String, fallback: OrgTodoConfig = DEFAULT_
     for (element in text.orgElements()) {
         if (element.isPreamble) continue
         val slice = element.sliceOf(text)
-        val heading = orgHeadingOf(slice.substringBefore('\n'))
+        val heading = orgHeadingOf(slice.substringBefore('\n'), todoConfig)
         while (ancestors.isNotEmpty() && ancestors.last().first >= element.level) ancestors.removeAt(ancestors.size - 1)
         ancestors += element.level to heading.tags
         if (!OrgSyntax.timestamp.containsMatchIn(slice)) continue
 
-        // The heading parser reads any leading capitalised word as a keyword; only the ones this
-        // file declares are.
-        val keyword = heading.todo?.takeIf { it.isNotEmpty() }
-        val isKeyword = keyword != null && (keyword in todoConfig.todo || keyword in todoConfig.done)
-        val rawTitle = if (keyword != null && !isKeyword) "$keyword ${heading.title}" else heading.title
+        val keyword = heading.todo
         val inherited = ancestors.dropLast(1).flatMap { it.second } + fileTags
-        val title = rawTitle.withoutStamps()
+        val title = heading.title.withoutStamps()
         val tags = (heading.tags + inherited).distinct()
         fun entry(kind: AgendaKind, stamp: OrgTimestamp) = AgendaEntry(
             file = path,
             headingOffset = element.start,
             title = title,
-            todo = if (isKeyword) keyword else null,
-            done = isKeyword && keyword in todoConfig.done,
+            todo = keyword,
+            done = keyword != null && keyword in todoConfig.done,
             tags = tags,
             priority = heading.priority,
             kind = kind,

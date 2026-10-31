@@ -339,7 +339,7 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: (
                     val keywordStyle = SpanStyle(color = todoColor ?: style.color)
                     // A link rather than a Text of its own, so a long title still wraps under the
                     // keyword. Like any link it takes its own tap, so the element is not opened for
-                    // editing. A capitalised first word the keywords do not know is left alone.
+                    // editing.
                     if (onSetTodo != null && todoColor != null) {
                         val pick = LinkAnnotation.Clickable(
                             tag = TODO_KEYWORD_TAG,

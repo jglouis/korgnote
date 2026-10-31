@@ -71,7 +71,7 @@ sealed interface OrgNode {
 class OrgHeading(
     override val range: IntRange,
     val level: Int,
-    val todo: String?,          // raw keyword; meaning comes from OrgTodoConfig
+    val todo: String?,          // one of the file's #+TODO: keywords (OrgDocument.todoKeywords), or null
     val priority: Char?,        // [#A]
     val title: TextRange,       // range of the title only, for in-place retitling
     val tags: List<String>,
