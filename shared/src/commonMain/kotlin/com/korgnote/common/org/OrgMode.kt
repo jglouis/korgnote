@@ -194,7 +194,7 @@ fun orgHeadingOf(line: String): OrgHeading {
     return OrgHeading(level = level, todo = todo, title = title, tags = tags, priority = priority)
 }
 
-private val headingLineRegex = Regex("^(\\*+)\\s+(?:([A-Z][A-Z0-9_-]*)\\s+)?(.*)")
+private val headingLineRegex = Regex("^(\\*+)\\s+(?:(${OrgSyntax.TODO_WORD})\\s+)?(.*)")
 private val headingTagsRegex = Regex("\\s+:([\\p{L}\\p{N}_@#%]+(?::[\\p{L}\\p{N}_@#%]+)*):\\s*$")
 
 // True when the line is part of a table (starts with '|' after optional indentation).
@@ -643,36 +643,44 @@ private val orgTableNumber = Regex(
 private val numericCellRegex = Regex("^[-+]?(\\d+([.,]\\d*)?|[.,]\\d+)([eE][-+]?\\d+)?%?$")
 fun String.isNumeric(): Boolean = isNotEmpty() && numericCellRegex.matches(this)
 
-// Represents parsed TODO workflow configuration from #+TODO metadata lines.
+/** The TODO keywords a file declares: those still to do, and those that mark an entry done. */
 data class OrgTodoConfig(val todo: Set<String>, val done: Set<String>)
 
-// Parse #+TODO metadata lines to extract TODO/DONE state sets.
+/**
+ * Each `#+TODO:` line among [lines] (see [OrgSyntax.todoKeywordsLine]) as the sequence it declares,
+ * in order. Other lines are skipped.
+ *
+ * Read as Org reads `org-todo-keywords`: the words before `|` are still to do and the words after
+ * it are done, and a line without `|` makes only its last word done, so `#+TODO: TODO NEXT DONE`
+ * is `TODO NEXT | DONE`. A word's `(t)` or `(w@/!)` settings are dropped. A word no heading could
+ * start with (see [OrgSyntax.TODO_WORD]) is skipped, as it could never mark one.
+ */
+fun todoSequencesOf(lines: List<String>): List<OrgTodoConfig> = lines.mapNotNull { line ->
+    val words = OrgSyntax.todoKeywordsLine.find(line)?.groupValues?.get(1)
+        ?.split(' ', '\t')?.filter { it.isNotEmpty() }
+        ?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+    val bar = words.indexOf("|")
+    val todo = if (bar >= 0) words.subList(0, bar) else words.dropLast(1)
+    val done = if (bar >= 0) words.subList(bar + 1, words.size) else words.takeLast(1)
+    fun keywords(side: List<String>) =
+        side.mapNotNullTo(linkedSetOf()) { OrgSyntax.todoKeywordDeclaration.matchEntire(it)?.groupValues?.get(1) }
+    OrgTodoConfig(keywords(todo), keywords(done))
+}
+
+/** Every keyword the `#+TODO:` lines among [metadata] declare, all sequences together. */
 fun parseTodoConfigFrom(metadata: List<String>): OrgTodoConfig {
     val todo = linkedSetOf<String>()
     val done = linkedSetOf<String>()
-    val lineRegex = Regex("^#\\+TODO:\\s*(.*)", RegexOption.IGNORE_CASE)
-    for (line in metadata) {
-        val m = lineRegex.find(line.trim()) ?: continue
-        val spec = m.groupValues[1].trim()
-        // Split around first '|' if present
-        val parts = spec.split('|', limit = 2)
-        val left = parts.getOrNull(0)?.trim().orEmpty()
-        val right = parts.getOrNull(1)?.trim().orEmpty()
-        fun parseSide(side: String): List<String> {
-            if (side.isBlank()) return emptyList()
-            // Tokens like WORD(k) possibly repeated; also allow bare WORD
-            val tokenRegex = Regex("([A-Z][A-Z0-9_-]*)(?:\\([^)]*\\))?")
-            return tokenRegex.findAll(side).map { it.groupValues[1] }.toList()
-        }
-        parseSide(left).forEach { todo.add(it) }
-        parseSide(right).forEach { done.add(it) }
+    for (sequence in todoSequencesOf(metadata)) {
+        todo += sequence.todo
+        done += sequence.done
     }
     return OrgTodoConfig(todo, done)
 }
 
 /** The `#+TODO:` lines of raw Org text, wherever they are. */
 private fun todoLinesOf(text: String): List<String> =
-    text.lineSequence().filter { it.startsWith("#+TODO", ignoreCase = true) }.toList()
+    text.lineSequence().filter { OrgSyntax.todoKeywordsLine.containsMatchIn(it) }.toList()
 
 /**
  * The keywords [text] declares with `#+TODO:`, or [fallback] when it declares none.
@@ -697,7 +705,7 @@ fun corpusTodoKeywords(texts: Iterable<String>): OrgTodoConfig {
     val todo = linkedSetOf("TODO")
     val done = linkedSetOf("DONE")
     for (text in texts) {
-        if (!text.contains("#+TODO", ignoreCase = true)) continue
+        if (!text.contains("TODO:", ignoreCase = true)) continue
         val declared = parseTodoConfigFrom(todoLinesOf(text))
         todo += declared.todo
         done += declared.done

@@ -17,9 +17,9 @@ import com.korgnote.common.org.complete.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.complete.orgStamp
 import com.korgnote.common.org.complete.restamp
 import com.korgnote.common.org.complete.shiftedEnd
-import com.korgnote.common.org.parseTodoConfigFrom
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.org.todoKeywordsOf
+import com.korgnote.common.org.todoSequencesOf
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
@@ -330,7 +330,7 @@ private fun OrgDocument.repeatStateOf(heading: OrgSection, done: String, keyword
         .firstOrNull { it.name.equals("PROPERTIES", ignoreCase = true) }
         ?.properties?.firstOrNull { it.first.equals("REPEAT_TO_STATE", ignoreCase = true) }?.second?.trim()
     if (declared != null && (declared in keywords.todo || declared in keywords.done)) return declared
-    val sequence = metadata.map { parseTodoConfigFrom(listOf(it)) }.firstOrNull { done in it.done }
+    val sequence = todoSequencesOf(metadata).firstOrNull { done in it.done }
     return sequence?.let { (it.todo + it.done).first() } ?: keywords.todo.firstOrNull() ?: done
 }
 

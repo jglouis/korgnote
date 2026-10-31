@@ -45,4 +45,49 @@ class OrgModeTodoMetadataTests {
         val s5 = assertIs<OrgSection>(doc.children[7]); assertEquals("Solved", s5.title); assertEquals("FIXED", s5.todo); assertFalse(s5.isTodo(doc)); assertTrue(s5.isDone(doc))
         val s6 = assertIs<OrgSection>(doc.children[8]); assertEquals("No need", s6.title); assertEquals("CANCELED", s6.todo); assertFalse(s6.isTodo(doc)); assertTrue(s6.isDone(doc))
     }
+
+    @Test
+    fun aLineWithoutABarMakesOnlyItsLastWordDone() {
+        assertEquals(
+            OrgTodoConfig(todo = setOf("TODO", "NEXT"), done = setOf("DONE")),
+            parseTodoConfigFrom(listOf("#+TODO: TODO NEXT DONE")),
+        )
+        assertEquals(OrgTodoConfig(todo = emptySet(), done = setOf("DONE")), parseTodoConfigFrom(listOf("#+TODO: DONE")))
+    }
+
+    @Test
+    fun theSeqAndTypSpellingsDeclareKeywordsToo() {
+        val text = "#+SEQ_TODO: NEXT(n) | SHIPPED(s)\n#+TYP_TODO: FRED SARA | DONE\n* SHIPPED Release\n"
+        assertEquals(
+            OrgTodoConfig(todo = setOf("NEXT", "FRED", "SARA"), done = setOf("SHIPPED", "DONE")),
+            todoKeywordsOf(text, OrgTodoConfig(setOf("TODO"), setOf("DONE"))),
+        )
+        val doc = text.toOrgDocument()
+        assertTrue(assertIs<OrgSection>(doc.children.last()).isDone(doc))
+    }
+
+    @Test
+    fun eachLineIsItsOwnSequence() {
+        assertEquals(
+            listOf(
+                OrgTodoConfig(todo = setOf("TODO", "WAIT"), done = setOf("DONE", "CANCELED")),
+                OrgTodoConfig(todo = setOf("EVENT"), done = setOf("FINISHED")),
+            ),
+            todoSequencesOf(
+                listOf(
+                    "#+TITLE: Not a sequence",
+                    "#+TODO: TODO(t) WAIT(w@/!) | DONE(d!) CANCELED(c@/!)",
+                    "#+todo: EVENT(e) | FINISHED(f)",
+                    "#+TODO:",
+                ),
+            ),
+        )
+    }
+
+    /** A bar is a word of its own, as in Org: `TODO|DONE` is one word, and no heading's keyword. */
+    @Test
+    fun onlyAWordOfItsOwnIsABar() {
+        assertEquals(OrgTodoConfig(todo = setOf("TODO"), done = setOf("DONE")), parseTodoConfigFrom(listOf("#+TODO: TODO | DONE")))
+        assertEquals(OrgTodoConfig(todo = emptySet(), done = emptySet()), parseTodoConfigFrom(listOf("#+TODO: TODO|DONE")))
+    }
 }

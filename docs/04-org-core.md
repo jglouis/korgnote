@@ -153,12 +153,11 @@ existing `OrgColors` palette and the `OrgSyntaxHighlightingTest` expectations ca
 only the producer changed.
 
 **Drift to fold back.** Org patterns have crept back outside the one grammar since T6. None breaks an
-edit, but each is a second definition that can disagree with the first, and two already do:
+edit, but each is a second definition that can disagree with the first, and one already does:
 
 | Where | Pattern | Duplicates |
 |---|---|---|
 | `composeApp/…/ui/OrgText.kt` | `ID_PROPERTY` (`:ID:`) | `ID_PROPERTY` in `shared/…/org/link/LinkTargets.kt` |
-| `composeApp/…/ui/OrgText.kt` | `TODO_KEYWORDS_LINE` | `parseTodoConfigFrom` — and **disagrees**: it also reads `#+SEQ_TODO:` and `#+TYP_TODO:`, which the parser ignores, so reading mode shows chips for keywords nothing else treats as keywords |
 | `composeApp/…/ui/NoteByline.kt` | `AUTHOR`, `DATE` | `FILE_KEYWORD` in `shared/…/org/edit/FileKeywords.kt` |
 | `composeApp/…/viewmodel/LinkNavigator.kt` | `TITLE_LINE`, `SCHEME` | `OrgSyntax.titleKeyword`; `SCHEME` in `edit/LinkEditing.kt` |
 | `composeApp/…/ui/LinkEditor.kt` | `FILE_SCHEME`, `HAS_SCHEME` | `FILE_SCHEMES`, `SCHEME` in `edit/LinkEditing.kt` |

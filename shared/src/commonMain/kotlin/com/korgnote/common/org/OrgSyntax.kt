@@ -62,6 +62,21 @@ object OrgSyntax {
     /** The `#+FILETAGS:` keyword, capturing the tags every heading in the file inherits. */
     val filetagsKeyword = Regex("^#\\+FILETAGS:\\s*(.*)$", RegexOption.IGNORE_CASE)
 
+    /**
+     * What a heading's first word must look like to be read as its TODO keyword, and what a
+     * `#+TODO:` line may declare. Whether that word *is* a keyword is up to the file's declaration.
+     */
+    const val TODO_WORD = "[A-Z][A-Z0-9_-]*"
+
+    /**
+     * A `#+TODO:` line, or the `#+SEQ_TODO:` and `#+TYP_TODO:` spellings Org reads the same way,
+     * capturing what it declares: `TODO(t) WAIT(w@/!) | DONE(d!)`.
+     */
+    val todoKeywordsLine = Regex("^[ \\t]*#\\+(?:SEQ_|TYP_)?TODO:[ \\t]*(.*)$", RegexOption.IGNORE_CASE)
+
+    /** One word of a `#+TODO:` line: the keyword, then its optional `(key@/!)` settings. */
+    val todoKeywordDeclaration = Regex("^($TODO_WORD)(?:\\([^)]*\\))?$")
+
     /** The date at the start of a timestamp, capturing year, month and day. */
     val timestampDate = Regex("<(\\d{4})-(\\d{2})-(\\d{2})")
 

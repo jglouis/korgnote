@@ -36,6 +36,14 @@ class FileMetadataViewTest {
         onNodeWithText(":PROPERTIES:").assertExists()
     }
 
+    /** Org reads `#+SEQ_TODO:` as `#+TODO:`, and so do the headings: the chips and the heading agree. */
+    @Test
+    fun aSeqTodoLineDeclaresWhatItsHeadingsUse() = runComposeUiTest {
+        setContent { OrgDocumentView(text = "#+SEQ_TODO: NEXT SHIPPED\n* SHIPPED Release\n", onEditElement = {}) }
+
+        onNodeWithContentDescription("Keywords: NEXT, done: SHIPPED").assertExists()
+    }
+
     @Test
     fun theTodoLineShowsItsKeywordsRatherThanItsSyntax() = runComposeUiTest {
         setContent { OrgDocumentView(text = text, onEditElement = {}) }

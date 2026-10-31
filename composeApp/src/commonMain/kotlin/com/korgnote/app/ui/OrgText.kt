@@ -86,7 +86,7 @@ import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.isNumeric
 import com.korgnote.common.org.joinOrgLines
 import com.korgnote.common.org.parseOrgTable
-import com.korgnote.common.org.parseTodoConfigFrom
+import com.korgnote.common.org.todoSequencesOf
 import com.korgnote.common.org.srcLanguageOf
 import com.korgnote.common.org.toOrgString
 import com.korgnote.common.org.edit.Progress
@@ -280,8 +280,7 @@ private fun RenderNode(
             // The note's own tags, as chips in their colours, like a heading's.
             val fileTags = OrgSyntax.filetagsKeyword.find(node.content.trim())?.groupValues?.get(1)
                 ?.let(::parseTypedTags)
-            val keywords = TODO_KEYWORDS_LINE.find(node.content.trim())
-                ?.let { parseTodoConfigFrom(listOf("#+TODO: " + it.groupValues[1])) }
+            val keywords = todoSequencesOf(listOf(node.content)).firstOrNull()
             if (!fileTags.isNullOrEmpty()) {
                 TagChips(fileTags, Modifier.padding(vertical = 2.dp))
             } else if (keywords != null && (keywords.todo.isNotEmpty() || keywords.done.isNotEmpty())) {
@@ -671,9 +670,6 @@ internal fun drawerIdOf(name: String, lines: List<String>): String? {
 }
 
 private val ID_PROPERTY = Regex("^\\s*:ID:\\s*(.*)$", RegexOption.IGNORE_CASE)
-
-/** `#+TODO:`, and the `SEQ_` and `TYP_` spellings Org reads the same way, with the keywords after. */
-private val TODO_KEYWORDS_LINE = Regex("^#\\+(?:SEQ_|TYP_)?TODO:\\s*(.*)$", RegexOption.IGNORE_CASE)
 
 /**
  * A note's `#+TODO:` line as what it declares: its keywords, each in the colour headings show it in,
