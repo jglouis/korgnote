@@ -127,6 +127,45 @@ The server also gives you the **web app**, at <http://localhost:8080/>, and the 
 To give the address at startup rather than on the Devices page, add
 `-e KORGNOTE_ADVERTISED_ADDRESSES=192.168.1.20` to the `docker run` command.
 
+#### On a server on the internet
+
+The best way is to keep the server off the internet: run it on your computer or on a machine at
+home, and reach it from outside through a VPN such as Tailscale or WireGuard. The server is a
+personal project and has not been hardened for the open internet. Behind a VPN, nobody else can
+even reach it.
+
+You can still run it on a machine with a public address, such as a VPS:
+
+1. **Start it there** with the same `docker run` command, using the notes folder on that machine,
+   and add the address the phone will use, a domain name or a public IP:
+   `-e KORGNOTE_ADVERTISED_ADDRESSES=notes.example.com`. Open port 8443 in the firewall. Leave 8080
+   bound to `127.0.0.1`, as it is in the command (see [Security](#security)).
+2. **Pair from the command line.** The Devices page is on port 8080, which only that machine can
+   reach, so ask it for a pairing code over SSH:
+
+   ```shell
+   ssh you@notes.example.com \
+     'curl -s -X POST "http://localhost:8080/api/local/pairing?addresses=notes.example.com"'
+   ```
+
+   This prints the QR code in the terminal, with a `korgnote://pair` link under it. Within 10
+   minutes, scan the code in the app, or paste the link there. The code works only once.
+
+   To list or revoke devices, open the Devices page through an SSH tunnel:
+
+   ```shell
+   ssh -L 8080:localhost:8080 you@notes.example.com
+   ```
+
+   Then open <http://localhost:8080/devices> on your own computer.
+
+**Do not put it behind a reverse proxy.** The app connects to the server over TLS itself, and it
+accepts the server's own certificate and no other: it learns that certificate's fingerprint from the
+QR code. A reverse proxy that handles TLS, such as nginx, Caddy, Traefik or Cloudflare, shows the app
+its own certificate instead, so the app refuses to connect. The server needs no Let's Encrypt
+certificate either. Forwarding the port without decrypting it is fine, for example with your router's
+port forwarding or a proxy in TCP passthrough mode.
+
 ## What else it does
 
 - **Your files stay yours:** the app reads and writes plain `.org` files and nothing else. An edit
@@ -161,6 +200,58 @@ To give the address at startup rather than on the Devices page, add
 The app's copy of your notes stays on the phone: it is in no Android or iPhone backup, and is not
 moved to a new phone, nor are the pairing and the WebDAV password. On a new phone, choose again
 where your notes are, and they sync. Notes in a folder of yours are wherever that folder is.
+
+## Security
+
+What KorgNote protects, and what it leaves to you.
+
+**Sync is not a backup.** Sync gives every device the same notes, so a note you delete or empty on
+one device is deleted or emptied on all of them. When a note is deleted, the KorgNote server moves it
+to `.korgnote-trash/` in the notes folder instead of erasing it. But it keeps no older versions of a
+note you edited. Back up the notes folder itself, with git, Time Machine, restic or the like. The
+app's copy of the notes is in no phone backup (see [above](#a-new-phone-and-backups)).
+
+**The server has two ports.**
+
+- **8443 (HTTPS)** is for the network. On this port the server answers only sync requests, and only
+  from a paired device's token. The one exception is pairing, which needs a one-time code.
+- **8080 (HTTP)** is for the computer the server runs on: the web app, the desktop app and the
+  Devices page. It has no password, so whoever can reach it can read and change every note, and pair
+  a device of their own. That is why it listens on `127.0.0.1` only (the `-p 127.0.0.1:8080:8080`
+  in the Docker command), and why the server refuses connections to it from anywhere but that
+  computer. Never make it reachable from outside: do not publish it on the network, and do not
+  forward it through a proxy or a tunnel other people can use. On a computer you share, every
+  account on it can reach it.
+
+**What goes over the network.**
+
+- Between a device and the KorgNote server, everything goes over TLS on port 8443: the text and
+  names of your notes, the device's token with every request, and the device's name when it pairs.
+  The server makes its own certificate the first time it starts. The app accepts that certificate
+  and no other, which it checks by the SHA-256 fingerprint in the QR code. So nobody between them can
+  read or change what they send, even on public Wi-Fi.
+- The pairing QR code, and the `korgnote://pair` link, hold the server's name, ID, addresses and
+  port, its certificate's fingerprint, and a one-time code that lasts 10 minutes. Anyone who scans
+  it within that time can pair, so show it only to the device you are pairing.
+- With WebDAV, the app talks HTTPS to your WebDAV server and checks its certificate the way the
+  phone checks any website's. It sends your user name and password with every request.
+- Reminders, the morning digest and the widgets never use the network. The app sends nothing to
+  anyone else: no analytics, no crash reports.
+
+**Secrets, and where they are kept.**
+
+| Secret | Where it is kept |
+|---|---|
+| A paired device's token, which identifies it to the server | On the phone, in the app's settings, sealed with a key that never leaves the Android Keystore. On an iPhone, in the Keychain, for this device only. If the settings are restored on another phone, the token cannot be opened there, and the app asks you to pair again. The desktop app seals it with a key in the system's keyring. The server keeps only a SHA-256 hash of each token, in `devices.json`. |
+| The WebDAV password | Sealed with the same key in the Android Keystore, or in the iPhone's Keychain. |
+| The server's TLS private key | In `tls.jks`, with its password in `tls.password`, in the server's state folder (`~/.korgnote-server`), readable by its owner only. Anyone who can read that folder can pretend to be your server: keep it private. If you delete it, the server makes a new certificate, and every device must pair again. |
+
+**Notes on disk.** KorgNote does not encrypt your notes: they are plain `.org` files. On the
+computer they are in your notes folder. On the phone they are in the app's private storage, which
+other apps cannot read, and which any recent phone encrypts along with the rest of its storage.
+
+**A lost phone.** Revoke it on the Devices page. Its token stops working on its next request, but the
+copy of the notes already on it stays there.
 
 ## Status
 
