@@ -1,0 +1,1 @@
+* Fixes the web client served by the server; nothing changes in the Android app.
