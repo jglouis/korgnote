@@ -55,6 +55,7 @@ import korgnote.composeapp.generated.resources.notes_sync_last
 import korgnote.composeapp.generated.resources.notes_sync_never
 import korgnote.composeapp.generated.resources.notes_sync_running
 import korgnote.composeapp.generated.resources.notes_sync_tap
+import korgnote.composeapp.generated.resources.settings_sync_never
 import kotlinx.coroutines.delay
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -96,13 +97,7 @@ fun ServerStatusIcon(
         }
     }
     // The age under the cloud counts on by itself, without a sync to recompose it.
-    var now by remember { mutableStateOf(Clock.System.now()) }
-    LaunchedEffect(lastSynced) {
-        while (true) {
-            now = Clock.System.now()
-            delay(AGE_TICK)
-        }
-    }
+    val now = rememberNow(lastSynced)
     val state = when {
         spinning -> SyncState.SYNCING
         unreachable != null -> SyncState.OFFLINE
@@ -143,6 +138,39 @@ fun ServerStatusIcon(
             }
         }
     }
+}
+
+/**
+ * What [ServerStatusIcon] says on a long press, written out, for Settings: that is where one goes to
+ * see whether the notes are in step with the server, so the answer should not need a gesture.
+ *
+ * A sync under way is only mentioned before the first one has got through: a save's push takes a
+ * blink, and the line would flicker with every edit.
+ */
+@Composable
+fun SyncStatusText(unreachable: String?, syncing: Boolean, lastSynced: Instant?, modifier: Modifier = Modifier) {
+    val now = rememberNow(lastSynced)
+    val last = lastSynced?.let { stringResource(Res.string.notes_sync_last, syncAgeOf(it, now).sentence(), clockTime(it)) }
+    val text = when {
+        unreachable != null && !syncing -> listOfNotNull(unreachable, last).joinToString(" ")
+        last != null -> last
+        syncing -> stringResource(Res.string.notes_sync_running)
+        else -> stringResource(Res.string.settings_sync_never)
+    }
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
+}
+
+/** The time now, brought up to date every [AGE_TICK] and whenever [lastSynced] changes. */
+@Composable
+private fun rememberNow(lastSynced: Instant?): Instant {
+    var now by remember { mutableStateOf(Clock.System.now()) }
+    LaunchedEffect(lastSynced) {
+        while (true) {
+            now = Clock.System.now()
+            delay(AGE_TICK)
+        }
+    }
+    return now
 }
 
 private enum class SyncState { SYNCING, OFFLINE, SYNCED, NEVER }

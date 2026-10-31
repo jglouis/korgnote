@@ -126,6 +126,8 @@ fun SettingsScreen(
     repo: SettingsRepository,
     modifier: Modifier = Modifier,
     serverStatus: @Composable () -> Unit = {},
+    /** The same state written out, with when the notes last synced, under the server's title. */
+    syncStatus: @Composable () -> Unit = {},
     onSaved: (() -> Unit)? = null,
     /** Tags used across the notes, most used first: the ones a colour can be chosen for. */
     knownTags: List<String> = emptyList(),
@@ -293,6 +295,7 @@ fun SettingsScreen(
                         },
                         trailing = { if (!onServer) serverStatus() },
                     ) {
+                        if (notesSource == NotesSource.WebDav) syncStatus()
                         OutlinedButton(onClick = onChangeNotesSource) { Text(stringResource(Res.string.settings_change_notes_source)) }
                     }
                 }
@@ -305,6 +308,7 @@ fun SettingsScreen(
                         subtitle = stringResource(Res.string.settings_server_subtitle),
                         trailing = serverStatus,
                     ) {
+                        syncStatus()
                         if (canPair) {
                             val incomingLink by PairingLinks.pending.collectAsState()
                             PairingSettings(
@@ -347,7 +351,9 @@ fun SettingsScreen(
                         title = stringResource(Res.string.settings_server),
                         subtitle = stringResource(Res.string.settings_server_subtitle),
                         trailing = serverStatus,
-                    ) {}
+                    ) {
+                        syncStatus()
+                    }
                 }
 
                 SettingsSection(

@@ -826,6 +826,13 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                     knownTags = vm.completion.context.knownTags,
                                     modifier = Modifier.fillMaxSize(),
                                     serverStatus = statusIcons,
+                                    syncStatus = {
+                                        SyncStatusText(
+                                            unreachable = vm.server.unreachable,
+                                            syncing = vm.server.syncing,
+                                            lastSynced = vm.server.lastSynced,
+                                        )
+                                    },
                                     onSaved = { scope.launch { vm.server.retry() } },
                                     pairing = remember { KoinPlatform.getKoin().getOrNull<DevicePairing>() },
                                     notesSource = source,

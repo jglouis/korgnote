@@ -8,6 +8,7 @@
     <string name="settings_change_notes_source">Change where notes are</string>
     <string name="settings_server">Server</string>
     <string name="settings_server_subtitle">Where this device syncs its notes</string>
+    <string name="settings_sync_never">Not synced yet.</string>
     <string name="settings_local_server">Server on this computer</string>
     <string name="settings_local_server_when_unpaired">Used when not paired.</string>
     <string name="settings_local_server_this_page">The server this page comes from.</string>

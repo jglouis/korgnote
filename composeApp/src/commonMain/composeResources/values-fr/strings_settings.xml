@@ -7,6 +7,7 @@
     <string name="settings_change_notes_source">Changer l’emplacement des notes</string>
     <string name="settings_server">Serveur</string>
     <string name="settings_server_subtitle">Avec quoi cet appareil synchronise ses notes</string>
+    <string name="settings_sync_never">Pas encore synchronisé.</string>
     <string name="settings_local_server">Serveur sur cet ordinateur</string>
     <string name="settings_local_server_when_unpaired">Utilisé en l’absence d’association.</string>
     <string name="settings_local_server_this_page">Le serveur d’où vient cette page.</string>
