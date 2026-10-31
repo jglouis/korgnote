@@ -5,8 +5,8 @@
 <h1 align="center">KorgNote</h1>
 
 <p align="center">
-  The power of <a href="https://orgmode.org">Org-mode</a> on your phone.<br>
-  Text edition, agenda and calendar view.
+  The power of <a href="https://orgmode.org">Org mode</a> on your phone.<br>
+  Text editing, agenda and calendar views.
 </p>
 
 <p align="center">
@@ -17,25 +17,35 @@
 
 ![KorgNote on a phone: a note with a table and tasks, then the agenda, the week and the month](docs/screenshots/overview.png)
 
-## Your notes are your calendar
+## Features
 
-In Emacs, Org Agenda makes your notes and your calendar the same thing. KorgNote does that on the
-phone: there is no calendar to keep apart from your notes, and nothing to copy between them.
+In Emacs, Org Agenda turns the dates in your notes into a calendar. KorgNote brings that to your
+phone: your notes are your calendar, and there is no separate one to keep in sync.
 
-- **From a heading to its day, and back.** Tap the `SCHEDULED` or `DEADLINE` date of a heading to
-  open that day in the calendar. Tap any entry in the calendar to open its note at that heading,
-  to read it, edit it or mark it done.
-- **A real calendar, not just a list.** The agenda, with what is overdue on top, then a day and a
-  week on an hour grid you can pinch to zoom, and a month. Built from `SCHEDULED`, `DEADLINE` and
-  plain timestamps, with times, ranges, repeats, deadline warnings and events over several days.
-- **Reminders** before each timed entry, 10 minutes ahead or as long as you choose. Tap one to open
-  its heading.
-- **A morning digest:** one notification, at the time you choose, with the day's agenda. Turn it on
-  in **Settings → Reminders**.
-- **Home-screen widgets** on Android: the agenda, and the month. Tap an entry to open its heading,
-  or a day to open the calendar there.
-- **Even offline:** reminders and the digest are scheduled on the phone, from your notes. Nothing
-  goes through a server, so they come with no network and the app closed.
+- **Notes and calendar, linked.** Tap a `SCHEDULED` or `DEADLINE` date to open that day in the
+  calendar; tap a calendar entry to jump to its heading.
+- **Agenda and calendar views.** The agenda shows what's coming, with overdue tasks on top. Day,
+  week and month views give you the overview; pinch to zoom the hour grid.
+- **Notifications.** A reminder before each timed entry, and an optional morning digest of the
+  day's agenda.
+- **Home-screen widgets** on Android: agenda and month.
+- **Your files stay yours.** The app reads and writes plain `.org` files and nothing else. An edit
+  rewrites only what you changed and leaves the rest of the file as it was, so Emacs, org-roam and
+  git keep working on your notes.
+- **Notes.** Headings, TODO keywords, priorities, tags, checkboxes, tables, drawers and code blocks.
+- **Editing.** Tap a heading to edit it, with suggestions above the keyboard for keywords, tags,
+  dates and links. Long-press it to move, promote, demote or delete it.
+- **Tasks.** Change TODO states from a menu. Repeating tasks move to their next date when done.
+- **Tables.** Edit them as a grid. `#+TBLFM` formulas are computed the same way as in Emacs.
+- **Links.** `id:`, `file:`, headings and custom IDs, with backlinks. New notes and daily notes are
+  made the way org-roam makes them.
+- **Capture.** Share a link, selected text or a Google Maps place from any app to KorgNote, or pick
+  an event from your phone's calendar, Google Calendar's included. It goes to your inbox, another
+  note, or under a heading, in one step.
+- **Search** by words and tags, save searches by name, and pin the notes you use most.
+- **Works offline.** Take notes and schedule tasks anywhere; they sync when the app can reach your
+  notes again. Reminders, the digest and the widgets come from the phone itself, so they work with
+  no network.
 
 ## Get started
 
@@ -43,16 +53,15 @@ phone: there is no calendar to keep apart from your notes, and nothing to copy b
    [latest release](https://github.com/jglouis/korgnote/releases/latest), download
    `korgnote-X.Y.Z.apk` and open it. Allow your browser to install apps when Android asks.
 
-   Or, to be told of each new version and install it in a tap, use
-   [Obtainium](https://github.com/ImranR98/Obtainium): tap the badge above on the phone, or in
-   Obtainium tap **Add app** and enter `https://github.com/jglouis/korgnote`.
+   Or use [Obtainium](https://github.com/ImranR98/Obtainium): tap the badge above on the phone, or
+   in Obtainium tap **Add app** and enter `https://github.com/jglouis/korgnote`.
 2. **Open it and choose where your notes are.** There are three ways:
 
 |  | [A folder on the phone](#a-folder-on-the-phone) | [A WebDAV server](#a-webdav-server-experimental) (experimental) | [Your computer, with the KorgNote server](#your-computer-with-the-korgnote-server) |
 |---|---|---|---|
 | **Pick it if** | you want to try the app, or already sync a folder | you have Nextcloud, a NAS or a hosting service | your notes live on your computer |
 | **You need** | nothing else | the server's address, a user name and a password | Docker on the computer, and the phone on its Wi-Fi or a VPN |
-| **A note edited on two devices** | the syncing app keeps a conflict copy | merged | merged |
+| **If a note is edited on two devices** | the syncing app keeps a conflict copy | notes are merged | notes are merged |
 
 All three work offline, and you can change your mind later in **Settings → Change where notes
 are**.
@@ -64,7 +73,7 @@ Choose **A folder on this device** and pick the folder your `.org` files are in,
 - On Android, keep it in sync with Syncthing, or with Dropbox and others through an app like
   FolderSync.
 - On an iPhone, the folder can be in iCloud Drive, or in Dropbox and other apps that show in Files.
-- Or sync it with nothing, if the phone is the only place you take notes.
+- Alternatively, you can just keep the notes on your phone.
 
 ### A WebDAV server (experimental)
 
@@ -88,15 +97,17 @@ Good to know:
 - **Experimental:** tested with Nextcloud and Apache, not yet with NAS or hosting services. Please
   [report](https://github.com/jglouis/korgnote/issues) what works and what does not.
 - **HTTPS only**, with a certificate the phone already trusts: not a self-signed one.
-- **User name and password only** (Basic sign-in). If the server asks for another way, such as
-  Digest, the app says which.
-- The password is kept in the Android Keystore or the iPhone's Keychain, and is in no backup.
+- **User name and password only** (Basic sign-in).
+- The password is kept in the Android Keystore or the iPhone's Keychain. It won't appear in any backup.
 - Changes made elsewhere show up within about 30 seconds while the app is open.
 
 ### Your computer, with the KorgNote server
 
-The server runs on the computer that has your notes folder. It reads and writes the `.org` files
-directly; there is no database. The phone pairs with it by QR code, and they talk over TLS.
+The server runs on the computer that holds your notes folder, such as your laptop or desktop. It
+has no database: the source of truth is always the `.org` files themselves. It is meant for a
+private network, your home Wi-Fi or a VPN; see [On a server on the internet](#on-a-server-on-the-internet)
+otherwise. The phone pairs with the server by QR code, and they talk over TLS. When the computer is
+off or out of reach, the phone keeps working and syncs the next time it can reach it.
 
 1. **Start the server.** Replace `~/notes` with your notes folder:
 
@@ -114,12 +125,8 @@ directly; there is no database. The phone pairs with it by QR code, and they tal
 
 2. **Open <http://localhost:8080/devices>.** Under *Addresses the phone can reach this computer at*,
    enter this computer's address, for example `192.168.1.20` (run `ipconfig getifaddr en0` on a Mac,
-   `hostname -I` on Linux). Then click **Show a pairing code**.
+   `hostname -I` on Linux), or its VPN address. Then click **Show a pairing code**.
 3. **In the app,** choose **My computer, with the KorgNote server** and scan the code.
-
-The phone must reach the computer: on the same Wi-Fi, or through a VPN such as Tailscale or
-WireGuard, whose address you add on the Devices page before pairing. When the computer is off or
-asleep, the phone keeps working and syncs later.
 
 The server also gives you the **web app**, at <http://localhost:8080/>, and the **desktop app**
 (built from source, see [Development](#development)) on the same computer.
@@ -166,24 +173,6 @@ its own certificate instead, so the app refuses to connect. The server needs no 
 certificate either. Forwarding the port without decrypting it is fine, for example with your router's
 port forwarding or a proxy in TCP passthrough mode.
 
-## What else it does
-
-- **Your files stay yours:** the app reads and writes plain `.org` files and nothing else. An edit
-  rewrites only what you changed and leaves the rest of the file as it was, so Emacs, org-roam and
-  git keep working on your notes.
-- **Notes:** headings, TODO keywords, priorities, tags, checkboxes, tables, drawers and code blocks.
-- **Links:** `id:`, `file:`, headings and custom IDs, with backlinks. New notes and daily notes are
-  made the way org-roam makes them.
-- **Editing:** tap a heading to edit it, long-press to move, promote, demote or delete it.
-  Suggestions above the keyboard for keywords, tags, dates and links.
-- **Tasks:** change TODO states from a menu. Repeating tasks move to their next date when done.
-- **Capture:** share a link, selected text or a Google Maps place from any app to KorgNote, or pick
-  an event from your phone's calendar, Google Calendar's included. It goes to your inbox, another
-  note, or under a heading, in one step.
-- **Tables:** edit them as a grid. `#+TBLFM` formulas are computed the same way as in Emacs.
-- **Search** by words and tags, save searches by name, and pin the notes you use most.
-- **Offline first:** the app keeps working without a connection and syncs when it can.
-
 ## Updating
 
 - **The app:** download the new APK from the [release page](https://github.com/jglouis/korgnote/releases/latest)
@@ -198,27 +187,21 @@ port forwarding or a proxy in TCP passthrough mode.
   Your notes and paired devices are kept. To stay on one version, use its number instead of
   `latest`, for example `ghcr.io/jglouis/korgnote-server:1.1.0`.
 
-## A new phone, and backups
-
-The app's copy of your notes stays on the phone: it is in no Android or iPhone backup, and is not
-moved to a new phone, nor are the pairing and the WebDAV password. On a new phone, choose again
-where your notes are, and they sync. Notes in a folder of yours are wherever that folder is.
-
 ## Security
-
-What KorgNote protects, and what it leaves to you.
 
 **Sync is not a backup.** Sync gives every device the same notes, so a note you delete or empty on
 one device is deleted or emptied on all of them. When a note is deleted, the KorgNote server moves it
 to `.korgnote-trash/` in the notes folder instead of erasing it. But it keeps no older versions of a
-note you edited. Back up the notes folder itself, with git, Time Machine, restic or the like. The
-app's copy of the notes is in no phone backup (see [above](#a-new-phone-and-backups)).
+note you edited. Back up the notes folder itself, with git, Time Machine, restic or the like.
+
+The app's copy of the notes is left out of phone backups on purpose, so it does not move to a new
+phone: there, choose where your notes are again and they sync.
 
 **The server has two ports.**
 
-- **8443 (HTTPS)** is for the network. On this port the server answers only sync requests, and only
+- **8443 (HTTPS)** faces the network. On this port the server answers only sync requests, and only
   from a paired device's token. The one exception is pairing, which needs a one-time code.
-- **8080 (HTTP)** is for the computer the server runs on: the web app, the desktop app and the
+- **8080 (HTTP)**, unencrypted, is for this computer only: the web app, the desktop app and the
   Devices page. It has no password, so whoever can reach it can read and change every note, and pair
   a device of their own. That is why it listens on `127.0.0.1` only (the `-p 127.0.0.1:8080:8080`
   in the Docker command), and why the server refuses connections to it from anywhere but that
@@ -275,11 +258,21 @@ what I needed: one app where my notes and my calendar are the same thing, as the
 Org Agenda. This is a personal project that I use every day. Issues and pull requests are welcome,
 but I make no promises about feature requests.
 
+## How it's built
+
 I started KorgNote by hand in 2025, to learn Compose Multiplatform. Since September 2026, most of
 the code has been written with [Claude Code](https://claude.com/claude-code), an AI coding agent,
 and it has rewritten much of the earlier code too. I decide what gets built, and I use it every day
 on my own notes. The parser, sync and editor are covered by automated tests. Commits written with
 Claude say so in a `Co-Authored-By` line.
+
+I've been a professional Android developer for more than ten years. Working with Claude let me try
+several designs quickly and end up with a tool I use every day, in the time I have outside my job.
+I wouldn't have the time or energy for a fully hand-written project.
+
+I know AI-written code is controversial, in open source and in the Emacs community especially, and
+that for some people it's reason enough to pass on this project. That's a fair choice. If you do try
+it, constructive feedback is welcome.
 
 ## License
 
