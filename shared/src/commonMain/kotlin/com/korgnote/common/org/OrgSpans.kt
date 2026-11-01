@@ -151,6 +151,8 @@ private fun scanLine(
             val kind = when (state.blockType) {
                 in OrgSyntax.monospaceBlocks -> OrgSpanKind.BlockBodyMonospace
                 "quote", "verse" -> OrgSpanKind.BlockBodyQuote
+                // Commented out, as a `# line` is: Emacs shows the two alike.
+                "comment" -> OrgSpanKind.Comment
                 else -> OrgSpanKind.BlockBody
             }
             add(lineRange(), kind)
@@ -212,6 +214,9 @@ private fun scanLine(
         }
 
         OrgSyntax.horizontalRule.containsMatchIn(line) -> add(lineRange(), OrgSpanKind.HorizontalRule)
+
+        // Verbatim, like the body of an example block: no links or emphasis inside.
+        OrgSyntax.fixedWidth.containsMatchIn(line) -> add(lineRange(), OrgSpanKind.BlockBodyMonospace)
 
         else -> {
             val item = OrgSyntax.listItem.find(line)

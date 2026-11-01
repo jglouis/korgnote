@@ -76,7 +76,9 @@ import com.korgnote.common.org.OrgBlock
 import com.korgnote.common.org.OrgComment
 import com.korgnote.common.org.OrgDescriptionItem
 import com.korgnote.common.org.OrgDrawer
+import com.korgnote.common.org.OrgFixedWidth
 import com.korgnote.common.org.OrgFootnoteDefinition
+import com.korgnote.common.org.orderedNumbers
 import com.korgnote.common.org.OrgHorizontalRule
 import com.korgnote.common.org.OrgListItem
 import com.korgnote.common.org.OrgSection
@@ -221,6 +223,14 @@ private fun RenderNode(
 
         is OrgHorizontalRule -> HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 
+        // Verbatim, as Org shows `: lines`: one line each, monospace, scrolling rather than wrapping.
+        is OrgFixedWidth -> Text(
+            text = node.contents.joinToString("\n"),
+            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            softWrap = false,
+            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 2.dp),
+        )
+
         is OrgDescriptionItem -> OrgLine("${node.term} :: ${joinOrgLines(node.description)}", todoConfig)
 
         is OrgFootnoteDefinition -> OrgLine("[fn:${node.label}] ${joinOrgLines(node.text)}", todoConfig)
@@ -247,8 +257,11 @@ private fun RenderNode(
                     Modifier
                 },
             ) {
+                // Numbered as Org numbers them, by position and `[@n]` counters, not by what the source
+                // wrote: a list typed `1.`, `1.`, `1.` reads 1, 2, 3, as it does in Emacs.
+                val numbers = node.orderedNumbers()
                 node.children.forEachIndexed { index, child ->
-                    val marker = if (node.ordered) "${index + 1}${node.bulletType}" else "${node.bulletType}"
+                    val marker = if (node.ordered) "${numbers[index]}${node.bulletType}" else "${node.bulletType}"
                     when (child) {
                         is OrgCheckboxItem -> {
                             RenderCheckboxItem(child, onToggleCheckbox)
@@ -637,6 +650,15 @@ private fun OrgBlockView(type: String, params: String, lines: List<String>) {
                     style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                     softWrap = false,
                     modifier = Modifier.horizontalScroll(rememberScrollState())
+                )
+
+                // Commented out: shown dimmed, as a `# comment` line is, and as Emacs shows both.
+                "comment" -> Text(
+                    text = body,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.outline,
+                        fontStyle = FontStyle.Italic,
+                    ),
                 )
 
                 "quote", "verse" -> Text(

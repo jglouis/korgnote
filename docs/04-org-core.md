@@ -98,7 +98,9 @@ be driven by the parse tree instead of a second grammar.
 Present: headings (+ nesting), TODO keywords, tags, priorities, planning lines
 (`SCHEDULED`/`DEADLINE`/`CLOSED`), paragraphs, plain and ordered lists with nesting,
 checkbox items, tables, `#+KEYWORD:` lines, comments, drawers (`:PROPERTIES:`, `:LOGBOOK:`),
-blocks (`#+BEGIN_…`/`#+END_…`), horizontal rules, description lists, footnote definitions.
+blocks (`#+BEGIN_…`/`#+END_…`), horizontal rules, description lists, footnote definitions,
+fixed-width lines (`: text`), and `[@n]` item counters. A list runs on over one blank line between
+items and ends at two, as in Org.
 
 Inline (spans, not nodes — see below): emphasis, code/verbatim, links, URLs, timestamps,
 footnote references, statistics cookies.

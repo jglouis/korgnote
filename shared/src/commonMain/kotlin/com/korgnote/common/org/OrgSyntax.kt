@@ -25,7 +25,19 @@ object OrgSyntax {
     val planning = Regex("^\\s*(SCHEDULED|DEADLINE|CLOSED):")
     val planningKeyword = Regex("(SCHEDULED|DEADLINE|CLOSED):")
     val horizontalRule = Regex("^\\s*-{5,}\\s*$")
-    val listItem = Regex("^(\\s*)([-+*]|\\d+[.)])(\\s+)(?:(\\[[ xX-]\\])(?=\\s|$))?")
+    /**
+     * A list item's start: indent, bullet, the space after it, then an optional `[@3]` counter and an
+     * optional checkbox. The counter is matched (so it is not item text) but not captured, which keeps
+     * the checkbox group 4 and last for everything that measures it from the end of the match; read
+     * the counter with [listCounter].
+     */
+    val listItem = Regex("^(\\s*)([-+*]|\\d+[.)])(\\s+)(?:\\[@\\d+\\](?:\\s+|$))?(?:(\\[[ xX-]\\])(?=\\s|$))?")
+
+    /** The `[@3]` that sets an item's number, capturing the number. */
+    val listCounter = Regex("\\[@(\\d+)\\]")
+
+    /** A fixed-width line, `: text` or a lone `:`, shown verbatim in a monospace font. */
+    val fixedWidth = Regex("^[ \\t]*:( |$)")
     val descriptionTerm = Regex("^(\\s*)(.+?)(\\s+::)(\\s|$)")
     val priority = Regex("^\\[#[A-Z0-9]\\]")
     val tags = Regex("\\s+(:[\\p{L}\\p{N}_@#%]+(?::[\\p{L}\\p{N}_@#%]+)*:)\\s*$")
@@ -55,6 +67,15 @@ object OrgSyntax {
 
     /** True when an emphasis run may close at [end]. */
     fun emphasisMayCloseAt(text: String, end: Int) = end >= text.length || text[end] in EMPHASIS_POST
+
+    /**
+     * True when a heading's [title] — what follows its TODO keyword and priority — starts with
+     * `COMMENT`, which comments the whole subtree out: Org leaves it out of export and of the agenda.
+     */
+    fun isCommentedTitle(title: String) = title == "COMMENT" || title.startsWith("COMMENT ")
+
+    /** The tag that marks a subtree archived, which the agenda passes over (`org-archive-tag`). */
+    const val ARCHIVE_TAG = "ARCHIVE"
 
     /** The `#+TITLE:` keyword, capturing the title. */
     val titleKeyword = Regex("^#\\+TITLE:\\s*(.*)$", RegexOption.IGNORE_CASE)

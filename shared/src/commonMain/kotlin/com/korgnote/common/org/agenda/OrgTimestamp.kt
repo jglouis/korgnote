@@ -35,8 +35,13 @@ enum class RepeatKind {
     Restart,
 }
 
+/**
+ * A stamp's repeater. [habitMax] is the `/4d` of a habit's `.+2d/4d`: the longest the habit may go
+ * between two completions, which `org-habit` draws in its consistency graph. The entry repeats by
+ * [every] all the same, so the agenda and marking it done read only that.
+ */
 @Serializable
-data class OrgRepeater(val kind: RepeatKind, val every: OrgDuration)
+data class OrgRepeater(val kind: RepeatKind, val every: OrgDuration, val habitMax: OrgDuration? = null)
 
 /**
  * The `-2d` of a stamp.
@@ -162,7 +167,7 @@ private data class Part(
 
 private val dateToken = Regex("^(\\d{4})-(\\d{2})-(\\d{2})$")
 private val timeToken = Regex("^(\\d{1,2}):(\\d{2})(?:-(\\d{1,2}):(\\d{2}))?$")
-private val repeaterToken = Regex("^(\\+\\+|\\.\\+|\\+)(\\d+)([hdwmy])$")
+private val repeaterToken = Regex("^(\\+\\+|\\.\\+|\\+)(\\d+)([hdwmy])(?:/(\\d+)([hdwmy]))?$")
 private val delayToken = Regex("^(--|-)(\\d+)([hdwmy])$")
 
 private fun parsePart(stamp: String): Part? {
@@ -198,7 +203,12 @@ private fun parsePart(stamp: String): Part? {
                     ".+" -> RepeatKind.Restart
                     else -> RepeatKind.Cumulate
                 }
-                repeater = OrgRepeater(kind, durationOf(repeaterMatch.groupValues[2], repeaterMatch.groupValues[3]))
+                repeater = OrgRepeater(
+                    kind = kind,
+                    every = durationOf(repeaterMatch.groupValues[2], repeaterMatch.groupValues[3]),
+                    habitMax = repeaterMatch.groupValues[4].takeIf { it.isNotEmpty() }
+                        ?.let { durationOf(it, repeaterMatch.groupValues[5]) },
+                )
             }
 
             delayMatch != null -> if (delay == null) {

@@ -107,12 +107,16 @@ data class OrgCheckboxItem(
     override val children: List<OrgNode> = emptyList(),
     /** `[-]`: some of the boxes under it are ticked and some are not. Never [checked] as well. */
     val partial: Boolean = false,
+    /** The `[@3]` that sets this item's number in an ordered list; see [orderedNumbers]. */
+    val counter: Int? = null,
 ) : OrgNode()
 
 /** A plain (non-checkbox) list item, which may own a nested list. */
 data class OrgListItem(
     val text: String,
     override val children: List<OrgNode> = emptyList(),
+    /** The `[@3]` that sets this item's number in an ordered list; see [orderedNumbers]. */
+    val counter: Int? = null,
 ) : OrgNode()
 
 /**
@@ -154,10 +158,47 @@ class OrgHorizontalRule : OrgNode() {
 }
 
 /** A `term :: definition` item of a description list. */
-data class OrgDescriptionItem(val term: String, val description: String) : OrgNode()
+data class OrgDescriptionItem(
+    val term: String,
+    val description: String,
+    /** The `[@3]` that sets this item's number in an ordered list; see [orderedNumbers]. */
+    val counter: Int? = null,
+) : OrgNode()
+
+/**
+ * A run of fixed-width lines, `: text`, which Org shows verbatim in a monospace font: a quicker
+ * example block for a line or two of output. [lines] are the source lines as written.
+ */
+data class OrgFixedWidth(val lines: List<String>) : OrgNode() {
+    /** What the lines show: each without its indent, its colon and the one space after it. */
+    val contents: List<String> get() = lines.map { it.trimStart().removePrefix(":").removePrefix(" ") }
+}
 
 /** A `[fn:name] text` definition at the start of a line. */
 data class OrgFootnoteDefinition(val label: String, val text: String) : OrgNode()
+
+/** The `[@3]` counter of a list item, or null for an item without one or a node that is no item. */
+val OrgNode.listCounter: Int?
+    get() = when (this) {
+        is OrgListItem -> counter
+        is OrgCheckboxItem -> counter
+        is OrgDescriptionItem -> counter
+        else -> null
+    }
+
+/**
+ * The number each of this list's items shows, as Org numbers them: by position, from 1, except
+ * that an item's `[@n]` counter makes it n and the items after it count on from there. What the
+ * source writes before the `.` is not read, which is how Org renumbers a list.
+ */
+fun OrgList.orderedNumbers(): List<Int> {
+    var next = 1
+    return children.map { item ->
+        val number = item.listCounter ?: next
+        next = number + 1
+        number
+    }
+}
 
 // Table model: consecutive lines starting with '|' become a single table. Each line is a row; a line
 // starting with "|-" is a horizontal rule row (isRule = true, no cells).
@@ -378,6 +419,7 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
             !OrgSyntax.comment.containsMatchIn(line) &&
             !OrgSyntax.drawerBegin.matches(line) &&
             !OrgSyntax.horizontalRule.matches(line) &&
+            !OrgSyntax.fixedWidth.containsMatchIn(line) &&
             !OrgSyntax.footnoteDefinition.containsMatchIn(line) &&
             !line.isOrgTableLine() &&
             !OrgSyntax.heading.containsMatchIn(line) &&
@@ -416,23 +458,40 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
         val ordered = firstMarker.first().isDigit()
         val bullet = if (ordered) firstMarker.last() else firstMarker.first()
 
-        val items = mutableListOf<OrgNode>()
-        var idx = start
-        while (idx < lines.size) {
-            val m = OrgSyntax.listItem.find(lines[idx]) ?: break
-            val itemIndent = m.groupValues[1].length
+        /** True when [line] is an item of this list rather than of a nested or an enclosing one. */
+        fun continuesList(line: String): Boolean {
+            val m = OrgSyntax.listItem.find(line) ?: return false
             val marker = m.groupValues[2]
             // A shallower item belongs to an enclosing list; a deeper one is handled below, as a
             // child of the item it follows.
-            if (itemIndent != indent) break
+            if (m.groupValues[1].length != indent) return false
             // A different marker starts a different list, as it does in Org. This is also what keeps
             // a list from eating the headings after it: the grammar matches `*` as a bullet, so
             // without this rule a `- ` list swallowed every following `* heading` as an item.
-            if (ordered != marker.first().isDigit()) break
-            if (!ordered && marker.first() != bullet) break
+            if (ordered != marker.first().isDigit()) return false
+            return ordered || marker.first() == bullet
+        }
+
+        /**
+         * The line after [at] when [at] is one blank line followed by a line that [belongs], else
+         * null: Org ends a list only at two blank lines, so a single one between items keeps it going.
+         */
+        fun overOneBlank(at: Int, belongs: (String) -> Boolean): Int? =
+            (at + 1).takeIf { at < lines.size && lines[at].isBlank() && it < lines.size && belongs(lines[it]) }
+
+        val items = mutableListOf<OrgNode>()
+        var idx = start
+        while (idx < lines.size) {
+            if (!continuesList(lines[idx])) {
+                // The blank line stays outside both items, in the list: the item before keeps its
+                // own lines, so nothing that edits it reaches into the gap.
+                idx = overOneBlank(idx, ::continuesList) ?: break
+            }
+            val m = OrgSyntax.listItem.find(lines[idx])!!
 
             val itemStart = idx
             val checkbox = m.groupValues[4]
+            val counter = OrgSyntax.listCounter.find(m.value)?.groupValues?.get(1)?.toIntOrNull()
 
             // The checkbox group ends before its trailing space (the regex only looks ahead), so
             // trim it rather than carrying it into the item's text.
@@ -442,24 +501,29 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
             idx = afterText
             val text = (listOf(firstLine) + more).joinToString("\n")
 
-            // Continuation: a deeper list directly under this item is nested inside it.
+            // Continuation: a deeper list directly under this item is nested inside it, after one
+            // blank line too.
             val nested = mutableListOf<OrgNode>()
-            val deeper = if (idx < lines.size) OrgSyntax.listItem.find(lines[idx]) else null
-            if (deeper != null && deeper.groupValues[1].length > indent) {
-                val (sub, next) = parseList(idx)
+            fun isDeeper(line: String) =
+                OrgSyntax.listItem.find(line)?.let { it.groupValues[1].length > indent } == true
+            val deeperAt = if (idx < lines.size && isDeeper(lines[idx])) idx else overOneBlank(idx, ::isDeeper)
+            if (deeperAt != null) {
+                val (sub, next) = parseList(deeperAt)
                 nested.add(sub)
                 idx = next
             }
 
             val description = OrgSyntax.descriptionTerm.find(text)
             val item: OrgNode = when {
-                checkbox.isNotEmpty() ->
-                    OrgCheckboxItem(checkbox.contains('x', ignoreCase = true), text, nested.toList(), partial = '-' in checkbox)
+                checkbox.isNotEmpty() -> OrgCheckboxItem(
+                    checkbox.contains('x', ignoreCase = true), text, nested.toList(), partial = '-' in checkbox, counter,
+                )
                 description != null -> OrgDescriptionItem(
                     term = description.groupValues[2].trim(),
                     description = text.substring(description.value.length).trim(),
-                ).also { if (nested.isNotEmpty()) Unit }
-                else -> OrgListItem(text, nested.toList())
+                    counter = counter,
+                )
+                else -> OrgListItem(text, nested.toList(), counter)
             }
             items.add(item.spanning(itemStart, idx))
         }
@@ -539,6 +603,14 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
             flushParagraph()
             val (drawer, next) = parseDrawer(i)
             sink().add(drawer)
+            i = next
+            continue
+        }
+        if (OrgSyntax.fixedWidth.containsMatchIn(line)) {
+            flushParagraph()
+            var next = i + 1
+            while (next < lines.size && OrgSyntax.fixedWidth.containsMatchIn(lines[next])) next++
+            sink().add(OrgFixedWidth(lines.subList(i, next).map { it.trimEnd() }).spanning(i, next))
             i = next
             continue
         }
@@ -782,6 +854,7 @@ fun OrgNode.toOrgString(): String = when (this) {
     is OrgRaw -> this.content
     is OrgComment -> text
     is OrgHorizontalRule -> "-----"
+    is OrgFixedWidth -> lines.joinToString("\n")
     is OrgDescriptionItem -> "- $term :: " + description.indentedBy(2)
     is OrgFootnoteDefinition -> "[fn:$label] $text"
     is OrgBlock -> buildString {
@@ -803,10 +876,11 @@ fun OrgNode.toOrgString(): String = when (this) {
         append("- ").append(text.indentedBy(2))
         children.forEach { appendLine(); append(it.toOrgString()) }
     }
-    is OrgList -> children.mapIndexed { index, child ->
+    is OrgList -> children.zip(orderedNumbers()).joinToString("\n") { (child, number) ->
         val pad = " ".repeat(indent)
-        val marker = if (ordered) "${index + 1}$bulletType" else "$bulletType"
-        val body = when (child) {
+        val marker = if (ordered) "$number$bulletType" else "$bulletType"
+        val counter = child.listCounter?.let { "[@$it] " }.orEmpty()
+        val body = counter + when (child) {
             is OrgCheckboxItem -> "[" + (if (child.checked) "X" else if (child.partial) "-" else " ") + "] " + child.text
             is OrgListItem -> child.text
             is OrgDescriptionItem -> "${child.term} :: ${child.description}"
@@ -816,7 +890,7 @@ fun OrgNode.toOrgString(): String = when (this) {
         val nested = child.children.joinToString("") { "\n" + it.toOrgString() }
         // Continuation lines go back under the text, past the bullet, or they would end the list.
         "$pad$marker ${body.indentedBy(pad.length + marker.length + 1)}$nested"
-    }.joinToString("\n")
+    }
     is OrgSection -> buildString {
         append("*".repeat(level.coerceAtLeast(1))).append(' ')
         if (todo != null) append(todo).append(' ')

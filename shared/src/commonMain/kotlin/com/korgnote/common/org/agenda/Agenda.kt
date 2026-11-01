@@ -123,6 +123,10 @@ fun agendaEntries(
  * Walks the same element split as the editor and search, so a stamp inside a source block, an
  * example block or a drawer is not an appointment: those are verbatim text. Text before the first
  * heading has no heading to attach a date to, and is passed over.
+ *
+ * A subtree that is commented out (`* COMMENT …`) or archived (tagged `:ARCHIVE:`, on itself or a
+ * heading above it, or in `#+FILETAGS:`) is passed over whole, as Org's agenda does by default
+ * (`org-agenda-skip-comment-trees`, `org-agenda-skip-archived-trees`).
  */
 fun agendaEntries(path: String, text: String, fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): List<AgendaEntry> {
     // A file without a stamp has nothing to offer, and most notes have none.
@@ -130,21 +134,24 @@ fun agendaEntries(path: String, text: String, fallback: OrgTodoConfig = DEFAULT_
 
     val todoConfig = todoKeywordsOf(text, fallback)
     val fileTags = fileTagsOf(text)
-    val ancestors = mutableListOf<Pair<Int, List<String>>>()
+    /** A heading above the current one: its level, its own tags, and whether it is commented out. */
+    data class Ancestor(val level: Int, val tags: List<String>, val commented: Boolean)
+    val ancestors = mutableListOf<Ancestor>()
     val entries = mutableListOf<AgendaEntry>()
 
     for (element in text.orgElements()) {
         if (element.isPreamble) continue
         val slice = element.sliceOf(text)
         val heading = orgHeadingOf(slice.substringBefore('\n'), todoConfig)
-        while (ancestors.isNotEmpty() && ancestors.last().first >= element.level) ancestors.removeAt(ancestors.size - 1)
-        ancestors += element.level to heading.tags
+        while (ancestors.isNotEmpty() && ancestors.last().level >= element.level) ancestors.removeAt(ancestors.size - 1)
+        ancestors += Ancestor(element.level, heading.tags, OrgSyntax.isCommentedTitle(heading.title))
         if (!OrgSyntax.timestamp.containsMatchIn(slice)) continue
 
         val keyword = heading.todo
-        val inherited = ancestors.dropLast(1).flatMap { it.second } + fileTags
+        val inherited = ancestors.dropLast(1).flatMap { it.tags } + fileTags
         val title = heading.title.withoutStamps()
         val tags = (heading.tags + inherited).distinct()
+        if (ancestors.any { it.commented } || OrgSyntax.ARCHIVE_TAG in tags) continue
         fun entry(kind: AgendaKind, stamp: OrgTimestamp) = AgendaEntry(
             file = path,
             headingOffset = element.start,
@@ -210,6 +217,8 @@ private inline fun forEachStampedLine(element: String, action: (lineStart: Int, 
                 when {
                     begin != null -> blockType = begin.groupValues[1]
                     OrgSyntax.drawerBegin.matches(line) && !OrgSyntax.drawerEnd.matches(line) -> inDrawer = true
+                    // `: lines` are verbatim too, as a block's body is.
+                    OrgSyntax.fixedWidth.containsMatchIn(line) -> {}
                     // Cheap filter before the regex: every stamp starts with a digit after a bracket.
                     line.contains('<') || line.contains('[') -> action(lineStart, line, false)
                 }
