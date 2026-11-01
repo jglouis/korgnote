@@ -1,7 +1,12 @@
+@file:OptIn(ExperimentalFoundationApi::class)
+
 package com.korgnote.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -31,12 +36,20 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
@@ -76,9 +89,20 @@ import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaKind
 import com.korgnote.common.org.agenda.AgendaOccurrence
+import com.korgnote.common.org.agenda.ClockedTotal
+import com.korgnote.common.org.agenda.on
+import com.korgnote.common.org.agenda.report
 import com.korgnote.common.org.agenda.DaySpan
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.cal_all_day
+import korgnote.composeapp.generated.resources.cal_clocked_block
+import korgnote.composeapp.generated.resources.cal_clocked_period
+import korgnote.composeapp.generated.resources.cal_clocked_report
+import korgnote.composeapp.generated.resources.cal_clocked_summary
+import korgnote.composeapp.generated.resources.ok
+import korgnote.composeapp.generated.resources.cal_clocked_total
+import korgnote.composeapp.generated.resources.editor_clock_in
+import korgnote.composeapp.generated.resources.editor_clock_out
 import korgnote.composeapp.generated.resources.cal_kind_closed
 import korgnote.composeapp.generated.resources.cal_kind_deadline
 import korgnote.composeapp.generated.resources.cal_kind_scheduled
@@ -95,6 +119,9 @@ import korgnote.composeapp.generated.resources.cal_status_starts
 import korgnote.composeapp.generated.resources.cal_today
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.plus
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.Month
 import kotlin.math.abs
@@ -237,6 +264,49 @@ private fun AgendaOccurrence.headline(
     append(AnnotatedString(title.text, title.spanStyles))
 }
 
+// --- Clocking from the calendar ----------------------------------------------------------------
+
+/**
+ * What the calendar can do about a heading's clock, given by the app: whether it runs, and clocking
+ * it in or out. None in a preview or a test that gives none, where a long-press does nothing.
+ */
+class CalendarClocking(
+    val isRunning: (file: String, headingOffset: Int) -> Boolean,
+    val clockIn: (file: String, headingOffset: Int) -> Unit,
+    val clockOut: (file: String, headingOffset: Int) -> Unit,
+    /** Opens the note at a clocked heading, as a tap on an entry opens its note. */
+    val open: (file: String, headingOffset: Int) -> Unit,
+)
+
+val LocalCalendarClocking = compositionLocalOf<CalendarClocking?> { null }
+
+/**
+ * A long-press's menu on an entry or a clocked block: *Clock in* on its heading, or *Clock out* when
+ * its clock runs. Put inside what is pressed, which it drops down from.
+ */
+@Composable
+private fun ClockMenu(file: String, headingOffset: Int, expanded: Boolean, onDismiss: () -> Unit) {
+    val clocking = LocalCalendarClocking.current ?: return
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        if (clocking.isRunning(file, headingOffset)) {
+            DropdownMenuItem(text = { Text(stringResource(Res.string.editor_clock_out)) }, onClick = { onDismiss(); clocking.clockOut(file, headingOffset) })
+        } else {
+            DropdownMenuItem(text = { Text(stringResource(Res.string.editor_clock_in)) }, onClick = { onDismiss(); clocking.clockIn(file, headingOffset) })
+        }
+    }
+}
+
+/** A tap that opens, and a long-press that opens [ClockMenu] when the app can clock. */
+@Composable
+private fun Modifier.openOrClock(onOpen: () -> Unit, onMenu: () -> Unit): Modifier {
+    val clocking = LocalCalendarClocking.current
+    return combinedClickable(onClick = onOpen, onLongClick = if (clocking != null) onMenu else null)
+}
+
+/** The colour of clocked time, set apart from the kinds of date: work done, not work planned. */
+@Composable
+private fun clockedAccent(): Color = MaterialTheme.colorScheme.secondary
+
 // --- Agenda list -------------------------------------------------------------------------------
 
 /**
@@ -250,8 +320,12 @@ fun AgendaListView(
     showDone: Boolean,
     onOpen: (AgendaOccurrence) -> Unit,
     modifier: Modifier = Modifier,
+    /** What a running clock counts to in the report; the start of [today] when not given. */
+    now: LocalDateTime = LocalDateTime(today, LocalTime(0, 0)),
 ) {
     val sections = remember(agenda, from, today, showDone) { agenda.agendaList(from, AGENDA_LIST_DAYS, today, showDone) }
+    val last = from.plus(AGENDA_LIST_DAYS - 1, DateTimeUnit.DAY)
+    val report = remember(agenda, from, now) { agenda.clocks.report(from, last, now) }
     val keywordColors = rememberKeywordColors(agenda)
     LazyColumn(modifier = modifier.fillMaxSize().testTag("agendaList")) {
         for (section in sections) {
@@ -291,20 +365,135 @@ fun AgendaListView(
                 AgendaRow(it, today, leading, keywordColors.of(it.entry), onOpen = { onOpen(it) })
             }
         }
+        if (report.isNotEmpty()) {
+            item(key = "clocked") { ClockReport(report, from, last) }
+        }
     }
 }
+
+/**
+ * How long was clocked in the days shown, above the day or the week, when anything was: a tap
+ * shows the report for those days, as the agenda shows it under its own.
+ */
+@Composable
+private fun ClockedSummary(agenda: AgendaIndex, from: LocalDate, to: LocalDate, now: LocalDateTime) {
+    val report = remember(agenda, from, to, now) { agenda.clocks.report(from, to, now) }
+    if (report.isEmpty()) return
+    var open by remember { mutableStateOf(false) }
+    val accent = clockedAccent()
+    Row(
+        Modifier.clickable { open = true }.padding(horizontal = 4.dp, vertical = 4.dp).testTag("clockedSummary"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Filled.Timer, contentDescription = null, tint = accent, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(
+            stringResource(Res.string.cal_clocked_summary, clockDuration(report.sumOf { it.minutes })),
+            style = MaterialTheme.typography.labelMedium,
+            color = accent,
+        )
+    }
+    if (open) {
+        AlertDialog(
+            onDismissRequest = { open = false },
+            confirmButton = { TextButton(onClick = { open = false }) { Text(stringResource(Res.string.ok)) } },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    ClockReport(report, from, to, onOpened = { open = false })
+                }
+            },
+        )
+    }
+}
+
+/**
+ * Emacs's agenda clock report: the time clocked in the days shown, by note and heading, and the
+ * total. A tap on a heading opens it; a heading whose clock runs is lit, its time still going up.
+ */
+@Composable
+private fun ClockReport(report: List<ClockedTotal>, from: LocalDate, to: LocalDate, onOpened: () -> Unit = {}) {
+    val clocking = LocalCalendarClocking.current
+    val accent = clockedAccent()
+    Column(Modifier.fillMaxWidth().padding(top = if (from == to) 0.dp else 24.dp, bottom = 8.dp).testTag("clockReport")) {
+        Row(Modifier.padding(start = 4.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Timer, contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(Res.string.cal_clocked_report), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        }
+        Text(
+            if (from == to) shortDay(from) else stringResource(Res.string.cal_clocked_period, shortDay(from), shortDay(to)),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.padding(start = 26.dp, bottom = 8.dp),
+        )
+        for ((file, totals) in report.groupBy { it.file }) {
+            Text(
+                file.substringAfterLast('/'),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 2.dp),
+            )
+            for (total in totals) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = clocking != null) {
+                            clocking?.open(total.file, total.headingOffset)
+                            onOpened()
+                        }
+                        .padding(vertical = 6.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.width(3.dp).height(20.dp).background(accent, RoundedCornerShape(2.dp)))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        (total.todo?.let { "$it " } ?: "") + buildOrgInlineString(total.title, viewMode = true).text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (total.running) Icon(Icons.Filled.Timer, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                    Text(
+                        clockDuration(total.minutes),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (total.running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
+                }
+            }
+        }
+        HorizontalDivider(Modifier.padding(top = 6.dp))
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 4.dp)) {
+            Text(
+                stringResource(Res.string.cal_clocked_total),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f).padding(start = 11.dp),
+            )
+            Text(clockDuration(report.sumOf { it.minutes }), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+/** `Mon 2 Nov`, in the language the app is shown in. */
+@Composable
+private fun shortDay(date: LocalDate): String = "${date.dayOfWeek.shortName()} ${date.day} ${date.month.shortName()}"
+
 
 @Composable
 private fun AgendaRow(occurrence: AgendaOccurrence, today: LocalDate, leading: Dp, keywordColor: Color?, onOpen: () -> Unit) {
     val accent = occurrence.entry.kind.accent()
+    var menu by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onOpen)
+            .openOrClock(onOpen) { menu = true }
             .dimmedIfDone(occurrence)
             .padding(vertical = 6.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        ClockMenu(occurrence.entry.file, occurrence.entry.headingOffset, menu) { menu = false }
         Box(Modifier.width(3.dp).height(36.dp).background(accent, RoundedCornerShape(2.dp)))
         Spacer(Modifier.width(8.dp))
         Box(Modifier.width(leading)) {
@@ -381,6 +570,8 @@ fun TimeGridView(
 ) {
     val today = now.date
     val byDate = remember(agenda, dates, today, showDone) { dates.associateWith { agenda.shownOn(it, today, showDone) } }
+    // What was clocked on each day, a running clock up to now: moved on each minute with it.
+    val clockedByDate = remember(agenda, dates, now) { dates.associateWith { agenda.clocks.on(it, now) } }
     val keywordColors = rememberKeywordColors(agenda)
     BoxWithConstraints(modifier.fillMaxSize()) {
         val dayWidth = maxOf((maxWidth - GUTTER_WIDTH) / dates.size, MIN_DAY_WIDTH)
@@ -391,6 +582,7 @@ fun TimeGridView(
         val days = if (daysWidth > maxWidth - GUTTER_WIDTH) Modifier.horizontalScroll(sideways).width(daysWidth) else Modifier
         val allDayMax = maxHeight / 3
         Column(Modifier.fillMaxSize().nestedScroll(remember { StopAtTheEdge() })) {
+            ClockedSummary(agenda, dates.first(), dates.last(), now)
             if (dates.size > 1) {
                 Row(Modifier.fillMaxWidth()) {
                     Spacer(Modifier.width(GUTTER_WIDTH))
@@ -445,7 +637,10 @@ fun TimeGridView(
 
             // Opens an hour before now on today, or at the day's start, but never below the first
             // timed entry on screen: an early meeting scrolled out of sight is a meeting missed.
-            val firstEvent = dates.flatMap { byDate.getValue(it) }.filter { !it.isAllDay }.minOfOrNull { it.time!!.hour }
+            val firstEvent = (
+                dates.flatMap { byDate.getValue(it) }.filter { !it.isAllDay }.map { it.time!!.hour } +
+                    dates.flatMap { date -> clockedByDate.getValue(date).filter { it.span.start.date == date } }.map { it.startMinute / 60 }
+                ).minOrNull()
             val preferred = if (today in dates) (now.hour - 1).coerceAtLeast(0) else dayStartHour
             val initialHour = minOf(preferred, firstEvent ?: preferred)
             // A little above the hour, so its label is not cut in half.
@@ -480,7 +675,7 @@ fun TimeGridView(
                 Row(Modifier.weight(1f).then(days)) {
                     for (date in dates) {
                         DayColumn(
-                            blocks = remember(byDate, date) { layoutTimed(byDate.getValue(date)) },
+                            layout = remember(byDate, clockedByDate, date) { layoutDay(byDate.getValue(date), clockedByDate.getValue(date)) },
                             nowMinute = if (date == today) now.hour * 60 + now.minute else null,
                             hourHeight = hourHeight,
                             keywordColors = keywordColors,
@@ -546,7 +741,7 @@ private fun Modifier.zoomHours(onZoom: (factor: Float, focusY: Float) -> Unit) =
 
 @Composable
 private fun DayColumn(
-    blocks: List<TimedBlock>,
+    layout: DayLayout,
     nowMinute: Int?,
     hourHeight: Dp,
     keywordColors: KeywordColors,
@@ -564,7 +759,11 @@ private fun DayColumn(
         }
         Box(Modifier.fillMaxHeight().width(1.dp).background(lineColor.copy(alpha = 0.5f)))
 
-        for (block in blocks) {
+        for (block in layout.clocked) {
+            ClockedBlockView(block, width = maxWidth / block.columns, hourHeight = hourHeight, compact = compact, titleLine = titleLine, timeLine = timeLine)
+        }
+
+        for (block in layout.events) {
             val occurrence = block.occurrence
             val accent = occurrence.entry.kind.accent()
             val keywordColor = keywordColors.of(occurrence.entry)
@@ -577,6 +776,7 @@ private fun DayColumn(
             // narrow column is otherwise two lines of title and a long empty block under them.
             val lines = ((height - 4.dp - (if (time != null) timeLine else 0.dp)) / titleLine).toInt().coerceAtLeast(1)
             val inset = if (compact) 1.dp else 3.dp
+            var menu by remember { mutableStateOf(false) }
             Column(
                 Modifier
                     .offset(x = width * block.column, y = hourHeight * block.startMinute / 60)
@@ -588,7 +788,7 @@ private fun DayColumn(
                     .background(MaterialTheme.colorScheme.surface)
                     .background(accent.copy(alpha = 0.18f))
                     .keywordEdge(keywordColor)
-                    .clickable { onOpen(occurrence) }
+                    .openOrClock({ onOpen(occurrence) }) { menu = true }
                     .dimmedIfDone(occurrence)
                     .padding(
                         start = (if (keywordColor != null) KEYWORD_EDGE else 0.dp) + inset,
@@ -597,6 +797,7 @@ private fun DayColumn(
                         bottom = 1.dp,
                     ),
             ) {
+                ClockMenu(occurrence.entry.file, occurrence.entry.headingOffset, menu) { menu = false }
                 Text(
                     occurrence.headline(keywordColor = keywordColor, titleOnly = compact),
                     modifier = Modifier.keywordDescription(occurrence, compact),
@@ -618,6 +819,55 @@ private fun DayColumn(
                 Box(Modifier.size(8.dp).background(nowColor, CircleShape))
             }
         }
+    }
+}
+
+/**
+ * A stretch of clocked time on the hour grid: what the hours actually went on, beside what was
+ * planned in them. Outlined in its own colour with a timer, rather than filled as an entry is; a
+ * running clock grows with the time. A tap opens the heading, a long-press clocks it in or out.
+ */
+@Composable
+private fun ClockedBlockView(block: ClockedBlock, width: Dp, hourHeight: Dp, compact: Boolean, titleLine: Dp, timeLine: Dp) {
+    val clocking = LocalCalendarClocking.current
+    val span = block.piece.span
+    val running = span.end == null
+    val accent = if (running) MaterialTheme.colorScheme.primary else clockedAccent()
+    val height = hourHeight * (block.endMinute - block.startMinute) / 60
+    val start = LocalTime(block.piece.startMinute / 60, block.piece.startMinute % 60).hhmm()
+    val duration = clockDuration(block.piece.minutes)
+    val time = "$start · $duration".takeIf { height - 4.dp >= titleLine + timeLine }
+    val lines = ((height - 4.dp - (if (time != null) timeLine else 0.dp)) / titleLine).toInt().coerceAtLeast(1)
+    val title = buildOrgInlineString(span.title, viewMode = true).text
+    val description = stringResource(Res.string.cal_clocked_block, title, start, duration)
+    var menu by remember { mutableStateOf(false) }
+    Column(
+        Modifier
+            .offset(x = width * block.column, y = hourHeight * block.startMinute / 60)
+            .width(width)
+            .height(height)
+            .padding(1.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .background(accent.copy(alpha = 0.10f))
+            .border(1.dp, accent.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+            .openOrClock({ clocking?.open(span.file, span.headingOffset) }) { menu = true }
+            .semantics(mergeDescendants = true) { contentDescription = description }
+            .testTag("clocked-${span.file}-${span.headingOffset}-${block.piece.startMinute}")
+            .padding(horizontal = if (compact) 2.dp else 4.dp, vertical = 1.dp),
+    ) {
+        ClockMenu(span.file, span.headingOffset, menu) { menu = false }
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(Icons.Filled.Timer, contentDescription = null, tint = accent, modifier = Modifier.padding(top = 2.dp, end = 2.dp).size(10.dp))
+            Text(
+                title,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = lines,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        time?.let { Text(it, fontSize = TIME_LABEL_SIZE, lineHeight = TIME_LABEL_LINE, color = accent, maxLines = 1) }
     }
 }
 
@@ -754,6 +1004,7 @@ private fun EventChip(
         DaySpan.Middle -> RectangleShape to PaddingValues()
         DaySpan.End -> RoundedCornerShape(topEnd = r, bottomEnd = r) to PaddingValues(end = 1.dp)
     }
+    var menu by remember { mutableStateOf(false) }
     Row(
         Modifier
             .fillMaxWidth()
@@ -761,7 +1012,7 @@ private fun EventChip(
             .clip(shape)
             .background(accent.copy(alpha = 0.18f))
             .keywordEdge(keywordColor)
-            .clickable(onClick = onOpen)
+            .openOrClock(onOpen) { menu = true }
             .dimmedIfDone(occurrence)
             .padding(
                 start = if (keywordColor != null) KEYWORD_EDGE + 2.dp else 3.dp,
@@ -771,6 +1022,7 @@ private fun EventChip(
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        ClockMenu(occurrence.entry.file, occurrence.entry.headingOffset, menu) { menu = false }
         if (!compact) {
             Icon(occurrence.entry.kind.icon(), contentDescription = null, tint = accent, modifier = Modifier.size(10.dp))
             Spacer(Modifier.width(2.dp))

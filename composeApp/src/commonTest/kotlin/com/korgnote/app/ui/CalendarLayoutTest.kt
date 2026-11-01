@@ -3,6 +3,7 @@ package com.korgnote.app.ui
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.AgendaOptions
+import com.korgnote.common.org.agenda.on
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -120,6 +121,28 @@ class CalendarLayoutTest {
         val block = layoutTimed(timed("Stand-up <2026-09-23 Wed 09:15-09:30>")).single()
         assertEquals(9 * 60 + 15, block.startMinute)
         assertEquals(9 * 60 + 15 + MIN_EVENT_MINUTES, block.endMinute)
+    }
+
+    @Test
+    fun clockedTimeSharesTheGridWithTheMeetingItWasDoneIn() {
+        val text = """
+            * Design review <2026-09-23 Wed 10:00-11:00>
+            * Report
+            :LOGBOOK:
+            CLOCK: [2026-09-23 Wed 10:30]--[2026-09-23 Wed 12:00] =>  1:30
+            CLOCK: [2026-09-23 Wed 08:00]--[2026-09-23 Wed 08:05] =>  0:05
+            :END:
+        """.trimIndent()
+        val index = index(text)
+        val day = layoutDay(index.on(today), index.clocks.on(today, now = kotlinx.datetime.LocalDateTime(today, kotlinx.datetime.LocalTime(18, 0))))
+        // The meeting keeps the first column; the work overlapping it takes the second.
+        assertEquals(0 to 2, day.events.single().let { it.column to it.columns })
+        val (early, late) = day.clocked.sortedBy { it.startMinute }
+        assertEquals(1 to 2, late.column to late.columns)
+        // Five minutes on its own, drawn a quarter of an hour tall, not an event's half hour.
+        assertEquals(0 to 1, early.column to early.columns)
+        assertEquals(8 * 60 + MIN_CLOCKED_MINUTES, early.endMinute)
+        assertEquals(5, early.piece.minutes)
     }
 
     @Test

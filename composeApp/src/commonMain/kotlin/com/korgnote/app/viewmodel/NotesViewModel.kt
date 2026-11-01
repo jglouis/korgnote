@@ -554,8 +554,16 @@ class NotesViewModel(
      * clock running elsewhere — in this note or another — stops at the same minute first.
      */
     fun clockInAt(offsetInDocument: Int) {
-        val path = note.path ?: return
-        if (refuseWhileEditing()) return
+        clockIn(note.path ?: return, offsetInDocument)
+    }
+
+    /**
+     * [clockInAt] for the heading at [headingOffset] of the note at [path], open or not: from the
+     * calendar, say.
+     */
+    fun clockIn(path: String, headingOffset: Int) {
+        if (path == note.path && refuseWhileEditing()) return
+        val offsetInDocument = headingOffset
         val at = now()
         viewModelScope.launch {
             for (other in clocks.running.filter { it.path != path }) changeNote(other.path) { it.withClock(other) { doc, h -> doc.clockOut(h, at) } }
@@ -590,7 +598,11 @@ class NotesViewModel(
         viewModelScope.launch { changeNote(clock.path) { it.withClock(clock) { doc, h -> doc.clockOut(h, end) } } }
     }
 
-    /** Removes [clock], wherever it runs. */
+    /** The clock running on the heading at [headingOffset] of the note at [path], if one is. */
+    fun clockRunningOn(path: String, headingOffset: Int): ClockRunning? =
+        clocks.running.firstOrNull { it.path == path && it.headingStart == headingOffset }
+
+        /** Removes [clock], wherever it runs. */
     fun cancelClock(clock: ClockRunning) {
         if (clock.path == note.path && refuseWhileEditing()) return
         viewModelScope.launch { changeNote(clock.path) { it.withClock(clock) { doc, h -> doc.cancelClock(h) } } }

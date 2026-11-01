@@ -14,7 +14,7 @@ CLOCK: [2026-11-01 Sun 09:30]--[2026-11-01 Sun 10:45] =>  1:15
 ```
 
 The proposal this came from, with the reasoning and the later phases, is the shared doc
-*Org clocking in KorgNote — proposal* (2026-11-01). Phase 1 is built; this document says how.
+*Org clocking in KorgNote — proposal* (2026-11-01). Phases 1 and 2 are built; this document says how.
 
 ## What is written
 
@@ -71,8 +71,34 @@ came in with the sync.
 
 iOS and the web have the bar only: a lock-screen Live Activity needs a Swift widget extension (G7).
 
+## In the calendar (phase 2)
+
+The agenda index also collects every clock in the notes (`clockedSpans`, in
+`shared/…/org/agenda/Clocked.kt`), in the same pass off the main thread, and keeps them across days
+(`AgendaIndex.clocks`). Only notes with a `CLOCK:` in them are parsed for it.
+
+- **The day and the week** draw each clock in the hours it took (`ClockedBlockView`), outlined in the
+  theme's secondary colour with a timer, where entries are filled in the colour of their kind: work
+  done beside work planned. A clock shares the width with a meeting it overlaps, as two meetings do
+  (`layoutDay`); one shorter than a quarter of an hour is drawn a quarter of an hour tall, where an
+  event gets half an hour, so a run of short clocks stays one under the other. A clock across
+  midnight is in both days (`on`), and a running one grows to now, lit in the primary colour. A tap
+  opens the heading. Only clocks started that day decide where the grid opens, so one left running
+  overnight does not scroll it to midnight.
+- **"13 h 45 clocked"** above the day or the week, when anything was, opens the report for those days.
+- **The agenda's clock report** (`ClockReport`), under its seven days: by note, then by heading in
+  note order, a heading's running clock lit and counted to now, and the total. Emacs's agenda `R`,
+  not a full clocktable.
+- **Clock in from the calendar**: a long-press on an entry in the agenda, the day or the week, or on
+  a clocked block, offers *Clock in*, or *Clock out* when its clock runs (`CalendarClocking`, which
+  the app gives; `NotesViewModel.clockIn(path, offset)` works on a note that is not open). The month
+  is left out: its chips are too small to aim a long-press at.
+
+Emacs runs one clock at a time, and so does KorgNote: clocking in stops the clock running. Several
+run only when devices clocked in apart, which Emacs calls dangling clocks and asks to resolve.
+
 ## Not built
 
-From the proposal's later phases: clocked time in the calendar's day and week views, the agenda's
-clock report, *Clock in* from calendar entries, a TODO keyword change on clocking in, an Android
-clock widget, editing `:Effort:`, and regenerating `#+BEGIN: clocktable` blocks (shown as written).
+A TODO keyword change on clocking in, an Android clock widget, editing `:Effort:`, a consistency
+check for overlapping clocks and gaps, and regenerating `#+BEGIN: clocktable` blocks (shown as
+written).

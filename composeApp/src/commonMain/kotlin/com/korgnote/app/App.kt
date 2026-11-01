@@ -31,6 +31,7 @@ import com.korgnote.app.data.NotesSource
 import com.korgnote.app.data.SavedSearch
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.data.offersNotesFolder
+import com.korgnote.app.ui.CalendarClocking
 import com.korgnote.app.ui.RunningClockBar
 import com.korgnote.app.ui.*
 import com.korgnote.app.data.DevicePairing
@@ -958,6 +959,17 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                         selectedScreen = BottomItem.FILE
                                     },
                                     headerActions = statusIcons,
+                                    clocking = remember(vm) {
+                                        CalendarClocking(
+                                            isRunning = { file, offset -> vm.clockRunningOn(file, offset) != null },
+                                            clockIn = { file, offset -> vm.clockIn(file, offset) },
+                                            clockOut = { file, offset -> vm.clockRunningOn(file, offset)?.let { vm.clockOut(it) } },
+                                            open = { file, offset ->
+                                                vm.onFileSelected(file, scrollToOffset = offset)
+                                                selectedScreen = BottomItem.FILE
+                                            },
+                                        )
+                                    },
                                 )
                             }
 

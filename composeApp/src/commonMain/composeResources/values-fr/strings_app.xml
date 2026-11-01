@@ -25,6 +25,11 @@
     <string name="cal_hide_done">Masquer les tâches terminées</string>
     <string name="cal_overdue">En retard</string>
     <string name="cal_nothing_planned">Rien de prévu</string>
+    <string name="cal_clocked_report">Temps chronométré</string>
+    <string name="cal_clocked_period">Du %1$s au %2$s</string>
+    <string name="cal_clocked_total">Total</string>
+    <string name="cal_clocked_summary">%1$s chronométrées</string>
+    <string name="cal_clocked_block">Chronométré sur %1$s à partir de %2$s, %3$s</string>
     <string name="cal_all_day">jour entier</string>
     <string name="cal_kind_deadline">Échéance</string>
     <string name="cal_kind_scheduled">Prévu</string>

@@ -17,6 +17,7 @@ import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOptions
 import com.korgnote.common.org.agenda.agendaEntries
+import com.korgnote.common.org.agenda.clockedSpans
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -65,7 +66,7 @@ class NoteAgenda(
      * old still carries over to the right day once anything changes.
      */
     fun build(texts: Map<String, String>, keywords: OrgTodoConfig): AgendaIndex =
-        AgendaIndex(agendaEntries(texts, keywords), AgendaOptions(today = today()))
+        AgendaIndex(agendaEntries(texts, keywords), AgendaOptions(today = today()), clockedSpans(texts, keywords))
 
     /** Opens the file an agenda entry comes from, at its heading. */
     fun openEntry(entry: AgendaEntry) = open(entry.file, entry.headingOffset)

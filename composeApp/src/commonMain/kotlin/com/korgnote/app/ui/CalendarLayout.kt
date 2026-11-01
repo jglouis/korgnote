@@ -1,6 +1,7 @@
 package com.korgnote.app.ui
 
 import com.korgnote.common.org.agenda.AgendaIndex
+import com.korgnote.common.org.agenda.ClockedPiece
 import com.korgnote.common.org.agenda.AgendaKind
 import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.DaySpan
@@ -113,6 +114,24 @@ data class TimedBlock(
 
 private val LocalTime.minuteOfDay get() = hour * 60 + minute
 
+/** A clocked stretch placed on the hour grid beside the timed entries, as a [TimedBlock] is. */
+data class ClockedBlock(
+    val piece: ClockedPiece,
+    val startMinute: Int,
+    val endMinute: Int,
+    val column: Int,
+    val columns: Int,
+)
+
+/** A day on the hour grid: its timed entries, and what was clocked, side by side where they overlap. */
+data class DayLayout(val events: List<TimedBlock>, val clocked: List<ClockedBlock>)
+
+/**
+ * The shortest a clocked stretch is drawn. Shorter than an event's: a clock is often stopped after
+ * a few minutes and the next started, and those should sit one under the other, not side by side.
+ */
+const val MIN_CLOCKED_MINUTES = 15
+
 /**
  * Lays out a day's timed occurrences.
  *
@@ -120,34 +139,50 @@ private val LocalTime.minuteOfDay get() = hour * 60 + minute
  * leftmost column free at its start, and every event in a cluster is as wide as the cluster's
  * column count allows. It is the layout most calendars use, and it never lets two blocks overlap.
  */
-fun layoutTimed(occurrences: List<AgendaOccurrence>): List<TimedBlock> {
-    val timed = occurrences.filter { !it.isAllDay }.map { occurrence ->
+fun layoutTimed(occurrences: List<AgendaOccurrence>): List<TimedBlock> = layoutDay(occurrences, emptyList()).events
+
+/**
+ * [layoutTimed], with the [clocked] stretches of the day laid out among the events: a meeting and
+ * the work clocked during it share the width, as two meetings would.
+ */
+fun layoutDay(occurrences: List<AgendaOccurrence>, clocked: List<ClockedPiece>): DayLayout {
+    class Item(val occurrence: AgendaOccurrence?, val piece: ClockedPiece?, val start: Int, val end: Int)
+
+    val items = occurrences.filter { !it.isAllDay }.map { occurrence ->
         val start = occurrence.time!!.minuteOfDay
         val end = maxOf(occurrence.endTime?.minuteOfDay ?: start, start + MIN_EVENT_MINUTES)
-        Triple(occurrence, start, end.coerceAtMost(24 * 60).coerceAtLeast(start + 1))
-    }.sortedWith(compareBy({ it.second }, { -it.third }))
+        Item(occurrence, null, start, end.coerceAtMost(24 * 60).coerceAtLeast(start + 1))
+    } + clocked.map { piece ->
+        val end = maxOf(piece.endMinute, piece.startMinute + MIN_CLOCKED_MINUTES)
+        Item(null, piece, piece.startMinute, end.coerceAtMost(24 * 60).coerceAtLeast(piece.startMinute + 1))
+    }
 
-    val blocks = mutableListOf<TimedBlock>()
-    var cluster = mutableListOf<Pair<Triple<AgendaOccurrence, Int, Int>, Int>>()
+    val events = mutableListOf<TimedBlock>()
+    val clocks = mutableListOf<ClockedBlock>()
+    var cluster = mutableListOf<Pair<Item, Int>>()
     var clusterEnd = -1
     val columnEnds = mutableListOf<Int>()
 
     fun flush() {
         val columns = columnEnds.size
-        cluster.forEach { (event, column) -> blocks += TimedBlock(event.first, event.second, event.third, column, columns) }
+        cluster.forEach { (item, column) ->
+            item.occurrence?.let { events += TimedBlock(it, item.start, item.end, column, columns) }
+            item.piece?.let { clocks += ClockedBlock(it, item.start, item.end, column, columns) }
+        }
         cluster = mutableListOf()
         columnEnds.clear()
     }
 
-    for (event in timed) {
-        if (event.second >= clusterEnd) flush()
-        val free = columnEnds.indexOfFirst { it <= event.second }
-        val column = if (free >= 0) free.also { columnEnds[it] = event.third } else columnEnds.size.also { columnEnds += event.third }
-        cluster += event to column
-        clusterEnd = maxOf(clusterEnd, event.third)
+    // Events before clocks that start with them, so a meeting keeps the first column.
+    for (item in items.sortedWith(compareBy({ it.start }, { -it.end }, { it.piece != null }))) {
+        if (item.start >= clusterEnd) flush()
+        val free = columnEnds.indexOfFirst { it <= item.start }
+        val column = if (free >= 0) free.also { columnEnds[it] = item.end } else columnEnds.size.also { columnEnds += item.end }
+        cluster += item to column
+        clusterEnd = maxOf(clusterEnd, item.end)
     }
     flush()
-    return blocks
+    return DayLayout(events, clocks)
 }
 
 // --- The month's weeks -------------------------------------------------------------------------

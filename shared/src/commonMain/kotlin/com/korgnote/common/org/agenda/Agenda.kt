@@ -459,7 +459,12 @@ private fun LocalDate.minus(duration: OrgDuration): LocalDate = plus(duration.co
  * looks at a few months and a daily repeater has an occurrence on every one of the others.
  * Not thread-safe: it is read from the UI thread.
  */
-class AgendaIndex(val entries: List<AgendaEntry>, val options: AgendaOptions) {
+class AgendaIndex(
+    val entries: List<AgendaEntry>,
+    val options: AgendaOptions,
+    /** Every clocked span in the notes, which the day and week draw and the agenda sums. */
+    val clocks: List<ClockedSpan> = emptyList(),
+) {
     private val months = mutableMapOf<Int, Map<LocalDate, List<AgendaOccurrence>>>()
 
     /** Occurrences on [date], in the order [occurrences] gives. */
@@ -478,10 +483,10 @@ class AgendaIndex(val entries: List<AgendaEntry>, val options: AgendaOptions) {
 
     /** The same entries, carried over and warned of as on [today]; this one when it already is. */
     fun asOf(today: LocalDate): AgendaIndex =
-        if (today == options.today) this else AgendaIndex(entries, options.copy(today = today))
+        if (today == options.today) this else AgendaIndex(entries, options.copy(today = today), clocks)
 
     companion object {
-        fun of(files: Map<String, String>, options: AgendaOptions) = AgendaIndex(agendaEntries(files), options)
+        fun of(files: Map<String, String>, options: AgendaOptions) = AgendaIndex(agendaEntries(files), options, clockedSpans(files))
         val EMPTY = AgendaIndex(emptyList(), AgendaOptions(today = LocalDate(1970, 1, 1)))
     }
 }

@@ -77,7 +77,7 @@ Updated 2026-10-30, as of 1.4.1.
 | ✅ | T38 Randomized two-device sync tests | Done — 30 seeded sessions per push, 10,000 nightly |
 | ✅ | T39 Secrets sealed, notes out of backups | Done — Keystore and Keychain; notes, widget state and reminder plan left out of backups |
 | ✅ | T40 Sync robustness | Done — first sync in one bundle, one cycle at a time, conflict copies instead of blind merges, restarts survived |
-| 🟡 | T41 Clocking | Phase 1 built — clock in/out from a heading's menu, a bar on every tab, totals, Android's ongoing notification; [11](11-clocking.md). The notification not yet seen on a device |
+| 🟡 | T41 Clocking | Phases 1 and 2 built — clock in/out from a heading's menu or a calendar entry, a bar on every tab, totals, clocked time in the day and week, the agenda's clock report, Android's ongoing notification; [11](11-clocking.md). The notification not yet seen on a device |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -1245,7 +1245,7 @@ the next sync rebuilds them (c5ec213).
 - A new note cannot be created through a symlink that leads out of the notes directory, as reading
   and editing one already could not (4d44808).
 
-### T41 · Clocking — 🟡 **phase 1 built**
+### T41 · Clocking — 🟡 **phases 1 and 2 built**
 **Landed** Org's clocking, written byte for byte as Emacs writes it: *Clock in*, *Clock out* and
 *Cancel clock* in a heading's long-press menu, clocking in stopping any other clock; totals beside
 headings, against `:Effort:`; a running-clock bar on every tab, with a warning and *Clock out at…*
@@ -1253,8 +1253,11 @@ for a clock left on; `=> H:MM` summed again when a clock is edited by hand; `CLO
 highlighted; on Android an ongoing notification whose *Clock out* works with the app closed. The
 design is [11](11-clocking.md). Covered by `ClockingTest` (shared and view model), `AppClockingTest`,
 `ClockEndTest` and `OrgSpansTests`.
-**Open** The notification has not been seen on a device. Phase 2 (clocked time in the calendar,
-the agenda's clock report, clocking in from calendar entries) is not started.
+**Phase 2** Clocked time drawn in the day and week beside what was planned, a total above them
+that opens its report, the agenda's clock report under its days, and *Clock in* or *Clock out* from
+a long-press on a calendar entry. Covered by `ClockedSpansTest`, `CalendarClockingTest` and
+`CalendarLayoutTest`.
+**Open** The notification has not been seen on a device.
 
 ---
 

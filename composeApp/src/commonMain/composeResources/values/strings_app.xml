@@ -27,6 +27,15 @@
     <string name="cal_hide_done">Hide done</string>
     <string name="cal_overdue">Overdue</string>
     <string name="cal_nothing_planned">Nothing planned</string>
+    <!-- Time clocked, Org's CLOCK lines: the agenda's report under the days, and a block on the hour grid. -->
+    <string name="cal_clocked_report">Time clocked</string>
+    <!-- The report's period: %1$s and %2$s are its first and last days, as Mon 2 Nov. -->
+    <string name="cal_clocked_period">%1$s to %2$s</string>
+    <string name="cal_clocked_total">Total</string>
+    <!-- Above the day or the week: how long was clocked in it, %1$s, as 13 h 45. A tap shows the report. -->
+    <string name="cal_clocked_summary">%1$s clocked</string>
+    <!-- For a screen reader, a clocked block: the heading %1$s, its start %2$s and how long, %3$s. -->
+    <string name="cal_clocked_block">Clocked on %1$s from %2$s, %3$s</string>
     <string name="cal_all_day">all day</string>
     <!-- Each kind of date, and how it stands relative to today; d. is days. -->
     <string name="cal_kind_deadline">Deadline</string>

@@ -29,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -87,7 +88,9 @@ fun CalendarScreen(
     initialAnchorDate: LocalDate? = null,
     now: LocalDateTime? = null,
     headerActions: @Composable () -> Unit = {},
-) {
+    /** Clocking a heading in or out from a long-press on its entry, and opening clocked time; none here. */
+    clocking: CalendarClocking? = null,
+) = CompositionLocalProvider(LocalCalendarClocking provides clocking) {
     val clock by produceState(now ?: currentDateTime(), now) {
         if (now != null) return@produceState
         while (true) {
@@ -162,6 +165,7 @@ fun CalendarScreen(
                         today = today,
                         showDone = showDone,
                         onOpen = open,
+                        now = clock,
                     )
 
                     CalendarMode.Day -> TimeGridView(
