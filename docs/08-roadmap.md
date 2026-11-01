@@ -77,7 +77,7 @@ Updated 2026-10-30, as of 1.4.1.
 | ✅ | T38 Randomized two-device sync tests | Done — 30 seeded sessions per push, 10,000 nightly |
 | ✅ | T39 Secrets sealed, notes out of backups | Done — Keystore and Keychain; notes, widget state and reminder plan left out of backups |
 | ✅ | T40 Sync robustness | Done — first sync in one bundle, one cycle at a time, conflict copies instead of blind merges, restarts survived |
-| 🟡 | T41 Clocking | Phases 1 and 2 built — clock in/out from a heading's menu or a calendar entry, a bar on every tab, totals, clocked time in the day and week, the agenda's clock report, Android's ongoing notification; [11](11-clocking.md). The notification not yet seen on a device |
+| ✅ | T41 Clocking | Done — clock in/out from a heading's menu, the calendar or the bar's recent tasks, totals against `:Effort:`, clocked time in the day and week, the agenda's clock report, Android's ongoing notification; seen on a phone; [11](11-clocking.md) |
 
 **Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
 how the app is actually used — most edits add one TODO — and dissolved the performance problem
@@ -1245,7 +1245,7 @@ the next sync rebuilds them (c5ec213).
 - A new note cannot be created through a symlink that leads out of the notes directory, as reading
   and editing one already could not (4d44808).
 
-### T41 · Clocking — 🟡 **phases 1 and 2 built**
+### T41 · Clocking — ✅ **done**
 **Landed** Org's clocking, written byte for byte as Emacs writes it: *Clock in*, *Clock out* and
 *Cancel clock* in a heading's long-press menu, clocking in stopping any other clock; totals beside
 headings, against `:Effort:`; a running-clock bar on every tab, with a warning and *Clock out at…*
@@ -1257,7 +1257,14 @@ design is [11](11-clocking.md). Covered by `ClockingTest` (shared and view model
 that opens its report, the agenda's clock report under its days, and *Clock in* or *Clock out* from
 a long-press on a calendar entry. Covered by `ClockedSpansTest`, `CalendarClockingTest` and
 `CalendarLayoutTest`.
-**Open** The notification has not been seen on a device.
+**Since** Changing a heading's keyword from the calendar's long-press, clocking back into a recent
+task from the bar, and *Set effort…* in the heading's menu.
+**Seen on a device** 2026-11-01, on a Galaxy A52s (Android 14) against a scratch server: clock in
+from the menu, written to the server at once; the notification with its chronometer, which outlived
+the app's process; its *Clock out* with the process killed, which wrote the stop, synced it and took
+the notification down; a clock started on the server picked up within seconds, bar and
+notification; switching to a recent task; the day view's blocks and total, the agenda's report;
+a keyword set from the calendar; an effort set from the menu.
 
 ---
 
@@ -1277,7 +1284,6 @@ a long-press on a calendar entry. Covered by `ClockedSpansTest`, `CalendarClocki
 - **The plain port** has no authentication: any process on the computer can use it. Another
   container on the Docker network no longer can: it is refused by its address.
 - **Completion labels** are English only.
-- **T41 on a device.** The clock notification and its background *Clock out* are built and compile, but have not run on a phone yet.
 
 ## Sequencing notes
 
