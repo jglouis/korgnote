@@ -219,7 +219,9 @@ private fun RenderNode(
 
         // The grammar models these now, so they render from the node rather than by re-scanning
         // text. The views themselves are the ones OrgBody already used.
-        is OrgBlock -> OrgBlockView(node.type.lowercase(), node.parameters, node.body.trimEnd('\n').split('\n'), todoConfig)
+        // Without the indentation all its lines share, which a block inside a list item has from the
+        // item: Org strips it too (`org-src-preserve-indentation` is off by default).
+        is OrgBlock -> OrgBlockView(node.type.lowercase(), node.parameters, node.body.trimEnd('\n').trimIndent().split('\n'), todoConfig)
 
         is OrgDrawer -> OrgDrawerView(node.name, node.lines)
 
@@ -254,7 +256,7 @@ private fun RenderNode(
 
         is OrgListItem -> {
             OrgLine(joinOrgLines(node.text), todoConfig)
-            node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox) }
+            ItemContents(node.children, todoConfig, onToggleCheckbox)
         }
 
         is OrgList -> {
@@ -282,16 +284,18 @@ private fun RenderNode(
                     when (child) {
                         is OrgCheckboxItem -> {
                             RenderCheckboxItem(child, onToggleCheckbox)
-                            child.children.forEach { RenderNode(it, todoConfig, onToggleCheckbox) }
+                            ItemContents(child.children, todoConfig, onToggleCheckbox)
                         }
 
                         is OrgListItem -> {
                             OrgLine("$marker ${joinOrgLines(child.text)}", todoConfig)
-                            child.children.forEach { RenderNode(it, todoConfig, onToggleCheckbox) }
+                            ItemContents(child.children, todoConfig, onToggleCheckbox)
                         }
 
-                        is OrgDescriptionItem ->
+                        is OrgDescriptionItem -> {
                             OrgLine("$marker ${child.term} :: ${joinOrgLines(child.description)}", todoConfig)
+                            ItemContents(child.children, todoConfig, onToggleCheckbox)
+                        }
 
                         is OrgRaw -> OrgLine("$marker ${child.content}", todoConfig)
 
@@ -357,6 +361,27 @@ private fun RenderNode(
 class PriorityEditing(val priorities: OrgPriorities, val onSet: (heading: OrgSection, priority: OrgPriority?) -> Unit)
 
 val LocalPriorityEditing = compositionLocalOf<PriorityEditing?> { null }
+
+/**
+ * What an item holds under its first line — further paragraphs, blocks, tables — indented under
+ * its text, as Org keeps them inside the item. A nested list indents itself, by its own depth.
+ */
+@Composable
+private fun ItemContents(contents: List<OrgNode>, todoConfig: OrgTodoConfig, onToggleCheckbox: ((OrgCheckboxItem) -> Unit)?) {
+    for (child in contents) {
+        if (child is OrgList) {
+            RenderNode(child, todoConfig, onToggleCheckbox)
+        } else {
+            // A little space above, as between paragraphs: in the file a blank line sets them apart.
+            Column(Modifier.padding(start = ITEM_CONTENTS_INDENT, top = 4.dp), horizontalAlignment = Alignment.Start) {
+                RenderNode(child, todoConfig, onToggleCheckbox)
+            }
+        }
+    }
+}
+
+/** How far an item's contents sit in from its bullet: about the width of `1. `. */
+private val ITEM_CONTENTS_INDENT = 20.dp
 
 @Composable
 private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: ((OrgSection, String?) -> Unit)?) {

@@ -163,6 +163,8 @@ data class OrgDescriptionItem(
     val description: String,
     /** The `[@3]` that sets this item's number in an ordered list; see [orderedNumbers]. */
     val counter: Int? = null,
+    /** What follows the definition under the item: further paragraphs, blocks, tables, lists. */
+    override val children: List<OrgNode> = emptyList(),
 ) : OrgNode()
 
 /**
@@ -342,9 +344,9 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
         }
     }
 
-    fun parseTable(start: Int): Pair<OrgNode, Int> {
+    fun parseTable(start: Int, limit: Int = lines.size): Pair<OrgNode, Int> {
         var idx = start
-        while (idx < lines.size && lines[idx].isOrgTableLine()) idx++
+        while (idx < limit && lines[idx].isOrgTableLine()) idx++
         val table = parseOrgTable(lines.subList(start, idx))
         // Cells keep an empty range: locating them needs intra-line offsets, which waits for the
         // real table grammar in T5.
@@ -452,6 +454,88 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
     }
 
     /**
+     * [parseList], which an item's contents use for the lists nested in them, before it is declared:
+     * the two call each other, so this is filled in once [parseList] exists.
+     */
+    lateinit var nestedList: (start: Int) -> Pair<OrgNode, Int>
+
+    /**
+     * Where the contents of an item end, from [from], the line after its first paragraph, for an
+     * item whose bullet is indented [indent]: as Org ends one, at the first line indented no further
+     * than the bullet — a heading among them — or at two blank lines; a single blank line between
+     * its paragraphs keeps it going. A block's own lines count as the item's however they are
+     * indented, as the lines of a greater element do in Org. Trailing blank lines are left after it.
+     */
+    fun itemBodyEnd(from: Int, indent: Int): Int {
+        var at = from
+        var end = from
+        var blanks = 0
+        while (at < lines.size) {
+            val line = lines[at]
+            if (line.isBlank()) {
+                if (++blanks >= 2) break
+                at++
+                continue
+            }
+            if (OrgSyntax.heading.containsMatchIn(line)) break
+            if (line.length - line.trimStart().length <= indent) break
+            blanks = 0
+            val begin = OrgSyntax.blockBegin.find(line)
+            at = if (begin != null) parseBlock(at, begin).second else at + 1
+            end = at
+        }
+        return end
+    }
+
+    /**
+     * The contents of an item from [from] to [to], as [itemBodyEnd] found them: paragraphs, blocks,
+     * tables, nested lists and the rest, each read as it would be outside a list. A paragraph's
+     * lines are kept without the indentation that put them under the item.
+     */
+    fun parseItemBody(from: Int, to: Int): List<OrgNode> {
+        val nodes = mutableListOf<OrgNode>()
+        val paragraph = mutableListOf<String>()
+        var paragraphFrom = from
+        fun flush(end: Int) {
+            if (paragraph.isEmpty()) return
+            nodes += OrgRaw(paragraph.joinToString("\n")).spanning(paragraphFrom, end)
+            paragraph.clear()
+        }
+        var at = from
+        while (at < to) {
+            val line = lines[at].trimEnd()
+            val begin = OrgSyntax.blockBegin.find(line)
+            val next: Int = when {
+                line.isBlank() -> { flush(at); at + 1 }
+                begin != null -> { flush(at); parseBlock(at, begin).let { (block, after) -> nodes += block; after } }
+                OrgSyntax.listItem.containsMatchIn(line) -> { flush(at); nestedList(at).let { (list, after) -> nodes += list; after } }
+                line.isOrgTableLine() -> { flush(at); parseTable(at, to).let { (table, after) -> nodes += table; after } }
+                OrgSyntax.fixedWidth.containsMatchIn(line) -> {
+                    flush(at)
+                    var after = at + 1
+                    while (after < to && OrgSyntax.fixedWidth.containsMatchIn(lines[after])) after++
+                    nodes += OrgFixedWidth(lines.subList(at, after).map { it.trimEnd() }).spanning(at, after)
+                    after
+                }
+                OrgSyntax.drawerBegin.matches(line) && !OrgSyntax.drawerEnd.matches(line) -> {
+                    flush(at)
+                    parseDrawer(at).let { (drawer, after) -> nodes += drawer; after }
+                }
+                line.trimStart().startsWith("#+") -> { flush(at); nodes += OrgKeyword(line.trim()).spanning(at, at + 1); at + 1 }
+                OrgSyntax.comment.containsMatchIn(line) -> { flush(at); nodes += OrgComment(line.trim()).spanning(at, at + 1); at + 1 }
+                else -> {
+                    if (paragraph.isEmpty()) paragraphFrom = at
+                    paragraph += line.trim()
+                    at + 1
+                }
+            }
+            at = next
+        }
+        flush(to)
+        return nodes
+    }
+
+    /**
      * A list starting at [start], together with any lists nested under its items.
      *
      * Indentation is what separates a nested list from a new one: an item indented further than the
@@ -507,17 +591,11 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
             idx = afterText
             val text = (listOf(firstLine) + more).joinToString("\n")
 
-            // Continuation: a deeper list directly under this item is nested inside it, after one
-            // blank line too.
-            val nested = mutableListOf<OrgNode>()
-            fun isDeeper(line: String) =
-                OrgSyntax.listItem.find(line)?.let { it.groupValues[1].length > indent } == true
-            val deeperAt = if (idx < lines.size && isDeeper(lines[idx])) idx else overOneBlank(idx, ::isDeeper)
-            if (deeperAt != null) {
-                val (sub, next) = parseList(deeperAt)
-                nested.add(sub)
-                idx = next
-            }
+            // The rest of the item: further paragraphs, blocks, tables and lists under it, as Org
+            // reads an item's contents — whatever is indented past its bullet.
+            val bodyEnd = itemBodyEnd(idx, indent)
+            val nested = parseItemBody(idx, bodyEnd)
+            idx = bodyEnd
 
             val description = OrgSyntax.descriptionTerm.find(text)
             val item: OrgNode = when {
@@ -528,6 +606,7 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
                     term = description.groupValues[2].trim(),
                     description = text.substring(description.value.length).trim(),
                     counter = counter,
+                    children = nested.toList(),
                 )
                 else -> OrgListItem(text, nested.toList(), counter)
             }
@@ -535,6 +614,7 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
         }
         return OrgList(bullet, items.toList(), ordered, indent).spanning(start, idx) to idx
     }
+    nestedList = ::parseList
 
     /**
      * An open heading: everything parsed after it belongs to it until a heading of the same or a
@@ -888,7 +968,9 @@ fun OrgNode.toOrgString(): String = when (this) {
             is OrgRaw -> child.content
             else -> child.toOrgString()
         }
-        val nested = child.children.joinToString("") { "\n" + it.toOrgString() }
+        val nested = child.children.joinToString("") {
+            "\n" + if (it is OrgList) it.toOrgString() else it.toOrgString().prependIndent(" ".repeat(pad.length + marker.length + 1))
+        }
         // Continuation lines go back under the text, past the bullet, or they would end the list.
         "$pad$marker ${body.indentedBy(pad.length + marker.length + 1)}$nested"
     }

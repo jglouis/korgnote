@@ -62,8 +62,8 @@ kept exactly as written and shown as plain text, so your files are never changed
 - **Agenda queries.** Search takes words, tags (with `#+TAGS:` groups), `todo:` and `priority:`.
   Org's match syntax (`+work-boss/NEXT`), property searches and custom agenda views are not there.
 - **Diary dates.** `<%%(diary-float t 4 3)>` and other diary expressions don't appear in the agenda.
-- **Some structure.** Paragraphs or blocks indented under a list item, multi-paragraph footnotes,
-  inline tasks, and `#+STARTUP:` folding (`overview`, `content`).
+- **Some structure.** Multi-paragraph footnotes, inline tasks, and `#+STARTUP:` folding
+  (`overview`, `content`).
 - **Rich text.** Inline images, LaTeX rendering, radio targets, inline footnotes, citations and
   macros show as written. Footnote references can't be tapped yet.
 - **Per-heading logging.** The `:LOGGING:` property, which changes logging for one subtree, isn't
