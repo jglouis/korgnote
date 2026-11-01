@@ -43,6 +43,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.OrgElement
 import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.edit.toggleableTimestamps
 import com.korgnote.common.org.link.OrgBacklink
 import com.korgnote.common.org.nextSibling
 import com.korgnote.common.org.orgElements
@@ -66,6 +67,8 @@ import korgnote.composeapp.generated.resources.editor_edit
 import korgnote.composeapp.generated.resources.editor_editing_element
 import korgnote.composeapp.generated.resources.editor_expand_heading
 import korgnote.composeapp.generated.resources.editor_linked_from
+import korgnote.composeapp.generated.resources.editor_make_stamp_active
+import korgnote.composeapp.generated.resources.editor_make_stamp_inactive
 import korgnote.composeapp.generated.resources.editor_more_actions
 import korgnote.composeapp.generated.resources.editor_move_down
 import korgnote.composeapp.generated.resources.editor_move_up
@@ -120,6 +123,11 @@ fun OrgDocumentView(
     onShiftSection: ((elementIndex: Int, delta: Int) -> Unit)? = null,
     /** From the long-press menu: the heading and its subtree to another heading or note, chosen next. */
     onRefileSection: ((elementIndex: Int) -> Unit)? = null,
+    /**
+     * From the long-press menu: the stamp beginning at this offset in [text] made inactive when it
+     * is active, and active when it is not.
+     */
+    onToggleTimestamp: ((offsetInDocument: Int) -> Unit)? = null,
     /** Folded headings: each shows only its heading line, and its descendants render nothing. */
     foldedElements: Set<Int> = emptySet(),
     onToggleFold: ((elementIndex: Int) -> Unit)? = null,
@@ -269,10 +277,17 @@ fun OrgDocumentView(
                                     { table -> edit(element.start + table.range.first) }
                                 },
                             )
+                            // Only what is shown: a folded heading's body is not there to be changed.
+                            val stamps = remember(shown) { shown.toggleableTimestamps().take(MAX_MENU_STAMPS) }
                             ElementMenu(
                                 expanded = menuOpen,
                                 onDismiss = { menuOpen = false },
                                 isPreamble = element.isPreamble,
+                                stamps = onToggleTimestamp?.let { toggle ->
+                                    stamps.map { stamp ->
+                                        MenuStamp(shown.substring(stamp.range), stamp.active) { toggle(element.start + stamp.range.first) }
+                                    }
+                                }.orEmpty(),
                                 onAddHeadingBelow = onAddHeadingBelow?.let { add -> { add(index) } },
                                 onAddSubheading = onAddSubheading?.let { add -> { add(index) } },
                                 onDelete = onDeleteSection?.let { { confirmingDelete = index } },
@@ -446,9 +461,19 @@ private fun BacklinksSection(backlinks: List<OrgBacklink>, onOpen: (OrgBacklink)
     }
 }
 
+/** A stamp of the element the long-press menu can make active or inactive, as written. */
+private class MenuStamp(val text: String, val active: Boolean, val toggle: () -> Unit)
+
+/**
+ * How many of an element's stamps its menu offers to toggle. A journal entry can hold dozens, and a
+ * menu of dozens is no menu; past these, the stamp is toggled from the editor's suggestions.
+ */
+private const val MAX_MENU_STAMPS = 5
+
 /**
  * What a long-press offers. Adding a heading used to be a **+** on every element; it is rare next
- * to reading, so it lives here, out of sight, along with restructuring a heading's subtree.
+ * to reading, so it lives here, out of sight, along with restructuring a heading's subtree, and
+ * making the element's dates active — in the calendar — or inactive.
  *
  * A null action is one that does not apply here. Moving and shifting stay listed, disabled, so the
  * menu keeps its shape from one heading to the next; the preamble, which is not a heading, gets
@@ -459,6 +484,7 @@ private fun ElementMenu(
     expanded: Boolean,
     onDismiss: () -> Unit,
     isPreamble: Boolean,
+    stamps: List<MenuStamp>,
     onAddHeadingBelow: (() -> Unit)?,
     onAddSubheading: (() -> Unit)?,
     onDelete: (() -> Unit)?,
@@ -488,6 +514,13 @@ private fun ElementMenu(
                 text = { Text(stringResource(Res.string.editor_add_subheading)) },
                 onClick = { onDismiss(); onAddSubheading() },
             )
+        }
+        if (stamps.isNotEmpty()) {
+            HorizontalDivider()
+            for (stamp in stamps) {
+                val label = if (stamp.active) Res.string.editor_make_stamp_inactive else Res.string.editor_make_stamp_active
+                Item(stringResource(label, stamp.text.replace(' ', ' ')), stamp.toggle)
+            }
         }
         if (!isPreamble) {
             HorizontalDivider()

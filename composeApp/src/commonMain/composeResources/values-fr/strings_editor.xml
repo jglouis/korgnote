@@ -129,4 +129,8 @@
     <string name="editor_done">Terminé</string>
     <string name="editor_gives">Donne %1$s</string>
     <string name="editor_picker">%1$s : %2$s</string>
+    <string name="editor_make_active">Rendre actif</string>
+    <string name="editor_make_inactive">Rendre inactif</string>
+    <string name="editor_make_stamp_active">Rendre %1$s actif</string>
+    <string name="editor_make_stamp_inactive">Rendre %1$s inactif</string>
 </resources>

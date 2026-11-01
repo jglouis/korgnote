@@ -578,48 +578,35 @@ private fun AnnotatedString.Builder.appendHeading(
 private fun AnnotatedString.Builder.appendPlanning(line: String, viewMode: Boolean) {
     withStyle(SpanStyle(color = OrgColors.planning)) {
         var pos = 0
-        var keyword: String? = null
         for (m in OrgSyntax.planningKeyword.findAll(line)) {
-            appendPlanningValue(line.substring(pos, m.range.first), keyword, viewMode)
+            // The stamps go through the inline path like any other, which links them in reading mode.
+            appendInline(line.substring(pos, m.range.first), viewMode)
             withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(m.value) }
-            keyword = m.groupValues[1]
             pos = m.range.last + 1
         }
-        appendPlanningValue(line.substring(pos), keyword, viewMode)
+        appendInline(line.substring(pos), viewMode)
     }
 }
-
-/** Planning keywords whose date reading mode links to that day in the calendar. */
-private val calendarLinkedPlanningKeywords = setOf("SCHEDULED", "DEADLINE")
 
 /**
- * The text after a planning [keyword]. In reading mode a `SCHEDULED` or `DEADLINE` timestamp
- * becomes a link to its day in the calendar, the way a `LOCATION` property links to a map.
+ * A timestamp as [appendInline] shows it. Reading, it is a link to its day in the calendar, the way
+ * a `LOCATION` property links to a map — an inactive one too: it is not in the calendar, but what
+ * else happened that day is, which is what tapping a date in a journal entry or a logbook is for.
+ * A stamp whose date does not exist (`<2026-02-30>`) has no day to open, and stays plain.
  *
- * A `<a>--<b>` range is one date, so both halves are links: each to its own day, the first to where
- * the range starts and the second to where it ends.
+ * A `<a>--<b>` range is one date, but each half is a stamp of its own here, so each links to its
+ * own day: the first to where the range starts and the second to where it ends.
  */
-private fun AnnotatedString.Builder.appendPlanningValue(text: String, keyword: String?, viewMode: Boolean) {
-    val first = OrgSyntax.timestamp.find(text)
-    if (!viewMode || keyword !in calendarLinkedPlanningKeywords || first == null || dateOfTimestamp(first.value) == null) {
-        appendInline(text, viewMode)
-        return
+private fun AnnotatedString.Builder.appendTimestamp(stamp: String, viewMode: Boolean) {
+    // Coloured under the link too, for what keeps the styles but drops the links: a search result.
+    withStyle(SpanStyle(color = OrgColors.timestamp)) {
+        val day = if (viewMode) dateOfTimestamp(stamp) else null
+        when {
+            day != null -> withLink(LinkAnnotation.Url(calendarDayUri(day), TextLinkStyles(style = linkStyle))) { append(unbroken(stamp)) }
+            viewMode -> append(unbroken(stamp))
+            else -> append(stamp)
+        }
     }
-    val second = first.next()?.takeIf { it.range.first == first.range.last + 3 && text.startsWith("--", first.range.last + 1) }
-    appendInline(text.substring(0, first.range.first), viewMode)
-    appendCalendarLink(first.value)
-    if (second != null) {
-        append("--")
-        appendCalendarLink(second.value)
-    }
-    appendInline(text.substring((second ?: first).range.last + 1), viewMode)
-}
-
-/** [stamp], linked to its day in the calendar when it has a real date. Reading mode only. */
-private fun AnnotatedString.Builder.appendCalendarLink(stamp: String) {
-    val day = dateOfTimestamp(stamp)
-    if (day == null) append(unbroken(stamp))
-    else withLink(LinkAnnotation.Url(calendarDayUri(day), TextLinkStyles(style = linkStyle))) { append(unbroken(stamp)) }
 }
 
 /**
@@ -715,13 +702,13 @@ private fun AnnotatedString.Builder.appendInline(text: String, viewMode: Boolean
                     withStyle(style) { append(m.value) }
                     consumed = m.value.length
                 } ?: OrgSyntax.timestamp.matchAt(text, i)?.let { m ->
-                    withStyle(SpanStyle(color = OrgColors.timestamp)) { append(if (viewMode) unbroken(m.value) else m.value) }
+                    appendTimestamp(m.value, viewMode)
                     consumed = m.value.length
                 }
             }
 
             '<' -> OrgSyntax.timestamp.matchAt(text, i)?.let { m ->
-                withStyle(SpanStyle(color = OrgColors.timestamp)) { append(if (viewMode) unbroken(m.value) else m.value) }
+                appendTimestamp(m.value, viewMode)
                 consumed = m.value.length
             } ?: if (viewMode) {
                 // A link target reads as its words, as Org exports it; the brackets are for links.

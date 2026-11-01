@@ -37,6 +37,7 @@ import com.korgnote.common.org.edit.fileKeywordsOf
 import com.korgnote.common.org.edit.withFileKeywords
 import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.edit.tickAsOrgDoes
+import com.korgnote.common.org.edit.withTimestampToggledAt
 import com.korgnote.common.org.link.LinkTarget
 import com.korgnote.common.org.link.linkTargetsOf
 import com.korgnote.common.org.link.withFileId
@@ -416,6 +417,21 @@ class NotesViewModel(
         if (updated.text == document.text) return
         note.content = updated.text
         library.put(file, updated)
+        refreshDerivedViews()
+
+        scope?.launch { server.push(writeFirst = { store.save(file, note.content) }) }
+    }
+
+    /**
+     * Makes the stamp that begins at [offsetInDocument] inactive when it is active and active when it
+     * is not, saved and pushed as [toggleCheckboxAt] saves a tick. The calendar follows at once: an
+     * active date is in it and an inactive one is not.
+     */
+    fun toggleTimestampAt(offsetInDocument: Int, scope: CoroutineScope? = null) {
+        val file = note.path ?: return
+        val updated = note.content.withTimestampToggledAt(offsetInDocument) ?: return
+        note.content = updated
+        library.put(file, updated.toOrgDocument(library.fallbackKeywords))
         refreshDerivedViews()
 
         scope?.launch { server.push(writeFirst = { store.save(file, note.content) }) }

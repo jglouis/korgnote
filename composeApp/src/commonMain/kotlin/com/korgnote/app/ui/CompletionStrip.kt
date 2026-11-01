@@ -70,6 +70,8 @@ import korgnote.composeapp.generated.resources.editor_insert_place
 import korgnote.composeapp.generated.resources.editor_insert_schedule
 import korgnote.composeapp.generated.resources.editor_insert_table
 import korgnote.composeapp.generated.resources.editor_insert_tag
+import korgnote.composeapp.generated.resources.editor_make_active
+import korgnote.composeapp.generated.resources.editor_make_inactive
 import korgnote.composeapp.generated.resources.editor_no_end
 import korgnote.composeapp.generated.resources.editor_no_time
 import korgnote.composeapp.generated.resources.editor_time_until
@@ -201,7 +203,7 @@ fun CompletionStrip(
                                 // A long address must not take the whole strip and hide the others.
                                 label = {
                                     Text(
-                                        item.label,
+                                        item.shownLabel(),
                                         style = MaterialTheme.typography.labelLarge,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -226,6 +228,17 @@ fun CompletionStrip(
             actions()
         }
     }
+}
+
+/**
+ * What a suggestion's chip says. Most say what they write, which is Org and needs no translating;
+ * the toggle says what it does, in the reader's language.
+ */
+@Composable
+private fun CompletionItem.shownLabel(): String = when (kind) {
+    CompletionItem.Kind.STAMP_TOGGLE ->
+        stringResource(if (insert.startsWith('<')) Res.string.editor_make_active else Res.string.editor_make_inactive)
+    else -> label
 }
 
 /** Room for one labelled insert chip; below that per button, the strip shows icons. */

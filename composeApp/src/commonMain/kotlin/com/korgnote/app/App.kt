@@ -845,6 +845,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                         revealElementIndex = vm.note.revealElementIndex,
                                         onRevealed = { vm.note.onRevealed() },
                                         onToggleCheckbox = { offset -> vm.toggleCheckboxAt(offset, scope) },
+                                        onToggleTimestamp = { offset -> vm.toggleTimestampAt(offset, scope) },
                                         onSetTodo = { offset, keyword -> vm.setTodoAt(offset, keyword, scope) },
                                         onEditTable = { vm.beginTableEdit(it) },
                                         backlinks = vm.links.backlinks,

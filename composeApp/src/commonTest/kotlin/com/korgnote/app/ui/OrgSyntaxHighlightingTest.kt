@@ -277,10 +277,35 @@ class OrgSyntaxHighlightingTest {
     }
 
     @Test
-    fun planningDatesAreNotLinkedInEditModeNorForClosed() {
+    fun datesAreNotLinkedInEditMode() {
         assertTrue(buildOrgHighlightedString("SCHEDULED: <2026-09-20 Sun>", heading).getLinkAnnotations(0, 27).isEmpty())
-        val closed = buildOrgHighlightedString("CLOSED: [2026-09-20 Sun 10:00]", heading, viewMode = true)
-        assertTrue(closed.getLinkAnnotations(0, closed.length).isEmpty())
+        val body = buildOrgHighlightedString("Met them <2026-09-20 Sun> and [2026-09-21 Mon]", heading)
+        assertTrue(body.getLinkAnnotations(0, body.length).isEmpty())
+    }
+
+    @Test
+    fun everyDateLinksToItsCalendarDayInViewModeActiveOrNot() {
+        val src = "* Call <2026-09-19 Sat>\nCLOSED: [2026-09-20 Sun 10:00]\nMet them [2026-09-21 Mon] and <2026-09-22 Tue>\n- Away [2026-12-19 Sat]--[2026-12-26 Sat]"
+        val out = buildOrgHighlightedString(src, heading, viewMode = true)
+        val links = out.getLinkAnnotations(0, out.length).map { (it.item as LinkAnnotation.Url).url to out.text.substring(it.start, it.end).withPlainSpaces() }
+        assertEquals(
+            listOf(
+                calendarDayUri(LocalDate(2026, 9, 19)) to "<2026-09-19 Sat>",
+                calendarDayUri(LocalDate(2026, 9, 20)) to "[2026-09-20 Sun 10:00]",
+                calendarDayUri(LocalDate(2026, 9, 21)) to "[2026-09-21 Mon]",
+                calendarDayUri(LocalDate(2026, 9, 22)) to "<2026-09-22 Tue>",
+                calendarDayUri(LocalDate(2026, 12, 19)) to "[2026-12-19 Sat]",
+                calendarDayUri(LocalDate(2026, 12, 26)) to "[2026-12-26 Sat]",
+            ),
+            links,
+        )
+    }
+
+    @Test
+    fun aDateThatDoesNotExistIsNotLinked() {
+        val out = buildOrgHighlightedString("Met them [2026-02-30 Mon]", heading, viewMode = true)
+        assertTrue(out.getLinkAnnotations(0, out.length).isEmpty())
+        assertTrue(out.hasColorAt(OrgColors.timestamp, 9 until 25))
     }
 
     @Test

@@ -137,4 +137,10 @@
     <string name="editor_gives">Gives %1$s</string>
     <!-- A picker's button: what it picks, and what is picked. -->
     <string name="editor_picker">%1$s: %2$s</string>
+    <!-- A timestamp under the caret, in the suggestions: active ones are in the calendar, inactive ones are not. -->
+    <string name="editor_make_active">Make active</string>
+    <string name="editor_make_inactive">Make inactive</string>
+    <!-- The long-press menu, for one timestamp of the element, which is %1$s. -->
+    <string name="editor_make_stamp_active">Make %1$s active</string>
+    <string name="editor_make_stamp_inactive">Make %1$s inactive</string>
 </resources>

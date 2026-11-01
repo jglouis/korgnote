@@ -111,13 +111,15 @@ Expansion rules, each a unit test:
 - **Multi-day ranges** → one occurrence per day, flagged as start/middle/end so the UI can
   draw a continuous bar. This holds for `SCHEDULED: <a>--<b>` too, which is how a trip or a
   week off is usually written; org-agenda shows only its first day. A scheduled range still
-  under way is on today already and is not carried over as well. In reading mode each half
-  of a planning range links to its own day in the calendar.
+  under way is on today already and is not carried over as well. In reading mode every stamp
+  links to its day in the calendar, inactive ones included, and each half of a range to its own.
   *Known gap:* two kinds of range are drawn on their first day only — a done entry with a
   repeater, which shows just its next occurrence, and a `DEADLINE: <a>--<b>`.
 - **Body timestamps** (active, not attached to a planning line) → `Timestamp` kind; these
   are your "meetings" and they are invisible today.
-- **Inactive `[…]`** → excluded unless explicitly requested.
+- **Inactive `[…]`** → excluded unless explicitly requested. A stamp is moved in or out of the
+  calendar by making it active or inactive: from the element's long-press menu, or from the
+  suggestions with the caret on it ([06](06-editor.md)).
 
 The result is an `AgendaIndex` in the client, rebuilt whenever the replica changes. It
 replaced `scheduledByDate` and decouples the calendar from raw `OrgPlanning` nodes.

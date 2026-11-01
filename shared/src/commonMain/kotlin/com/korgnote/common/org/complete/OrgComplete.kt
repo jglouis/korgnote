@@ -5,8 +5,10 @@ import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.agenda.orgTimestamps
 import com.korgnote.common.org.agenda.parseOrgTimestamp
 import com.korgnote.common.org.edit.nodeAt
+import com.korgnote.common.org.edit.toggledTimestamp
 import com.korgnote.common.org.link.relativeNotePath
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
@@ -76,6 +78,11 @@ data class CompletionItem(
         KEYWORD,
         LINK,
         TIMESTAMP,
+        /**
+         * The stamp under the caret, made inactive when it is active and active when it is not.
+         * [insert] is the stamp as it will read, so its first character says which.
+         */
+        STAMP_TOGGLE,
         TEMPLATE,
     }
 }
@@ -136,6 +143,7 @@ fun complete(doc: OrgDocument, cursor: Int, ctx: CompletionContext): List<Comple
         ?: keywordValueItems(prefix, lineStart, cursor, ctx)
         ?: locationItems(prefix, lineStart, cursor, ctx)
         ?: planningStampItems(line, lineStart, cursor, ctx)
+        ?: bodyStampItems(line, lineStart, cursor)
         ?: timestampItems(prefix, cursor, ctx)
         ?: dateItems(prefix, cursor, ctx)
         ?: planningItems(prefix, previousLine, lineStart, cursor, ctx)
@@ -260,19 +268,52 @@ private fun locationItems(prefix: String, lineStart: Int, cursor: Int, ctx: Comp
         }
 }
 
-/** A bare `<` or `[` asks for today's date: active in angle brackets, inactive in square ones. */
+/**
+ * A bare `<` or `[` asks for a date: today, or another from the picker — active in angle brackets,
+ * inactive in square ones. The picker keeps the bracket that was typed, so square ones are how an
+ * inactive stamp gets a date other than today without a button of its own.
+ */
 private fun timestampItems(prefix: String, cursor: Int, ctx: CompletionContext): List<CompletionItem>? {
     val opener = prefix.lastOrNull() ?: return null
     if (opener != '<' && opener != '[') return null
     val active = opener == '<'
+    val replace = (cursor - 1) until cursor
     return listOf(
         CompletionItem(
             label = ctx.today.orgStamp(active),
             insert = ctx.today.orgStamp(active),
-            replace = (cursor - 1) until cursor,
+            replace = replace,
             kind = CompletionItem.Kind.TIMESTAMP,
-        )
+        ),
+        datePicker(replace),
     )
+}
+
+/**
+ * The caret on a stamp in the text — anywhere in it, or just after it, which is where accepting one
+ * leaves the caret — rather than on a planning line.
+ *
+ * The picker, opened on the stamp, changes its date; the toggle makes it inactive when it is active
+ * and active when it is not, which is what takes a written date out of the calendar or puts it in.
+ * A range toggles whole, since halves that differ are no longer a range; the picker changes the
+ * half the caret is on, as it does on a planning line.
+ */
+private fun bodyStampItems(line: String, lineStart: Int, cursor: Int): List<CompletionItem>? {
+    // `SCHEDULED` and `DEADLINE` have their own rule; a `CLOSED` stamp is inactive by definition.
+    if (OrgSyntax.planning.containsMatchIn(line)) return null
+    val column = cursor - lineStart
+    fun IntRange.underCaret() = column in first..last + 1
+    val stamp = line.orgTimestamps().firstOrNull { it.range.underCaret() } ?: return null
+    val toggled = toggledTimestamp(line.substring(stamp.range)) ?: return null
+    val toggle = CompletionItem(
+        label = if (stamp.active) "Make inactive" else "Make active",
+        insert = toggled,
+        replace = (lineStart + stamp.range.first)..(lineStart + stamp.range.last),
+        kind = CompletionItem.Kind.STAMP_TOGGLE,
+    )
+    val half = OrgSyntax.timestamp.findAll(line).firstOrNull { it.range.underCaret() }
+    val picker = half?.let { datePicker((lineStart + it.range.first)..(lineStart + it.range.last)) }
+    return listOfNotNull(picker, toggle)
 }
 
 /**
@@ -453,8 +494,9 @@ fun LocalDate.orgStamp(active: Boolean): String {
 }
 
 /**
- * [stamp] moved to [date] at [time] — or with no time, when [time] is null — or a new active stamp
- * when [stamp] is not one, such as the half-typed text a picker suggestion stands in for.
+ * [stamp] moved to [date] at [time] — or with no time, when [time] is null — or a new stamp when
+ * [stamp] is not one, such as the half-typed text a picker suggestion stands in for: inactive when
+ * that text opens with `[`, active otherwise.
  *
  * [endTime] makes it a range within the day, `10:00-11:30`. It is written only after a start time,
  * and only when it is later than that start: Org reads an end before its start as nothing useful.
@@ -476,7 +518,8 @@ fun restamp(stamp: String, date: LocalDate, time: LocalTime?, endTime: LocalTime
                 .forEach { append(' ').append(it) }
         }
     }
-    return if (old?.active == false) "[$inner]" else "<$inner>"
+    val active = old?.active ?: !stamp.startsWith('[')
+    return if (active) "<$inner>" else "[$inner]"
 }
 
 /**

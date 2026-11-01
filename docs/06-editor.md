@@ -221,6 +221,11 @@ nothing else:
   cycled to the next keyword.
 - **Long-press a heading**: the menu adds, moves, promotes, demotes and deletes. These work on
   element ranges (`withOrgSubtreesSwapped`, `withOrgSubtreeShifted`) rather than through `org.edit`.
+  It also offers to make each of the element's stamps active or inactive — up to five, those of
+  its heading and text, not of planning lines, drawers or blocks (`toggleableTimestamps`) — which
+  swaps only the brackets, both halves of a range together, as `org-toggle-timestamp-type` does.
+- **Tap a date**: any timestamp with a real date opens its day in the calendar, active or inactive —
+  an inactive date is not in the calendar, but what else happened that day is.
 - **Tap a table**: the grid editor ([09](09-element-editing.md#tables)).
 
 Rescheduling is done in the editor rather than by a swipe: with the caret on a `SCHEDULED:` or
@@ -282,11 +287,12 @@ Triggers, all derived from the current line — and the one above, for a plannin
 | after an empty `#+DATE:` | today as an inactive stamp, as org-roam dates a note |
 | after `:LOCATION:` | places the notes already name, most named first |
 | `[[` | notes — by `id:` when the note has an `:ID:`, else a `file:` path relative to this note, described by its title — then headings in the current document |
-| `<` in body text | active timestamp for today; `[` for inactive |
+| `<` in body text | active timestamp for today, then the picker; `[` for inactive, and the picker keeps the `[` — the way to an inactive stamp on another day, with no button of its own |
+| caret on a stamp in the text (not a planning line) | the picker, opened on that stamp, then **Make inactive** / **Make active** (`STAMP_TOGGLE`, labelled by the strip in the reader's language); a range toggles whole |
 | `<s`, `<q`, `<e` at line start | structure templates (src/quote/example blocks), Org's `org-tempo` convention |
 
 Being pure functions of `(document, cursor, context)`, every row above is a unit test with
-no UI involved — 41 of them in `OrgCompleteTests`, plus `CompletionContextTest` (6) for how the
+no UI involved — 47 of them in `OrgCompleteTests`, plus `CompletionContextTest` (6) for how the
 context is built and `CompletionEditingTest` (17) for accepting, the keyboard, the picker and the
 insert buttons. The rules are tried in a fixed order, which is what keeps `[[` a link rather than a
 bracket and `<s` a template rather than a timestamp; inside a block's body nothing is offered at all,

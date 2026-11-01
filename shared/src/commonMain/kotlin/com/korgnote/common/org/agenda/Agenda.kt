@@ -190,8 +190,15 @@ fun agendaEntries(path: String, text: String, fallback: OrgTodoConfig = DEFAULT_
 /**
  * Calls [action] for each line of [element] that can carry a stamp: the heading line and body lines
  * outside blocks and drawers.
+ *
+ * [startsWithHeading] is false for the text before a file's first heading, whose first line is an
+ * ordinary line — perhaps the start of a drawer — rather than a heading.
  */
-private inline fun forEachStampedLine(element: String, action: (lineStart: Int, line: String, isHeadingLine: Boolean) -> Unit) {
+internal inline fun forEachStampedLine(
+    element: String,
+    startsWithHeading: Boolean = true,
+    action: (lineStart: Int, line: String, isHeadingLine: Boolean) -> Unit,
+) {
     var blockType: String? = null
     var inDrawer = false
     var lineStart = 0
@@ -201,7 +208,7 @@ private inline fun forEachStampedLine(element: String, action: (lineStart: Int, 
         val lineEnd = if (newline < 0) element.length else newline
         val line = element.substring(lineStart, lineEnd)
         when {
-            first -> action(lineStart, line, true)
+            first && startsWithHeading -> action(lineStart, line, true)
             blockType != null -> {
                 val end = OrgSyntax.blockEnd.find(line)
                 if (end != null && (end.groupValues[1].isEmpty() || end.groupValues[1].equals(blockType, ignoreCase = true))) {

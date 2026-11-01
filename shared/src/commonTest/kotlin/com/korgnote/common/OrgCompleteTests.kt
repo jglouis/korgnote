@@ -183,9 +183,54 @@ class OrgCompleteTests {
     }
 
     @Test
-    fun aStampOutsideAPlanningLineIsLeftAlone() {
-        assertTrue(completeAt("* Buy milk\nCall the shop <2026-09-23 Wed>‸").isEmpty())
+    fun aClosedStampIsLeftAlone() {
+        // Inactive by definition, and written by marking the entry done.
         assertTrue(completeAt("* DONE Buy milk\nCLOSED: [2026-09-23 Wed 10:00]‸").isEmpty())
+    }
+
+    // --- Row 3c: a stamp in the text ----------------------------------------------------------------
+
+    @Test
+    fun aStampInTheTextOffersThePickerAndTheToggle() {
+        val fixture = "* Buy milk\nCall the shop <2026-09-23 Wed 10:00>‸"
+        val items = completeAt(fixture)
+        assertEquals(listOf(CompletionItem.Kind.DATE_PICKER, CompletionItem.Kind.STAMP_TOGGLE), items.map { it.kind })
+        assertEquals("Make inactive", items.last().label)
+        assertEquals("* Buy milk\nCall the shop [2026-09-23 Wed 10:00]‸", apply(fixture, items.last()))
+        // The picker stands in for the whole stamp.
+        assertEquals(
+            "* Buy milk\nCall the shop <2026-12-24 Thu>",
+            items.first().applyTo("* Buy milk\nCall the shop <2026-09-23 Wed 10:00>", "<2026-12-24 Thu>").text,
+        )
+    }
+
+    @Test
+    fun anInactiveStampToggledBecomesActive() {
+        val fixture = "- Called the shop [2026-09-‸23 Wed +1w]"
+        val toggle = completeAt(fixture).single { it.kind == CompletionItem.Kind.STAMP_TOGGLE }
+        assertEquals("Make active", toggle.label)
+        assertEquals("- Called the shop <2026-09-23 Wed +1w>‸", apply(fixture, toggle))
+    }
+
+    @Test
+    fun aRangeTogglesWhole() {
+        val fixture = "Away <2026-12-19 Sat>‸--<2026-12-26 Sat> for the holidays"
+        val items = completeAt(fixture)
+        val toggle = items.single { it.kind == CompletionItem.Kind.STAMP_TOGGLE }
+        assertEquals("Away [2026-12-19 Sat]--[2026-12-26 Sat]‸ for the holidays", apply(fixture, toggle))
+        // The picker changes the half the caret is on.
+        val picker = items.single { it.kind == CompletionItem.Kind.DATE_PICKER }
+        assertEquals("<2026-12-19 Sat>", fixture.replace("‸", "").substring(picker.replace))
+    }
+
+    @Test
+    fun aStampInAHeadingOffersTheToggle() {
+        assertTrue(completeAt("* Dentist <2026-09-23 Wed>‸").any { it.kind == CompletionItem.Kind.STAMP_TOGGLE })
+    }
+
+    @Test
+    fun theCaretPastAStampOffersNothingForIt() {
+        assertTrue(completeAt("Call the shop <2026-09-23 Wed> ‸").isEmpty())
     }
 
     @Test
@@ -324,7 +369,7 @@ class OrgCompleteTests {
     @Test
     fun offersTodayForAnAngleBracket() {
         val fixture = "Met them on <‸"
-        val item = completeAt(fixture).single()
+        val item = completeAt(fixture).first()
         assertEquals("<2026-09-23 Wed>", item.label)
         assertEquals("Met them on <2026-09-23 Wed>‸", apply(fixture, item))
     }
@@ -332,8 +377,21 @@ class OrgCompleteTests {
     @Test
     fun aSquareBracketGivesTheInactiveForm() {
         val fixture = "Met them on [‸"
-        val item = completeAt(fixture).single()
+        val item = completeAt(fixture).first()
         assertEquals("Met them on [2026-09-23 Wed]‸", apply(fixture, item))
+    }
+
+    @Test
+    fun aBracketAlsoOffersThePickerWhichKeepsTheBracket() {
+        for (opener in listOf("<", "[")) {
+            val fixture = "Met them on $opener‸"
+            val picker = completeAt(fixture).last()
+            assertEquals(CompletionItem.Kind.DATE_PICKER, picker.kind)
+            val written = fixture.replace("‸", "").substring(picker.replace)
+            assertEquals(opener, written)
+            val stamp = restamp(written, LocalDate(2026, 12, 24), LocalTime(9, 30))
+            assertEquals(if (opener == "<") "<2026-12-24 Thu 09:30>" else "[2026-12-24 Thu 09:30]", stamp)
+        }
     }
 
     // --- Row 8: org-tempo structure templates -------------------------------------------------------------
@@ -348,7 +406,7 @@ class OrgCompleteTests {
     /** `<s` is a template only at the start of a line; mid-sentence it is a timestamp. */
     @Test
     fun aTemplateLetterMidLineIsNotATemplate() {
-        assertContentEquals(listOf("<2026-09-23 Wed>"), completeAt("Met them on <‸").map { it.label })
+        assertEquals(CompletionItem.Kind.TIMESTAMP, completeAt("Met them on <‸").first().kind)
     }
 
     // --- What must not fire --------------------------------------------------------------------------------
