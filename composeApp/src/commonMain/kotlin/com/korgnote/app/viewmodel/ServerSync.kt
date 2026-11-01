@@ -198,8 +198,12 @@ class ServerSync(
     /**
      * Pushes what just changed, if the server can be reached; offline, it waits for the next sync.
      * No message either way: a created, renamed or deleted note needs none to say it was sent.
+     *
+     * The caller has shown its change already, so the replica is shown again only when the sync
+     * moved it: rebuilt after every push, it scanned every note a second time for nothing.
      */
-    override suspend fun pushQuietly() = catchUp("Sync after a file change", onFailure = background::whenOnline)
+    override suspend fun pushQuietly() =
+        catchUp("Sync after a file change", onFailure = background::whenOnline, onlyWhenMoved = true)
 
     /**
      * Catches up with changes made while the app was away. The stream may have been cut meanwhile
@@ -216,16 +220,18 @@ class ServerSync(
 
     /**
      * One sync, with no message either way, then shows what the replica holds; marks the server
-     * [unreachable] when it cannot be reached.
+     * [unreachable] when it cannot be reached. With [onlyWhenMoved], it shows it only when the sync
+     * changed what it holds.
      *
      * Not runCatching: it would swallow cancellation, and keep a loop alive after the view model is
      * gone.
      */
-    private suspend fun catchUp(what: String, onFailure: () -> Unit = {}) {
+    private suspend fun catchUp(what: String, onFailure: () -> Unit = {}, onlyWhenMoved: Boolean = false) {
         try {
-            reportConflicts(syncOnce())
+            val report = syncOnce()
+            reportConflicts(report)
             unreachable = null
-            onReplicaChanged()
+            if (!onlyWhenMoved || report.replicaMoved) onReplicaChanged()
         } catch (t: Throwable) {
             currentCoroutineContext().ensureActive()
             unreachable = reason(t)

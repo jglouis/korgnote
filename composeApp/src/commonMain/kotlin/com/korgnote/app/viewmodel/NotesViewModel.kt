@@ -761,13 +761,23 @@ class NotesViewModel(
         )
     }
 
+    /**
+     * Opens a note just written to the replica at its first heading, then pushes it.
+     *
+     * Only what opening needs is waited for: the note read into the library. The links, agenda
+     * and search are rebuilt a moment later, as for a tick, since a note with nothing in it yet
+     * changes none of them; and the push goes on behind, since the note exists here whether or not
+     * the server hears of it. Awaited, the two held the new-note dialog open for a sync round trip
+     * and two scans of every note.
+     */
     private suspend fun openNewNote(path: String) {
         editor.cancel()
         note.path = path
-        showFromReplica()
+        library.reload(parseOn = background)
+        refreshDerivedViewsSoon()
         openAndWait(path)
         editor.addAtEnd()
-        server.pushQuietly()
+        viewModelScope.launch { server.pushQuietly() }
     }
 
     /**

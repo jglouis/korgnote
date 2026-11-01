@@ -8,6 +8,7 @@ import com.korgnote.common.org.edit.FileKeywords
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -45,6 +46,8 @@ class NoteLifecycleTest {
             newNotesFolder = { inbox },
             noteTemplate = { NoteTemplateSettings(author = "Me", extraHeader = "#+STARTUP: overview") },
             newId = { "id-1" },
+            // A new note's scans are put off; run here, they come back to the test's main thread.
+            background = Dispatchers.Unconfined,
         )
     }
 
@@ -77,6 +80,22 @@ class NoteLifecycleTest {
         viewModel.editor.onDraftChanged("* TODO Ask about the boiler\n")
         viewModel.editor.commit()
         assertEquals(head + "* TODO Ask about the boiler\n", server.files[path])
+    }
+
+    @Test
+    fun aNewNoteOpensWithoutWaitingForTheServer() = runTest {
+        viewModel.server.load()
+        val slow = CompletableDeferred<Unit>()
+        server.answerManifest = slow
+
+        val path = viewModel.createNote("Slow server")
+
+        assertEquals("Selected: $path", viewModel.note.label, "open while the push is still out")
+        assertEquals(1, viewModel.editor.editingIndex)
+        assertNull(server.files[path])
+
+        slow.complete(Unit)
+        assertTrue(server.files[path]!!.contains("#+TITLE: Slow server\n"), "and pushed once it answers")
     }
 
     @Test

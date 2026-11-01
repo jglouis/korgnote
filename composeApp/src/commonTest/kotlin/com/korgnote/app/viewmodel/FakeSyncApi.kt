@@ -6,6 +6,7 @@ import com.korgnote.common.replica.RemoteEntry
 import com.korgnote.common.replica.RemoteFile
 import com.korgnote.common.replica.RemoteManifest
 import com.korgnote.common.replica.SyncApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 
 /** A stand-in server for the view-model tests: a map of files with etags derived from content. */
@@ -22,8 +23,12 @@ class FakeSyncApi(val files: MutableMap<String, String> = mutableMapOf()) : Sync
 
     var manifestRequests = 0
 
+    /** When set, a sync waits here before it is answered: a slow server. */
+    var answerManifest: CompletableDeferred<Unit>? = null
+
     override suspend fun manifest(since: Long?): RemoteManifest {
         manifestRequests++
+        answerManifest?.await()
         requireOnline()
         return RemoteManifest(
             generation = generation,
