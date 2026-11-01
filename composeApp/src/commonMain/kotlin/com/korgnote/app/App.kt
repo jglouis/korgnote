@@ -838,6 +838,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                             }
                                         },
                                         onRefileSection = { index -> refiling = index to vm.refileTargets(index) },
+                                        onSetPriority = { offset, priority -> vm.setPriorityAt(offset, priority, scope) },
                                         foldedElements = vm.folds.folded,
                                         onToggleFold = { vm.folds.toggle(it) },
                                         scrollToElementIndex = vm.note.scrollToElementIndex,

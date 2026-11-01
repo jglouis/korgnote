@@ -4,6 +4,7 @@ import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.orgHeadingOf
+import com.korgnote.common.org.prioritiesOf
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.todoKeywordsOf
 import com.korgnote.common.org.search.fileTagsOf
@@ -57,6 +58,11 @@ data class AgendaEntry(
     /** The heading's own tags, then those it inherits from its parents and from `#+FILETAGS:`. */
     val tags: List<String>,
     val priority: Char?,
+    /**
+     * Where [priority] stands against its file's default — see [com.korgnote.common.org.OrgPriorities.orderOf]
+     * — so that a day's entries can put the important first, as Org's agenda does.
+     */
+    val priorityOrder: Int = 0,
     val kind: AgendaKind,
     val stamp: OrgTimestamp,
 )
@@ -131,6 +137,7 @@ fun agendaEntries(path: String, text: String, fallback: OrgTodoConfig = DEFAULT_
     if (!OrgSyntax.timestamp.containsMatchIn(text)) return emptyList()
 
     val todoConfig = todoKeywordsOf(text, fallback)
+    val priorities = prioritiesOf(text)
     val fileTags = fileTagsOf(text)
     /** A heading above the current one: its level, its own tags, and whether it is commented out. */
     data class Ancestor(val level: Int, val tags: List<String>, val commented: Boolean)
@@ -158,6 +165,7 @@ fun agendaEntries(path: String, text: String, fallback: OrgTodoConfig = DEFAULT_
             done = keyword != null && keyword in todoConfig.done,
             tags = tags,
             priority = heading.priority,
+            priorityOrder = priorities.orderOf(heading.priority),
             kind = kind,
             stamp = stamp,
         )
@@ -250,7 +258,8 @@ fun agenda(files: Map<String, String>, from: LocalDate, to: LocalDate, options: 
 
 /**
  * Every occurrence of these entries between [from] and [to], both inclusive, ordered by date, then
- * all-day before timed, then by time, then by file and position.
+ * all-day before timed, then by time, then by priority — most important first, a heading without
+ * one counting as its file's default — then by file and position: Org's `time-up priority-down`.
  */
 fun List<AgendaEntry>.occurrences(from: LocalDate, to: LocalDate, options: AgendaOptions): List<AgendaOccurrence> {
     if (to < from) return emptyList()
@@ -260,6 +269,7 @@ fun List<AgendaEntry>.occurrences(from: LocalDate, to: LocalDate, options: Agend
         compareBy<AgendaOccurrence> { it.date }
             .thenBy { it.time != null }
             .thenBy { it.time }
+            .thenBy { it.entry.priorityOrder }
             .thenBy { it.entry.file }
             .thenBy { it.entry.stamp.range.first },
     )

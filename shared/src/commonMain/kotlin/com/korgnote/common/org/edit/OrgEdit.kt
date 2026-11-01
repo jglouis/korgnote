@@ -166,6 +166,35 @@ fun OrgDocument.setTodo(heading: OrgSection, keyword: String?): OrgDocument {
 }
 
 /**
+ * Sets [heading]'s priority cookie, `[#A]`, or removes it when [priority] is null — as Org's
+ * `C-c ,` does: the cookie goes after the TODO keyword, or first in the title when there is none,
+ * and only the cookie and the space after it change.
+ */
+fun OrgDocument.setPriority(heading: OrgSection, priority: Char?): OrgDocument {
+    val parts = headingPartsOf(heading) ?: return this
+    // Where the cookie is, or goes: after the keyword and its space, else right after the stars.
+    var at = parts.todo?.let { it.last + 1 } ?: parts.afterStars
+    if (parts.todo != null) while (at < parts.lineEnd && text[at] == ' ') at++
+    val existing = OrgSyntax.priority.find(text.substring(at, parts.lineEnd))?.let { at until (at + it.value.length) }
+    val cookie = priority?.let { "[#$it]" }
+    return when {
+        existing != null && cookie != null -> replace(existing, cookie)
+        // Take the space after it too, so removing a cookie does not leave a double space.
+        existing != null -> {
+            val end = if (existing.last + 1 < parts.lineEnd && text[existing.last + 1] == ' ') existing.last + 1 else existing.last
+            replace(existing.first..end, "")
+        }
+        cookie != null -> {
+            // A heading that is only its keyword, `* TODO`, has no space after it to write into.
+            val before = if (at > 0 && text[at - 1] != ' ') " " else ""
+            val after = if (at < parts.lineEnd && text[at] != ' ') " " else ""
+            replace(at until at, before + cookie + after)
+        }
+        else -> this
+    }
+}
+
+/**
  * Advances [heading] to the next TODO keyword: through the not-done keywords, then the done ones,
  * then back to no keyword at all — the cycle Org itself uses.
  */

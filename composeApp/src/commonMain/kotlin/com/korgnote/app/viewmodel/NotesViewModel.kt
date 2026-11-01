@@ -84,6 +84,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+import com.korgnote.common.org.edit.setPriority
 
 /**
  * The app's notes, and everything shown about them.
@@ -432,6 +433,23 @@ class NotesViewModel(
         val updated = note.content.withTimestampToggledAt(offsetInDocument) ?: return
         note.content = updated
         library.put(file, updated.toOrgDocument(library.fallbackKeywords))
+        refreshDerivedViews()
+
+        scope?.launch { server.push(writeFirst = { store.save(file, note.content) }) }
+    }
+
+    /**
+     * Sets the priority of the heading at [offsetInDocument] — `[#A]` — or removes it when
+     * [priority] is null, as Org's `C-c ,` does; saved and pushed as [setTodoAt] saves a keyword.
+     */
+    fun setPriorityAt(offsetInDocument: Int, priority: Char?, scope: CoroutineScope? = null) {
+        val file = note.path ?: return
+        val document = note.content.toOrgDocument(library.fallbackKeywords)
+        val heading = document.nodeAt<OrgSection>(offsetInDocument) ?: return
+        val updated = document.setPriority(heading, priority)
+        if (updated.text == document.text) return
+        note.content = updated.text
+        library.put(file, updated)
         refreshDerivedViews()
 
         scope?.launch { server.push(writeFirst = { store.save(file, note.content) }) }

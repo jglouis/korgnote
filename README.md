@@ -36,7 +36,8 @@ phone: your notes are your calendar, and there is no separate one to keep in syn
 - **Editing.** Tap a heading to edit it, with suggestions above the keyboard for keywords, tags,
   dates and links. Long-press it to move, promote, demote or delete it, or to refile it under a
   heading in any note, as Org's `C-c C-w` does.
-- **Tasks.** Change TODO states from a menu. Repeating tasks move to their next date when done.
+- **Tasks.** Change TODO states and priorities from a menu. Repeating tasks move to their next date
+  when done. The agenda puts the most important first, within a time.
 - **Tables.** Edit them as a grid. `#+TBLFM` formulas are computed the same way as in Emacs.
 - **Links.** `id:`, `file:`, headings and custom IDs, with backlinks. New notes and daily notes are
   made the way org-roam makes them.
@@ -58,7 +59,8 @@ kept exactly as written and shown as plain text, so your files are never changed
   left out of the agenda.
 - **Agenda queries.** Search takes words, tags (with `#+TAGS:` groups), `todo:` and `priority:`.
   Org's match syntax (`+work-boss/NEXT`), property searches and custom agenda views are not there.
-- **Priorities.** Shown but not editable, and only one character: `[#A]` to `[#Z]`, `[#0]` to `[#9]`.
+- **Priorities above `[#9]`.** A priority is one character, `[#A]` to `[#Z]` or `[#0]` to `[#9]`;
+  Org's `[#10]` to `[#64]` are read as text.
 - **Diary dates.** `<%%(diary-float t 4 3)>` and other diary expressions don't appear in the agenda.
 - **Some structure.** Paragraphs or blocks indented under a list item, multi-paragraph footnotes,
   inline tasks, and `#+STARTUP:` folding (`overview`, `content`).

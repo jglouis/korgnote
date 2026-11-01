@@ -163,7 +163,8 @@ suspend fun AgendaStatus.text(): String = words.let { (text, days) ->
 /**
  * The order entries are stacked in a cell or the all-day strip: multi-day ranges first, in the same
  * order on every day so each keeps its row and reads as one bar; then what matters most when there
- * is room for only a few — deadlines, then scheduled work, then appointments — and then by time.
+ * is room for only a few — deadlines, then scheduled work, then appointments — and then by time,
+ * then by priority.
  */
 private val KIND_ORDER = listOf(AgendaKind.Deadline, AgendaKind.Scheduled, AgendaKind.Timestamp, AgendaKind.Closed)
 
@@ -172,6 +173,7 @@ private val chipOrder = compareBy<AgendaOccurrence>(
     { if (it.span != DaySpan.Single) it.entry.stamp.start.toEpochDays() else 0L },
     { KIND_ORDER.indexOf(it.entry.kind) },
     { it.time?.let { t -> t.hour * 60 + t.minute } ?: -1 },
+    { it.entry.priorityOrder },
     { it.entry.file },
     { it.entry.stamp.range.first },
 )

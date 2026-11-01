@@ -81,6 +81,10 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Duration.Companion.milliseconds
+import androidx.compose.runtime.CompositionLocalProvider
+import com.korgnote.common.org.orgHeadingOf
+import com.korgnote.common.org.prioritiesOf
+import korgnote.composeapp.generated.resources.editor_priority
 
 /**
  * Reading view of a whole document, rendered one editable element at a time.
@@ -123,6 +127,8 @@ fun OrgDocumentView(
     onShiftSection: ((elementIndex: Int, delta: Int) -> Unit)? = null,
     /** From the long-press menu: the heading and its subtree to another heading or note, chosen next. */
     onRefileSection: ((elementIndex: Int) -> Unit)? = null,
+    /** A priority picked for the heading at an offset in [text], or null to remove it. */
+    onSetPriority: ((offsetInDocument: Int, priority: Char?) -> Unit)? = null,
     /**
      * From the long-press menu: the stamp beginning at this offset in [text] made inactive when it
      * is active, and active when it is not.
@@ -170,6 +176,9 @@ fun OrgDocumentView(
     val guideColor = MaterialTheme.colorScheme.outlineVariant
     // The heading a delete is waiting to be confirmed for.
     var confirmingDelete by remember { mutableStateOf<Int?>(null) }
+    /** The heading whose priority is being chosen from its long-press menu, by element index. */
+    var choosingPriority by remember { mutableStateOf<Int?>(null) }
+    val priorities = remember(text) { prioritiesOf(text) }
     // The element a jump just landed on — a link, a search hit, an agenda entry, Back — lit for a
     // moment so the eye finds it among its neighbours. A new [Landing] each time, so landing on
     // the same element twice lights it twice.
@@ -261,6 +270,12 @@ fun OrgDocumentView(
                             // Folded, only the heading line shows, as `org-cycle` leaves it.
                             val shown = if (folded) slice.substringBefore('\n') else slice
                             val document = remember(shown, todoKeywords) { shown.toOrgDocument(todoKeywords) }
+                            val priorityEditing = remember(onSetPriority, priorities, element.start) {
+                                onSetPriority?.let { set ->
+                                    PriorityEditing(priorities) { heading, priority -> set(element.start + heading.range.first, priority) }
+                                }
+                            }
+                            CompositionLocalProvider(LocalPriorityEditing provides priorityEditing) {
                             OrgText(
                                 content = document,
                                 todoKeywords = todoKeywords,
@@ -277,6 +292,7 @@ fun OrgDocumentView(
                                     { table -> edit(element.start + table.range.first) }
                                 },
                             )
+                            }
                             // Only what is shown: a folded heading's body is not there to be changed.
                             val stamps = remember(shown) { shown.toggleableTimestamps().take(MAX_MENU_STAMPS) }
                             ElementMenu(
@@ -299,7 +315,19 @@ fun OrgDocumentView(
                                     ?.let { shift -> { shift(index, -1) } },
                                 onDemote = onShiftSection?.let { shift -> { shift(index, 1) } },
                                 onRefile = onRefileSection?.let { refile -> { refile(index) } },
+                                onPriority = onSetPriority?.let { { choosingPriority = index } },
                             )
+                            // From the long-press menu: the same choices as a tap on the cookie, for
+                            // a heading that has none yet to tap.
+                            if (choosingPriority == index && onSetPriority != null) {
+                                PriorityMenu(
+                                    expanded = true,
+                                    current = orgHeadingOf(slice.substringBefore('\n'), todoKeywords).priority,
+                                    priorities = priorities,
+                                    onPick = { priority -> choosingPriority = null; onSetPriority(element.start, priority) },
+                                    onDismiss = { choosingPriority = null },
+                                )
+                            }
                         }
                         if (editDetails != null && element.isPreamble) NoteDetailsButton(editDetails)
                         if (foldable && onToggleFold != null) {
@@ -493,6 +521,7 @@ private fun ElementMenu(
     onPromote: (() -> Unit)?,
     onDemote: (() -> Unit)?,
     onRefile: (() -> Unit)?,
+    onPriority: (() -> Unit)?,
 ) {
     @Composable
     fun Item(label: String, action: (() -> Unit)?) = DropdownMenuItem(
@@ -530,6 +559,7 @@ private fun ElementMenu(
             Item(stringResource(Res.string.editor_demote), onDemote)
             // Out of this place entirely, `C-c C-w`: under a heading here or in another note.
             if (onRefile != null) Item(stringResource(Res.string.editor_refile), onRefile)
+            if (onPriority != null) Item(stringResource(Res.string.editor_priority), onPriority)
         }
         if (onDelete != null && !isPreamble) {
             HorizontalDivider()

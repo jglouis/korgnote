@@ -52,6 +52,9 @@
     <string name="editor_progress_done">%1$s done</string>
     <string name="editor_current_keyword">Current keyword</string>
     <string name="editor_no_keyword">No keyword</string>
+    <string name="editor_priority">Priority…</string>
+    <string name="editor_current_priority">Current priority</string>
+    <string name="editor_no_priority">No priority</string>
     <string name="editor_keywords">Keywords: %1$s</string>
     <string name="editor_keywords_with_done">Keywords: %1$s, done: %2$s</string>
     <string name="editor_expand_drawer">Expand drawer</string>

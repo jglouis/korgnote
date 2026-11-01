@@ -110,6 +110,10 @@ import korgnote.composeapp.generated.resources.editor_show_on_map
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.runtime.compositionLocalOf
+import com.korgnote.common.org.OrgPriorities
+import korgnote.composeapp.generated.resources.editor_current_priority
+import korgnote.composeapp.generated.resources.editor_no_priority
 
 
 
@@ -345,6 +349,14 @@ private fun RenderNode(
     }
 }
 
+/**
+ * Choosing a heading's priority, where it can be: the file's priorities, and what to do with the
+ * one picked. Provided around a note's headings rather than handed down through every node.
+ */
+class PriorityEditing(val priorities: OrgPriorities, val onSet: (heading: OrgSection, priority: Char?) -> Unit)
+
+val LocalPriorityEditing = compositionLocalOf<PriorityEditing?> { null }
+
 @Composable
 private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: ((OrgSection, String?) -> Unit)?) {
     val typography = MaterialTheme.typography
@@ -356,6 +368,8 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: (
     }
     val style = base.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
     var picking by remember { mutableStateOf(false) }
+    var pickingPriority by remember { mutableStateOf(false) }
+    val priorityEditing = LocalPriorityEditing.current
     // A filled-in `[2/5]` or `[40%]` is drawn as a bar beside the title rather than as text in it.
     val progress = remember(node.title) {
         STATISTICS_COOKIE.find(node.title)?.let { cookie -> progressOf(cookie)?.let { cookie to it } }
@@ -388,7 +402,18 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: (
                 var title = progress?.let { (cookie, _) -> node.title.removeRange(cookie.range).replace("  ", " ").trim() }
                     ?: node.title
                 OrgSyntax.priority.find(title)?.let { prio ->
-                    withStyle(SpanStyle(color = OrgColors.priority)) { append(prio.value) }
+                    val priorityStyle = SpanStyle(color = OrgColors.priority)
+                    // Like the keyword, a link of its own: a tap picks another priority.
+                    if (priorityEditing != null) {
+                        val pick = LinkAnnotation.Clickable(
+                            tag = PRIORITY_TAG,
+                            styles = TextLinkStyles(style = priorityStyle),
+                            linkInteractionListener = { pickingPriority = true },
+                        )
+                        withLink(pick) { append(prio.value) }
+                    } else {
+                        withStyle(priorityStyle) { append(prio.value) }
+                    }
                     title = title.substring(prio.value.length)
                 }
                 appendOrgInline(title, viewMode = true)
@@ -416,6 +441,18 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: (
                     )
                 }
             }
+        }
+        if (priorityEditing != null) {
+            PriorityMenu(
+                expanded = pickingPriority,
+                current = node.priority,
+                priorities = priorityEditing.priorities,
+                onPick = { priority ->
+                    pickingPriority = false
+                    if (priority != node.priority) priorityEditing.onSet(node, priority)
+                },
+                onDismiss = { pickingPriority = false },
+            )
         }
         if (onSetTodo != null) {
             TodoKeywordMenu(
@@ -482,6 +519,36 @@ internal fun OrgSection.location(): String? =
  * The keywords a heading can move to, in the order the file declares them: the not-done ones, then
  * the done ones, then none at all. The current one is checked, and picking it changes nothing.
  */
+/** The file's priorities, most important first, then none; the heading's own is ticked. */
+@Composable
+fun PriorityMenu(
+    expanded: Boolean,
+    current: Char?,
+    priorities: OrgPriorities,
+    onPick: (priority: Char?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        for (priority in priorities.range) {
+            DropdownMenuItem(
+                text = { Text("[#$priority]", color = OrgColors.priority, fontWeight = FontWeight.Bold) },
+                trailingIcon = if (priority == current) {
+                    { Icon(Icons.Filled.Check, contentDescription = stringResource(Res.string.editor_current_priority)) }
+                } else null,
+                onClick = { onPick(priority) },
+            )
+        }
+        HorizontalDivider()
+        DropdownMenuItem(
+            text = { Text(stringResource(Res.string.editor_no_priority)) },
+            trailingIcon = if (current == null) {
+                { Icon(Icons.Filled.Check, contentDescription = stringResource(Res.string.editor_current_priority)) }
+            } else null,
+            onClick = { onPick(null) },
+        )
+    }
+}
+
 @Composable
 private fun TodoKeywordMenu(
     expanded: Boolean,
@@ -510,6 +577,9 @@ private fun TodoKeywordMenu(
 
 /** The link annotation on a heading's TODO keyword, which offers the other keywords when tapped. */
 internal const val TODO_KEYWORD_TAG = "todo-keyword"
+
+/** The tag of the link a heading's priority cookie is drawn as. */
+private const val PRIORITY_TAG = "priority"
 
 /**
  * A heading's tags as chips, the way the reading view shows them, for the places that list

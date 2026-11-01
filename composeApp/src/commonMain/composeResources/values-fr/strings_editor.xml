@@ -49,6 +49,9 @@
     <string name="editor_progress_done">%1$s terminé</string>
     <string name="editor_current_keyword">Mot-clé actuel</string>
     <string name="editor_no_keyword">Aucun mot-clé</string>
+    <string name="editor_priority">Priorité…</string>
+    <string name="editor_current_priority">Priorité actuelle</string>
+    <string name="editor_no_priority">Aucune priorité</string>
     <string name="editor_keywords">Mots-clés : %1$s</string>
     <string name="editor_keywords_with_done">Mots-clés : %1$s, terminés : %2$s</string>
     <string name="editor_expand_drawer">Déplier le tiroir</string>
