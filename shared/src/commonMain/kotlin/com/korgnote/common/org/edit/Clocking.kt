@@ -67,6 +67,19 @@ fun OrgDocument.runningClocks(): List<RunningClock> =
         clocksOf(heading).filter { it.isRunning }.map { RunningClock(heading.range.first, heading.title, it.start) }
     }
 
+/** A heading clocked before, by where it starts, and when its last clock stopped. */
+data class LastClocked(val headingStart: Int, val title: String, val end: LocalDateTime)
+
+/**
+ * Every heading in this document with a stopped clock, and the latest of its stops: what Emacs's
+ * clock history offers to clock back into.
+ */
+fun OrgDocument.lastClocked(): List<LastClocked> =
+    allNodes().filterIsInstance<OrgSection>().mapNotNull { heading ->
+        val end = clocksOf(heading).mapNotNull { it.end }.maxOrNull() ?: return@mapNotNull null
+        LastClocked(heading.range.first, heading.title, end)
+    }
+
 /** The heading's `:Effort:` property, as written (`1:30`, `2h`), or null when it has none. */
 val OrgSection.effort: String?
     get() = children.filterIsInstance<OrgDrawer>()

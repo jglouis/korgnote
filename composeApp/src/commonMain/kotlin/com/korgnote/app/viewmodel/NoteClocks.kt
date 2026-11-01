@@ -3,11 +3,18 @@ package com.korgnote.app.viewmodel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.korgnote.common.org.edit.lastClocked
 import com.korgnote.common.org.edit.runningClocks
 import kotlinx.datetime.LocalDateTime
 
 /** A clock running in one of the notes: in which, on which heading, and since when. */
 data class ClockRunning(val path: String, val headingStart: Int, val title: String, val start: LocalDateTime)
+
+/** A heading clocked before, to clock back into: in which note, where, and when its clock last stopped. */
+data class ClockRecent(val path: String, val headingStart: Int, val title: String, val end: LocalDateTime)
+
+/** How many recently clocked headings are offered to clock back into. */
+const val RECENT_CLOCKS = 5
 
 /**
  * Where the running clock is shown outside the app: Android's ongoing notification, or nowhere.
@@ -36,12 +43,26 @@ class NoteClocks(
     var running: List<ClockRunning> by mutableStateOf(emptyList())
         private set
 
+    /**
+     * The headings clocked most recently, the latest stop first, as many as [RECENT_CLOCKS]: Emacs's
+     * clock history, read from the notes, so a task clocked in Emacs is there too. A heading whose
+     * clock runs now is left out.
+     */
+    var recent: List<ClockRecent> by mutableStateOf(emptyList())
+        private set
+
     /** Reads the clocks again from the notes as they stand; cheap, since few notes hold any. */
     fun refresh() {
-        val found = library.documents.flatMap { (path, doc) ->
-            if (!doc.text.contains("CLOCK:")) emptyList()
-            else doc.runningClocks().map { ClockRunning(path, it.headingStart, it.title, it.start) }
+        val clocked = library.documents.filter { (_, doc) -> doc.text.contains("CLOCK:") }
+        val found = clocked.flatMap { (path, doc) ->
+            doc.runningClocks().map { ClockRunning(path, it.headingStart, it.title, it.start) }
         }.sortedWith(compareByDescending<ClockRunning> { it.start }.thenBy { it.path })
+        val runningOn = found.map { it.path to it.headingStart }.toSet()
+        recent = clocked.flatMap { (path, doc) ->
+            doc.lastClocked().map { ClockRecent(path, it.headingStart, it.title, it.end) }
+        }.filter { (it.path to it.headingStart) !in runningOn }
+            .sortedWith(compareByDescending<ClockRecent> { it.end }.thenBy { it.path })
+            .take(RECENT_CLOCKS)
         // The first time whatever it finds: a notification left from before the app last closed
         // may describe a clock stopped since, in Emacs or on another device.
         if (found != running || !told) {

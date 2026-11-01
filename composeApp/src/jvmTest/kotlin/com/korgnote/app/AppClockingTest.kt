@@ -87,5 +87,12 @@ class AppClockingTest {
         waitUntil(timeoutMillis = 5_000) { viewModel.clocks.running.isEmpty() }
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("1\u00A0h\u00A045 / 2\u00A0h clocked").fetchSemanticsNodes().isNotEmpty() }
         assertEquals(true, viewModel.note.content.contains("CLOCK: [2026-11-01 Sun 09:30]--[2026-11-01 Sun 10:15] =>  0:45\n"))
+
+        // Stopped a moment ago: the bar offers to clock back in.
+        onNodeWithText("Stopped at 10:15").assertExists()
+        time = LocalDateTime(2026, 11, 1, 10, 30)
+        onNodeWithContentDescription("Clock back in").performClick()
+        waitUntil(timeoutMillis = 5_000) { viewModel.clocks.running.isNotEmpty() }
+        assertEquals(true, viewModel.note.content.contains(":LOGBOOK:\nCLOCK: [2026-11-01 Sun 10:30]\n"))
     }
 }

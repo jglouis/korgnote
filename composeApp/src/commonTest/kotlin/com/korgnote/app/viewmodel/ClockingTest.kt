@@ -121,4 +121,26 @@ class ClockingTest {
 
         assertEquals("* Report\n* Review\n", repository.files[work])
     }
+
+    @Test
+    fun theRecentTasksAreTheLatestStoppedFirstWithoutTheOneRunning() = runTest {
+        viewModel.server.load()
+        viewModel.onFileSelected(work)
+        // Report, then Review: Garden was stopped by the first, Report by the second.
+        viewModel.clockInAt(0)
+        advanceUntilIdle()
+        time = LocalDateTime(2026, 11, 1, 10, 0)
+        viewModel.clockInAt(viewModel.note.content.indexOf("* Review"))
+        advanceUntilIdle()
+
+        assertEquals(listOf("Report", "Garden"), viewModel.clocks.recent.map { it.title })
+
+        // Back to the task the interruption took over from.
+        time = LocalDateTime(2026, 11, 1, 10, 20)
+        val report = viewModel.clocks.recent.first()
+        viewModel.clockIn(report.path, report.headingStart)
+        advanceUntilIdle()
+        assertEquals(listOf("Report"), viewModel.clocks.running.map { it.title })
+        assertEquals(listOf("Review", "Garden"), viewModel.clocks.recent.map { it.title })
+    }
 }

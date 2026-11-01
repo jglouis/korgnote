@@ -8,8 +8,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TimerOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -32,10 +36,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.korgnote.app.viewmodel.ClockRecent
 import com.korgnote.app.viewmodel.ClockRunning
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.cancel
+import korgnote.composeapp.generated.resources.clock_back_in
 import korgnote.composeapp.generated.resources.clock_cancel
+import korgnote.composeapp.generated.resources.clock_recent
+import korgnote.composeapp.generated.resources.clock_stopped_at
+import korgnote.composeapp.generated.resources.clock_switch
 import korgnote.composeapp.generated.resources.clock_hours
 import korgnote.composeapp.generated.resources.clock_hours_minutes
 import korgnote.composeapp.generated.resources.clock_left_running
@@ -79,8 +88,19 @@ fun RunningClockBar(
     onClockOut: (ClockRunning, at: LocalDateTime?) -> Unit,
     onCancel: (ClockRunning) -> Unit,
     modifier: Modifier = Modifier,
+    /** The headings clocked most recently, to switch to, or clock back into once stopped. */
+    recent: List<ClockRecent> = emptyList(),
+    onClockIn: (ClockRecent) -> Unit = {},
+    onOpenRecent: (ClockRecent) -> Unit = {},
 ) {
-    val newest = clocks.firstOrNull() ?: return
+    val newest = clocks.firstOrNull()
+    if (newest == null) {
+        // Stopped a moment ago: back in a tap, as after an interruption; otherwise nothing.
+        recent.firstOrNull()?.takeIf { minutesBetween(it.end, now) in 0 until STOPPED_BAR_MINUTES }?.let { last ->
+            StoppedClockBar(last, recent, now, onClockIn, onOpenRecent, modifier)
+        }
+        return
+    }
     val minutes = newest.minutesAt(now)
     val leftRunning = minutes >= CLOCK_LEFT_RUNNING_MINUTES
     var listOpen by remember { mutableStateOf(false) }
@@ -109,6 +129,16 @@ fun RunningClockBar(
                     val status = if (leftRunning) stringResource(Res.string.clock_left_running, elapsed) else stringResource(Res.string.clock_running_for, elapsed)
                     val more = if (clocks.size > 1) " · " + pluralStringResource(Res.plurals.clock_running_count, clocks.size, clocks.size) else ""
                     Text(status + more, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                // Onto another task, as after an interruption: clocking in there stops this one.
+                if (recent.isNotEmpty()) {
+                    var switching by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { switching = true }) {
+                            Icon(Icons.Filled.SwapHoriz, contentDescription = stringResource(Res.string.clock_switch))
+                        }
+                        RecentMenu(switching, recent, now, onDismiss = { switching = false }, onClockIn = onClockIn)
+                    }
                 }
                 Box {
                     IconButton(onClick = { if (leftRunning) stopMenuFor = newest else onClockOut(newest, null) }) {
@@ -151,6 +181,75 @@ fun RunningClockBar(
         )
     }
 }
+
+/** How long after its clock stopped the bar still offers to clock back in: an interruption's length. */
+const val STOPPED_BAR_MINUTES = 60
+
+/** Whether the bar shows something that changes with the minute: a clock running, or one just stopped. */
+fun clockBarIsLive(running: List<ClockRunning>, recent: List<ClockRecent>, now: LocalDateTime): Boolean =
+    running.isNotEmpty() || recent.firstOrNull()?.let { minutesBetween(it.end, now) in 0 until STOPPED_BAR_MINUTES } == true
+
+/**
+ * The bar just after a clock stopped: the heading, when it stopped, a button to clock back in, and
+ * the other recent headings. A tap opens the heading. Gone [STOPPED_BAR_MINUTES] after the stop.
+ */
+@Composable
+private fun StoppedClockBar(
+    last: ClockRecent,
+    recent: List<ClockRecent>,
+    now: LocalDateTime,
+    onClockIn: (ClockRecent) -> Unit,
+    onOpen: (ClockRecent) -> Unit,
+    modifier: Modifier,
+) {
+    var listOpen by remember { mutableStateOf(false) }
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.clickable { onOpen(last) }.padding(start = 16.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Filled.TimerOff, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.outline)
+            Column(Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Text(plainHeadingTitle(last.title), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    stringResource(Res.string.clock_stopped_at, last.end.time.hhmm()),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+            }
+            if (recent.size > 1) {
+                Box {
+                    IconButton(onClick = { listOpen = true }) {
+                        Icon(Icons.Filled.History, contentDescription = stringResource(Res.string.clock_recent))
+                    }
+                    RecentMenu(listOpen, recent, now, onDismiss = { listOpen = false }, onClockIn = onClockIn)
+                }
+            }
+            IconButton(onClick = { onClockIn(last) }) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(Res.string.clock_back_in))
+            }
+        }
+    }
+}
+
+/** The recently clocked headings, the latest first, each with when it stopped; a tap clocks it in. */
+@Composable
+private fun RecentMenu(expanded: Boolean, recent: List<ClockRecent>, now: LocalDateTime, onDismiss: () -> Unit, onClockIn: (ClockRecent) -> Unit) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        for (task in recent) {
+            val stopped = if (task.end.date == now.date) task.end.time.hhmm() else "${task.end.day} ${task.end.month.shortName()}"
+            DropdownMenuItem(
+                text = { Text(plainHeadingTitle(task.title), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                leadingIcon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+                trailingIcon = { Text(stopped, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline) },
+                onClick = { onDismiss(); onClockIn(task) },
+            )
+        }
+    }
+}
+
+private fun minutesBetween(from: LocalDateTime, to: LocalDateTime): Long =
+    (to.toInstant(TimeZone.UTC) - from.toInstant(TimeZone.UTC)).inWholeMinutes
 
 /** What stopping a clock left running offers: now, at a time of day, or not at all. */
 @Composable

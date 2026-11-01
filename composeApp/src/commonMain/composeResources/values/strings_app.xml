@@ -67,6 +67,13 @@
     <string name="clock_out_at">Clock out at…</string>
     <string name="clock_cancel">Cancel clock</string>
     <string name="clock_open">Open the heading</string>
+    <!-- The bar's buttons for the headings clocked recently: switching the running clock to one, and,
+         once it has stopped, clocking back in or choosing another. -->
+    <string name="clock_switch">Switch to a recent task</string>
+    <string name="clock_back_in">Clock back in</string>
+    <string name="clock_recent">Recent tasks</string>
+    <!-- Under the heading whose clock just stopped: when, %1$s, as 10:45. -->
+    <string name="clock_stopped_at">Stopped at %1$s</string>
     <!-- A time clocked, as the bar and the totals beside headings show it: under an hour, in an hour
          exactly, and otherwise (%2$s is the minutes, two digits). Unbreakable spaces. -->
     <string name="clock_minutes">%1$d&#160;min</string>

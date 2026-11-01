@@ -53,6 +53,12 @@ the drawer, because Emacs sums them wherever they are. A heading's total is its 
 - **Several clocks running** — two devices clocked in while apart, or Emacs and the phone — are all
   found (`NoteClocks`, from every note in the library) and the bar says how many; a tap lists them,
   each to open or stop.
+- **Recent tasks**, Emacs's clock history read from the notes (`NoteClocks.recent`): the five
+  headings whose clocks stopped last, latest first, without the one running. While a clock runs,
+  the bar's switch button lists them, each with when it stopped, and a tap clocks it in, which stops
+  the running one: back to the task an interruption took over from. For `STOPPED_BAR_MINUTES` (an
+  hour) after a clock stops, the bar stays, quieter, as *Stopped at 10:45* with *Clock back in* and
+  the same list; then it goes, so it is not there all day for someone who does not clock.
 - **Highlighting**: in a `CLOCK:` line the keyword is bold and the stamps are stamps, in the editor
   (`orgSpans`) and in reading (`appendDrawerLine`), where each stamp links to its day.
 

@@ -57,6 +57,10 @@
     <string name="clock_out_at">Arrêter à…</string>
     <string name="clock_cancel">Annuler le chrono</string>
     <string name="clock_open">Ouvrir le titre</string>
+    <string name="clock_switch">Passer à une tâche récente</string>
+    <string name="clock_back_in">Relancer le chrono</string>
+    <string name="clock_recent">Tâches récentes</string>
+    <string name="clock_stopped_at">Arrêté à %1$s</string>
     <string name="clock_minutes">%1$d&#160;min</string>
     <string name="clock_hours">%1$d&#160;h</string>
     <string name="clock_hours_minutes">%1$d&#160;h&#160;%2$s</string>

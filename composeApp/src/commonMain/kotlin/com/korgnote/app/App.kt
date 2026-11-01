@@ -33,6 +33,7 @@ import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.data.offersNotesFolder
 import com.korgnote.app.ui.CalendarActions
 import com.korgnote.app.ui.RunningClockBar
+import com.korgnote.app.ui.clockBarIsLive
 import com.korgnote.app.ui.*
 import com.korgnote.app.data.DevicePairing
 import com.korgnote.app.capture.CaptureLinks
@@ -533,9 +534,10 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
             val rail = wide && !editingShort
             // What a running clock counts to: the bar's elapsed time and the totals beside headings,
             // moved on each minute while a clock runs, and still otherwise.
-            val clockTime by produceState(vm.currentTime(), vm.clocks.running) {
+            val clockTime by produceState(vm.currentTime(), vm.clocks.running, vm.clocks.recent) {
                 value = vm.currentTime()
-                while (vm.clocks.running.isNotEmpty()) {
+                // Also while the bar offers to clock back in, so that it goes when the hour is up.
+                while (clockBarIsLive(vm.clocks.running, vm.clocks.recent, value)) {
                     delay((60 - value.second) * 1000L)
                     value = vm.currentTime()
                 }
@@ -710,6 +712,12 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                 },
                                 onClockOut = { clock, at -> vm.clockOut(clock, at) },
                                 onCancel = { vm.cancelClock(it) },
+                                recent = vm.clocks.recent,
+                                onClockIn = { vm.clockIn(it.path, it.headingStart) },
+                                onOpenRecent = { task ->
+                                    vm.onFileSelected(task.path, scrollToOffset = task.headingStart)
+                                    selectedScreen = BottomItem.FILE
+                                },
                                 modifier = if (wide) Modifier.windowInsetsPadding(safeInsets.only(WindowInsetsSides.Bottom + WindowInsetsSides.End)) else Modifier,
                             )
                             if (!wide) NavigationBar {
