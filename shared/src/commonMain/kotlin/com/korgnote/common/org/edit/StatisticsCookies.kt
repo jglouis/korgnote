@@ -7,6 +7,7 @@ import com.korgnote.common.org.OrgList
 import com.korgnote.common.org.OrgListItem
 import com.korgnote.common.org.OrgNode
 import com.korgnote.common.org.OrgSection
+import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.toOrgDocument
 
@@ -25,7 +26,7 @@ data class Progress(val done: Int, val total: Int) {
 }
 
 /** A cookie in a line: `[n/m]`, `[/]`, `[n%]` or `[%]`, with the parts as typed. */
-val STATISTICS_COOKIE = Regex("\\[(\\d*)(?:/(\\d*)|%)]")
+val STATISTICS_COOKIE = OrgSyntax.statistics
 
 /** What the cookie [match] says, or null for an empty one (`[/]`, `[%]`) that has yet to be filled. */
 fun progressOf(match: MatchResult): Progress? {

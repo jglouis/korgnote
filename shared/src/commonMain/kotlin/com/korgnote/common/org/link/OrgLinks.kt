@@ -218,8 +218,11 @@ class OrgLinkIndex(
             if (element.isPreamble) return@firstOrNull false
             val line = element.sliceOf(text).substringBefore('\n')
             val heading = orgHeadingOf(line, keywords)
+            // Org also leaves out the `COMMENT` that comments a subtree out, which a link may keep too.
+            val uncommented = heading.title.takeIf(OrgSyntax::isCommentedTitle)?.removePrefix("COMMENT")?.trim()
             // Both spellings: Org leaves the keyword out of the title, but a link may have kept it.
             heading.title.normalised() == wanted ||
+                uncommented?.normalised() == wanted ||
                 listOfNotNull(heading.todo, heading.title).joinToString(" ").normalised() == wanted
         }?.start
     }

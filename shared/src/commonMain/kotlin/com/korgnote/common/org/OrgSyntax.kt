@@ -49,7 +49,11 @@ object OrgSyntax {
     val url = Regex("(?:https?|ftp|mailto):[^\\s<>\\[\\]()\"']+")
     val timestamp = Regex("[<\\[]\\d{4}-\\d{2}-\\d{2}(?: [^\\]>\\n]*)?[>\\]]")
     val footnoteReference = Regex("\\[fn:[^\\]]+\\]")
-    val statistics = Regex("\\[(?:\\d+/\\d+|\\d+%)\\]")
+    /**
+     * A statistics cookie, `[2/5]` or `[40%]`, capturing its two numbers (or its percentage, then
+     * nothing). Either number may be empty, as in the `[/]` and `[%]` typed for Org to fill in.
+     */
+    val statistics = Regex("\\[(\\d*)(?:/(\\d*)|%)\\]")
 
     /** Characters an emphasis run may open after, and close before. */
     const val EMPHASIS_PRE = " \t-('\"{"
