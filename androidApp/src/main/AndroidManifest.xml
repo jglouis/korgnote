@@ -115,6 +115,10 @@
         <receiver
             android:name="com.korgnote.app.notifications.ReminderReceiver"
             android:exported="false" />
+        <!-- The running clock's notification: its Clock out button. -->
+        <receiver
+            android:name="com.korgnote.app.clock.ClockOutReceiver"
+            android:exported="false" />
         <receiver
             android:name="com.korgnote.app.notifications.RestoreRemindersReceiver"
             android:exported="false">

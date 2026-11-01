@@ -227,6 +227,13 @@ private fun scanLine(
 
 private fun addDrawerLine(line: String, offset: Int, add: (IntRange, OrgSpanKind, Int) -> Unit) {
     add(offset until (offset + line.length), OrgSpanKind.Drawer, 0)
+    // A clock's keyword stands out as a property's key does, and its stamps are stamps.
+    OrgSyntax.clock.find(line)?.let { clock ->
+        val keyword = clock.groupValues[1]
+        add(offset until (offset + keyword.length), OrgSpanKind.DrawerKey, 0)
+        addInline(clock.groupValues[2], offset + keyword.length, 0, add)
+        return
+    }
     OrgSyntax.property.find(line)?.let { prop ->
         val key = prop.groupValues[1]
         add(offset until (offset + key.length), OrgSpanKind.DrawerKey, 0)

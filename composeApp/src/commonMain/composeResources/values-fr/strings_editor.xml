@@ -140,4 +140,8 @@
     <string name="editor_make_inactive">Rendre inactif</string>
     <string name="editor_make_stamp_active">Rendre %1$s actif</string>
     <string name="editor_make_stamp_inactive">Rendre %1$s inactif</string>
+    <string name="editor_clock_in">Lancer le chrono</string>
+    <string name="editor_clock_out">Arrêter le chrono</string>
+    <string name="editor_cancel_clock">Annuler le chrono</string>
+    <string name="editor_clocked">%1$s passées</string>
 </resources>

@@ -29,6 +29,7 @@ agent) one document — or one task — at a time.
 | [07-calendar-agenda.md](07-calendar-agenda.md) | Timestamp/agenda engine, day & week views, local notifications. |
 | [09-element-editing.md](09-element-editing.md) | **Built.** Editing one heading at a time as a range splice — now the primary editing surface. |
 | [10-capture.md](10-capture.md) | **On a branch.** Capturing from other apps: share sheet, selected text, calendar files, `korgnote://capture`, templates in `capture.org`. |
+| [11-clocking.md](11-clocking.md) | **Built (phase 1).** Org's clocking: `CLOCK:` lines in the logbook, the running-clock bar, totals beside headings, Android's ongoing notification. |
 | [08-roadmap.md](08-roadmap.md) | The work, sequenced into tasks with acceptance criteria, and **current status**. |
 
 ## How to use these with an agent

@@ -52,4 +52,20 @@
     </plurals>
     <string name="remind_channel_name">Agenda reminders</string>
     <string name="remind_channel_description">Before timed entries in your notes, and the morning digest</string>
+    <!-- The running clock: a bar above the tabs, and on Android a notification. -->
+    <string name="clock_out">Clock out</string>
+    <string name="clock_out_now">Clock out now</string>
+    <string name="clock_out_at">Clock out at…</string>
+    <string name="clock_cancel">Cancel clock</string>
+    <string name="clock_open">Open the heading</string>
+    <!-- Under the heading clocked: how long it has run, %1$s, as 1:15. -->
+    <string name="clock_running_for">Running for %1$s</string>
+    <!-- A clock left running for hours: %1$s is how long, as 9:30. -->
+    <string name="clock_left_running">Running for %1$s. Left on?</string>
+    <plurals name="clock_running_count">
+        <item quantity="one">%1$d clock running</item>
+        <item quantity="other">%1$d clocks running</item>
+    </plurals>
+    <string name="clock_channel_name">Running clock</string>
+    <string name="clock_channel_description">The heading being clocked, with a button to stop it</string>
 </resources>

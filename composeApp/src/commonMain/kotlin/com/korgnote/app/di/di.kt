@@ -21,6 +21,8 @@ import com.korgnote.app.notifications.NoopNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
 import com.korgnote.app.viewmodel.BackgroundSync
 import com.korgnote.app.viewmodel.NoBackgroundSync
+import com.korgnote.app.viewmodel.ClockNotifier
+import com.korgnote.app.viewmodel.NoClockNotifier
 import com.korgnote.app.viewmodel.NotesViewModel
 import com.korgnote.app.widgets.AgendaWidgets
 import com.korgnote.app.widgets.NoAgendaWidgets
@@ -103,6 +105,7 @@ val appModule = module {
             notifications = getOrNull<NotificationScheduler>() ?: NoopNotificationScheduler,
             backgroundSync = getOrNull<BackgroundSync>() ?: NoBackgroundSync,
             widgets = getOrNull<AgendaWidgets>() ?: NoAgendaWidgets,
+            clockNotifier = getOrNull<ClockNotifier>() ?: NoClockNotifier,
             reminderSettings = settings::getReminderSettings,
             newNotesFolder = settings::getNewNotesFolder,
             noteTemplate = settings::getNoteTemplate,

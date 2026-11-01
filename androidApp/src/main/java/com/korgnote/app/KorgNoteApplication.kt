@@ -2,6 +2,7 @@ package com.korgnote.app
 
 import android.app.Application
 import com.korgnote.app.capture.AndroidDeviceCalendar
+import com.korgnote.app.clock.clockNotifier
 import com.korgnote.app.capture.CAPTURE_QUEUE
 import com.korgnote.app.capture.DeviceCalendar
 import com.korgnote.app.capture.CaptureQueueFolder
@@ -19,6 +20,7 @@ import com.korgnote.app.notifications.NotificationScheduler
 import com.korgnote.app.sync.AndroidBackgroundSync
 import com.korgnote.app.sync.BackgroundSyncWorker
 import com.korgnote.app.viewmodel.BackgroundSync
+import com.korgnote.app.viewmodel.ClockNotifier
 import com.korgnote.app.widget.AndroidAgendaWidgets
 import com.korgnote.app.widget.WidgetPreviews
 import com.korgnote.app.widgets.AgendaWidgets
@@ -36,6 +38,7 @@ class KorgNoteApplication : Application() {
             androidNotesFolders(this@KorgNoteApplication)
             single<NotificationScheduler> { AndroidNotificationScheduler(this@KorgNoteApplication) }
             single<AgendaWidgets> { AndroidAgendaWidgets(this@KorgNoteApplication) }
+            single<ClockNotifier> { clockNotifier(this@KorgNoteApplication) }
             single<FileOpener> { AndroidFileOpener(this@KorgNoteApplication) }
             single<BackgroundSync> { AndroidBackgroundSync(this@KorgNoteApplication) }
             single<CaptureQueueFolder> { FileCaptureQueueFolder(File(filesDir, CAPTURE_QUEUE)) }

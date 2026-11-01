@@ -31,6 +31,7 @@ import com.korgnote.app.data.NotesSource
 import com.korgnote.app.data.SavedSearch
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.data.offersNotesFolder
+import com.korgnote.app.ui.RunningClockBar
 import com.korgnote.app.ui.*
 import com.korgnote.app.data.DevicePairing
 import com.korgnote.app.capture.CaptureLinks
@@ -51,6 +52,7 @@ import org.koin.core.parameter.parametersOf
 import com.korgnote.app.viewmodel.OpenNote
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -528,6 +530,15 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
             // Even the status bar: its height is another line of the element.
             HideStatusBar(editingShort)
             val rail = wide && !editingShort
+            // What a running clock counts to: the bar's elapsed time and the totals beside headings,
+            // moved on each minute while a clock runs, and still otherwise.
+            val clockTime by produceState(vm.currentTime(), vm.clocks.running) {
+                value = vm.currentTime()
+                while (vm.clocks.running.isNotEmpty()) {
+                    delay((60 - value.second) * 1000L)
+                    value = vm.currentTime()
+                }
+            }
             // The sync's state, and any conflict, go wherever the top bar's actions go.
             val statusIcons = @Composable {
                 ConflictStatusIcon(vm.library.conflicts) { path ->
@@ -686,7 +697,21 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                     Icon(Icons.Filled.Save, contentDescription = stringResource(Res.string.app_save_element))
                                 }
                             }
-                        } else if (!wide && WindowInsets.ime.getBottom(LocalDensity.current) == 0) NavigationBar {
+                        } else if (WindowInsets.ime.getBottom(LocalDensity.current) == 0) Column {
+                            // A running clock, on every tab, just above the tabs; on a wide window,
+                            // where the tabs are down the side, at the foot of the screen.
+                            RunningClockBar(
+                                clocks = vm.clocks.running,
+                                now = clockTime,
+                                onOpen = { clock ->
+                                    vm.onFileSelected(clock.path, scrollToOffset = clock.headingStart)
+                                    selectedScreen = BottomItem.FILE
+                                },
+                                onClockOut = { clock, at -> vm.clockOut(clock, at) },
+                                onCancel = { vm.cancelClock(it) },
+                                modifier = if (wide) Modifier.windowInsetsPadding(safeInsets.only(WindowInsetsSides.Bottom + WindowInsetsSides.End)) else Modifier,
+                            )
+                            if (!wide) NavigationBar {
                             BottomItem.entries.forEach { item ->
                                 NavigationBarItem(
                                     selected = selectedScreen == item,
@@ -700,6 +725,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                     label = { Text(item.getLabel()) },
                                     alwaysShowLabel = true
                                 )
+                            }
                             }
                         }
                     }
@@ -862,6 +888,10 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                         },
                                         onRefileSection = { index -> refiling = index to vm.refileTargets(index) },
                                         onSetPriority = { offset, priority -> vm.setPriorityAt(offset, priority, scope) },
+                                        onClockIn = { vm.clockInAt(it) },
+                                        onClockOut = { vm.clockOutAt(it) },
+                                        onCancelClock = { vm.cancelClockAt(it) },
+                                        clockTime = clockTime,
                                         foldedElements = vm.folds.folded,
                                         onToggleFold = { vm.folds.toggle(it) },
                                         scrollToElementIndex = vm.note.scrollToElementIndex,

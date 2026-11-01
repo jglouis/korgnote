@@ -23,6 +23,8 @@ object OrgSyntax {
     val drawerEnd = Regex("^\\s*:END:\\s*$", RegexOption.IGNORE_CASE)
     val property = Regex("^(\\s*:[A-Za-z0-9_+-]+:)(.*)$")
     val planning = Regex("^\\s*(SCHEDULED|DEADLINE|CLOSED):")
+    /** A `CLOCK:` line of a logbook, its keyword (group 1) and what follows it (group 2). */
+    val clock = Regex("^(\\s*CLOCK:)(.*)$")
     val planningKeyword = Regex("(SCHEDULED|DEADLINE|CLOSED):")
     val horizontalRule = Regex("^\\s*-{5,}\\s*$")
     /**

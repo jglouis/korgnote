@@ -535,7 +535,7 @@ fun OrgDocument.setProperty(heading: OrgSection, key: String, value: String): Or
 }
 
 /** Inserts whole [lines] at [at], the start of a line or the end of the text. */
-private fun OrgDocument.insertLines(at: Int, lines: String): OrgDocument {
+internal fun OrgDocument.insertLines(at: Int, lines: String): OrgDocument {
     // What comes before may be the file's last line, with no newline after it.
     if (at >= text.length && !text.endsWith('\n')) return replace(text.length until text.length, "\n$lines")
     return replace(at until at, lines)

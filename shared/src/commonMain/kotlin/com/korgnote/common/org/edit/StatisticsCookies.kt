@@ -88,14 +88,14 @@ fun updateStatisticsCookies(text: String, todoKeywords: OrgTodoConfig, before: S
 }
 
 /** Where an edit changed a text: from [start] to [end], exclusive, in the text after it. */
-private data class Change(val start: Int, val end: Int)
+internal data class Change(val start: Int, val end: Int)
 
 /**
  * Where [after] differs from [before], in whole lines, or null when they are equal. Whole lines,
  * because a character-wise diff is ambiguous where lines start alike: a heading added at the end of
  * a subtree would otherwise reach into the first character of the heading after it.
  */
-private fun changedRegion(before: String, after: String): Change? {
+internal fun changedRegion(before: String, after: String): Change? {
     if (before == after) return null
     val shorter = minOf(before.length, after.length)
     var prefix = 0

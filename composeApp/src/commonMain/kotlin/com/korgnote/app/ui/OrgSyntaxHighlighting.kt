@@ -467,7 +467,12 @@ private fun AnnotatedString.Builder.appendBlockBody(line: String, blockType: Str
 private fun AnnotatedString.Builder.appendDrawerLine(line: String, viewMode: Boolean) {
     withStyle(SpanStyle(color = OrgColors.drawer)) {
         val prop = OrgSyntax.property.find(line)
-        if (prop != null) {
+        val clock = OrgSyntax.clock.find(line)
+        if (clock != null) {
+            // Its stamps as stamps — reading, each a link to its day — and the sum left quiet.
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(clock.groupValues[1]) }
+            appendInline(clock.groupValues[2], viewMode)
+        } else if (prop != null) {
             val key = prop.groupValues[1]
             val value = prop.groupValues[2]
             withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(key) }

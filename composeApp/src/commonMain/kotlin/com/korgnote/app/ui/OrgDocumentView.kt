@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,6 +44,10 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.OrgElement
 import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.edit.OrgClock
+import com.korgnote.common.org.edit.clocksInText
+import com.korgnote.common.org.edit.effortIn
+import com.korgnote.common.org.edit.formatClocked
 import com.korgnote.common.org.edit.toggleableTimestamps
 import com.korgnote.common.org.link.OrgBacklink
 import com.korgnote.common.org.nextSibling
@@ -57,6 +62,10 @@ import korgnote.composeapp.generated.resources.delete
 import korgnote.composeapp.generated.resources.editor_add_heading
 import korgnote.composeapp.generated.resources.editor_add_heading_below
 import korgnote.composeapp.generated.resources.editor_add_subheading
+import korgnote.composeapp.generated.resources.editor_cancel_clock
+import korgnote.composeapp.generated.resources.editor_clock_in
+import korgnote.composeapp.generated.resources.editor_clock_out
+import korgnote.composeapp.generated.resources.editor_clocked
 import korgnote.composeapp.generated.resources.editor_collapse_heading
 import korgnote.composeapp.generated.resources.editor_delete_heading
 import korgnote.composeapp.generated.resources.editor_delete_heading_text
@@ -78,6 +87,7 @@ import korgnote.composeapp.generated.resources.editor_promote
 import korgnote.composeapp.generated.resources.editor_refile
 import korgnote.composeapp.generated.resources.editor_this_heading
 import kotlinx.coroutines.delay
+import kotlinx.datetime.LocalDateTime
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Duration.Companion.milliseconds
@@ -161,6 +171,12 @@ fun OrgDocumentView(
      * above the first heading — or on its own over that heading, in a note that has none yet.
      */
     onEditDetails: (() -> Unit)? = null,
+    /** From the long-press menu: the heading at this offset in [text] clocked in, out, or its clock cancelled. */
+    onClockIn: ((offsetInDocument: Int) -> Unit)? = null,
+    onClockOut: ((offsetInDocument: Int) -> Unit)? = null,
+    onCancelClock: ((offsetInDocument: Int) -> Unit)? = null,
+    /** The time a running clock counts to, in the totals beside headings; ticks while one runs. */
+    clockTime: LocalDateTime? = null,
 ) {
     val elements = remember(text) { text.orgElements() }
     // An element is hidden when it lies inside a folded heading's subtree. The folded heading itself
@@ -250,6 +266,7 @@ fun OrgDocumentView(
                             slice.substringAfter('\n', "").isNotBlank()
                         )
                     var menuOpen by remember { mutableStateOf(false) }
+                    val clocks = remember(text, elements, index) { elementClocks(text, elements, index) }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -317,6 +334,9 @@ fun OrgDocumentView(
                                 onDemote = onShiftSection?.let { shift -> { shift(index, 1) } },
                                 onRefile = onRefileSection?.let { refile -> { refile(index) } },
                                 onPriority = onSetPriority?.let { { choosingPriority = index } },
+                                onClockIn = onClockIn?.takeIf { clocks?.running != true }?.let { clock -> { clock(element.start) } },
+                                onClockOut = onClockOut?.takeIf { clocks?.running == true }?.let { clock -> { clock(element.start) } },
+                                onCancelClock = onCancelClock?.takeIf { clocks?.running == true }?.let { cancel -> { cancel(element.start) } },
                             )
                             // From the long-press menu: the same choices as a tap on the cookie, for
                             // a heading that has none yet to tap.
@@ -331,6 +351,7 @@ fun OrgDocumentView(
                             }
                         }
                         if (editDetails != null && element.isPreamble) NoteDetailsButton(editDetails)
+                        if (clocks != null && clocks.subtree.isNotEmpty()) ClockedTotal(clocks, clockTime)
                         if (foldable && onToggleFold != null) {
                             val foldDescription = stringResource(if (folded) Res.string.editor_expand_heading else Res.string.editor_collapse_heading, element.title)
                             IconButton(
@@ -446,6 +467,41 @@ private val GUIDE_INSET = 4.dp
 private val GUIDE_WIDTH = 2.dp
 private const val MAX_GUIDES = 5
 
+/**
+ * A heading's clocks: every one in its subtree, for its total, whether its own clock runs, for
+ * the menu, and its `:Effort:`, which the total is shown against.
+ */
+private class ElementClocks(val subtree: List<OrgClock>, val running: Boolean, val effort: String?)
+
+/** The clocks of the heading at [index], read from the text: null for the preamble. */
+private fun elementClocks(text: String, elements: List<OrgElement>, index: Int): ElementClocks? {
+    val element = elements.getOrNull(index)?.takeUnless { it.isPreamble } ?: return null
+    val end = elements.getOrNull(elements.subtreeEnd(index))?.start ?: text.length
+    val subtree = text.substring(element.start, end)
+    if (!subtree.contains("CLOCK:")) return ElementClocks(emptyList(), running = false, effort = null)
+    val own = element.sliceOf(text)
+    return ElementClocks(clocksInText(subtree), clocksInText(own).any { it.isRunning }, effortIn(own))
+}
+
+/**
+ * The time clocked on a heading and under it, as Emacs's `C-c C-x C-d` shows it: `1:15`, or
+ * `1:15 / 2:00` against its effort. Its own running clock lights it and counts up to [now].
+ */
+@Composable
+private fun ClockedTotal(clocks: ElementClocks, now: LocalDateTime?) {
+    val minutes = clocks.subtree.sumOf { it.minutes(now ?: it.end ?: it.start) }
+    val total = formatClocked(minutes) + (clocks.effort?.let { " / $it" } ?: "")
+    val color = if (clocks.running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+    val description = stringResource(Res.string.editor_clocked, total)
+    Row(
+        modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp).semantics { contentDescription = description },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (clocks.running) Icon(Icons.Filled.Timer, contentDescription = null, tint = color, modifier = Modifier.size(14.dp).padding(end = 2.dp))
+        Text(total, style = MaterialTheme.typography.labelMedium, color = color)
+    }
+}
+
 /** A jump's arrival at the element at [index]; compared by identity, so each jump is its own. */
 private class Landing(val index: Int)
 
@@ -523,6 +579,9 @@ private fun ElementMenu(
     onDemote: (() -> Unit)?,
     onRefile: (() -> Unit)?,
     onPriority: (() -> Unit)?,
+    onClockIn: (() -> Unit)? = null,
+    onClockOut: (() -> Unit)? = null,
+    onCancelClock: (() -> Unit)? = null,
 ) {
     @Composable
     fun Item(label: String, action: (() -> Unit)?) = DropdownMenuItem(
@@ -544,6 +603,13 @@ private fun ElementMenu(
                 text = { Text(stringResource(Res.string.editor_add_subheading)) },
                 onClick = { onDismiss(); onAddSubheading() },
             )
+        }
+        // The heading's clock: started, or stopped and cancelled when it runs.
+        if (!isPreamble && (onClockIn != null || onClockOut != null || onCancelClock != null)) {
+            HorizontalDivider()
+            onClockIn?.let { Item(stringResource(Res.string.editor_clock_in), it) }
+            onClockOut?.let { Item(stringResource(Res.string.editor_clock_out), it) }
+            onCancelClock?.let { Item(stringResource(Res.string.editor_cancel_clock), it) }
         }
         if (stamps.isNotEmpty()) {
             HorizontalDivider()

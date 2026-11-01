@@ -47,4 +47,17 @@
     </plurals>
     <string name="remind_channel_name">Rappels de l’agenda</string>
     <string name="remind_channel_description">Avant les entrées à heure fixe de vos notes, et le résumé du matin</string>
+    <string name="clock_out">Arrêter le chrono</string>
+    <string name="clock_out_now">Arrêter maintenant</string>
+    <string name="clock_out_at">Arrêter à…</string>
+    <string name="clock_cancel">Annuler le chrono</string>
+    <string name="clock_open">Ouvrir le titre</string>
+    <string name="clock_running_for">En cours depuis %1$s</string>
+    <string name="clock_left_running">En cours depuis %1$s. Oublié ?</string>
+    <plurals name="clock_running_count">
+        <item quantity="one">%1$d chrono en cours</item>
+        <item quantity="other">%1$d chronos en cours</item>
+    </plurals>
+    <string name="clock_channel_name">Chrono en cours</string>
+    <string name="clock_channel_description">Le titre chronométré, avec un bouton pour l’arrêter</string>
 </resources>

@@ -73,6 +73,17 @@ class OrgSpansTests {
     }
 
     @Test
+    fun aClockLineHasItsKeywordAndItsStamps() {
+        val text = ":LOGBOOK:\nCLOCK: [2026-11-01 Sun 09:30]--[2026-11-01 Sun 10:45] =>  1:15\n:END:\n"
+        val spans = spansOf(text)
+
+        assertTrue(OrgSpanKind.DrawerKey in spans.kindsAt(text, "CLOCK:"))
+        assertTrue(OrgSpanKind.Timestamp in spans.kindsAt(text, "[2026-11-01 Sun 09:30]"))
+        assertTrue(OrgSpanKind.Timestamp in spans.kindsAt(text, "[2026-11-01 Sun 10:45]"))
+        assertTrue(OrgSpanKind.Drawer in spans.kindsAt(text, "1:15"))
+    }
+
+    @Test
     fun planningKeywordsAndTimestamps() {
         val text = "SCHEDULED: <2026-09-21 Mon>"
         val spans = spansOf(text)

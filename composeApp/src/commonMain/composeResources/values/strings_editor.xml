@@ -150,4 +150,10 @@
     <!-- The long-press menu, for one timestamp of the element, which is %1$s. -->
     <string name="editor_make_stamp_active">Make %1$s active</string>
     <string name="editor_make_stamp_inactive">Make %1$s inactive</string>
+    <!-- The long-press menu: Org's clocking, time spent on a heading written into its logbook. -->
+    <string name="editor_clock_in">Clock in</string>
+    <string name="editor_clock_out">Clock out</string>
+    <string name="editor_cancel_clock">Cancel clock</string>
+    <!-- Beside a heading, for a screen reader: the time clocked on it, %1$s, as 1:15 or 1:15 / 2:00 against its effort. -->
+    <string name="editor_clocked">%1$s clocked</string>
 </resources>

@@ -47,6 +47,11 @@ import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.todoKeywordsOf
 import com.korgnote.common.org.withOrgSubtreeFiled
 import com.korgnote.common.org.edit.updateStatisticsCookies
+import com.korgnote.common.org.edit.cancelClock
+import com.korgnote.common.org.edit.clockIn
+import com.korgnote.common.org.edit.clockOut
+import com.korgnote.common.org.edit.runningClocks
+import com.korgnote.common.org.edit.updateClockDurations
 import com.korgnote.common.org.template.dailyFileName
 import com.korgnote.common.org.template.dailyTitle
 import com.korgnote.common.org.template.newNoteText
@@ -155,6 +160,8 @@ class NotesViewModel(
     folder: FolderNoteStorage? = null,
     /** Files what was captured — shared from another app, or by a link — into these notes; none in the tests. */
     private val captures: CaptureFiler? = null,
+    /** Where a running clock shows outside the app: Android's ongoing notification, or nowhere. */
+    clockNotifier: ClockNotifier = NoClockNotifier,
 ) : ViewModel() {
 
     /** The one message line: why something could not be done, or what was done instead. */
@@ -178,6 +185,9 @@ class NotesViewModel(
     val folds: Folds = Folds(note)
 
     val pins: NotePins = NotePins(library, pinnedNotes, savePinnedNotes)
+
+    /** The clocks running in the notes, for the bar that shows them on every tab. */
+    val clocks: NoteClocks = NoteClocks(library, clockNotifier)
 
     val editor: ElementEditor = ElementEditor(
         note,
@@ -325,6 +335,7 @@ class NotesViewModel(
         agenda.refresh()
         search.refresh()
         completion.refreshContext()
+        clocks.refresh()
     }
 
     /** A refresh put off by [refreshDerivedViewsSoon], until it runs or another replaces it. */
@@ -352,6 +363,7 @@ class NotesViewModel(
             agenda.show(agendaIndex)
             search.refresh()
             completion.refreshContext()
+            clocks.refresh()
         }
     }
 
@@ -372,6 +384,7 @@ class NotesViewModel(
         agenda.show(agendaIndex)
         search.refresh()
         completion.refreshContext()
+        clocks.refresh()
 
         // The open note may be gone: deleted here, or on another device. With nothing open — at
         // launch, say — the first pinned note opens: it was pinned to be at hand.
@@ -407,7 +420,9 @@ class NotesViewModel(
         val path = note.path ?: return
         // A heading's `[2/5]` counts what is under it, which the edit may have changed — and only
         // those over the edit: the rest of the note is saved as it was.
-        note.content = updateStatisticsCookies(note.content, todoKeywords, before = store.read(path))
+        // And a clock edited by hand sums its stamps again, as `C-c C-c` on its line would.
+        val before = store.read(path)
+        note.content = updateClockDurations(updateStatisticsCookies(note.content, todoKeywords, before = before), before)
         store.save(path, note.content)
         library.put(path, note.content.toOrgDocument(library.fallbackKeywords))
         refreshDerivedViews()
@@ -527,6 +542,99 @@ class NotesViewModel(
         refreshDerivedViewsSoon()
 
         scope?.launch { server.push(writeFirst = { store.save(file, note.content) }) }
+    }
+
+    // --- Clocking ---
+
+    /** The time now, as clocks are stamped with it: for elapsed times and the totals beside headings. */
+    fun currentTime(): LocalDateTime = now()
+
+    /**
+     * Clocks in the heading at [offsetInDocument] of the open note, as `org-clock-in` does: any
+     * clock running elsewhere — in this note or another — stops at the same minute first.
+     */
+    fun clockInAt(offsetInDocument: Int) {
+        val path = note.path ?: return
+        if (refuseWhileEditing()) return
+        val at = now()
+        viewModelScope.launch {
+            for (other in clocks.running.filter { it.path != path }) changeNote(other.path) { it.withClock(other) { doc, h -> doc.clockOut(h, at) } }
+            changeNote(path) { doc ->
+                val heading = doc.nodeAt<OrgSection>(offsetInDocument) ?: return@changeNote doc
+                var start = heading.range.first
+                var updated = doc.clockIn(heading, at)
+                while (true) {
+                    val other = updated.runningClocks().firstOrNull { it.headingStart != start } ?: break
+                    val heading = updated.nodeAt<OrgSection>(other.headingStart) ?: break
+                    val next = updated.clockOut(heading, at)
+                    if (next.text == updated.text) break
+                    // Its clock line is in its own entry: before this heading when that heading is above it.
+                    if (other.headingStart < start) start += next.text.length - updated.text.length
+                    updated = next
+                }
+                updated
+            }
+        }
+    }
+
+    /** Stops the clock running on the heading at [offsetInDocument] of the open note. */
+    fun clockOutAt(offsetInDocument: Int) = changeHeading(offsetInDocument) { doc, h -> doc.clockOut(h, now()) }
+
+    /** Removes the clock running on the heading at [offsetInDocument], as `org-clock-cancel` does. */
+    fun cancelClockAt(offsetInDocument: Int) = changeHeading(offsetInDocument) { doc, h -> doc.cancelClock(h) }
+
+    /** Stops [clock], wherever it runs: now, or at [at] for one left running. */
+    fun clockOut(clock: ClockRunning, at: LocalDateTime? = null) {
+        if (clock.path == note.path && refuseWhileEditing()) return
+        val end = at ?: now()
+        viewModelScope.launch { changeNote(clock.path) { it.withClock(clock) { doc, h -> doc.clockOut(h, end) } } }
+    }
+
+    /** Removes [clock], wherever it runs. */
+    fun cancelClock(clock: ClockRunning) {
+        if (clock.path == note.path && refuseWhileEditing()) return
+        viewModelScope.launch { changeNote(clock.path) { it.withClock(clock) { doc, h -> doc.cancelClock(h) } } }
+    }
+
+    private fun changeHeading(offsetInDocument: Int, change: (OrgDocument, OrgSection) -> OrgDocument) {
+        val path = note.path ?: return
+        if (refuseWhileEditing()) return
+        viewModelScope.launch {
+            changeNote(path) { doc -> doc.nodeAt<OrgSection>(offsetInDocument)?.let { change(doc, it) } ?: doc }
+        }
+    }
+
+    /** An element of the open note being edited would have the note change under it. */
+    private fun refuseWhileEditing(): Boolean {
+        if (editor.editingIndex == null) return false
+        viewModelScope.launch { showMessage(getString(Res.string.vm_finish_editing_first)) }
+        return true
+    }
+
+    /**
+     * [change] made to the heading [clock] runs on, found again by its title and start: the note may
+     * have changed since the clock was read, on another device or in Emacs.
+     */
+    private fun OrgDocument.withClock(clock: ClockRunning, change: (OrgDocument, OrgSection) -> OrgDocument): OrgDocument {
+        val found = runningClocks().firstOrNull { it.title == clock.title && it.start == clock.start } ?: return this
+        val heading = nodeAt<OrgSection>(found.headingStart) ?: return this
+        return change(this, heading)
+    }
+
+    /**
+     * [change] made to the note at [path] — the open one as it stands on screen, or another as the
+     * replica has it — then saved and pushed as a keyword change is.
+     */
+    private suspend fun changeNote(path: String, change: (OrgDocument) -> OrgDocument) {
+        val open = path == note.path
+        val before = if (open) note.content.toOrgDocument(library.fallbackKeywords) else library[path] ?: return
+        val updated = change(before)
+        if (updated.text == before.text) return
+        library.put(path, updated)
+        if (open) note.content = updated.text
+        clocks.refresh()
+        refreshDerivedViewsSoon()
+        server.push(writeFirst = { store.save(path, updated.text) })
     }
 
     /**
