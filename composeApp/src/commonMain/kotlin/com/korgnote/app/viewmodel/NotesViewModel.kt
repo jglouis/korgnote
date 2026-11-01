@@ -86,6 +86,10 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import com.korgnote.common.org.edit.setPriority
 import com.korgnote.common.org.OrgPriority
+import com.korgnote.common.org.LogKind
+import com.korgnote.common.org.edit.stateChangeLog
+import com.korgnote.common.org.todoLoggingOf
+import korgnote.composeapp.generated.resources.vm_edit_conflict
 
 /**
  * The app's notes, and everything shown about them.
@@ -204,6 +208,35 @@ class NotesViewModel(
         replaceDraft = { editor.replaceDraft(it) },
         author = { noteTemplate().author },
     )
+
+    /**
+     * A keyword change waiting on the note its keyword's `@` asks for: which heading, by where it
+     * starts and the line it was, and the keyword. Null when none is.
+     */
+    data class PendingStateNote(val offset: Int, val headingLine: String, val title: String, val keyword: String, val closing: Boolean)
+
+    var pendingStateNote by mutableStateOf<PendingStateNote?>(null)
+        private set
+
+    /** The note being written for [pendingStateNote], and its caret. */
+    var stateNoteDraft by mutableStateOf(TextFieldValue(""))
+        private set
+
+    /** Completion in the note, as in the element editor: the same suggestions, over the note's own text. */
+    val stateNoteCompletion: CompletionController = CompletionController(
+        library,
+        note,
+        links,
+        today,
+        draft = { stateNoteDraft.takeIf { pendingStateNote != null } },
+        replaceDraft = { onStateNoteChanged(it) },
+        author = { noteTemplate().author },
+    )
+
+    fun onStateNoteChanged(value: TextFieldValue) {
+        stateNoteDraft = value
+        stateNoteCompletion.onDraftChanged()
+    }
 
     val search: NoteSearch = NoteSearch(viewModelScope, library, open = ::open)
 
@@ -412,16 +445,52 @@ class NotesViewModel(
      * its dates move on to the next occurrence.
      */
     fun setTodoAt(offsetInDocument: Int, keyword: String?, scope: CoroutineScope? = null) {
-        val file = note.path ?: return
         val document = note.content.toOrgDocument(library.fallbackKeywords)
         val heading = document.nodeAt<OrgSection>(offsetInDocument) ?: return
-        val updated = document.changeTodoState(heading, keyword, now(), todoKeywords).withStatistics(since = document)
+        // A keyword with `@` wants a note: the change waits for it, as Org's note buffer does.
+        if (keyword != null && document.stateChangeLog(heading, keyword, todoKeywords) == LogKind.Note) {
+            val line = document.text.substring(heading.range.first).substringBefore('\n')
+            val closing = todoLoggingOf(document.text).forChange(heading.todo, keyword) == null
+            pendingStateNote = PendingStateNote(heading.range.first, line, heading.title, keyword, closing)
+            stateNoteDraft = TextFieldValue("")
+            stateNoteCompletion.refreshContext()
+            stateNoteCompletion.reset()
+            return
+        }
+        applyTodoState(heading.range.first, keyword, note = null, scope)
+    }
+
+    /** Changes the keyword [pendingStateNote] waits on, logging what was written. */
+    fun saveStateNote(scope: CoroutineScope? = null) {
+        val pending = pendingStateNote ?: return
+        pendingStateNote = null
+        stateNoteCompletion.reset()
+        // The note may have taken a while: the heading must still be where, and what, it was.
+        val line = note.content.drop(pending.offset).substringBefore('\n')
+        if (line != pending.headingLine) {
+            viewModelScope.launch { showMessage(getString(Res.string.vm_edit_conflict)) }
+            return
+        }
+        applyTodoState(pending.offset, pending.keyword, stateNoteDraft.text, scope)
+    }
+
+    /** Drops the change [pendingStateNote] waits on: the keyword stays as it was. */
+    fun cancelStateNote() {
+        pendingStateNote = null
+        stateNoteCompletion.reset()
+    }
+
+    private fun applyTodoState(offsetInDocument: Int, keyword: String?, note: String?, scope: CoroutineScope?) {
+        val file = this.note.path ?: return
+        val document = this.note.content.toOrgDocument(library.fallbackKeywords)
+        val heading = document.nodeAt<OrgSection>(offsetInDocument) ?: return
+        val updated = document.changeTodoState(heading, keyword, now(), todoKeywords, note).withStatistics(since = document)
         if (updated.text == document.text) return
-        note.content = updated.text
+        this.note.content = updated.text
         library.put(file, updated)
         refreshDerivedViews()
 
-        scope?.launch { server.push(writeFirst = { store.save(file, note.content) }) }
+        scope?.launch { server.push(writeFirst = { store.save(file, this@NotesViewModel.note.content) }) }
     }
 
     /**

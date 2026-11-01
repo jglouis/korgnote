@@ -347,19 +347,14 @@ class ElementEditingTest {
     }
 
     @Test
-    fun pickingAKeywordSetsItLogsTheChangeAndSavesIt() = runTest {
+    fun pickingAKeywordSetsItAndSavesIt() = runTest {
         openFile()
 
         viewModel.setTodoAt(initialText.indexOf("* TODO Second"), "DONE", this)
         testScheduler.advanceUntilIdle()
 
-        assertEquals(
-            initialText.replace(
-                "* TODO Second task\n",
-                "* DONE Second task\n- State \"DONE\"       from \"TODO\"       [2026-10-24 Sat 14:05]\n",
-            ),
-            viewModel.note.content,
-        )
+        // No `!` or `@` on the keywords here, Org's TODO and DONE: nothing is logged, as in Org.
+        assertEquals(initialText.replace("* TODO Second task\n", "* DONE Second task\n"), viewModel.note.content)
         assertEquals(viewModel.note.content, repository.saves.last().second)
     }
 

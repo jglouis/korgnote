@@ -23,6 +23,9 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.plus
 import com.korgnote.common.org.OrgPriority
+import com.korgnote.common.org.LogKind
+import com.korgnote.common.org.TodoLogging
+import com.korgnote.common.org.todoLoggingOf
 
 /**
  * Structural edits, each of which is a text replacement over a range.
@@ -213,71 +216,174 @@ fun OrgDocument.cycleTodo(heading: OrgSection, config: OrgTodoConfig): OrgDocume
 }
 
 /**
- * Sets [heading]'s keyword as Org's `C-c C-t` does with state logging on: the keyword changes, and
- * a note stamped [at] records the change under the heading.
+ * What changing [heading]'s keyword to [keyword] records, by the file's settings (see
+ * [todoLoggingOf]): nothing, a time stamp, or a note. A note is the user's to write, so the caller
+ * asks for one when this says [LogKind.Note], and hands it to [changeTodoState].
+ */
+fun OrgDocument.stateChangeLog(heading: OrgSection, keyword: String?, keywords: OrgTodoConfig = todoKeywords): LogKind? {
+    val previous = heading.todo?.takeIf { it.isNotEmpty() }
+    if (previous == keyword || keyword == null) return null
+    val logging = todoLoggingOf(text)
+    val logged = logging.forChange(previous, keyword)
+    val nowDone = keyword in keywords.done && previous !in keywords.done
+    if (nowDone && repeatingStampsOf(heading).isNotEmpty()) return repeatLog(logging, logged)
+    if (logged != null) return logged
+    // A closing note, `#+STARTUP: lognotedone`, when the keyword itself records nothing.
+    return if (nowDone && logging.done == LogKind.Note) LogKind.Note else null
+}
+
+/**
+ * Sets [heading]'s keyword as Org's `C-c C-t` does, recording what the file asks for and nothing
+ * more (see [todoLoggingOf]):
  *
- * The note is Org's own, `- State "DONE"       from "TODO"       [2026-10-24 Sat 14:30]`, so Emacs
- * reads it back as a state change. It goes where Org puts it — after the planning line and the
- * property drawer, newest first — and into the heading's `:LOGBOOK:` when it has one there, or when
- * the file asks for one with `#+STARTUP: logdrawer`.
+ * - The keyword's own setting, `!` or `@` on the state entered — else `/!` or `/@` on the one
+ *   left — gives a line Org reads back as a state change,
+ *   `- State "WAIT"       from "TODO"       [2026-10-24 Sat 14:30]`, followed by [note] under it
+ *   when a note is asked for and one is given. Without a setting, nothing is logged.
+ * - `#+STARTUP: logdone` stamps an entry `CLOSED:` when it becomes done; `lognotedone` adds a
+ *   closing note when the keyword records nothing itself. While anything is tracked, an entry that
+ *   is not done any more loses its `CLOSED:` stamp.
+ * - Marking a repeating entry done repeats it instead; see [repeat].
  *
- * Clearing the keyword records nothing: there is no state left to log, and Org logs none either.
- *
- * Marking a repeating entry done — moving it into one of [keywords]' done states from one that is
- * not — repeats it instead; see [repeat].
+ * Log lines go where Org puts them — after the planning line and the property drawer, newest
+ * first — and into the heading's `:LOGBOOK:` when it has one there, or when the file asks for one
+ * with `#+STARTUP: logdrawer`. Clearing the keyword records nothing.
  */
 fun OrgDocument.changeTodoState(
     heading: OrgSection,
     keyword: String?,
     at: LocalDateTime,
     keywords: OrgTodoConfig = todoKeywords,
+    /** What the user wrote when [stateChangeLog] asked for a note; null or blank for none. */
+    note: String? = null,
 ): OrgDocument {
     val previous = heading.todo?.takeIf { it.isNotEmpty() }
     if (previous == keyword) return this
-    if (keyword == null) return setTodo(heading, null)
-    val note = stateNote(keyword, previous, at)
-    if (keyword in keywords.done && previous !in keywords.done) {
-        val stamps = repeatingStampsOf(heading)
-        if (stamps.isNotEmpty()) return repeat(heading, keyword, stamps, note, at, keywords)
+    val start = heading.range.first
+    val logging = todoLoggingOf(text)
+    if (keyword == null) {
+        val cleared = setTodo(heading, null)
+        return if (logging.isActive) cleared.withoutClosed(start) else cleared
     }
-    val changed = setTodo(heading, keyword)
+    val logged = logging.forChange(previous, keyword)
+    val nowDone = keyword in keywords.done && previous !in keywords.done
+    if (nowDone) {
+        val stamps = repeatingStampsOf(heading)
+        if (stamps.isNotEmpty()) return repeat(heading, keyword, previous, stamps, at, keywords, repeatLog(logging, logged), note)
+    }
+    var changed = setTodo(heading, keyword)
     if (changed === this) return changed
-    // The keyword moved what follows it, so the heading is found again rather than reused. It
-    // still starts where it did, and no section nested in it starts on its line.
-    val updated = changed.nodeAt<OrgSection>(heading.range.first) ?: return changed
-    return changed.insertLogNote(updated, note)
+    // The keyword moved what follows it, so the heading is found again by where it starts, each
+    // time: it still starts there, and no section nested in it starts on its line.
+    if (logging.isActive && keyword !in keywords.done && previous !in keywords.todo) changed = changed.withoutClosed(start)
+    if (nowDone && logging.done != null) {
+        changed = changed.withClosed(start, at)
+        if (logged == null && logging.done == LogKind.Note) {
+            changed = changed.withLogLine(start, logEntry("- CLOSING NOTE ${at.orgStamp(active = false)}", note))
+        }
+    }
+    if (logged != null) changed = changed.withLogLine(start, logEntry(stateLine(keyword, previous, at), note.takeIf { logged == LogKind.Note }))
+    return changed
 }
 
-private fun stateNote(keyword: String, previous: String?, at: LocalDateTime): String {
+/**
+ * What a repeating entry marked done records, as `org-auto-repeat-maybe` decides: what the keywords
+ * ask for — made a note when `lognoterepeat` wants one — else what `org-log-repeat` asks for, a
+ * time stamp unless the file says `nologrepeat`.
+ */
+private fun repeatLog(logging: TodoLogging, logged: LogKind?): LogKind? =
+    if (logged != null) (if (logging.repeat == LogKind.Note) LogKind.Note else logged) else logging.repeat
+
+/** Org's state line, `- State "DONE"       from "TODO"       [2026-10-24 Sat 14:30]`. */
+private fun stateLine(keyword: String, previous: String?, at: LocalDateTime): String {
     fun quoted(state: String?) = (state?.let { "\"$it\"" } ?: "").padEnd(12)
     return "- State ${quoted(keyword)} from ${quoted(previous)} ${at.orgStamp(active = false)}"
 }
 
 /**
+ * [header] with [note] under it as `org-store-log-note` writes one: the header ends in `\\` and
+ * each line of the note follows, indented under the item; a blank note leaves the header alone.
+ */
+internal fun logEntry(header: String, note: String?): String {
+    val lines = note?.trimEnd()?.takeIf { it.isNotBlank() }?.lines() ?: return header
+    return (listOf("$header \\\\") + lines.map { if (it.isBlank()) "" else "  " + it.trimEnd() }).joinToString("\n")
+}
+
+/** [entry] added to the log of the heading that starts at [start]. */
+private fun OrgDocument.withLogLine(start: Int, entry: String): OrgDocument =
+    nodeAt<OrgSection>(start)?.let { insertLogNote(it, entry) } ?: this
+
+/** The planning line directly under [heading], where Org keeps `SCHEDULED:`, `DEADLINE:` and `CLOSED:`. */
+private fun OrgDocument.planningLineOf(heading: OrgSection): IntRange? {
+    val parts = headingPartsOf(heading) ?: return null
+    val planning = heading.children.firstOrNull { it is OrgPlanning && it.range.first == parts.lineEnd + 1 } ?: return null
+    val end = text.indexOf('\n', planning.range.first).let { if (it < 0) text.length else it }
+    return planning.range.first until end
+}
+
+/**
+ * The heading at [start] stamped `CLOSED:` [at], as `org-add-planning-info` does: first on its
+ * planning line, or on a new one under the heading; a stamp already there is replaced.
+ */
+private fun OrgDocument.withClosed(start: Int, at: LocalDateTime): OrgDocument {
+    val heading = nodeAt<OrgSection>(start) ?: return this
+    val stamp = at.orgStamp(active = false)
+    val line = planningLineOf(heading)
+    if (line == null) {
+        val parts = headingPartsOf(heading) ?: return this
+        return insertLines(parts.lineEnd + 1, "CLOSED: $stamp\n")
+    }
+    val source = text.substring(line.first, line.last + 1)
+    CLOSED_STAMP.find(source)?.let { return replace((line.first + it.range.first)..(line.first + it.range.last), "CLOSED: $stamp") }
+    val indent = source.takeWhile { it == ' ' || it == '\t' }.length
+    return replace((line.first + indent) until (line.first + indent), "CLOSED: $stamp ")
+}
+
+/** The heading at [start] without its `CLOSED:` stamp, and without its planning line if that leaves it empty. */
+private fun OrgDocument.withoutClosed(start: Int): OrgDocument {
+    val heading = nodeAt<OrgSection>(start) ?: return this
+    val line = planningLineOf(heading) ?: return this
+    val source = text.substring(line.first, line.last + 1)
+    val closed = CLOSED_STAMP.find(source) ?: return this
+    val rest = source.removeRange(closed.range).let { it.replace(Regex("[ \t]{2,}"), " ").trimEnd() }
+    if (rest.isBlank()) return replace(line.first..minOf(line.last + 1, text.length - 1), "")
+    return replace(line, rest.let { r -> if (source.first().isWhitespace()) r else r.trimStart() })
+}
+
+private val CLOSED_STAMP = Regex("CLOSED:[ \t]*\\[[^\\]\n]*\\][ \t]*")
+
+/**
  * Org's repeated task (`org-auto-repeat-maybe`): rather than staying [done], the entry goes back to
  * the first keyword of its sequence — or its `REPEAT_TO_STATE` — and each of its repeating [stamps]
- * moves on to its next occurrence. What remains of the completion is a record: `LAST_REPEAT` in
- * the property drawer and the [note] saying it was done, both as Org writes them by default.
+ * moves on to its next occurrence, any `CLOSED:` stamp going. What remains of the completion is
+ * what the file asks for, [log]: by default, `LAST_REPEAT` in the property drawer and the state
+ * line saying it was done; with a note under it when one is asked for.
  */
 private fun OrgDocument.repeat(
     heading: OrgSection,
     done: String,
+    previous: String?,
     stamps: List<OrgTimestamp>,
-    note: String,
     at: LocalDateTime,
     keywords: OrgTodoConfig,
+    log: LogKind?,
+    note: String?,
 ): OrgDocument {
     val start = heading.range.first
+    val logging = todoLoggingOf(text)
     val resetTo = repeatStateOf(heading, done, keywords)
     // From the last stamp up, so each replacement leaves the ranges above it where they were.
     val shifted = stamps.asReversed().fold(this) { doc, stamp ->
         doc.replace(stamp.range, nextOccurrence(text.substring(stamp.range), stamp, at))
     }
     // Every edit below moves what follows the heading, never its start, so it is found again there.
-    val reset = shifted.nodeAt<OrgSection>(start)?.let { shifted.setTodo(it, resetTo) } ?: return shifted
-    val stamped = reset.nodeAt<OrgSection>(start)
-        ?.let { reset.setProperty(it, "LAST_REPEAT", at.orgStamp(active = false)) } ?: return reset
-    return stamped.nodeAt<OrgSection>(start)?.let { stamped.insertLogNote(it, note) } ?: stamped
+    var result = shifted.nodeAt<OrgSection>(start)?.let { shifted.setTodo(it, resetTo) } ?: return shifted
+    result = result.withoutClosed(start)
+    if (logging.repeat != null) {
+        result = result.nodeAt<OrgSection>(start)?.let { result.setProperty(it, "LAST_REPEAT", at.orgStamp(active = false)) } ?: result
+    }
+    if (log != null) result = result.withLogLine(start, logEntry(stateLine(done, previous, at), note.takeIf { log == LogKind.Note }))
+    return result
 }
 
 /**

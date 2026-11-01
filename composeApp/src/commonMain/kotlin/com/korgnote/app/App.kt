@@ -83,6 +83,7 @@ import korgnote.composeapp.generated.resources.calendar
 import korgnote.composeapp.generated.resources.notes_conflict_moved
 import korgnote.composeapp.generated.resources.settings
 import org.jetbrains.compose.resources.stringResource
+import com.korgnote.app.ui.StateNoteDialog
 
 /**
  * The app: the welcome screens until it is known where the notes are, then the notes. Settings can
@@ -748,6 +749,28 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                             },
                             onDismiss = { editingLink = null },
                         )
+                    }
+                    vm.pendingStateNote?.let { pending ->
+                        StateNoteDialog(
+                            keyword = pending.keyword.takeUnless { pending.closing },
+                            headingTitle = pending.title,
+                            value = vm.stateNoteDraft,
+                            onValueChange = { vm.onStateNoteChanged(it) },
+                            completion = vm.stateNoteCompletion,
+                            todoKeywords = vm.todoKeywords,
+                            onSave = { vm.saveStateNote(scope) },
+                            onCancel = { vm.cancelStateNote() },
+                        )
+                        vm.stateNoteCompletion.pendingDatePicker?.let {
+                            val stamp = vm.stateNoteCompletion.pickerStamp
+                            OrgDatePickerDialog(
+                                initialDate = stamp?.start ?: vm.stateNoteCompletion.context.today,
+                                initialTime = stamp?.startTime,
+                                initialEndTime = stamp?.endTime,
+                                onPick = { date, time, end -> vm.stateNoteCompletion.onDatePicked(date, time, end) },
+                                onDismiss = { vm.stateNoteCompletion.dismissDatePicker() },
+                            )
+                        }
                     }
                     vm.completion.pendingDatePicker?.let {
                         val stamp = vm.completion.pickerStamp

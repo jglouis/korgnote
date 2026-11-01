@@ -55,6 +55,10 @@
     <string name="editor_priority">Priority…</string>
     <string name="editor_current_priority">Current priority</string>
     <string name="editor_no_priority">No priority</string>
+    <string name="editor_state_note_title">Note for %1$s</string>
+    <string name="editor_state_note_closing">Closing note</string>
+    <string name="editor_state_note_field">Note</string>
+    <string name="editor_state_note_save">Save</string>
     <string name="editor_keywords">Keywords: %1$s</string>
     <string name="editor_keywords_with_done">Keywords: %1$s, done: %2$s</string>
     <string name="editor_expand_drawer">Expand drawer</string>

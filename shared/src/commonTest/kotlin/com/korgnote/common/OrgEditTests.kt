@@ -32,7 +32,7 @@ class OrgEditTests {
 
     private val document = """
         #+TITLE: Edits
-        #+TODO: TODO NEXT | DONE
+        #+TODO: TODO(!) NEXT | DONE(!)
 
         * TODO Parent                       :work:
         SCHEDULED: <2026-09-21 Mon>
@@ -164,7 +164,7 @@ class OrgEditTests {
         assertTrue(none.text.contains("* Parent"), none.text)
     }
 
-    // --- State changes, logged ---
+    // --- State changes, logged as the keywords' `!` asks ---
 
     private val afternoon = LocalDateTime(2026, 10, 24, 14, 5)
 
@@ -215,12 +215,12 @@ class OrgEditTests {
 
     @Test
     fun theNoteGoesBelowThePropertyDrawer() {
-        val d = "* TODO Task\n:PROPERTIES:\n:ID: abc\n:END:\nBody.\n".toOrgDocument()
+        val d = "#+TODO: TODO | DONE(!)\n* TODO Task\n:PROPERTIES:\n:ID: abc\n:END:\nBody.\n".toOrgDocument()
 
         val result = d.changeTodoState(d.heading("Task"), "DONE", afternoon).text
 
         assertEquals(
-            "* DONE Task\n:PROPERTIES:\n:ID: abc\n:END:\n" +
+            "#+TODO: TODO | DONE(!)\n* DONE Task\n:PROPERTIES:\n:ID: abc\n:END:\n" +
                 "- State \"DONE\"       from \"TODO\"       [2026-10-24 Sat 14:05]\nBody.\n",
             result,
         )
@@ -228,13 +228,13 @@ class OrgEditTests {
 
     @Test
     fun anExistingLogbookTakesTheNote() {
-        val d = ("* TODO Task\nSCHEDULED: <2026-09-21 Mon>\n:LOGBOOK:\n" +
+        val d = ("#+TODO: TODO | DONE(!)\n* TODO Task\nSCHEDULED: <2026-09-21 Mon>\n:LOGBOOK:\n" +
             "- State \"TODO\"       from              [2026-10-01 Thu 08:00]\n:END:\nBody.\n").toOrgDocument()
 
         val result = d.changeTodoState(d.heading("Task"), "DONE", afternoon).text
 
         assertEquals(
-            "* DONE Task\nSCHEDULED: <2026-09-21 Mon>\n:LOGBOOK:\n" +
+            "#+TODO: TODO | DONE(!)\n* DONE Task\nSCHEDULED: <2026-09-21 Mon>\n:LOGBOOK:\n" +
                 "- State \"DONE\"       from \"TODO\"       [2026-10-24 Sat 14:05]\n" +
                 "- State \"TODO\"       from              [2026-10-01 Thu 08:00]\n:END:\nBody.\n",
             result,
@@ -243,12 +243,12 @@ class OrgEditTests {
 
     @Test
     fun logdrawerStartsALogbook() {
-        val d = "#+STARTUP: overview logdrawer\n* TODO Task\nBody.\n".toOrgDocument()
+        val d = "#+STARTUP: overview logdrawer\n#+TODO: TODO | DONE(!)\n* TODO Task\nBody.\n".toOrgDocument()
 
         val result = d.changeTodoState(d.heading("Task"), "DONE", afternoon).text
 
         assertEquals(
-            "#+STARTUP: overview logdrawer\n* DONE Task\n:LOGBOOK:\n" +
+            "#+STARTUP: overview logdrawer\n#+TODO: TODO | DONE(!)\n* DONE Task\n:LOGBOOK:\n" +
                 "- State \"DONE\"       from \"TODO\"       [2026-10-24 Sat 14:05]\n:END:\nBody.\n",
             result,
         )
@@ -257,11 +257,11 @@ class OrgEditTests {
     /** The heading may be the last line of a file that does not end in a newline. */
     @Test
     fun aHeadingOnTheLastLineStillGetsItsNoteOnALineOfItsOwn() {
-        val d = "* TODO Task".toOrgDocument()
+        val d = "#+TODO: TODO | DONE(!)\n* TODO Task".toOrgDocument()
 
         val result = d.changeTodoState(d.heading("Task"), "DONE", afternoon).text
 
-        assertEquals("* DONE Task\n- State \"DONE\"       from \"TODO\"       [2026-10-24 Sat 14:05]\n", result)
+        assertEquals("#+TODO: TODO | DONE(!)\n* DONE Task\n- State \"DONE\"       from \"TODO\"       [2026-10-24 Sat 14:05]\n", result)
     }
 
     @Test

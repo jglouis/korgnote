@@ -36,8 +36,10 @@ phone: your notes are your calendar, and there is no separate one to keep in syn
 - **Editing.** Tap a heading to edit it, with suggestions above the keyboard for keywords, tags,
   dates and links. Long-press it to move, promote, demote or delete it, or to refile it under a
   heading in any note, as Org's `C-c C-w` does.
-- **Tasks.** Change TODO states and priorities from a menu. Repeating tasks move to their next date
-  when done. The agenda puts the most important first, within a time.
+- **Tasks.** Change TODO states and priorities from a menu. A change is logged as each keyword
+  asks in `#+TODO:` — `!` a time stamp, `@` a note, written in a dialog with the editor's
+  suggestions. Repeating tasks move to their next date when done. The agenda puts the most
+  important first, within a time.
 - **Tables.** Edit them as a grid. `#+TBLFM` formulas are computed the same way as in Emacs.
 - **Links.** `id:`, `file:`, headings and custom IDs, with backlinks. New notes and daily notes are
   made the way org-roam makes them.
@@ -64,8 +66,8 @@ kept exactly as written and shown as plain text, so your files are never changed
   inline tasks, and `#+STARTUP:` folding (`overview`, `content`).
 - **Rich text.** Inline images, LaTeX rendering, radio targets, inline footnotes, citations and
   macros show as written. Footnote references can't be tapped yet.
-- **Per-keyword logging.** A note is logged on every state change; `TODO(t@/!)` settings and
-  `:LOGGING:` aren't read.
+- **Per-heading logging.** The `:LOGGING:` property, which changes logging for one subtree, isn't
+  read; the file's `#+TODO:` and `#+STARTUP:` settings are.
 - **Shared settings.** `#+SETUPFILE:`, `#+PROPERTY:` and property inheritance aren't read.
 
 Out of scope: running code blocks (Babel), export and publishing.

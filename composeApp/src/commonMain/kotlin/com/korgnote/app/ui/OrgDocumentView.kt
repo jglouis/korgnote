@@ -617,6 +617,8 @@ internal fun OrgElementEditor(
     onValueChange: (TextFieldValue) -> Unit,
     onCompletionKey: (CompletionKey) -> Boolean,
     todoKeywords: OrgTodoConfig,
+    /** What the field says it is for; that it edits an element when null. */
+    label: String? = null,
 ) {
     val headingColor = MaterialTheme.colorScheme.primary
     val highlighting = remember(headingColor) { OrgSyntaxHighlightTransformation(headingColor) }
@@ -666,7 +668,7 @@ internal fun OrgElementEditor(
                 // time on every keystroke, just to decide whether to show a placeholder.
                 visualTransformation = VisualTransformation.None,
                 interactionSource = interactionSource,
-                label = { Text(stringResource(Res.string.editor_editing_element)) },
+                label = { Text(label ?: stringResource(Res.string.editor_editing_element)) },
             )
         },
     )
