@@ -427,9 +427,12 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: (
                     }
                     append(' ')
                 }
-                var title = progress?.let { (cookie, _) -> node.title.removeRange(cookie.range).replace("  ", " ").trim() }
+                val title = progress?.let { (cookie, _) -> node.title.removeRange(cookie.range).replace("  ", " ").trim() }
                     ?: node.title
-                OrgSyntax.priority.find(title)?.let { prio ->
+                // The parser takes the cookie off the title into [OrgSection.priority], so it is
+                // drawn from there: looked for in the title, it was never found, and never shown.
+                node.priority?.let { priority ->
+                    val cookie = "[#${priority.text}]"
                     val priorityStyle = SpanStyle(color = OrgColors.priority)
                     // Like the keyword, a link of its own: a tap picks another priority.
                     if (priorityEditing != null) {
@@ -438,11 +441,11 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: (
                             styles = TextLinkStyles(style = priorityStyle),
                             linkInteractionListener = { pickingPriority = true },
                         )
-                        withLink(pick) { append(prio.value) }
+                        withLink(pick) { append(cookie) }
                     } else {
-                        withStyle(priorityStyle) { append(prio.value) }
+                        withStyle(priorityStyle) { append(cookie) }
                     }
-                    title = title.substring(prio.value.length)
+                    append(' ')
                 }
                 appendOrgInline(title, viewMode = true)
             }

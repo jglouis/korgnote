@@ -70,4 +70,13 @@ class AppPriorityTest {
         waitUntil(timeoutMillis = 5_000) { viewModel.note.content.contains("* [#A] Plain heading") }
         assertEquals("#+PRIORITIES: A D C\n* TODO [#B] Write it\n* [#A] Plain heading\n", viewModel.note.content)
     }
+
+    @Test
+    fun aHeadingShowsItsPriorityCookie() = runComposeUiTest {
+        viewModel.onFileSelected(tasks)
+        setContent { App() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Write it", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        // The parser keeps the cookie apart from the title; the heading still shows it, where it is written.
+        onNodeWithText("TODO [#B] Write it").assertExists()
+    }
 }
