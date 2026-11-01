@@ -70,3 +70,7 @@ actual fun rememberCalendarPermission(): PermissionAsk? {
         }
     }
 }
+
+// EventKit fetches from any account on asking: there is no account to pick.
+@Composable
+actual fun rememberCalendarAccountAccess(): CalendarAccountAccess? = null

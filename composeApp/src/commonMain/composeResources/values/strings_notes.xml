@@ -190,6 +190,8 @@
     <string name="capture_calendar_search">Search the events</string>
     <string name="capture_calendar_allow_text">KorgNote reads this phone's calendar, Google Calendar's events included, only to list them here.</string>
     <string name="capture_calendar_allow">Allow</string>
+    <string name="capture_calendar_account_why">Pick your calendar's account, so KorgNote can ask it for events just added on the web or another device.</string>
+    <string name="capture_calendar_fetch">Fetch new events</string>
     <string name="capture_reading_calendar">Reading the calendar…</string>
     <string name="capture_calendar_none">No events in the last week or the next two months.</string>
     <string name="capture_all_day">All day</string>

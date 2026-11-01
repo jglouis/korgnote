@@ -4,6 +4,9 @@ import com.korgnote.common.org.capture.CalendarEvent
 import com.korgnote.common.org.capture.EventTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
@@ -15,9 +18,11 @@ import platform.EventKit.EKAuthorizationStatusFullAccess
 import platform.EventKit.EKEntityType
 import platform.EventKit.EKEvent
 import platform.EventKit.EKEventStore
+import platform.EventKit.EKEventStoreChangedNotification
 import platform.EventKit.EKRecurrenceFrequency
 import platform.EventKit.EKRecurrenceRule
 import platform.Foundation.NSDate
+import platform.Foundation.NSNotificationCenter
 import platform.Foundation.dateWithTimeIntervalSince1970
 import platform.Foundation.timeIntervalSince1970
 import kotlin.time.Instant
@@ -31,10 +36,29 @@ internal val eventStore: EKEventStore by lazy { EKEventStore() }
  */
 class IosDeviceCalendar : DeviceCalendar {
 
-    override suspend fun events(from: LocalDate, days: Int): List<DeviceEvent> = withContext(Dispatchers.IO) {
-        if (EKEventStore.authorizationStatusForEntityType(EKEntityType.EKEntityTypeEvent) != EKAuthorizationStatusFullAccess) {
-            return@withContext emptyList()
+    private fun allowed() =
+        EKEventStore.authorizationStatusForEntityType(EKEntityType.EKEntityTypeEvent) == EKAuthorizationStatusFullAccess
+
+    /**
+     * A fetch from the accounts, as pulling down in Apple's Calendar does. Google's calendars are
+     * fetched, never pushed, on the schedule set in Settings: an event made in Google Calendar's own
+     * app, which writes to Google and not to the iPhone's calendars, waits for that fetch otherwise.
+     */
+    override suspend fun refresh() {
+        if (allowed()) eventStore.refreshSourcesIfNecessary()
+    }
+
+    /** EventKit's word that the store changed, as the fetch brings events in. */
+    override val changes: Flow<Unit> = callbackFlow {
+        val center = NSNotificationCenter.defaultCenter
+        val token = center.addObserverForName(EKEventStoreChangedNotification, `object` = eventStore, queue = null) { _ ->
+            trySend(Unit)
         }
+        awaitClose { center.removeObserver(token) }
+    }
+
+    override suspend fun events(from: LocalDate, days: Int): List<DeviceEvent> = withContext(Dispatchers.IO) {
+        if (!allowed()) return@withContext emptyList()
         val zone = TimeZone.currentSystemDefault()
         fun date(day: LocalDate) = NSDate.dateWithTimeIntervalSince1970(day.atStartOfDayIn(zone).epochSeconds.toDouble())
         val predicate = eventStore.predicateForEventsWithStartDate(date(from), endDate = date(from.plus(DatePeriod(days = days))), calendars = null)

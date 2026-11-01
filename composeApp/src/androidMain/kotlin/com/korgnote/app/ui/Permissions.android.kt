@@ -1,6 +1,7 @@
 package com.korgnote.app.ui
 
 import android.Manifest
+import android.accounts.AccountManager
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -17,6 +18,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.korgnote.app.capture.hiddenCalendarAccounts
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.capture_calendar_account_why
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.stringResource
 
 // Before Android 13 notifications need no permission.
 @Composable
@@ -79,3 +86,37 @@ private tailrec fun Context.activity(): Activity? = when (this) {
 
 @Composable
 actual fun rememberCalendarPermission(): PermissionAsk? = rememberRuntimePermission(Manifest.permission.READ_CALENDAR)
+
+/**
+ * Android's account chooser, offering the calendars' accounts the app may not see yet: the one
+ * picked becomes visible to the app for good, and its calendars sync when the picker asks.
+ */
+@Composable
+actual fun rememberCalendarAccountAccess(): CalendarAccountAccess? {
+    val context = LocalContext.current
+    val why = stringResource(Res.string.capture_calendar_account_why)
+    var waiting by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        waiting?.invoke()
+        waiting = null
+    }
+    return remember(launcher) {
+        val prefs = context.getSharedPreferences(CAPTURE_PREFS, Context.MODE_PRIVATE)
+        object : CalendarAccountAccess {
+            override suspend fun missing() = withContext(Dispatchers.IO) { hiddenCalendarAccounts(context).isNotEmpty() }
+
+            override val askedBefore: Boolean get() = prefs.getBoolean(KEY_ACCOUNTS_ASKED, false)
+
+            override fun request(onDone: () -> Unit) {
+                prefs.edit().putBoolean(KEY_ACCOUNTS_ASKED, true).apply()
+                waiting = onDone
+                // Read here, on the main thread, from a table of a few rows, as the chooser opens on a tap.
+                val hidden = hiddenCalendarAccounts(context)
+                launcher.launch(AccountManager.newChooseAccountIntent(null, hidden, null, why, null, null, null))
+            }
+        }
+    }
+}
+
+private const val CAPTURE_PREFS = "korgnote_capture"
+private const val KEY_ACCOUNTS_ASKED = "calendar_accounts_asked"

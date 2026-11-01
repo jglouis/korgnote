@@ -1,14 +1,24 @@
 package com.korgnote.app.capture
 
 import android.Manifest
+import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Context
 import android.content.pm.PackageManager
+import android.database.ContentObserver
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.provider.CalendarContract
 import android.provider.CalendarContract.Instances
+import android.util.Log
 import com.korgnote.common.org.capture.CalendarEvent
 import com.korgnote.common.org.capture.EventTime
 import com.korgnote.common.org.capture.orgRepeaterFor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
@@ -24,10 +34,43 @@ import kotlin.time.Instant
  */
 class AndroidDeviceCalendar(private val context: Context) : DeviceCalendar {
 
-    override suspend fun events(from: LocalDate, days: Int): List<DeviceEvent> = withContext(Dispatchers.IO) {
-        if (context.checkSelfPermission(Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
-            return@withContext emptyList()
+    private fun allowed() =
+        context.checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * A sync of each account the calendars come from, as the calendar app's own "Refresh" asks: an
+     * event made on the web or another phone is otherwise in the provider only once Google's push
+     * comes through, and on a phone that pushes rarely that can be the next day's periodic sync.
+     *
+     * Android ignores, without a word, a sync asked of an account the app may not see: the Google
+     * account is one until it is picked once in the account chooser, which the picker offers.
+     */
+    override suspend fun refresh(): Unit = withContext(Dispatchers.IO) {
+        val now = Bundle().apply {
+            putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true)
+            putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true)
         }
+        calendarAccounts(context).forEach { account ->
+            runCatching { ContentResolver.requestSync(account, CalendarContract.AUTHORITY, now) }
+                .onFailure { Log.w(TAG, "Could not ask the calendars to sync", it) }
+        }
+    }
+
+    /** The provider's own word that something in it changed, as a sync writes new events. */
+    override val changes: Flow<Unit> = callbackFlow {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                trySend(Unit)
+            }
+        }
+        val watching = allowed() && runCatching {
+            context.contentResolver.registerContentObserver(CalendarContract.CONTENT_URI, true, observer)
+        }.onFailure { Log.w(TAG, "Could not watch the calendars", it) }.isSuccess
+        awaitClose { if (watching) context.contentResolver.unregisterContentObserver(observer) }
+    }
+
+    override suspend fun events(from: LocalDate, days: Int): List<DeviceEvent> = withContext(Dispatchers.IO) {
+        if (!allowed()) return@withContext emptyList()
         val zone = TimeZone.currentSystemDefault()
         val uri = Instances.CONTENT_URI.buildUpon().also {
             ContentUris.appendId(it, from.atStartOfDayIn(zone).toEpochMilliseconds())
@@ -66,3 +109,5 @@ class AndroidDeviceCalendar(private val context: Context) : DeviceCalendar {
         events
     }
 }
+
+private const val TAG = "DeviceCalendar"

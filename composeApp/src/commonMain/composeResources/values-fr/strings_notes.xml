@@ -190,6 +190,8 @@
     <string name="capture_calendar_search">Chercher un événement</string>
     <string name="capture_calendar_allow_text">KorgNote lit l’agenda de ce téléphone, événements de Google Agenda compris, uniquement pour les afficher ici.</string>
     <string name="capture_calendar_allow">Autoriser</string>
+    <string name="capture_calendar_account_why">Choisissez le compte de votre agenda, pour que KorgNote puisse lui demander les événements ajoutés sur le web ou un autre appareil.</string>
+    <string name="capture_calendar_fetch">Récupérer les nouveaux événements</string>
     <string name="capture_reading_calendar">Lecture de l’agenda…</string>
     <string name="capture_calendar_none">Aucun événement la semaine passée ni dans les deux prochains mois.</string>
     <string name="capture_all_day">Toute la journée</string>

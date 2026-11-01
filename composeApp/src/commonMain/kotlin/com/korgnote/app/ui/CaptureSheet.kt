@@ -152,6 +152,7 @@ fun CaptureSheet(
     var allDestinations by remember { mutableStateOf<List<LinkTarget>?>(null) }
     var picking by remember { mutableStateOf(false) }
     val calendarPermission = calendar?.let { rememberCalendarPermission() }
+    val calendarAccounts = calendar?.let { rememberCalendarAccountAccess() }
     var pickingEvent by remember { mutableStateOf(startWithCalendar && calendarPermission != null) }
 
     if (picking) {
@@ -188,6 +189,7 @@ fun CaptureSheet(
         CalendarEventPicker(
             calendar = calendar,
             permission = calendarPermission,
+            accountAccess = calendarAccounts,
             onPick = { event ->
                 request = filer.request(SharedContent(calendar = icsOf(event)))
                 pickingEvent = false

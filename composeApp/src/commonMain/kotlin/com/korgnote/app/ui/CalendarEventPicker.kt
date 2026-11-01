@@ -37,10 +37,13 @@ import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.capture_all_day
 import korgnote.composeapp.generated.resources.capture_calendar_allow
 import korgnote.composeapp.generated.resources.capture_calendar_allow_text
+import korgnote.composeapp.generated.resources.capture_calendar_fetch
 import korgnote.composeapp.generated.resources.capture_calendar_none
 import korgnote.composeapp.generated.resources.capture_calendar_search
 import korgnote.composeapp.generated.resources.capture_pick_event
 import korgnote.composeapp.generated.resources.capture_reading_calendar
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.onStart
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -51,7 +54,8 @@ import kotlin.time.Clock
 
 /**
  * The phone's calendar, the past week and the next two months, to pick an event to capture: what
- * Google Calendar cannot share. Asks for the calendar first when it may not be read yet.
+ * Google Calendar cannot share. Asks for the calendar first when it may not be read yet, and on
+ * Android for its account once, which a sync of it needs: see [CalendarAccountAccess].
  */
 @Composable
 fun CalendarEventPicker(
@@ -59,16 +63,37 @@ fun CalendarEventPicker(
     permission: PermissionAsk,
     onPick: (CalendarEvent) -> Unit,
     onDismiss: () -> Unit,
+    accountAccess: CalendarAccountAccess? = null,
 ) {
     var granted by remember { mutableStateOf(permission.granted) }
     var events by remember { mutableStateOf<List<DeviceEvent>?>(null) }
     var query by remember { mutableStateOf("") }
     // Bumped to read the calendar again, once it is allowed.
     var reads by remember { mutableIntStateOf(0) }
+    // Bumped once the account chooser closes, to ask for the sync again with what was picked.
+    var picked by remember { mutableIntStateOf(0) }
+    // A calendar's account is hidden from the app, so asking it to sync does nothing: the button offers the chooser.
+    var hidden by remember { mutableStateOf(false) }
     val today = remember { Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date }
 
+    // A fetch from the accounts, for what was added in Google Calendar since the phone last fetched.
+    // On Android, the chooser first, once: unasked if it never was, from the button after a no.
+    LaunchedEffect(granted, picked) {
+        if (!granted) return@LaunchedEffect
+        hidden = accountAccess?.missing() == true
+        if (hidden && accountAccess != null && !accountAccess.askedBefore) {
+            accountAccess.request { picked++ }
+            return@LaunchedEffect
+        }
+        calendar.refresh()
+    }
+
+    // Read now, then again each time the phone's calendar changes, as the fetch brings events in.
     LaunchedEffect(granted, reads) {
-        if (granted) events = calendar.events(today.minus(DatePeriod(days = PAST_DAYS)), PAST_DAYS + COMING_DAYS)
+        if (!granted) return@LaunchedEffect
+        calendar.changes.onStart { emit(Unit) }.conflate().collect {
+            events = calendar.events(today.minus(DatePeriod(days = PAST_DAYS)), PAST_DAYS + COMING_DAYS)
+        }
     }
 
     AlertDialog(
@@ -121,9 +146,10 @@ fun CalendarEventPicker(
                     lastDay = day
                     header to each
                 }
-                // Opened at today: the past week is there, above, for the meeting just had.
+                // Opened at today: the past week is there, above, for the meeting just had. Not moved
+                // again when a fetch brings events in, which would pull the list from under a finger.
                 val list = rememberLazyListState()
-                LaunchedEffect(rows.size, query) {
+                LaunchedEffect(rows.isEmpty(), query) {
                     val first = rows.indexOfFirst { (_, each) -> dayOf(each.event.start) >= today }
                     if (first > 0 && query.isBlank()) list.scrollToItem(first)
                 }
@@ -136,7 +162,11 @@ fun CalendarEventPicker(
                 }
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            if (hidden && accountAccess != null) {
+                TextButton(onClick = { accountAccess.request { picked++ } }) { Text(stringResource(Res.string.capture_calendar_fetch)) }
+            }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
     )
 }

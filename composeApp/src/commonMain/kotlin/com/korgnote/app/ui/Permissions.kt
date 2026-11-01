@@ -31,3 +31,23 @@ expect fun rememberLocalNetworkPermission(): PermissionAsk?
  */
 @Composable
 expect fun rememberCalendarPermission(): PermissionAsk?
+
+/**
+ * Android's leave to ask the calendars' accounts to sync, for an event just made in Google Calendar
+ * elsewhere to reach the phone at once: Android ignores a sync asked of an account the app may not
+ * see, and the Google account is one until it is picked once in Android's account chooser.
+ */
+interface CalendarAccountAccess {
+    /** Whether a calendar's account is still hidden from the app. Reads the calendars: not on the main thread. */
+    suspend fun missing(): Boolean
+
+    /** Whether the chooser was shown before, so that it is not shown unasked again after a no. */
+    val askedBefore: Boolean
+
+    /** Shows Android's account chooser; [onDone] once it closes, whatever was picked. */
+    fun request(onDone: () -> Unit)
+}
+
+/** The leave for the calendars' accounts to sync on asking. Null where none is needed: iOS fetches on asking. */
+@Composable
+expect fun rememberCalendarAccountAccess(): CalendarAccountAccess?

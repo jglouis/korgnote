@@ -12,3 +12,6 @@ actual fun rememberLocalNetworkPermission(): PermissionAsk? = null
 
 @Composable
 actual fun rememberCalendarPermission(): PermissionAsk? = null
+
+@Composable
+actual fun rememberCalendarAccountAccess(): CalendarAccountAccess? = null
