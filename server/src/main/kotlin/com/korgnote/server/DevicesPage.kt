@@ -56,8 +56,19 @@ fun Route.devicesPage(access: ServerAccess) {
     }
     post("/devices/pair") {
         val details = access.pairing ?: return@post call.respondText("This server does not pair devices.", status = HttpStatusCode.NotFound)
-        val typed = call.receiveParameters()["addresses"]?.let(::splitAddresses).orEmpty()
+        val typedText = call.receiveParameters()["addresses"].orEmpty()
+        val typed = splitAddresses(typedText)
+        // A code is only made for somewhere a phone can go: an address it cannot use, or none at
+        // all, gets the form back with what to do, rather than a QR code that leads nowhere.
+        val wrong = typed.filterNot(::isPairingAddress)
+        if (wrong.isNotEmpty()) {
+            val problem = "“${wrong.joinToString(", ")}” is not an address. Type addresses only, such as 192.168.1.20, separated by commas: no http://, no port."
+            return@post call.respondText(page(devicesBody(access, problem, typedText)), ContentType.Text.Html, HttpStatusCode.BadRequest)
+        }
         if (typed.isNotEmpty()) details.lastAddresses = typed
+        details.missingAddressAdvice()?.let { advice ->
+            return@post call.respondText(page(devicesBody(access, advice, typedText)), ContentType.Text.Html, HttpStatusCode.BadRequest)
+        }
         val link = newLink(access, details)
         call.respondText(page(pairingBody(link)), ContentType.Text.Html)
     }
@@ -70,7 +81,17 @@ fun Route.devicesPage(access: ServerAccess) {
     post("/api/local/pairing") {
         val details = access.pairing ?: return@post call.respondText("This server does not pair devices.", status = HttpStatusCode.NotFound)
         val given = call.request.queryParameters["addresses"]?.let(::splitAddresses).orEmpty()
+        val wrong = given.filterNot(::isPairingAddress)
+        if (wrong.isNotEmpty()) {
+            return@post call.respondText("Not an address: ${wrong.joinToString(", ")}\n", status = HttpStatusCode.BadRequest)
+        }
         if (given.isNotEmpty()) details.lastAddresses = given
+        details.missingAddressAdvice()?.let { advice ->
+            return@post call.respondText(
+                "$advice Or pass it here: /api/local/pairing?addresses=192.168.1.20\n",
+                status = HttpStatusCode.Conflict,
+            )
+        }
         val link = newLink(access, details)
         val text = if (call.request.queryParameters["format"] == "link") {
             link.toUri() + "\n"
@@ -95,7 +116,11 @@ private fun newLink(access: ServerAccess, details: PairingDetails) = PairingLink
 
 private fun splitAddresses(text: String) = text.split(',', ' ', '\n').map { it.trim() }.filter { it.isNotEmpty() }
 
-private fun devicesBody(access: ServerAccess): String = buildString {
+/**
+ * The devices, and the form that shows a pairing code. [problem] is said above the form when the
+ * last try made no code, with what was typed — [typed] — kept in the box to correct.
+ */
+private fun devicesBody(access: ServerAccess, problem: String? = null, typed: String? = null): String = buildString {
     append("<h1>Devices</h1>")
     val devices = access.devices.all()
     if (devices.isEmpty()) {
@@ -116,9 +141,12 @@ private fun devicesBody(access: ServerAccess): String = buildString {
     if (details != null) {
         append("<h2>Pair a device</h2>")
         append("<p>Shows a QR code to scan in KorgNote's Settings. It works once, for 10 minutes.</p>")
+        val warning = problem ?: details.missingAddressAdvice()
+        if (warning != null) append("<p class=warning role=alert>").append(escape(warning)).append("</p>")
         append("<form method=post action=/devices/pair>")
         append("<label>Addresses the phone can reach this computer at<br>")
-        append("<input name=addresses size=40 value=\"").append(escape(details.addresses().joinToString(", "))).append("\"></label> ")
+        append("<input name=addresses size=40 placeholder=\"192.168.1.20\" value=\"")
+            .append(escape(typed ?: details.addresses().joinToString(", "))).append("\"></label> ")
         append("<button>Show a pairing code</button></form>")
         append("<p class=muted>Server ").append(escape(details.serverName)).append(" · certificate ")
         append(details.fingerprint.chunked(4).take(4).joinToString(" ")).append("…</p>")
@@ -143,7 +171,8 @@ body{font:16px/1.5 system-ui,sans-serif;max-width:44rem;margin:2rem auto;padding
 table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:.4rem .6rem;border-bottom:1px solid #ddd}
 button{font:inherit;padding:.3rem .9rem;cursor:pointer}input{font:inherit;padding:.3rem}
 .muted{color:#79747e}.qr svg{max-width:100%;height:auto}code{word-break:break-all}
-@media (prefers-color-scheme:dark){body{color:#e6e1e5;background:#1c1b1f}th,td{border-color:#49454f}.muted{color:#938f99}}
+.warning{border-left:4px solid #b3261e;padding:.5rem .8rem;background:#f9dedc;color:#410e0b}
+@media (prefers-color-scheme:dark){body{color:#e6e1e5;background:#1c1b1f}th,td{border-color:#49454f}.muted{color:#938f99}.warning{background:#601410;color:#f9dedc;border-color:#f2b8b5}}
 </style></head><body>$body</body></html>"""
 
 private fun time(epochMillis: Long): String =

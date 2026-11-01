@@ -45,6 +45,8 @@ fun main() {
         },
     ) {
         log.info(config.describe())
+        // Said at startup, where whoever started the container looks, not only when a phone fails.
+        access.pairing?.missingAddressAdvice()?.let { log.warn("No address to pair phones with. $it") }
         module(
             access,
             watchFiles = true,

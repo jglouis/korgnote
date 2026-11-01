@@ -101,14 +101,41 @@ class PairingDetails(
     val port: Int,
     /** Addresses given at startup; the Devices page adds what the computer's own interfaces say, when it can see them. */
     val configuredAddresses: List<String>,
+    /** This computer's own addresses; none inside a container. Given in tests. */
+    private val interfaces: () -> List<String> = ::interfaceAddresses,
 ) {
     /** Set by `scripts/pair.sh`, which asks the host for its addresses: the newest a QR code was made with. */
     @Volatile
     var lastAddresses: List<String> = emptyList()
 
     /** Where devices may find this server, best guesses first. */
-    fun addresses(): List<String> = (lastAddresses + configuredAddresses + interfaceAddresses()).distinct()
+    fun addresses(): List<String> = (lastAddresses + configuredAddresses + interfaces()).distinct()
+
+    /** What to do about knowing no address, which no QR code can be made without; null when one is known. */
+    fun missingAddressAdvice(): String? = if (addresses().isNotEmpty()) null else NO_ADDRESS_ADVICE
+
+    companion object {
+        const val NO_ADDRESS_ADVICE =
+            "The server does not know an address phones can reach it at, so a pairing code would lead nowhere. " +
+                "Type this computer's address on your network (such as 192.168.1.20, in its Wi-Fi settings) below. " +
+                "In a container, start it with ${ServerConfig.ADDRESSES_VARIABLE} set to that address, so it is known from the start."
+    }
 }
+
+/**
+ * Whether [text] can be where a phone finds this server: an IPv4 or IPv6 address, or a host name.
+ * Anything else typed in the Devices page's address box — a URL, a port, a stray word — would only
+ * put a code in the QR code that the phone cannot use.
+ */
+fun isPairingAddress(text: String): Boolean =
+    IPV4.matches(text) && text.split('.').all { it.toInt() <= 255 } ||
+        // IPv6 has at least two colons, which an IPv4 address with a port (`192.168.1.20:8443`) has not.
+        (text.count { it == ':' } >= 2 && IPV6.matches(text)) ||
+        (HOST_NAME.matches(text) && !text.all { it.isDigit() || it == '.' })
+
+private val IPV4 = Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")
+private val IPV6 = Regex("^[0-9A-Fa-f:.]+(%[A-Za-z0-9]+)?$")
+private val HOST_NAME = Regex("^(?=.{1,253}$)[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$")
 
 /**
  * This computer's IPv4 addresses on the networks it is on. None inside a container, whose
