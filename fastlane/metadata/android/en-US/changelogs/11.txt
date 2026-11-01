@@ -1,0 +1,5 @@
+* Clocking: clock in and out on a heading, as Emacs does, with a bar, a notification and totals against effort.
+* The calendar shows clocked time beside what was planned, with a report.
+* Priorities, state changes logged with notes, refiling.
+* Settle a sync conflict change by change.
+* A note without #+TODO: reads only TODO and DONE.
