@@ -28,8 +28,11 @@
     <string name="data_not_paired">Cet appareil n’est pas encore associé à un ordinateur. Associez-le dans Réglages.</string>
     <string name="data_pairing_revoked">L’ordinateur ne reconnaît plus cet appareil. Associez-le à nouveau dans Réglages.</string>
     <string name="data_pairing_server_said">Le serveur a répondu : %1$s.</string>
-    <string name="data_pairing_unreachable">Impossible de joindre %1$s à l’adresse %2$s, ou il n’a pas présenté le certificat indiqué par le code. Cet appareil est-il sur le même réseau, et le code vient-il de la page Appareils de cet ordinateur ?</string>
-    <string name="data_pairing_unreachable_unnamed">Impossible de joindre l’ordinateur à l’adresse %1$s, ou il n’a pas présenté le certificat indiqué par le code. Cet appareil est-il sur le même réseau, et le code vient-il de la page Appareils de cet ordinateur ?</string>
+    <string name="data_pairing_code_refused">%1$s a refusé ce code d’appairage. Chaque code ne sert qu’une fois, pendant 10 minutes. Sur l’ordinateur, appuyez à nouveau sur Show a pairing code et scannez le nouveau code.</string>
+    <string name="data_pairing_server_error">%1$s n’a pas pu appairer cet appareil. %2$s</string>
+    <string name="data_pairing_wrong_certificate">Quelque chose a répondu à %1$s, mais pas %2$s : il a présenté un autre certificat que celui du code. Si le serveur a été réinstallé ou son dossier d’état vidé, affichez un nouveau code sur sa page Devices et scannez-le. Sinon, ce réseau s’interpose peut-être entre cet appareil et l’ordinateur ; essayez-en un autre.</string>
+    <string name="data_pairing_not_listening">L’ordinateur à %1$s a répondu, mais rien n’écoute sur le port %2$d. Le serveur KorgNote est-il lancé ? Avec Docker, ce port doit être publié, comme dans -p %2$d:8443.</string>
+    <string name="data_pairing_no_answer">Rien n’a répondu à %2$s. Vérifiez que cet appareil est sur le même réseau Wi-Fi que %1$s, et non sur les données mobiles, un réseau invité ou un VPN ; que l’ordinateur est allumé ; et que son pare-feu laisse passer le port %3$d.</string>
     <string name="data_pairing_scan_prompt">Le code d’association de la page Appareils de l’ordinateur</string>
     <string name="data_device_name_desktop">Ordinateur</string>
     <string name="data_device_name_web">Navigateur web</string>

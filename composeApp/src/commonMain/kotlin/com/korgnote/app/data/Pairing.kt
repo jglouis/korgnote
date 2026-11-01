@@ -12,10 +12,15 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import korgnote.composeapp.generated.resources.Res
+import com.korgnote.common.pairing.PairingLinkCheck
 import korgnote.composeapp.generated.resources.data_or
+import korgnote.composeapp.generated.resources.data_pairing_code_refused
+import korgnote.composeapp.generated.resources.data_pairing_no_answer
+import korgnote.composeapp.generated.resources.data_pairing_not_listening
+import korgnote.composeapp.generated.resources.data_pairing_server_error
 import korgnote.composeapp.generated.resources.data_pairing_server_said
-import korgnote.composeapp.generated.resources.data_pairing_unreachable
-import korgnote.composeapp.generated.resources.data_pairing_unreachable_unnamed
+import korgnote.composeapp.generated.resources.data_pairing_wrong_certificate
+import korgnote.composeapp.generated.resources.settings_the_computer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.Serializable
@@ -89,9 +94,12 @@ class CertificatePins(private val fingerprint: () -> String?) {
 object PairingLinks {
     val pending = MutableStateFlow<String?>(null)
 
-    /** Keeps [uri] for Settings when it is a pairing link; whether it was one. */
+    /**
+     * Keeps [uri] for Settings when it is a pairing link — also one that cannot pair, so that
+     * Settings says why rather than the link doing nothing — and says whether it was one.
+     */
     fun offer(uri: String?): Boolean {
-        if (uri == null || PairingLink.parse(uri) == null) return false
+        if (uri == null || PairingLink.check(uri) == PairingLinkCheck.NotALink) return false
         pending.value = uri
         return true
     }
@@ -101,7 +109,43 @@ object PairingLinks {
 sealed interface PairingResult {
     data class Paired(val server: PairedServer) : PairingResult
 
-    data class Failed(val reason: String) : PairingResult
+    /** What went wrong, as [problem], and [reason]: that said for the user, with what to do about it. */
+    data class Failed(val reason: String, val problem: PairingProblem = PairingProblem.ServerError) : PairingResult
+}
+
+/** Why a pairing failed, each with its own advice. */
+enum class PairingProblem {
+    /** The server turned the code down: used already, or older than its 10 minutes. */
+    CodeRefused,
+
+    /** Something answered, showing another certificate than the code names. */
+    WrongCertificate,
+
+    /** The computer answered, but nothing listens on the port. */
+    NotListening,
+
+    /** Nothing answered at any address. */
+    NoAnswer,
+
+    /** The server answered with another error. */
+    ServerError,
+}
+
+/**
+ * How connecting to one address failed, read off the platform's exception: a certificate turned
+ * down by the pin, a connection refused, or anything else — a timeout, no route — which all mean
+ * that nothing answered. The words are the platform's, so they are only looked through, never shown.
+ */
+internal fun pairingProblemOf(failure: Throwable): PairingProblem {
+    val chain = generateSequence(failure) { it.cause }.take(8).toList()
+    val names = chain.map { it::class.simpleName.orEmpty() }
+    val messages = chain.map { it.message.orEmpty().lowercase() }
+    return when {
+        names.any { "SSL" in it || "Certificate" in it || "Handshake" in it } || messages.any { "certificate" in it } ->
+            PairingProblem.WrongCertificate
+        messages.any { "refused" in it } -> PairingProblem.NotListening
+        else -> PairingProblem.NoAnswer
+    }
 }
 
 /**
@@ -122,6 +166,8 @@ class DevicePairing(
         val previous = settings.getPairedServer()?.takeIf { it.serverId == link.serverId }
         val request = PairRequest(link.code, deviceName, previous?.deviceId, previous?.token)
         val client = newClient(CertificatePins { link.fingerprint })
+        val computer = link.serverName.ifBlank { getString(Res.string.settings_the_computer) }
+        val failures = mutableMapOf<String, PairingProblem>()
         return client.use {
             for (address in link.addresses) {
                 val response = try {
@@ -131,13 +177,16 @@ class DevicePairing(
                     }
                 } catch (e: CancellationException) {
                     throw e
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    failures[address] = pairingProblemOf(e)
                     continue
                 }
+                if (response.status == HttpStatusCode.Forbidden) {
+                    return@use PairingResult.Failed(getString(Res.string.data_pairing_code_refused, computer), PairingProblem.CodeRefused)
+                }
                 if (response.status != HttpStatusCode.OK) {
-                    return@use PairingResult.Failed(
-                        response.bodyAsText().ifBlank { getString(Res.string.data_pairing_server_said, response.status.toString()) },
-                    )
+                    val said = response.bodyAsText().ifBlank { getString(Res.string.data_pairing_server_said, response.status.toString()) }
+                    return@use PairingResult.Failed(getString(Res.string.data_pairing_server_error, computer, said), PairingProblem.ServerError)
                 }
                 val answer = response.body<PairResponse>()
                 val server = PairedServer(
@@ -153,13 +202,24 @@ class DevicePairing(
                 settings.setPairedServer(server)
                 return@use PairingResult.Paired(server)
             }
-            // The platform's own words are no help here: an address with nothing at it and a server
-            // showing another certificate both end the connection, and neither is worth a stack.
-            val addresses = link.addresses.joinToString(" ${getString(Res.string.data_or)} ")
-            PairingResult.Failed(
-                if (link.serverName.isBlank()) getString(Res.string.data_pairing_unreachable_unnamed, addresses)
-                else getString(Res.string.data_pairing_unreachable, link.serverName, addresses),
-            )
+            // The most telling failure decides what is said: something that answered with another
+            // certificate, then a computer with nothing on the port, then no answer at all.
+            val or = " ${getString(Res.string.data_or)} "
+            fun where(problem: PairingProblem) = failures.filterValues { it == problem }.keys.joinToString(or)
+            when {
+                PairingProblem.WrongCertificate in failures.values -> PairingResult.Failed(
+                    getString(Res.string.data_pairing_wrong_certificate, where(PairingProblem.WrongCertificate), computer),
+                    PairingProblem.WrongCertificate,
+                )
+                PairingProblem.NotListening in failures.values -> PairingResult.Failed(
+                    getString(Res.string.data_pairing_not_listening, where(PairingProblem.NotListening), link.port),
+                    PairingProblem.NotListening,
+                )
+                else -> PairingResult.Failed(
+                    getString(Res.string.data_pairing_no_answer, computer, link.addresses.joinToString(or), link.port),
+                    PairingProblem.NoAnswer,
+                )
+            }
         }
     }
 }

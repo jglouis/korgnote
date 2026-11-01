@@ -56,7 +56,10 @@
     <string name="settings_error_file_link_start">Please write each folder in links as the links do, starting with ~ or /.</string>
 
     <string name="settings_pair_title">Pair with a computer</string>
-    <string name="settings_pair_not_a_link">That is not a KorgNote pairing link. It starts with korgnote://pair.</string>
+    <string name="settings_pair_not_a_link">That is not a KorgNote pairing code: it reads “%1$s”. On the computer the server runs on, open http://localhost:8080/devices, press Show a pairing code, and scan that code.</string>
+    <string name="settings_pair_no_address">This code from %1$s does not say where to reach it: the server knows no address for itself, as when it runs in Docker without KORGNOTE_ADVERTISED_ADDRESSES. On its Devices page, type the computer's address on your network (such as 192.168.1.20) in the address box, press Show a pairing code, and scan the new code.</string>
+    <string name="settings_pair_incomplete">This pairing link is incomplete. Copy all of it, from korgnote://pair to the code after &amp;c=, or scan the QR code instead.</string>
+    <string name="settings_pair_failed_title">Could not pair</string>
     <string name="settings_pairing_with">Pairing with %1$s…</string>
     <string name="settings_the_computer">the computer</string>
     <string name="settings_paired_with">Paired with %1$s.</string>

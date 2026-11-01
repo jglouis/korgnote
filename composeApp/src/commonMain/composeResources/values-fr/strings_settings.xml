@@ -55,7 +55,10 @@
     <string name="settings_error_file_link_start">Veuillez écrire chaque dossier comme dans les liens, en commençant par ~ ou /.</string>
 
     <string name="settings_pair_title">Associer à un ordinateur</string>
-    <string name="settings_pair_not_a_link">Ce n’est pas un lien d’association KorgNote. Il commence par korgnote://pair.</string>
+    <string name="settings_pair_not_a_link">Ce n’est pas un code d’appairage KorgNote : il contient « %1$s ». Sur l’ordinateur où tourne le serveur, ouvrez http://localhost:8080/devices, appuyez sur Show a pairing code et scannez ce code.</string>
+    <string name="settings_pair_no_address">Ce code de %1$s ne dit pas où le joindre : le serveur ne connaît aucune adresse pour lui-même, comme lorsqu’il tourne dans Docker sans KORGNOTE_ADVERTISED_ADDRESSES. Sur sa page Devices, saisissez l’adresse de l’ordinateur sur votre réseau (comme 192.168.1.20) dans le champ d’adresse, appuyez sur Show a pairing code et scannez le nouveau code.</string>
+    <string name="settings_pair_incomplete">Ce lien d’appairage est incomplet. Copiez-le en entier, de korgnote://pair jusqu’au code après &amp;c=, ou scannez plutôt le code QR.</string>
+    <string name="settings_pair_failed_title">Appairage impossible</string>
     <string name="settings_pairing_with">Association avec %1$s…</string>
     <string name="settings_the_computer">l’ordinateur</string>
     <string name="settings_paired_with">Associé à %1$s.</string>

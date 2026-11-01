@@ -30,8 +30,11 @@
     <string name="data_not_paired">This device is not paired with a computer yet. Pair it in Settings.</string>
     <string name="data_pairing_revoked">The computer no longer knows this device. Pair it again in Settings.</string>
     <string name="data_pairing_server_said">The server said %1$s.</string>
-    <string name="data_pairing_unreachable">Could not reach %1$s at %2$s, or it did not show the certificate the code names. Is this device on the same network, and is the code from this computer's Devices page?</string>
-    <string name="data_pairing_unreachable_unnamed">Could not reach the computer at %1$s, or it did not show the certificate the code names. Is this device on the same network, and is the code from this computer's Devices page?</string>
+    <string name="data_pairing_code_refused">%1$s turned this pairing code down. Each code works once, for 10 minutes. On the computer, press Show a pairing code again and scan the new code.</string>
+    <string name="data_pairing_server_error">%1$s could not pair this device. %2$s</string>
+    <string name="data_pairing_wrong_certificate">Something answered at %1$s, but not %2$s: it showed another certificate than the code names. If the server was reinstalled, or its state folder emptied, show a new code on its Devices page and scan that. If not, this network may be getting between this device and the computer; try another one.</string>
+    <string name="data_pairing_not_listening">The computer at %1$s answered, but nothing listens on port %2$d. Is the KorgNote server running? In Docker, that port must be published, as in -p %2$d:8443.</string>
+    <string name="data_pairing_no_answer">Nothing answered at %2$s. Check that this device is on the same Wi-Fi network as %1$s, not on mobile data, a guest network or a VPN; that the computer is awake; and that its firewall lets port %3$d in.</string>
     <string name="data_pairing_scan_prompt">The pairing code on the computer's Devices page</string>
     <string name="data_device_name_desktop">Desktop</string>
     <string name="data_device_name_web">Web browser</string>

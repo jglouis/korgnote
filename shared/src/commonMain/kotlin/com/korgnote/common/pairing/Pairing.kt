@@ -38,26 +38,48 @@ data class PairingLink(
     companion object {
         const val SCHEME = "korgnote"
 
-        /** The link in [text] — trimmed, as a paste brings it — or null when it is not one. */
-        fun parse(text: String): PairingLink? {
+        /** The link in [text] — trimmed, as a paste brings it — or null when it is not one that can pair. */
+        fun parse(text: String): PairingLink? = (check(text) as? PairingLinkCheck.Valid)?.link
+
+        /**
+         * What [text] is, so that a link that cannot pair says why: not a pairing link at all, one
+         * whose server gave it no address, or one with parts missing, as a partial copy leaves it.
+         */
+        fun check(text: String): PairingLinkCheck {
             val t = text.trim()
             val prefix = "$SCHEME://pair?"
-            if (!t.startsWith(prefix, ignoreCase = true)) return null
+            if (!t.startsWith(prefix, ignoreCase = true)) return PairingLinkCheck.NotALink
             val query = t.substring(prefix.length).split('&').mapNotNull { part ->
                 val at = part.indexOf('=')
                 if (at <= 0) null else part.substring(0, at) to part.substring(at + 1)
             }.toMap()
-            val serverId = query["id"]?.let(::decode)?.takeIf { it.isNotBlank() } ?: return null
+            val name = query["name"]?.let(::decode).orEmpty()
+            val serverId = query["id"]?.let(::decode)?.takeIf { it.isNotBlank() }
             val addresses = query["a"].orEmpty().split(',').map(::decode).map { it.trim() }.filter { it.isNotEmpty() }
-            val port = query["p"]?.toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
-            val fingerprint = query["fp"]?.lowercase()?.takeIf { FINGERPRINT.matches(it) } ?: return null
-            val code = query["c"]?.let(::decode)?.takeIf { it.isNotBlank() } ?: return null
-            if (addresses.isEmpty()) return null
-            return PairingLink(serverId, query["name"]?.let(::decode).orEmpty(), addresses, port, fingerprint, code)
+            val port = query["p"]?.toIntOrNull()?.takeIf { it in 1..65535 }
+            val fingerprint = query["fp"]?.lowercase()?.takeIf { FINGERPRINT.matches(it) }
+            val code = query["c"]?.let(::decode)?.takeIf { it.isNotBlank() }
+            if (serverId == null || port == null || fingerprint == null || code == null) return PairingLinkCheck.Incomplete
+            if (addresses.isEmpty()) return PairingLinkCheck.NoAddress(name)
+            return PairingLinkCheck.Valid(PairingLink(serverId, name, addresses, port, fingerprint, code))
         }
 
         private val FINGERPRINT = Regex("^[0-9a-f]{64}$")
     }
+}
+
+/** What a scanned or pasted text turned out to be; see [PairingLink.check]. */
+sealed interface PairingLinkCheck {
+    data class Valid(val link: PairingLink) : PairingLinkCheck
+
+    /** Not a pairing link at all: another QR code, a web address, a word. */
+    data object NotALink : PairingLinkCheck
+
+    /** Complete, but saying nowhere to reach the server, [serverName]: its server knew no address for itself. */
+    data class NoAddress(val serverName: String) : PairingLinkCheck
+
+    /** A pairing link with parts missing or damaged. */
+    data object Incomplete : PairingLinkCheck
 }
 
 /** What a device sends to pair, over TLS to the pinned certificate. */

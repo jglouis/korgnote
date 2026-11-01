@@ -27,11 +27,18 @@ class DevicePairingTest {
     private val pinsGiven = mutableListOf<Set<String>>()
     private val hosts = mutableListOf<String>()
 
-    private fun pairing(settings: SettingsRepository, unreachable: Set<String> = emptySet(), status: HttpStatusCode = HttpStatusCode.OK) =
+    private fun pairing(
+        settings: SettingsRepository,
+        unreachable: Set<String> = emptySet(),
+        status: HttpStatusCode = HttpStatusCode.OK,
+        /** How each address fails, by host, instead of answering. */
+        failures: Map<String, Throwable> = emptyMap(),
+    ) =
         DevicePairing({ pins ->
             pinsGiven += pins.accepted()
             HttpClient(MockEngine { request ->
                 hosts += request.url.host
+                failures[request.url.host]?.let { throw it }
                 if (request.url.host in unreachable) throw RuntimeException("no route")
                 respond(
                     """{"deviceId":"dev-2","token":"new-token","serverId":"server-2","serverName":"Laptop"}""",
@@ -76,7 +83,56 @@ class DevicePairingTest {
         val result = pairing(settings, unreachable = setOf("10.0.0.5", "192.168.1.20")).pair(link, "Phone")
 
         assertIs<PairingResult.Failed>(result)
-        assertEquals(true, result.reason.startsWith("Could not reach Laptop at 10.0.0.5 or 192.168.1.20, "), result.reason)
+        assertEquals(PairingProblem.NoAnswer, result.problem)
+        assertEquals(true, result.reason.startsWith("Nothing answered at 10.0.0.5 or 192.168.1.20. "), result.reason)
+        assertEquals(true, "same Wi-Fi network as Laptop" in result.reason, result.reason)
         assertNull(settings.getPairedServer())
     }
+
+    /** A used or expired code: the advice is a new code, not the network. */
+    @Test
+    fun aRefusedCodeSaysToShowANewOne() = runTest {
+        val result = pairing(InMemorySettingsRepository(), status = HttpStatusCode.Forbidden).pair(link, "Phone")
+        assertIs<PairingResult.Failed>(result)
+        assertEquals(PairingProblem.CodeRefused, result.problem)
+        assertEquals(true, result.reason.startsWith("Laptop turned this pairing code down."), result.reason)
+    }
+
+    @Test
+    fun anotherCertificateSaysSoRatherThanNoAnswer() = runTest {
+        val result = pairing(
+            InMemorySettingsRepository(),
+            failures = mapOf(
+                "10.0.0.5" to RuntimeException("no route"),
+                "192.168.1.20" to RuntimeException("handshake failed", FakeCertificateException("The server's certificate is not the one this device paired with.")),
+            ),
+        ).pair(link, "Phone")
+        assertIs<PairingResult.Failed>(result)
+        assertEquals(PairingProblem.WrongCertificate, result.problem)
+        assertEquals(true, result.reason.startsWith("Something answered at 192.168.1.20, but not Laptop"), result.reason)
+    }
+
+    @Test
+    fun aRefusedConnectionAsksWhetherTheServerRuns() = runTest {
+        val result = pairing(
+            InMemorySettingsRepository(),
+            failures = mapOf(
+                "10.0.0.5" to RuntimeException("timeout"),
+                "192.168.1.20" to RuntimeException("Failed to connect", RuntimeException("ECONNREFUSED (Connection refused)")),
+            ),
+        ).pair(link, "Phone")
+        assertIs<PairingResult.Failed>(result)
+        assertEquals(PairingProblem.NotListening, result.problem)
+        assertEquals(true, "nothing listens on port 8443" in result.reason, result.reason)
+    }
+
+    @Test
+    fun anotherErrorFromTheServerIsPassedOn() = runTest {
+        val result = pairing(InMemorySettingsRepository(), status = HttpStatusCode.InternalServerError).pair(link, "Phone")
+        assertIs<PairingResult.Failed>(result)
+        assertEquals(PairingProblem.ServerError, result.problem)
+        assertEquals(true, result.reason.startsWith("Laptop could not pair this device."), result.reason)
+    }
+
+    private class FakeCertificateException(message: String) : Exception(message)
 }

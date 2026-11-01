@@ -29,6 +29,7 @@ import com.korgnote.app.data.DevicePairing
 import com.korgnote.app.data.PairingResult
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.common.pairing.PairingLink
+import com.korgnote.common.pairing.PairingLinkCheck
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.settings_forget
@@ -37,6 +38,10 @@ import korgnote.composeapp.generated.resources.settings_forget_title
 import korgnote.composeapp.generated.resources.settings_pair
 import korgnote.composeapp.generated.resources.settings_pair_how_to
 import korgnote.composeapp.generated.resources.settings_pair_not_a_link
+import korgnote.composeapp.generated.resources.ok
+import korgnote.composeapp.generated.resources.settings_pair_failed_title
+import korgnote.composeapp.generated.resources.settings_pair_incomplete
+import korgnote.composeapp.generated.resources.settings_pair_no_address
 import korgnote.composeapp.generated.resources.settings_pair_title
 import korgnote.composeapp.generated.resources.settings_paired_as
 import korgnote.composeapp.generated.resources.settings_paired_with
@@ -74,26 +79,43 @@ fun PairingSettings(
     var pasted by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    /** Why the last try did not pair, with what to do: a dialog, as pairing is not to fail unnoticed. */
+    var failure by remember { mutableStateOf<String?>(null) }
     var forgetting by remember { mutableStateOf(false) }
     val deviceName = rememberDeviceName()
 
     fun pairWith(text: String) = scope.launch {
-        val link = PairingLink.parse(text)
-        if (link == null) {
-            message = getString(Res.string.settings_pair_not_a_link)
-            return@launch
+        message = null
+        val link = when (val check = PairingLink.check(text)) {
+            is PairingLinkCheck.Valid -> check.link
+            PairingLinkCheck.NotALink -> {
+                val shown = text.trim().let { if (it.length > 80) it.take(80) + "…" else it }
+                failure = getString(Res.string.settings_pair_not_a_link, shown)
+                return@launch
+            }
+            is PairingLinkCheck.NoAddress -> {
+                failure = getString(Res.string.settings_pair_no_address, check.serverName.ifBlank { getString(Res.string.settings_the_computer) })
+                return@launch
+            }
+            PairingLinkCheck.Incomplete -> {
+                failure = getString(Res.string.settings_pair_incomplete)
+                return@launch
+            }
         }
         if (pairing == null) return@launch
         busy = true
         message = getString(Res.string.settings_pairing_with, link.serverName.ifBlank { getString(Res.string.settings_the_computer) })
-        message = when (val result = pairing.pair(link, deviceName)) {
+        when (val result = pairing.pair(link, deviceName)) {
             is PairingResult.Paired -> {
                 paired = result.server
                 pasted = ""
                 onChanged()
-                getString(Res.string.settings_paired_with, result.server.serverName)
+                message = getString(Res.string.settings_paired_with, result.server.serverName)
             }
-            is PairingResult.Failed -> result.reason
+            is PairingResult.Failed -> {
+                message = null
+                failure = result.reason
+            }
         }
         busy = false
     }
@@ -105,6 +127,20 @@ fun PairingSettings(
         }
     }
     val scan = rememberPairingScanner { pairWith(it) }
+
+    failure?.let { reason ->
+        AlertDialog(
+            onDismissRequest = { failure = null },
+            title = { Text(stringResource(Res.string.settings_pair_failed_title)) },
+            text = { Text(reason) },
+            confirmButton = {
+                if (scan != null && pairing != null) {
+                    TextButton(onClick = { failure = null; scan() }) { Text(stringResource(Res.string.settings_scan_again)) }
+                }
+            },
+            dismissButton = { TextButton(onClick = { failure = null }) { Text(stringResource(Res.string.ok)) } },
+        )
+    }
 
     if (forgetting) {
         AlertDialog(
