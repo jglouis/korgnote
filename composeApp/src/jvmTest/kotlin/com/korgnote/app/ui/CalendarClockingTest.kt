@@ -18,6 +18,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOptions
 import kotlinx.datetime.LocalDate
@@ -45,6 +46,7 @@ class CalendarClockingTest {
 
     private val clockedIn = mutableListOf<Pair<String, Int>>()
     private val opened = mutableListOf<Pair<String, Int>>()
+    private val keywordsSet = mutableListOf<Triple<String, Int, String?>>()
 
     private fun ComposeUiTest.show(mode: CalendarMode) = setContent {
         MaterialTheme {
@@ -53,11 +55,13 @@ class CalendarClockingTest {
                 agenda = agenda,
                 initialMode = mode,
                 now = now,
-                clocking = CalendarClocking(
+                actions = CalendarActions(
                     isRunning = { file, offset -> file == "work.org" && offset == work.indexOf("** Figures") },
                     clockIn = { file, offset -> clockedIn += file to offset },
                     clockOut = { _, _ -> },
                     open = { file, offset -> opened += file to offset },
+                    keywords = { DEFAULT_TODO_KEYWORDS },
+                    setTodo = { file, offset, keyword -> keywordsSet += Triple(file, offset, keyword) },
                 ),
             )
         }
@@ -92,6 +96,14 @@ class CalendarClockingTest {
         onNodeWithText("1 h 30").assertExists()
         onNodeWithText("1 h 15").assertExists()
         onNodeWithText("2 h 45").assertExists()
+    }
+
+    @Test
+    fun anEntrysKeywordIsChangedFromItsLongPress() = runComposeUiTest {
+        show(CalendarMode.Agenda)
+        onAllNodesWithText("Design review", substring = true)[0].performTouchInput { longClick() }
+        onNodeWithText("TODO").performClick()
+        assertEquals(listOf<Triple<String, Int, String?>>(Triple("work.org", 0, "TODO")), keywordsSet)
     }
 
     @Test

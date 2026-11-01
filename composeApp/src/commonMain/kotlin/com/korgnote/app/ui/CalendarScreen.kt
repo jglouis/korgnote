@@ -88,9 +88,9 @@ fun CalendarScreen(
     initialAnchorDate: LocalDate? = null,
     now: LocalDateTime? = null,
     headerActions: @Composable () -> Unit = {},
-    /** Clocking a heading in or out from a long-press on its entry, and opening clocked time; none here. */
-    clocking: CalendarClocking? = null,
-) = CompositionLocalProvider(LocalCalendarClocking provides clocking) {
+    /** What a long-press on an entry does to its heading — its clock, its keyword — and opening clocked time. */
+    actions: CalendarActions? = null,
+) = CompositionLocalProvider(LocalCalendarActions provides actions) {
     val clock by produceState(now ?: currentDateTime(), now) {
         if (now != null) return@produceState
         while (true) {

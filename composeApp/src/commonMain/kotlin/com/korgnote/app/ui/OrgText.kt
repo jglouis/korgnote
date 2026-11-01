@@ -585,6 +585,17 @@ private fun TodoKeywordMenu(
     onPick: (keyword: String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        TodoKeywordItems(current, todoConfig, onPick)
+    }
+}
+
+/**
+ * A heading's keywords as menu items: the not-done ones, then the done ones, each in its colour and
+ * [current] ticked, then *No keyword*. The note's keyword menu, and the calendar's long-press.
+ */
+@Composable
+internal fun TodoKeywordItems(current: String?, todoConfig: OrgTodoConfig, onPick: (keyword: String?) -> Unit) {
     @Composable
     fun Item(keyword: String) = DropdownMenuItem(
         text = { Text(keyword, color = todoConfig.colorFor(keyword) ?: Color.Unspecified, fontWeight = FontWeight.Bold) },
@@ -594,13 +605,11 @@ private fun TodoKeywordMenu(
         onClick = { onPick(keyword) },
     )
 
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        todoConfig.todo.forEach { Item(it) }
-        if (todoConfig.todo.isNotEmpty() && todoConfig.done.isNotEmpty()) HorizontalDivider()
-        todoConfig.done.forEach { Item(it) }
-        HorizontalDivider()
-        DropdownMenuItem(text = { Text(stringResource(Res.string.editor_no_keyword)) }, onClick = { onPick(null) })
-    }
+    todoConfig.todo.forEach { Item(it) }
+    if (todoConfig.todo.isNotEmpty() && todoConfig.done.isNotEmpty()) HorizontalDivider()
+    todoConfig.done.forEach { Item(it) }
+    HorizontalDivider()
+    DropdownMenuItem(text = { Text(stringResource(Res.string.editor_no_keyword)) }, onClick = { onPick(null) })
 }
 
 /** The link annotation on a heading's TODO keyword, which offers the other keywords when tapped. */

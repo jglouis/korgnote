@@ -475,6 +475,42 @@ class NotesViewModel(
         applyTodoState(heading.range.first, keyword, note = null, scope)
     }
 
+    /** The keywords of the note at [path]: its own `#+TODO:`, or what the notes declare. */
+    fun todoKeywordsOf(path: String): OrgTodoConfig =
+        if (path == note.path) todoKeywords else library[path]?.todoKeywords ?: library.fallbackKeywords
+
+    /**
+     * [setTodoAt] for the heading at [headingOffset] of the note at [path], open or not: from the
+     * calendar, say. A keyword that asks for a note (`@`) opens the note first, so that the note
+     * is asked for over the heading it goes under, as it is from the note itself; any other change
+     * is made in the note where it is, logged and repeated as Org does.
+     */
+    fun setTodo(path: String, headingOffset: Int, keyword: String?) {
+        if (path == note.path) {
+            if (refuseWhileEditing()) return
+            setTodoAt(headingOffset, keyword, viewModelScope)
+            return
+        }
+        val document = library[path] ?: return
+        val heading = document.nodeAt<OrgSection>(headingOffset) ?: return
+        val keywords = document.todoKeywords
+        if (keyword != null && document.stateChangeLog(heading, keyword, keywords) == LogKind.Note) {
+            if (refuseWhileEditing()) return
+            viewModelScope.launch {
+                openAndWait(path)
+                if (note.path == path) setTodoAt(headingOffset, keyword, viewModelScope)
+            }
+            return
+        }
+        val at = now()
+        viewModelScope.launch {
+            changeNote(path) { doc ->
+                val target = doc.nodeAt<OrgSection>(headingOffset) ?: return@changeNote doc
+                doc.changeTodoState(target, keyword, at, keywords).withStatistics(since = doc)
+            }
+        }
+    }
+
     /** Changes the keyword [pendingStateNote] waits on, logging what was written. */
     fun saveStateNote(scope: CoroutineScope? = null) {
         val pending = pendingStateNote ?: return

@@ -85,6 +85,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaKind
@@ -267,40 +268,51 @@ private fun AgendaOccurrence.headline(
 // --- Clocking from the calendar ----------------------------------------------------------------
 
 /**
- * What the calendar can do about a heading's clock, given by the app: whether it runs, and clocking
- * it in or out. None in a preview or a test that gives none, where a long-press does nothing.
+ * What the calendar can do to the heading behind an entry, given by the app: clock it in or out,
+ * and change its keyword. None in a preview or a test that gives none, where a long-press does
+ * nothing.
  */
-class CalendarClocking(
+class CalendarActions(
     val isRunning: (file: String, headingOffset: Int) -> Boolean,
     val clockIn: (file: String, headingOffset: Int) -> Unit,
     val clockOut: (file: String, headingOffset: Int) -> Unit,
     /** Opens the note at a clocked heading, as a tap on an entry opens its note. */
     val open: (file: String, headingOffset: Int) -> Unit,
+    /** The keywords of the note at [file]: its own `#+TODO:`, or what the notes declare. */
+    val keywords: (file: String) -> OrgTodoConfig,
+    /** Sets the heading's keyword, or clears it for null, as the note's keyword menu does. */
+    val setTodo: (file: String, headingOffset: Int, keyword: String?) -> Unit,
 )
 
-val LocalCalendarClocking = compositionLocalOf<CalendarClocking?> { null }
+val LocalCalendarActions = compositionLocalOf<CalendarActions?> { null }
 
 /**
  * A long-press's menu on an entry or a clocked block: *Clock in* on its heading, or *Clock out* when
- * its clock runs. Put inside what is pressed, which it drops down from.
+ * its clock runs, then its keywords, [todo] ticked, as the note's keyword menu offers them. Put
+ * inside what is pressed, which it drops down from.
  */
 @Composable
-private fun ClockMenu(file: String, headingOffset: Int, expanded: Boolean, onDismiss: () -> Unit) {
-    val clocking = LocalCalendarClocking.current ?: return
+private fun EntryMenu(file: String, headingOffset: Int, todo: String?, expanded: Boolean, onDismiss: () -> Unit) {
+    val actions = LocalCalendarActions.current ?: return
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        if (clocking.isRunning(file, headingOffset)) {
-            DropdownMenuItem(text = { Text(stringResource(Res.string.editor_clock_out)) }, onClick = { onDismiss(); clocking.clockOut(file, headingOffset) })
+        if (actions.isRunning(file, headingOffset)) {
+            DropdownMenuItem(text = { Text(stringResource(Res.string.editor_clock_out)) }, onClick = { onDismiss(); actions.clockOut(file, headingOffset) })
         } else {
-            DropdownMenuItem(text = { Text(stringResource(Res.string.editor_clock_in)) }, onClick = { onDismiss(); clocking.clockIn(file, headingOffset) })
+            DropdownMenuItem(text = { Text(stringResource(Res.string.editor_clock_in)) }, onClick = { onDismiss(); actions.clockIn(file, headingOffset) })
+        }
+        HorizontalDivider()
+        TodoKeywordItems(todo, remember(file, actions) { actions.keywords(file) }) { keyword ->
+            onDismiss()
+            if (keyword != todo) actions.setTodo(file, headingOffset, keyword)
         }
     }
 }
 
-/** A tap that opens, and a long-press that opens [ClockMenu] when the app can clock. */
+/** A tap that opens, and a long-press that opens [EntryMenu] when the app gives it actions. */
 @Composable
-private fun Modifier.openOrClock(onOpen: () -> Unit, onMenu: () -> Unit): Modifier {
-    val clocking = LocalCalendarClocking.current
-    return combinedClickable(onClick = onOpen, onLongClick = if (clocking != null) onMenu else null)
+private fun Modifier.openOrMenu(onOpen: () -> Unit, onMenu: () -> Unit): Modifier {
+    val actions = LocalCalendarActions.current
+    return combinedClickable(onClick = onOpen, onLongClick = if (actions != null) onMenu else null)
 }
 
 /** The colour of clocked time, set apart from the kinds of date: work done, not work planned. */
@@ -412,7 +424,7 @@ private fun ClockedSummary(agenda: AgendaIndex, from: LocalDate, to: LocalDate, 
  */
 @Composable
 private fun ClockReport(report: List<ClockedTotal>, from: LocalDate, to: LocalDate, onOpened: () -> Unit = {}) {
-    val clocking = LocalCalendarClocking.current
+    val actions = LocalCalendarActions.current
     val accent = clockedAccent()
     Column(Modifier.fillMaxWidth().padding(top = if (from == to) 0.dp else 24.dp, bottom = 8.dp).testTag("clockReport")) {
         Row(Modifier.padding(start = 4.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -437,8 +449,8 @@ private fun ClockReport(report: List<ClockedTotal>, from: LocalDate, to: LocalDa
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .clickable(enabled = clocking != null) {
-                            clocking?.open(total.file, total.headingOffset)
+                        .clickable(enabled = actions != null) {
+                            actions?.open(total.file, total.headingOffset)
                             onOpened()
                         }
                         .padding(vertical = 6.dp, horizontal = 4.dp),
@@ -488,12 +500,12 @@ private fun AgendaRow(occurrence: AgendaOccurrence, today: LocalDate, leading: D
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .openOrClock(onOpen) { menu = true }
+            .openOrMenu(onOpen) { menu = true }
             .dimmedIfDone(occurrence)
             .padding(vertical = 6.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ClockMenu(occurrence.entry.file, occurrence.entry.headingOffset, menu) { menu = false }
+        EntryMenu(occurrence.entry.file, occurrence.entry.headingOffset, occurrence.entry.todo, menu) { menu = false }
         Box(Modifier.width(3.dp).height(36.dp).background(accent, RoundedCornerShape(2.dp)))
         Spacer(Modifier.width(8.dp))
         Box(Modifier.width(leading)) {
@@ -788,7 +800,7 @@ private fun DayColumn(
                     .background(MaterialTheme.colorScheme.surface)
                     .background(accent.copy(alpha = 0.18f))
                     .keywordEdge(keywordColor)
-                    .openOrClock({ onOpen(occurrence) }) { menu = true }
+                    .openOrMenu({ onOpen(occurrence) }) { menu = true }
                     .dimmedIfDone(occurrence)
                     .padding(
                         start = (if (keywordColor != null) KEYWORD_EDGE else 0.dp) + inset,
@@ -797,7 +809,7 @@ private fun DayColumn(
                         bottom = 1.dp,
                     ),
             ) {
-                ClockMenu(occurrence.entry.file, occurrence.entry.headingOffset, menu) { menu = false }
+                EntryMenu(occurrence.entry.file, occurrence.entry.headingOffset, occurrence.entry.todo, menu) { menu = false }
                 Text(
                     occurrence.headline(keywordColor = keywordColor, titleOnly = compact),
                     modifier = Modifier.keywordDescription(occurrence, compact),
@@ -829,7 +841,7 @@ private fun DayColumn(
  */
 @Composable
 private fun ClockedBlockView(block: ClockedBlock, width: Dp, hourHeight: Dp, compact: Boolean, titleLine: Dp, timeLine: Dp) {
-    val clocking = LocalCalendarClocking.current
+    val actions = LocalCalendarActions.current
     val span = block.piece.span
     val running = span.end == null
     val accent = if (running) MaterialTheme.colorScheme.primary else clockedAccent()
@@ -851,12 +863,12 @@ private fun ClockedBlockView(block: ClockedBlock, width: Dp, hourHeight: Dp, com
             .background(MaterialTheme.colorScheme.surface)
             .background(accent.copy(alpha = 0.10f))
             .border(1.dp, accent.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
-            .openOrClock({ clocking?.open(span.file, span.headingOffset) }) { menu = true }
+            .openOrMenu({ actions?.open(span.file, span.headingOffset) }) { menu = true }
             .semantics(mergeDescendants = true) { contentDescription = description }
             .testTag("clocked-${span.file}-${span.headingOffset}-${block.piece.startMinute}")
             .padding(horizontal = if (compact) 2.dp else 4.dp, vertical = 1.dp),
     ) {
-        ClockMenu(span.file, span.headingOffset, menu) { menu = false }
+        EntryMenu(span.file, span.headingOffset, span.todo, menu) { menu = false }
         Row(verticalAlignment = Alignment.Top) {
             Icon(Icons.Filled.Timer, contentDescription = null, tint = accent, modifier = Modifier.padding(top = 2.dp, end = 2.dp).size(10.dp))
             Text(
@@ -1012,7 +1024,7 @@ private fun EventChip(
             .clip(shape)
             .background(accent.copy(alpha = 0.18f))
             .keywordEdge(keywordColor)
-            .openOrClock(onOpen) { menu = true }
+            .openOrMenu(onOpen) { menu = true }
             .dimmedIfDone(occurrence)
             .padding(
                 start = if (keywordColor != null) KEYWORD_EDGE + 2.dp else 3.dp,
@@ -1022,7 +1034,7 @@ private fun EventChip(
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ClockMenu(occurrence.entry.file, occurrence.entry.headingOffset, menu) { menu = false }
+        EntryMenu(occurrence.entry.file, occurrence.entry.headingOffset, occurrence.entry.todo, menu) { menu = false }
         if (!compact) {
             Icon(occurrence.entry.kind.icon(), contentDescription = null, tint = accent, modifier = Modifier.size(10.dp))
             Spacer(Modifier.width(2.dp))

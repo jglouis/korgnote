@@ -89,10 +89,14 @@ The agenda index also collects every clock in the notes (`clockedSpans`, in
 - **The agenda's clock report** (`ClockReport`), under its seven days: by note, then by heading in
   note order, a heading's running clock lit and counted to now, and the total. Emacs's agenda `R`,
   not a full clocktable.
-- **Clock in from the calendar**: a long-press on an entry in the agenda, the day or the week, or on
-  a clocked block, offers *Clock in*, or *Clock out* when its clock runs (`CalendarClocking`, which
-  the app gives; `NotesViewModel.clockIn(path, offset)` works on a note that is not open). The month
-  is left out: its chips are too small to aim a long-press at.
+- **Clock in, and change the keyword, from the calendar**: a long-press on an entry in the agenda,
+  the day or the week, or on a clocked block, offers *Clock in* (or *Clock out* when its clock runs)
+  and then the note's keywords, the current one ticked, and *No keyword*, as the note's own keyword
+  menu does (`CalendarActions`, which the app gives). `NotesViewModel.clockIn(path, offset)` and
+  `setTodo(path, offset, keyword)` work on a note that is not open: a keyword change is logged and
+  repeated as from the note, and its statistics cookies counted again; one that asks for a note
+  (`@`) opens its note first, so the note is asked for there. The month is left out: its chips are
+  too small to aim a long-press at.
 
 Emacs runs one clock at a time, and so does KorgNote: clocking in stops the clock running. Several
 run only when devices clocked in apart, which Emacs calls dangling clocks and asks to resolve.
