@@ -20,8 +20,8 @@ extensions.configure<ApplicationExtension> {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
 
         // Raise versionCode on every release: Android refuses a lower one over a higher one.
-        versionCode = 11
-        versionName = "1.6.0"
+        versionCode = 12
+        versionName = "1.6.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
