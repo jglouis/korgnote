@@ -284,9 +284,26 @@ class NotesViewModel(
      * the wrong place, or nowhere at all.
      */
     fun onFileSelected(path: String, scrollToOffset: Int? = null) {
+        if (path != note.path && !leaveEdit()) return
         if (!beginOpening(path)) return
         // From the replica, so opening a note works offline and does not wait on a round trip.
         viewModelScope.launch { finishOpening(path, scrollToOffset) }
+    }
+
+    /**
+     * Whether another note may be opened over the element being edited, if one is. An edit with
+     * nothing typed into it — the heading a new note opens on, say — is dropped. One with changes
+     * keeps the note where it is, with a word to save or discard it: kept open across the switch,
+     * it showed over the other note's element at the same place, and its save was refused there.
+     */
+    private fun leaveEdit(): Boolean {
+        if (editor.editingIndex == null) return true
+        if (editor.isUntouched) {
+            editor.cancel()
+            return true
+        }
+        viewModelScope.launch { showMessage(getString(Res.string.vm_finish_editing_first)) }
+        return false
     }
 
     /** [onFileSelected] for callers that go on to edit the note and so must wait for its text. */

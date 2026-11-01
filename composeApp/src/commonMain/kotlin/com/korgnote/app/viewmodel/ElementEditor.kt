@@ -71,6 +71,9 @@ class ElementEditor(
     /** The element's text when editing began, used to refuse a splice if the document moved. */
     private var original: String? = null
 
+    /** An element is being edited and nothing has been typed into it yet: dropping it loses nothing. */
+    val isUntouched: Boolean get() = editingIndex != null && draft == original
+
     /**
      * Set when editing a heading that was just inserted, so cancelling removes it again. Until then
      * the heading is on screen but not in the replica.
