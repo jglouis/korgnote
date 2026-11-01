@@ -236,7 +236,8 @@ private fun RenderNode(
 
         // Shown as written, as Emacs shows it unless asked to preview it.
         is OrgLatexEnvironment -> Text(
-            text = node.lines.joinToString("\n") { it.trimStart() },
+            // Without the indent the whole environment shares, keeping what its body adds.
+            text = node.lines.joinToString("\n").trimIndent(),
             style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
             softWrap = false,
             modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 2.dp),

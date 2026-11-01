@@ -114,7 +114,7 @@
     <string name="notes_search_label">Search notes</string>
     <string name="notes_search_placeholder">words, or tag:work</string>
     <string name="notes_remove_saved_search">Remove saved search</string>
-    <string name="notes_search_hint">Type to search every note. Words match anywhere — body text, headings and file names. `tag:work` keeps only headings carrying that tag, and tags are inherited, so a tag on a parent heading counts for everything under it. Quote a phrase to search for it whole. The bookmark in the field keeps a search to run again from the saved searches.</string>
+    <string name="notes_search_hint">Type to search every note. Words match anywhere — body text, headings and file names. `tag:work` keeps only headings carrying that tag, and tags are inherited, so a tag on a parent heading counts for everything under it. `todo:NEXT` and `priority:A` keep the headings with that keyword or priority. Quote a phrase to search for it whole. The bookmark in the field keeps a search to run again from the saved searches.</string>
     <string name="notes_search_nothing">Nothing matched "%1$s".</string>
     <plurals name="notes_search_results">
         <item quantity="one">%1$d result</item>

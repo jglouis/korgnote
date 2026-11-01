@@ -114,7 +114,7 @@
     <string name="notes_search_label">Rechercher dans les notes</string>
     <string name="notes_search_placeholder">mots, ou tag:work</string>
     <string name="notes_remove_saved_search">Retirer la recherche enregistrée</string>
-    <string name="notes_search_hint">Saisissez du texte pour rechercher dans toutes les notes. Les mots sont trouvés partout : texte, titres et noms de fichiers. `tag:work` ne garde que les titres portant cette étiquette, et les étiquettes se transmettent : une étiquette sur un titre parent vaut pour tout ce qu’il contient. Mettez une expression entre guillemets pour la rechercher telle quelle. Le signet du champ garde une recherche pour la relancer depuis les recherches enregistrées.</string>
+    <string name="notes_search_hint">Saisissez du texte pour rechercher dans toutes les notes. Les mots sont trouvés partout : texte, titres et noms de fichiers. `tag:work` ne garde que les titres portant cette étiquette, et les étiquettes se transmettent : une étiquette sur un titre parent vaut pour tout ce qu’il contient. `todo:NEXT` et `priority:A` gardent les titres qui ont ce mot-clé ou cette priorité. Mettez une expression entre guillemets pour la rechercher telle quelle. Le signet du champ garde une recherche pour la relancer depuis les recherches enregistrées.</string>
     <string name="notes_search_nothing">Aucun résultat pour « %1$s ».</string>
     <plurals name="notes_search_results">
         <item quantity="one">%1$d résultat</item>
