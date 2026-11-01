@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -68,6 +69,7 @@ import korgnote.composeapp.generated.resources.editor_cancel_clock
 import korgnote.composeapp.generated.resources.editor_clock_in
 import korgnote.composeapp.generated.resources.editor_clock_out
 import korgnote.composeapp.generated.resources.editor_clocked
+import korgnote.composeapp.generated.resources.editor_clocked_over_effort
 import korgnote.composeapp.generated.resources.editor_collapse_heading
 import korgnote.composeapp.generated.resources.editor_delete_heading
 import korgnote.composeapp.generated.resources.editor_delete_heading_text
@@ -511,14 +513,18 @@ private fun elementClocks(text: String, elements: List<OrgElement>, index: Int):
 private fun ClockedTotal(clocks: ElementClocks, now: LocalDateTime?) {
     val minutes = clocks.subtree.sumOf { it.minutes(now ?: it.end ?: it.start) }
     // An effort Org can read is shown the same way; any other is shown as written.
-    val effort = clocks.effort?.let { written -> effortMinutes(written)?.let { clockDuration(it) } ?: written }
+    val effortMinutes = clocks.effort?.let(::effortMinutes)
+    val effort = clocks.effort?.let { written -> effortMinutes?.let { clockDuration(it) } ?: written }
     val total = clockDuration(minutes) + (effort?.let { " / $it" } ?: "")
+    // Past what it should have taken: a warning beside the total, which says so to a screen reader too.
+    val over = effortMinutes != null && minutes > effortMinutes
     val color = if (clocks.running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-    val description = stringResource(Res.string.editor_clocked, total)
+    val description = stringResource(if (over) Res.string.editor_clocked_over_effort else Res.string.editor_clocked, total)
     Row(
         modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp).semantics { contentDescription = description },
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (over) Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp).padding(end = 2.dp))
         if (clocks.running) Icon(Icons.Filled.Timer, contentDescription = null, tint = color, modifier = Modifier.size(14.dp).padding(end = 2.dp))
         Text(total, style = MaterialTheme.typography.labelMedium, color = color)
     }

@@ -107,7 +107,7 @@ class AppClockingTest {
         onNodeWithText("30 min").performClick()
 
         waitUntil(timeoutMillis = 5_000) { viewModel.note.content.contains(":Effort: 0:30\n") }
-        waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("1 h / 30 min clocked").fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("1 h / 30 min clocked, past the effort").fetchSemanticsNodes().isNotEmpty() }
 
         // Removed, it takes its drawer with it when nothing else was in it.
         onAllNodesWithText("Write the report", substring = true)[0].performTouchInput { longClick() }

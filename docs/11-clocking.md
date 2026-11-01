@@ -42,7 +42,7 @@ the drawer, because Emacs sums them wherever they are. A heading's total is its 
   (`NotesViewModel.clockInAt`). Refused while an element is being edited, as the note would change
   under it.
 - **The total beside a heading**, its subtree's clocks included: `1 h 15`, or `1 h 15 / 2 h` against an
-  `:Effort:` (one Org can read — `1:30`, `45`, `2h`, `1h 30min` — is shown the same way; any other as
+  `:Effort:`, with a red warning sign once the total is past it (one Org can read — `1:30`, `45`, `2h`, `1h 30min` — is shown the same way; any other as
   written). On screen a time is `1 min`, `45 min`, `2 h`, `1 h 05` (`clockDuration`): Emacs's `0:01`,
   kept in the file, read as minutes and seconds. Its own running clock lights it and adds a timer; the total counts up each minute.
 - **The running-clock bar**, on every tab, above the navigation bar (at the foot of the screen on a

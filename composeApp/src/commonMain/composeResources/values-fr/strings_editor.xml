@@ -144,6 +144,7 @@
     <string name="editor_clock_out">Arrêter le chrono</string>
     <string name="editor_cancel_clock">Annuler le chrono</string>
     <string name="editor_clocked">%1$s passées</string>
+    <string name="editor_clocked_over_effort">%1$s passées, au-delà de l’effort</string>
     <string name="editor_set_effort">Estimer l’effort…</string>
     <string name="editor_effort_title">Combien de temps prévoir ?</string>
     <string name="editor_effort_other">Autre : 1:30, 45, 2h</string>
