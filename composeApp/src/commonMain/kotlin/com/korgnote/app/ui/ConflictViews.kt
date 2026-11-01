@@ -7,16 +7,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SyncProblem
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
@@ -39,9 +40,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.korgnote.app.viewmodel.ConflictComparison
 import com.korgnote.common.sync.ChunkChoice
 import com.korgnote.common.sync.ConflictChunk
@@ -226,64 +229,104 @@ fun ConflictCompareDialog(
     val chunks = comparison.chunks
     val choices = remember(comparison) { mutableStateListOf<ChunkChoice?>().apply { repeat(chunks.size) { add(null) } } }
     val left = choices.count { it == null }
-    AlertDialog(
+    val colors = diffColors()
+    // Not an AlertDialog: that one stays where it is when the keyboard opens, and an edited chunk's
+    // keyboard then covered the field and Apply both. This card is laid out in what the keyboard
+    // and the system bars leave, the chunks shrinking to fit, so the buttons stay in view. A tap
+    // beside it does nothing, rather than throwing away the choices made so far.
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.notes_conflict_compare_title)) },
-        text = {
-            Column {
-                Text(
-                    stringResource(Res.string.notes_conflict_only_in_note, comparison.original.substringAfterLast('/'), keptSideName(keptSide)),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Text(
-                    stringResource(Res.string.notes_conflict_only_in_copy, comparison.copy.substringAfterLast('/')),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Spacer(Modifier.height(8.dp))
-                if (chunks.isEmpty()) {
-                    Text(stringResource(Res.string.notes_conflict_same))
-                } else {
-                    Text(stringResource(Res.string.notes_conflict_resolve_hint), style = MaterialTheme.typography.bodySmall)
-                    FlowRow {
-                        TextButton(onClick = { choices.indices.forEach { choices[it] = ChunkChoice.Note } }) {
-                            Text(stringResource(Res.string.notes_conflict_all_note))
-                        }
-                        TextButton(onClick = { choices.indices.forEach { choices[it] = ChunkChoice.Copy } }) {
-                            Text(stringResource(Res.string.notes_conflict_all_copy))
-                        }
-                    }
-                }
-                error?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
-                LazyColumn(Modifier.heightIn(max = 420.dp)) {
-                    itemsIndexed(chunks) { index, chunk ->
-                        ChunkChooser(chunk, choices[index], onChoose = { choices[index] = it })
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Column(horizontalAlignment = Alignment.End) {
-                TextButton(onClick = { onApply(choices.map { it!! }) }, enabled = left == 0) {
-                    Text(stringResource(Res.string.notes_conflict_apply))
-                }
-                if (left > 0) {
-                    Text(
-                        pluralStringResource(Res.plurals.notes_conflict_left, left, left),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline,
+        properties = cardDialogProperties(),
+    ) {
+        Box(
+            Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Surface(
+                shape = MaterialTheme.shapes.extraLarge,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 12.dp)) {
+                    Text(stringResource(Res.string.notes_conflict_compare_title), style = MaterialTheme.typography.headlineSmall)
+                    Spacer(Modifier.height(12.dp))
+                    LegendText(
+                        stringResource(Res.string.notes_conflict_only_in_note, comparison.original.substringAfterLast('/'), keptSideName(keptSide)),
+                        colors.note,
                     )
+                    Spacer(Modifier.height(2.dp))
+                    LegendText(stringResource(Res.string.notes_conflict_only_in_copy, comparison.copy.substringAfterLast('/')), colors.copy)
+                    Spacer(Modifier.height(8.dp))
+                    if (chunks.isEmpty()) {
+                        Text(stringResource(Res.string.notes_conflict_same), style = MaterialTheme.typography.bodyMedium)
+                    } else {
+                        Text(stringResource(Res.string.notes_conflict_resolve_hint), style = MaterialTheme.typography.bodySmall)
+                        FlowRow {
+                            TextButton(onClick = { choices.indices.forEach { choices[it] = ChunkChoice.Note } }) {
+                                Text(stringResource(Res.string.notes_conflict_all_note))
+                            }
+                            TextButton(onClick = { choices.indices.forEach { choices[it] = ChunkChoice.Copy } }) {
+                                Text(stringResource(Res.string.notes_conflict_all_copy))
+                            }
+                        }
+                    }
+                    error?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                    LazyColumn(Modifier.weight(1f, fill = false)) {
+                        itemsIndexed(chunks) { index, chunk ->
+                            ChunkChooser(chunk, choices[index], colors, onChoose = { choices[index] = it })
+                        }
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) {
+                        Text(
+                            if (left > 0) pluralStringResource(Res.plurals.notes_conflict_left, left, left) else "",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = onDismiss) { Text(stringResource(Res.string.close)) }
+                        TextButton(onClick = { onApply(choices.map { it!! }) }, enabled = left == 0) {
+                            Text(stringResource(Res.string.notes_conflict_apply))
+                        }
+                    }
                 }
             }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.close)) } },
+        }
+    }
+}
+
+/**
+ * The backgrounds of the note's lines and the copy's: red and green, as in any diff, light or dark
+ * with the theme. The theme's own containers will not do: in Material's defaults the error and
+ * tertiary ones are both a pale pink, and on a phone the two sides could not be told apart.
+ */
+private data class DiffColors(val note: Color, val copy: Color)
+
+@Composable
+private fun diffColors(): DiffColors =
+    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+        DiffColors(note = Color(0xFF5E2A2A), copy = Color(0xFF214A2E))
+    } else {
+        DiffColors(note = Color(0xFFFFDCDC), copy = Color(0xFFD3F2D9))
+    }
+
+/** A line of the legend, on the background its side's lines have. */
+@Composable
+private fun LegendText(text: String, background: Color) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.background(background, MaterialTheme.shapes.extraSmall).padding(horizontal = 6.dp, vertical = 2.dp),
     )
 }
 
 /** One chunk of [ConflictCompareDialog]: where it is, both sides, and what to keep of it. */
 @Composable
-private fun ChunkChooser(chunk: ConflictChunk, choice: ChunkChoice?, onChoose: (ChunkChoice) -> Unit) {
+private fun ChunkChooser(chunk: ConflictChunk, choice: ChunkChoice?, colors: DiffColors, onChoose: (ChunkChoice) -> Unit) {
     val keepsNote = choice == null || choice == ChunkChoice.Note || choice == ChunkChoice.Both
     val keepsCopy = choice == null || choice == ChunkChoice.Copy || choice == ChunkChoice.Both
     Column(Modifier.padding(top = 12.dp)) {
@@ -293,8 +336,8 @@ private fun ChunkChooser(chunk: ConflictChunk, choice: ChunkChoice?, onChoose: (
             modifier = Modifier.padding(bottom = 2.dp),
         )
         for (line in chunk.before) DiffText("  $line", background = null, kept = true)
-        for (line in chunk.note) DiffText("− $line", MaterialTheme.colorScheme.errorContainer, kept = keepsNote)
-        for (line in chunk.copy) DiffText("+ $line", MaterialTheme.colorScheme.tertiaryContainer, kept = keepsCopy)
+        for (line in chunk.note) DiffText("− $line", colors.note, kept = keepsNote)
+        for (line in chunk.copy) DiffText("+ $line", colors.copy, kept = keepsCopy)
         for (line in chunk.after) DiffText("  $line", background = null, kept = true)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             ChoiceChip(Res.string.notes_conflict_take_note, choice == ChunkChoice.Note) { onChoose(ChunkChoice.Note) }
