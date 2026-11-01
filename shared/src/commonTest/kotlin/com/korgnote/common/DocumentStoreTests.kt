@@ -200,6 +200,49 @@ abstract class DocumentStoreContract {
         assertFalse(store.replaceWithCopy("a.org", "a.sync-conflict-20260921-101500.org"))
         assertEquals("* Theirs\n", store.read("a.org"))
     }
+
+    @Test
+    fun aResolutionReplacesTheNoteAndDeletesTheCopy() = runTest {
+        val store = store()
+        val copy = "a.sync-conflict-20260921-101500.org"
+        store.acceptFromServer("a.org", "* Theirs\n", etag = "e1")
+        store.acceptFromServer(copy, "* Mine\n", etag = "e2")
+
+        assertTrue(store.resolveConflict("a.org", copy, "* Theirs\n", "* Mine\n", "* Theirs\n* Mine\n"))
+
+        assertEquals("* Theirs\n* Mine\n", store.read("a.org"))
+        assertTrue(store.isDirty("a.org"), "pushed as an edit of the server's version")
+        assertEquals("e1", store.meta("a.org")?.etag)
+        assertEquals(listOf(copy), store.tombstones().map { it.path })
+    }
+
+    @Test
+    fun aResolutionThatKeepsTheNoteOnlyDeletesTheCopy() = runTest {
+        val store = store()
+        val copy = "a.sync-conflict-20260921-101500.org"
+        store.acceptFromServer("a.org", "* Theirs\n", etag = "e1")
+        store.acceptFromServer(copy, "* Mine\n", etag = "e2")
+
+        assertTrue(store.resolveConflict("a.org", copy, "* Theirs\n", "* Mine\n", "* Theirs\n"))
+
+        assertFalse(store.isDirty("a.org"), "nothing to push for the note")
+        assertEquals(listOf(copy), store.tombstones().map { it.path })
+    }
+
+    @Test
+    fun aResolutionIsRefusedWhenEitherVersionMoved() = runTest {
+        val store = store()
+        val copy = "a.sync-conflict-20260921-101500.org"
+        store.acceptFromServer("a.org", "* Theirs, again\n", etag = "e3")
+        store.acceptFromServer(copy, "* Mine\n", etag = "e2")
+
+        assertFalse(store.resolveConflict("a.org", copy, "* Theirs\n", "* Mine\n", "* Mine\n"))
+        assertFalse(store.resolveConflict("a.org", copy, "* Theirs, again\n", "* Mine, edited\n", "* Mine\n"))
+
+        assertEquals("* Theirs, again\n", store.read("a.org"))
+        assertEquals("* Mine\n", store.read(copy))
+        assertEquals(emptyList(), store.tombstones())
+    }
 }
 
 class InMemoryDocumentStoreTest : DocumentStoreContract() {

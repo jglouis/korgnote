@@ -163,10 +163,22 @@
     <string name="notes_conflict_compare_title">Compare versions</string>
     <string name="notes_conflict_only_in_note">− only in %1$s (the %2$s's)</string>
     <string name="notes_conflict_only_in_copy">+ only in %1$s</string>
-    <string name="notes_conflict_same">The two versions are the same: either can go.</string>
+    <string name="notes_conflict_same">The two versions are the same: applying deletes the copy.</string>
     <string name="notes_conflict_before_first_heading">Before the first heading</string>
-    <string name="notes_conflict_keep_note">Keep the note</string>
-    <string name="notes_conflict_use_copy">Use the copy</string>
+    <string name="notes_conflict_resolve_hint">Choose what to keep at each change, then apply.</string>
+    <string name="notes_conflict_all_note">All the note's</string>
+    <string name="notes_conflict_all_copy">All the copy's</string>
+    <string name="notes_conflict_take_note">− Note</string>
+    <string name="notes_conflict_take_copy">+ Copy</string>
+    <string name="notes_conflict_take_both">Both</string>
+    <string name="notes_conflict_take_edit">Edit</string>
+    <string name="notes_conflict_edit_label">What to keep here</string>
+    <string name="notes_conflict_apply">Apply</string>
+    <plurals name="notes_conflict_left">
+        <item quantity="one">%1$d change left to choose</item>
+        <item quantity="other">%1$d changes left to choose</item>
+    </plurals>
+    <string name="notes_conflict_moved">A version changed meanwhile. Look again, then apply.</string>
     <!-- Capture -->
     <string name="capture_add_location">Location</string>
     <string name="capture_add_link">Link</string>

@@ -79,6 +79,7 @@ import korgnote.composeapp.generated.resources.app_select_file
 import korgnote.composeapp.generated.resources.app_todays_daily
 import korgnote.composeapp.generated.resources.back
 import korgnote.composeapp.generated.resources.calendar
+import korgnote.composeapp.generated.resources.notes_conflict_moved
 import korgnote.composeapp.generated.resources.settings
 import org.jetbrains.compose.resources.stringResource
 
@@ -338,19 +339,24 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
         )
     }
     comparingCopy?.let { copy ->
-        val original = vm.conflictOriginalOf(copy)
-        if (original == null) {
+        // Worked out again whenever a note's text changes, so the chunks are always the current ones.
+        val comparison = remember(copy, vm.library.revision) { vm.conflictComparison(copy) }
+        var refused by remember(copy) { mutableStateOf(false) }
+        if (comparison == null) {
             // Settled meanwhile, here or on another device.
             comparingCopy = null
         } else {
+            val moved = stringResource(Res.string.notes_conflict_moved)
             ConflictCompareDialog(
-                original = original,
-                copy = copy,
-                hunks = remember(copy, vm.library.conflicts) { vm.conflictDiff(copy) },
-                onKeepNote = { comparingCopy = null; scope.launch { vm.discardConflictCopy(copy) } },
-                onUseCopy = { comparingCopy = null; scope.launch { vm.useConflictCopy(copy) } },
+                comparison = comparison,
+                onApply = { choices ->
+                    scope.launch {
+                        if (vm.resolveConflictCopy(comparison, choices)) comparingCopy = null else refused = true
+                    }
+                },
                 onDismiss = { comparingCopy = null },
                 keptSide = keptSide,
+                error = moved.takeIf { refused },
             )
         }
     }

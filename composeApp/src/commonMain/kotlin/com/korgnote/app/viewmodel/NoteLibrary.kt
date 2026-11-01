@@ -60,6 +60,13 @@ class NoteLibrary(private val store: DocumentStore) {
         private set
 
     /**
+     * Counts every change to the notes' texts, as state, for what shows a note's text without
+     * holding it — the comparison of a note with its conflict copy.
+     */
+    var revision by mutableStateOf(0)
+        private set
+
+    /**
      * Set once the replica has been read. Until then the notes are empty because nothing has
      * arrived, not because there are none, and nothing should act on that emptiness.
      */
@@ -104,6 +111,7 @@ class NoteLibrary(private val store: DocumentStore) {
         conflicts = conflictsIn(paths)
         loaded = true
         keywords = corpus
+        revision++
     }
 
     /**
@@ -114,6 +122,7 @@ class NoteLibrary(private val store: DocumentStore) {
      */
     fun put(path: String, document: OrgDocument) {
         val before = parsed.put(path, document)
+        revision++
         keywords = null
         if (before == null || declaredKeywords(before.text) != declaredKeywords(document.text)) {
             val corpus = corpusKeywords

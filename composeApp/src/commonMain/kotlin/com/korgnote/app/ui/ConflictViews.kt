@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material3.AlertDialog
@@ -21,25 +21,43 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import com.korgnote.common.sync.DiffHunk
-import com.korgnote.common.sync.DiffLine
+import com.korgnote.app.viewmodel.ConflictComparison
+import com.korgnote.common.sync.ChunkChoice
+import com.korgnote.common.sync.ConflictChunk
+import com.korgnote.common.sync.lines
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.close
+import korgnote.composeapp.generated.resources.notes_conflict_all_copy
+import korgnote.composeapp.generated.resources.notes_conflict_all_note
+import korgnote.composeapp.generated.resources.notes_conflict_apply
+import korgnote.composeapp.generated.resources.notes_conflict_edit_label
+import korgnote.composeapp.generated.resources.notes_conflict_left
+import korgnote.composeapp.generated.resources.notes_conflict_resolve_hint
+import korgnote.composeapp.generated.resources.notes_conflict_take_both
+import korgnote.composeapp.generated.resources.notes_conflict_take_copy
+import korgnote.composeapp.generated.resources.notes_conflict_take_edit
+import korgnote.composeapp.generated.resources.notes_conflict_take_note
 import korgnote.composeapp.generated.resources.notes_conflict_before_first_heading
 import korgnote.composeapp.generated.resources.notes_conflict_compare
 import korgnote.composeapp.generated.resources.notes_conflict_compare_title
@@ -47,7 +65,6 @@ import korgnote.composeapp.generated.resources.notes_conflict_copy_text
 import korgnote.composeapp.generated.resources.notes_conflict_copy_title
 import korgnote.composeapp.generated.resources.notes_conflict_count
 import korgnote.composeapp.generated.resources.notes_conflict_discard_this
-import korgnote.composeapp.generated.resources.notes_conflict_keep_note
 import korgnote.composeapp.generated.resources.notes_conflict_keep_this
 import korgnote.composeapp.generated.resources.notes_conflict_menu_title
 import korgnote.composeapp.generated.resources.notes_conflict_note_text
@@ -58,10 +75,10 @@ import korgnote.composeapp.generated.resources.notes_conflict_only_in_note
 import korgnote.composeapp.generated.resources.notes_conflict_same
 import korgnote.composeapp.generated.resources.notes_conflict_side_folder
 import korgnote.composeapp.generated.resources.notes_conflict_side_server
-import korgnote.composeapp.generated.resources.notes_conflict_use_copy
 import korgnote.composeapp.generated.resources.notes_conflict_use_other
 import korgnote.composeapp.generated.resources.notes_conflict_use_this
 import korgnote.composeapp.generated.resources.notes_conflict_versions
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -187,76 +204,139 @@ fun ConflictBanner(
 }
 
 /**
- * The note and its copy side by side, change by change: each hunk under the heading it falls in,
- * lines only in the note marked −, lines only in the copy marked +. Settling it from here is the
- * same as from the banner.
+ * The note and its copy, change by change, to settle chunk by chunk as `git add -p` does: each
+ * chunk under the heading it falls in, lines only in the note marked −, lines only in the copy
+ * marked +, and a choice of the note's, the copy's, both, or lines written in their place. What a
+ * choice leaves out is struck through. Applying needs a choice for every chunk; see
+ * [com.korgnote.common.sync.resolveConflict].
+ *
+ * The choices last while the two texts do: a sync that changes either brings new chunks, and
+ * choices made on the old ones would land on other lines.
  */
 @Composable
 fun ConflictCompareDialog(
-    original: String,
-    copy: String,
-    hunks: List<DiffHunk>,
-    onKeepNote: () -> Unit,
-    onUseCopy: () -> Unit,
+    comparison: ConflictComparison,
+    onApply: (List<ChunkChoice>) -> Unit,
     onDismiss: () -> Unit,
     /** As in [ConflictBanner]. */
     keptSide: String = "server",
+    /** Why the last apply was refused, if it was. */
+    error: String? = null,
 ) {
-    val removed = MaterialTheme.colorScheme.errorContainer
-    val added = MaterialTheme.colorScheme.tertiaryContainer
+    val chunks = comparison.chunks
+    val choices = remember(comparison) { mutableStateListOf<ChunkChoice?>().apply { repeat(chunks.size) { add(null) } } }
+    val left = choices.count { it == null }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.notes_conflict_compare_title)) },
         text = {
             Column {
                 Text(
-                    stringResource(Res.string.notes_conflict_only_in_note, original.substringAfterLast('/'), keptSideName(keptSide)),
+                    stringResource(Res.string.notes_conflict_only_in_note, comparison.original.substringAfterLast('/'), keptSideName(keptSide)),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Text(
-                    stringResource(Res.string.notes_conflict_only_in_copy, copy.substringAfterLast('/')),
+                    stringResource(Res.string.notes_conflict_only_in_copy, comparison.copy.substringAfterLast('/')),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Spacer(Modifier.height(8.dp))
-                if (hunks.isEmpty()) {
+                if (chunks.isEmpty()) {
                     Text(stringResource(Res.string.notes_conflict_same))
+                } else {
+                    Text(stringResource(Res.string.notes_conflict_resolve_hint), style = MaterialTheme.typography.bodySmall)
+                    FlowRow {
+                        TextButton(onClick = { choices.indices.forEach { choices[it] = ChunkChoice.Note } }) {
+                            Text(stringResource(Res.string.notes_conflict_all_note))
+                        }
+                        TextButton(onClick = { choices.indices.forEach { choices[it] = ChunkChoice.Copy } }) {
+                            Text(stringResource(Res.string.notes_conflict_all_copy))
+                        }
+                    }
+                }
+                error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
                 LazyColumn(Modifier.heightIn(max = 420.dp)) {
-                    for (hunk in hunks) {
-                        item {
-                            Text(
-                                hunk.heading ?: stringResource(Res.string.notes_conflict_before_first_heading),
-                                style = MaterialTheme.typography.labelLarge,
-                                modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
-                            )
-                        }
-                        items(hunk.lines) { line ->
-                            val (mark, background) = when (line.kind) {
-                                DiffLine.Kind.SAME -> "  " to null
-                                DiffLine.Kind.REMOVED -> "− " to removed
-                                DiffLine.Kind.ADDED -> "+ " to added
-                            }
-                            Text(
-                                mark + line.text,
-                                fontFamily = FontFamily.Monospace,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .then(if (background != null) Modifier.background(background) else Modifier)
-                                    .padding(horizontal = 4.dp),
-                            )
-                        }
+                    itemsIndexed(chunks) { index, chunk ->
+                        ChunkChooser(chunk, choices[index], onChoose = { choices[index] = it })
                     }
                 }
             }
         },
         confirmButton = {
-            Row {
-                TextButton(onClick = onKeepNote) { Text(stringResource(Res.string.notes_conflict_keep_note)) }
-                TextButton(onClick = onUseCopy) { Text(stringResource(Res.string.notes_conflict_use_copy)) }
+            Column(horizontalAlignment = Alignment.End) {
+                TextButton(onClick = { onApply(choices.map { it!! }) }, enabled = left == 0) {
+                    Text(stringResource(Res.string.notes_conflict_apply))
+                }
+                if (left > 0) {
+                    Text(
+                        pluralStringResource(Res.plurals.notes_conflict_left, left, left),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                    )
+                }
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.close)) } },
+    )
+}
+
+/** One chunk of [ConflictCompareDialog]: where it is, both sides, and what to keep of it. */
+@Composable
+private fun ChunkChooser(chunk: ConflictChunk, choice: ChunkChoice?, onChoose: (ChunkChoice) -> Unit) {
+    val keepsNote = choice == null || choice == ChunkChoice.Note || choice == ChunkChoice.Both
+    val keepsCopy = choice == null || choice == ChunkChoice.Copy || choice == ChunkChoice.Both
+    Column(Modifier.padding(top = 12.dp)) {
+        Text(
+            chunk.heading ?: stringResource(Res.string.notes_conflict_before_first_heading),
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(bottom = 2.dp),
+        )
+        for (line in chunk.before) DiffText("  $line", background = null, kept = true)
+        for (line in chunk.note) DiffText("− $line", MaterialTheme.colorScheme.errorContainer, kept = keepsNote)
+        for (line in chunk.copy) DiffText("+ $line", MaterialTheme.colorScheme.tertiaryContainer, kept = keepsCopy)
+        for (line in chunk.after) DiffText("  $line", background = null, kept = true)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ChoiceChip(Res.string.notes_conflict_take_note, choice == ChunkChoice.Note) { onChoose(ChunkChoice.Note) }
+            ChoiceChip(Res.string.notes_conflict_take_copy, choice == ChunkChoice.Copy) { onChoose(ChunkChoice.Copy) }
+            ChoiceChip(Res.string.notes_conflict_take_both, choice == ChunkChoice.Both) { onChoose(ChunkChoice.Both) }
+            ChoiceChip(Res.string.notes_conflict_take_edit, choice is ChunkChoice.Edited) {
+                // Starts from what was chosen so far, or from both sides when nothing was.
+                if (choice !is ChunkChoice.Edited) {
+                    onChoose(ChunkChoice.Edited((choice ?: ChunkChoice.Both).lines(chunk).joinToString("\n")))
+                }
+            }
+        }
+        if (choice is ChunkChoice.Edited) {
+            OutlinedTextField(
+                value = choice.text,
+                onValueChange = { onChoose(ChunkChoice.Edited(it)) },
+                label = { Text(stringResource(Res.string.notes_conflict_edit_label)) },
+                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChoiceChip(label: StringResource, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(selected = selected, onClick = onClick, label = { Text(stringResource(label)) })
+}
+
+/** One line of a chunk; struck through and faded when the choice leaves it out. */
+@Composable
+private fun DiffText(text: String, background: Color?, kept: Boolean) {
+    Text(
+        text,
+        fontFamily = FontFamily.Monospace,
+        style = MaterialTheme.typography.bodySmall,
+        textDecoration = if (kept) null else TextDecoration.LineThrough,
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (background != null) Modifier.background(background) else Modifier)
+            .alpha(if (kept) 1f else 0.45f)
+            .padding(horizontal = 4.dp),
     )
 }
 

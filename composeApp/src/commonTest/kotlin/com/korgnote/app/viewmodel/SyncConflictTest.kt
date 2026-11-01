@@ -3,6 +3,7 @@ package com.korgnote.app.viewmodel
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
+import com.korgnote.common.sync.ChunkChoice
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -92,8 +93,10 @@ class SyncConflictTest {
         assertEquals(mapOf(path to listOf(copy)), vm.library.conflicts)
         assertEquals(path, vm.conflictOriginalOf(copy))
         assertNull(vm.conflictOriginalOf(path))
-        val hunk = vm.conflictDiff(copy).single()
-        assertEquals("* WAITING First", hunk.heading)
+        val chunk = vm.conflictComparison(copy)!!.chunks.single()
+        assertEquals("* WAITING First", chunk.heading)
+        assertEquals(listOf("* WAITING First"), chunk.note)
+        assertEquals(listOf("* DONE First"), chunk.copy)
     }
 
     @Test
@@ -122,6 +125,33 @@ class SyncConflictTest {
         assertFalse(copy in api.files)
         assertEquals(path, vm.note.path)
         assertEquals(mine, vm.note.content)
+    }
+
+    @Test
+    fun settlingChunkByChunkMakesTheResultTheNoteEverywhere() = runTest {
+        conflict()
+        vm.onFileSelected(path)
+
+        assertTrue(vm.resolveConflictCopy(vm.conflictComparison(copy)!!, listOf(ChunkChoice.Edited("* NEXT First"))))
+
+        val resolved = original.replace("TODO First", "NEXT First")
+        assertEquals(emptyMap(), vm.library.conflicts)
+        assertEquals(resolved, api.files[path], "pushed as an edit of the server's version")
+        assertFalse(copy in api.files)
+        assertEquals(path, vm.note.path)
+        assertEquals(resolved, vm.note.content)
+    }
+
+    @Test
+    fun choicesMadeOnVersionsThatSinceChangedAreRefused() = runTest {
+        conflict()
+        val comparison = vm.conflictComparison(copy)!!
+        store.save(copy, mine.replace("body two", "body two, edited meanwhile"))
+
+        assertFalse(vm.resolveConflictCopy(comparison, listOf(ChunkChoice.Copy)))
+
+        assertEquals(theirs, store.read(path))
+        assertEquals(mapOf(path to listOf(copy)), vm.library.conflicts)
     }
 
     @Test

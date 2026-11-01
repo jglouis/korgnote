@@ -325,14 +325,33 @@ Syncthing's copies (`…-HHmmss-DEVICE.org`) too, and needs no bookkeeping: dele
 what resolves it. A copy whose note is gone is just a note.
 
 Conflicts are shown per file, not per heading: the copy is a whole file, and one made elsewhere
-carries no heading information. Headings come in when comparing.
+carries no heading information. Headings come in when comparing, and so does settling it piece by
+piece.
 
 - **Top bar**: a warning with the count of notes in conflict; a tap lists them.
 - **File tree**: the note is flagged, and each copy is drawn under it, newest first.
 - **Banner** on the note or a copy: which version is on screen, and *Keep this one* (delete the
   copy, which the server moves to its trash), *Use the other* (the copy's text replaces the
   note, pushed as an edit of the server's version, then the copy is deleted) and *Compare*.
-- **Compare**: only the differing lines, with context, each hunk under the heading it falls in.
+- **Compare**: the note and the copy cut into chunks, each a run of lines that differ between
+  lines both share (`shared/…/sync/ConflictChunks.kt`), shown under the heading it falls in with a
+  little context. Each chunk is settled on its own, as `git add -p` would: the note's lines, the
+  copy's, both (the note's first), or lines written by hand in their place; what a choice leaves
+  out is struck through, and *All the note's* / *All the copy's* choose every chunk at once.
+  *Apply* needs a choice for every chunk. The result becomes the note, pushed as an edit of the
+  server's version, and the copy is deleted; when it is the note unchanged, only the copy goes.
+  The choices were made on two texts, so the result is written only while the note and the copy
+  still hold them (`DocumentStore.resolveConflict`); a sync landing meanwhile brings new chunks
+  and asks for the choices again.
+
+  Chunks, not single lines: the lines of one run are usually one edit, and taking half of it is
+  how an Org file ends up with a heading without its body, half a drawer, or a block that never
+  ends. The hand-written lines cover anything finer.
+
+  The comparison is two-way, the note against the copy, with no ancestor: the base is gone once
+  the copy is written, and a copy made elsewhere — Syncthing's, the folder's — never had one. So a
+  chunk says where the two differ, not which side changed it: a change only one side made, which
+  a three-way merge would have taken without asking, is shown like the rest.
 
 When a sync ends in a conflict the message line says so, since the open note's text changes
 under the reader; and any sync that moved the replica redraws it, a save's included — left on

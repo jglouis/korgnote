@@ -350,6 +350,34 @@ class DocumentStore(private val storage: ReplicaStorage) {
     }
 
     /**
+     * Resolves a conflict with [content] made from both versions, chunk by chunk: it becomes
+     * [path]'s, as an edit to push, and [copy] is deleted. When [content] is what the note already
+     * has, only the copy goes, and nothing is pushed for the note.
+     *
+     * Only while the note still holds [expectedNote] and the copy [expectedCopy], the texts the
+     * choices were made on: false, changing nothing, when either moved or is gone — a sync landing
+     * while the reader was choosing.
+     */
+    suspend fun resolveConflict(path: String, copy: String, expectedNote: String, expectedCopy: String, content: String): Boolean {
+        requireSafeReplicaPath(path)
+        var noteChanged = false
+        val resolved = mutex.withLock {
+            if (storage.read(path) != expectedNote || storage.read(copy) != expectedCopy) return@withLock false
+            if (content != expectedNote) {
+                saveLocked(path, content)
+                noteChanged = true
+            }
+            tombstoneLocked(copy)
+            true
+        }
+        if (resolved) {
+            if (noteChanged) _changes.emit(ReplicaChange.Saved(path))
+            _changes.emit(ReplicaChange.Deleted(copy))
+        }
+        return resolved
+    }
+
+    /**
      * Remembers how far the replica has caught up, so the next sync can ask for a delta.
      *
      * Taken as the server gives it, even when lower: a server whose clock went back across a

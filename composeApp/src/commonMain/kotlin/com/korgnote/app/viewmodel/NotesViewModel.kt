@@ -51,9 +51,11 @@ import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.FolderNoteStorage
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
-import com.korgnote.common.sync.DiffHunk
+import com.korgnote.common.sync.ChunkChoice
+import com.korgnote.common.sync.ConflictChunk
+import com.korgnote.common.sync.conflictChunks
 import com.korgnote.common.sync.conflictCopyOriginal
-import com.korgnote.common.sync.diffHunks
+import com.korgnote.common.sync.resolveConflict
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.vm_finish_editing_first
 import korgnote.composeapp.generated.resources.vm_not_a_note_path
@@ -753,12 +755,15 @@ class NotesViewModel(
      */
     fun conflictOriginalOf(path: String): String? = conflictCopyOriginal(path)?.takeIf { it in library }
 
-    /** How [copy] differs from its note, change by change; empty when it does not, or is no copy. */
-    fun conflictDiff(copy: String): List<DiffHunk> {
-        val original = conflictOriginalOf(copy) ?: return emptyList()
-        val ours = library[original]?.text ?: return emptyList()
-        val theirs = library[copy]?.text ?: return emptyList()
-        return diffHunks(ours, theirs)
+    /**
+     * How [copy] differs from its note, chunk by chunk, with the two texts the chunks were cut from;
+     * null when it is no copy of a note here.
+     */
+    fun conflictComparison(copy: String): ConflictComparison? {
+        val original = conflictOriginalOf(copy) ?: return null
+        val note = library[original]?.text ?: return null
+        val copied = library[copy]?.text ?: return null
+        return ConflictComparison(original, copy, note, copied, conflictChunks(note, copied))
     }
 
     /**
@@ -792,6 +797,41 @@ class NotesViewModel(
         return true
     }
 
+    /**
+     * Settles a conflict chunk by chunk: each chunk of [comparison] as [choices] says, at the same
+     * index, becomes the note, pushed as an edit of the server's version, and the copy is deleted.
+     * Every chunk the note's way is [discardConflictCopy]; every one the copy's, [useConflictCopy].
+     *
+     * False, changing nothing, when the note or the copy no longer holds what [comparison] was made
+     * from — a sync landed while the choices were made — and they have to be made again.
+     */
+    suspend fun resolveConflictCopy(comparison: ConflictComparison, choices: List<ChunkChoice>): Boolean {
+        val (original, copy, noteText, copyText) = comparison
+        if (conflictOriginalOf(copy) != original) return false
+        if (store.read(original) != noteText || store.read(copy) != copyText) {
+            // What was compared is behind the replica: show what it holds, for new chunks.
+            showFromReplica()
+            return false
+        }
+        val content = resolveConflict(noteText, copyText, choices)
+        val wasOpen = note.path == copy || note.path == original
+        // The element editor holds offsets into a text about to be replaced.
+        if (wasOpen) editor.cancel()
+        // Checked again under the store's lock: a sync can still land between the two.
+        if (!store.resolveConflict(original, copy, noteText, copyText, content)) {
+            showFromReplica()
+            if (wasOpen) note.path?.let { openAndWait(it) }
+            return false
+        }
+        folds.forget(copy)
+        pins.forget(copy)
+        if (wasOpen) note.path = original
+        showFromReplica()
+        if (wasOpen) openAndWait(original)
+        server.pushQuietly()
+        return true
+    }
+
     internal companion object {
         /**
          * How long the ticking has to stop before [refreshDerivedViewsSoon] refreshes: long enough
@@ -801,3 +841,12 @@ class NotesViewModel(
         val DERIVED_REFRESH_PAUSE = 600.milliseconds
     }
 }
+
+/** A note in conflict and one of its copies, as they were when compared: see [NotesViewModel.conflictComparison]. */
+data class ConflictComparison(
+    val original: String,
+    val copy: String,
+    val noteText: String,
+    val copyText: String,
+    val chunks: List<ConflictChunk>,
+)

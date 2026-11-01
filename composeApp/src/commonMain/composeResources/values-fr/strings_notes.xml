@@ -163,10 +163,22 @@
     <string name="notes_conflict_compare_title">Comparer les versions</string>
     <string name="notes_conflict_only_in_note">− seulement dans %1$s (celle du %2$s)</string>
     <string name="notes_conflict_only_in_copy">+ seulement dans %1$s</string>
-    <string name="notes_conflict_same">Les deux versions sont identiques : vous pouvez garder l’une ou l’autre.</string>
+    <string name="notes_conflict_same">Les deux versions sont identiques : appliquer supprime la copie.</string>
     <string name="notes_conflict_before_first_heading">Avant le premier titre</string>
-    <string name="notes_conflict_keep_note">Garder la note</string>
-    <string name="notes_conflict_use_copy">Utiliser la copie</string>
+    <string name="notes_conflict_resolve_hint">Choisissez quoi garder à chaque modification, puis appliquez.</string>
+    <string name="notes_conflict_all_note">Tout de la note</string>
+    <string name="notes_conflict_all_copy">Tout de la copie</string>
+    <string name="notes_conflict_take_note">− Note</string>
+    <string name="notes_conflict_take_copy">+ Copie</string>
+    <string name="notes_conflict_take_both">Les deux</string>
+    <string name="notes_conflict_take_edit">Modifier</string>
+    <string name="notes_conflict_edit_label">Ce qu’il faut garder ici</string>
+    <string name="notes_conflict_apply">Appliquer</string>
+    <plurals name="notes_conflict_left">
+        <item quantity="one">%1$d modification reste à choisir</item>
+        <item quantity="other">%1$d modifications restent à choisir</item>
+    </plurals>
+    <string name="notes_conflict_moved">Une des versions a changé entre-temps. Vérifiez, puis appliquez.</string>
     <!-- Capture -->
     <string name="capture_add_location">Lieu</string>
     <string name="capture_add_link">Lien</string>
