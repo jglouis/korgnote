@@ -33,11 +33,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.viewmodel.ClockRunning
-import com.korgnote.common.org.edit.formatClocked
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.clock_cancel
+import korgnote.composeapp.generated.resources.clock_hours
+import korgnote.composeapp.generated.resources.clock_hours_minutes
 import korgnote.composeapp.generated.resources.clock_left_running
+import korgnote.composeapp.generated.resources.clock_minutes
 import korgnote.composeapp.generated.resources.clock_open
 import korgnote.composeapp.generated.resources.clock_out
 import korgnote.composeapp.generated.resources.clock_out_at
@@ -103,7 +105,7 @@ fun RunningClockBar(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    val elapsed = formatClocked(minutes)
+                    val elapsed = clockDuration(minutes)
                     val status = if (leftRunning) stringResource(Res.string.clock_left_running, elapsed) else stringResource(Res.string.clock_running_for, elapsed)
                     val more = if (clocks.size > 1) " · " + pluralStringResource(Res.plurals.clock_running_count, clocks.size, clocks.size) else ""
                     Text(status + more, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -124,9 +126,10 @@ fun RunningClockBar(
             // Every clock, newest first, each to open or stop.
             DropdownMenu(expanded = listOpen, onDismissRequest = { listOpen = false }) {
                 clocks.forEachIndexed { i, clock ->
+                    val elapsed = clockDuration(clock.minutesAt(now))
                     if (i > 0) HorizontalDivider()
                     DropdownMenuItem(
-                        text = { Text("${plainHeadingTitle(clock.title)}  ${formatClocked(clock.minutesAt(now))}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        text = { Text("${plainHeadingTitle(clock.title)}  $elapsed", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         onClick = { listOpen = false; onOpen(clock) },
                     )
                     DropdownMenuItem(
@@ -190,6 +193,21 @@ internal fun clockEndAt(start: LocalDateTime, now: LocalDateTime, time: LocalTim
     var at = LocalDateTime(now.date, time)
     if (at > now) at = LocalDateTime(now.date.minus(1, DateTimeUnit.DAY), time)
     return if (at < start) start else at
+}
+
+/**
+ * A time clocked as the app shows it: `1 min`, `45 min`, `2 h`, `1 h 05`. The notes keep Emacs's
+ * `1:05`, which on screen read as minutes and seconds.
+ */
+@Composable
+fun clockDuration(minutes: Int): String {
+    val hours = minutes / 60
+    val rest = minutes % 60
+    return when {
+        hours == 0 -> stringResource(Res.string.clock_minutes, rest)
+        rest == 0 -> stringResource(Res.string.clock_hours, hours)
+        else -> stringResource(Res.string.clock_hours_minutes, hours, rest.toString().padStart(2, '0'))
+    }
 }
 
 /** A heading's title as it reads: its links' descriptions, without the brackets around them. */

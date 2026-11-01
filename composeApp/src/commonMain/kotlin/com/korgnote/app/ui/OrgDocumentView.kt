@@ -47,7 +47,7 @@ import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.edit.OrgClock
 import com.korgnote.common.org.edit.clocksInText
 import com.korgnote.common.org.edit.effortIn
-import com.korgnote.common.org.edit.formatClocked
+import com.korgnote.common.org.edit.effortMinutes
 import com.korgnote.common.org.edit.toggleableTimestamps
 import com.korgnote.common.org.link.OrgBacklink
 import com.korgnote.common.org.nextSibling
@@ -484,13 +484,15 @@ private fun elementClocks(text: String, elements: List<OrgElement>, index: Int):
 }
 
 /**
- * The time clocked on a heading and under it, as Emacs's `C-c C-x C-d` shows it: `1:15`, or
- * `1:15 / 2:00` against its effort. Its own running clock lights it and counts up to [now].
+ * The time clocked on a heading and under it, as Emacs's `C-c C-x C-d` sums it: `1 h 15`, or
+ * `1 h 15 / 2 h` against its effort. Its own running clock lights it and counts up to [now].
  */
 @Composable
 private fun ClockedTotal(clocks: ElementClocks, now: LocalDateTime?) {
     val minutes = clocks.subtree.sumOf { it.minutes(now ?: it.end ?: it.start) }
-    val total = formatClocked(minutes) + (clocks.effort?.let { " / $it" } ?: "")
+    // An effort Org can read is shown the same way; any other is shown as written.
+    val effort = clocks.effort?.let { written -> effortMinutes(written)?.let { clockDuration(it) } ?: written }
+    val total = clockDuration(minutes) + (effort?.let { " / $it" } ?: "")
     val color = if (clocks.running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
     val description = stringResource(Res.string.editor_clocked, total)
     Row(

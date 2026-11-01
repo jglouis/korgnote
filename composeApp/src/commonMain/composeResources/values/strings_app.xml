@@ -58,6 +58,11 @@
     <string name="clock_out_at">Clock out at…</string>
     <string name="clock_cancel">Cancel clock</string>
     <string name="clock_open">Open the heading</string>
+    <!-- A time clocked, as the bar and the totals beside headings show it: under an hour, in an hour
+         exactly, and otherwise (%2$s is the minutes, two digits). Unbreakable spaces. -->
+    <string name="clock_minutes">%1$d&#160;min</string>
+    <string name="clock_hours">%1$d&#160;h</string>
+    <string name="clock_hours_minutes">%1$d&#160;h&#160;%2$s</string>
     <!-- Under the heading clocked: how long it has run, %1$s, as 1:15. -->
     <string name="clock_running_for">Running for %1$s</string>
     <!-- A clock left running for hours: %1$s is how long, as 9:30. -->

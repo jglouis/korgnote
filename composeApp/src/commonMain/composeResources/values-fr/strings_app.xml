@@ -52,6 +52,9 @@
     <string name="clock_out_at">Arrêter à…</string>
     <string name="clock_cancel">Annuler le chrono</string>
     <string name="clock_open">Ouvrir le titre</string>
+    <string name="clock_minutes">%1$d&#160;min</string>
+    <string name="clock_hours">%1$d&#160;h</string>
+    <string name="clock_hours_minutes">%1$d&#160;h&#160;%2$s</string>
     <string name="clock_running_for">En cours depuis %1$s</string>
     <string name="clock_left_running">En cours depuis %1$s. Oublié ?</string>
     <plurals name="clock_running_count">

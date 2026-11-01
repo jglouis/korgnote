@@ -67,7 +67,7 @@ class AppClockingTest {
         setContent { App() }
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Write the report", substring = true).fetchSemanticsNodes().isNotEmpty() }
         // What was clocked before, against the effort.
-        onNodeWithContentDescription("1:00 / 2:00 clocked").assertExists()
+        onNodeWithContentDescription("1\u00A0h / 2\u00A0h clocked").assertExists()
 
         onAllNodesWithText("Write the report", substring = true)[0].performTouchInput { longClick() }
         onNodeWithText("Clock in").performClick()
@@ -79,13 +79,13 @@ class AppClockingTest {
             viewModel.note.content,
         )
         // The bar, on every tab, says what runs.
-        onNodeWithText("Running for 0:00").assertExists()
+        onNodeWithText("Running for 0\u00A0min").assertExists()
 
         time = LocalDateTime(2026, 11, 1, 10, 15)
         onAllNodesWithContentDescription("Clock out")[0].performClick()
 
         waitUntil(timeoutMillis = 5_000) { viewModel.clocks.running.isEmpty() }
-        waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("1:45 / 2:00 clocked").fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("1\u00A0h\u00A045 / 2\u00A0h clocked").fetchSemanticsNodes().isNotEmpty() }
         assertEquals(true, viewModel.note.content.contains("CLOCK: [2026-11-01 Sun 09:30]--[2026-11-01 Sun 10:15] =>  0:45\n"))
     }
 }

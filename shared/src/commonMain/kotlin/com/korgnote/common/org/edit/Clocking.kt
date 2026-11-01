@@ -177,8 +177,22 @@ fun updateClockDurations(text: String, before: String? = null): String {
 private fun duration(minutes: Int): String =
     "${(minutes / 60).toString().padStart(2)}:${(minutes % 60).toString().padStart(2, '0')}"
 
-/** A total as the app shows it beside a heading: `1:15`, `0:05`, `26:00`. */
-fun formatClocked(minutes: Int): String = "${minutes / 60}:${(minutes % 60).toString().padStart(2, '0')}"
+/**
+ * An `:Effort:` in minutes, as Org reads the usual ones: `1:30`, a bare `45` (minutes), `2h`,
+ * `30min`, `1h 30min`. Null for anything else, which is then shown as written.
+ */
+fun effortMinutes(effort: String): Int? {
+    val text = effort.trim()
+    HOURS_MINUTES.matchEntire(text)?.let { return it.groupValues[1].toInt() * 60 + it.groupValues[2].toInt() }
+    text.toIntOrNull()?.let { return it.takeIf { it >= 0 } }
+    val units = UNITS.matchEntire(text) ?: return null
+    val hours = units.groupValues[1].toIntOrNull() ?: 0
+    val minutes = units.groupValues[2].toIntOrNull() ?: 0
+    return if (units.groupValues[1].isEmpty() && units.groupValues[2].isEmpty()) null else hours * 60 + minutes
+}
+
+private val HOURS_MINUTES = Regex("^(\\d+):([0-5]\\d)$")
+private val UNITS = Regex("^(?:(\\d+)\\s*h)?\\s*(?:(\\d+)\\s*min)?$")
 
 /**
  * The clocks written anywhere in [text], whatever heading they belong to: for a heading's subtree,

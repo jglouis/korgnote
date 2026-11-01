@@ -9,7 +9,7 @@ import com.korgnote.common.org.edit.clockOut
 import com.korgnote.common.org.edit.clockedMinutes
 import com.korgnote.common.org.edit.clocksOf
 import com.korgnote.common.org.edit.effort
-import com.korgnote.common.org.edit.formatClocked
+import com.korgnote.common.org.edit.effortMinutes
 import com.korgnote.common.org.edit.runningClocks
 import com.korgnote.common.org.edit.updateClockDurations
 import com.korgnote.common.org.toOrgDocument
@@ -157,13 +157,23 @@ class ClockingTest {
         // Its own clocks stop at its first sub-heading.
         assertEquals(1, doc.clocksOf(doc.heading("Project")).size)
         assertEquals(listOf("Part"), doc.runningClocks().map { it.title })
-        assertEquals("1:50", formatClocked(110))
     }
 
     @Test
     fun theEffortIsReadFromTheProperties() {
         val doc = "* Task\n:PROPERTIES:\n:Effort:   1:30\n:END:\n".toOrgDocument()
         assertEquals("1:30", doc.heading("Task").effort)
+    }
+
+    @Test
+    fun anEffortIsReadAsOrgReadsIt() {
+        assertEquals(90, effortMinutes("1:30"))
+        assertEquals(45, effortMinutes("45"))
+        assertEquals(120, effortMinutes("2h"))
+        assertEquals(30, effortMinutes("30min"))
+        assertEquals(90, effortMinutes("1h 30min"))
+        assertEquals(null, effortMinutes("a while"))
+        assertEquals(null, effortMinutes(""))
     }
 
     @Test
