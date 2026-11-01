@@ -283,7 +283,9 @@ private fun RenderNode(
                     val marker = if (node.ordered) "${numbers[index]}${node.bulletType}" else "${node.bulletType}"
                     when (child) {
                         is OrgCheckboxItem -> {
-                            RenderCheckboxItem(child, onToggleCheckbox)
+                            // In a numbered list, its number before the box, as Org writes `3. [ ]`;
+                            // in a bulleted one the box stands for the bullet.
+                            RenderCheckboxItem(child, onToggleCheckbox, number = marker.takeIf { node.ordered })
                             ItemContents(child.children, todoConfig, onToggleCheckbox)
                         }
 
@@ -1039,11 +1041,13 @@ private fun TableCell(text: String, header: Boolean, drawRightBorder: Boolean, l
 @Composable
 private fun RenderCheckboxItem(
     item: OrgCheckboxItem,
-    onToggleCheckbox: ((OrgCheckboxItem) -> Unit)?
+    onToggleCheckbox: ((OrgCheckboxItem) -> Unit)?,
+    /** `3.`, for an item of a numbered list; null in a bulleted one. */
+    number: String? = null,
 ) {
     // Keyed by where the item came from: two items with the same text are still different items.
     key(item.range.first) {
-        CheckboxLine(checked = item.checked, partial = item.partial, text = joinOrgLines(item.text), onCheckedChange = {
+        CheckboxLine(checked = item.checked, partial = item.partial, text = joinOrgLines(item.text), number = number, onCheckedChange = {
             onToggleCheckbox?.invoke(item)
         })
     }
@@ -1056,8 +1060,16 @@ private fun CheckboxLine(
     onCheckedChange: (Boolean) -> Unit,
     /** `[-]`, drawn as a box part-way ticked. */
     partial: Boolean = false,
+    /** The item's number before the box, styled as a numbered item's: `3.`. */
+    number: String? = null,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
+        if (number != null) {
+            Text(
+                text = number,
+                style = MaterialTheme.typography.bodyMedium.copy(color = OrgColors.bullet, fontWeight = FontWeight.Bold),
+            )
+        }
         TriStateCheckbox(
             state = when {
                 checked -> ToggleableState.On

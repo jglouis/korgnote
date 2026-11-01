@@ -35,6 +35,7 @@ class AppListItemsTest {
                make install
                #+end_src
             2. Second step
+            3. [ ] Third step
         """.trimIndent() + "\n",
     )
 
@@ -74,5 +75,8 @@ class AppListItemsTest {
         assertTrue(!shown("1. Second step"))
         assertTrue(shown("Its second paragraph."))
         assertTrue(shown("make install"))
+        // A checkbox item keeps its number, before its box.
+        assertTrue(onAllNodesWithText("3.").fetchSemanticsNodes().isNotEmpty(), "the checkbox step is numbered")
+        assertTrue(shown("Third step"))
     }
 }
