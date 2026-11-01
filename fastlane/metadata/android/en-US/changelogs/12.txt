@@ -1,0 +1,1 @@
+* Capture an event: Pick an event now shows events just added in Google Calendar, after asking once for your Google account.
