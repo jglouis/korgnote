@@ -38,6 +38,7 @@ import com.korgnote.app.capture.DeviceCalendar
 import com.korgnote.common.org.capture.SharedContent
 import androidx.compose.material.icons.filled.Event
 import org.koin.compose.getKoin
+import korgnote.composeapp.generated.resources.editor_refile_title
 import korgnote.composeapp.generated.resources.capture_event
 import com.korgnote.app.capture.CaptureQueue
 import com.korgnote.app.capture.CaptureSignals
@@ -170,6 +171,8 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     var editingDetails by remember { mutableStateOf(false) }
     // The notes and headings a link can go to, while the link picker is open.
     var pickingLink by remember { mutableStateOf<List<LinkTarget>?>(null) }
+    /** The heading being refiled, by element index, with where it can go. */
+    var refiling by remember { mutableStateOf<Pair<Int, List<LinkTarget>>?>(null) }
     var editingLink by remember { mutableStateOf<LinkEdit?>(null) }
     // A table being made from the editor's Table button, before it goes into the element.
     var insertingTable by remember { mutableStateOf(false) }
@@ -715,6 +718,19 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                             onDismiss = { pickingLink = null },
                         )
                     }
+                    refiling?.let { (index, targets) ->
+                        LinkPickerDialog(
+                            targets = targets,
+                            currentPath = vm.note.path.orEmpty(),
+                            onPick = { target ->
+                                refiling = null
+                                scope.launch { vm.refile(index, target) }
+                            },
+                            onTypeLink = null,
+                            onDismiss = { refiling = null },
+                            title = stringResource(Res.string.editor_refile_title),
+                        )
+                    }
                     editingLink?.let { edit ->
                         LinkEditorDialog(
                             edit = edit,
@@ -821,6 +837,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                                 if (delta < 0) vm.editor.promoteSection(index) else vm.editor.demoteSection(index)
                                             }
                                         },
+                                        onRefileSection = { index -> refiling = index to vm.refileTargets(index) },
                                         foldedElements = vm.folds.folded,
                                         onToggleFold = { vm.folds.toggle(it) },
                                         scrollToElementIndex = vm.note.scrollToElementIndex,

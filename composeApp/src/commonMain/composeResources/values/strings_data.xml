@@ -2,6 +2,9 @@
     <!-- Messages from the view models: the message line, and what an open note says. -->
     <string name="vm_edit_conflict">This part of the note also changed elsewhere while you were editing it; nothing was written.</string>
     <string name="vm_finish_editing_first">Save or discard the element you are editing first.</string>
+    <string name="vm_refiled">Moved under %1$s.</string>
+    <string name="vm_refile_target_gone">%1$s is no longer there; nothing was moved.</string>
+    <string name="vm_refile_left_copy">The note changed while the heading was being moved; it is now in both places.</string>
     <string name="vm_table_changed">The note changed while the table was open, so the table was not saved.</string>
     <string name="vm_note_title_needed">A note needs a title with at least one letter or digit.</string>
     <string name="vm_note_exists">There is already a note called %1$s.</string>

@@ -41,7 +41,10 @@ import com.korgnote.common.org.link.LinkTarget
 import com.korgnote.common.org.link.linkTargetsOf
 import com.korgnote.common.org.link.withFileId
 import com.korgnote.common.org.link.withHeadingId
+import com.korgnote.common.org.cutOrgSubtree
 import com.korgnote.common.org.orgElements
+import com.korgnote.common.org.todoKeywordsOf
+import com.korgnote.common.org.withOrgSubtreeFiled
 import com.korgnote.common.org.edit.updateStatisticsCookies
 import com.korgnote.common.org.template.dailyFileName
 import com.korgnote.common.org.template.dailyTitle
@@ -58,6 +61,8 @@ import com.korgnote.common.sync.conflictCopyOriginal
 import com.korgnote.common.sync.resolveConflict
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.vm_finish_editing_first
+import korgnote.composeapp.generated.resources.vm_refile_target_gone
+import korgnote.composeapp.generated.resources.vm_refiled
 import korgnote.composeapp.generated.resources.vm_not_a_note_path
 import korgnote.composeapp.generated.resources.vm_note_exists
 import korgnote.composeapp.generated.resources.vm_note_title_needed
@@ -433,6 +438,55 @@ class NotesViewModel(
         note.path?.let { documents[it] = note.content.toOrgDocument(library.fallbackKeywords) }
         return linkTargetsOf(documents).filter { target ->
             !(target.isNote && target.path == note.path) && target.title.isNotBlank()
+        }
+    }
+
+    /**
+     * Where the heading at element [index] of the open note can be refiled to: every note, as a
+     * place for a top-level heading, and every heading with a title — except the heading itself and
+     * those under it. The open note as it stands on screen, so that its offsets are the editor's.
+     */
+    fun refileTargets(index: Int): List<LinkTarget> {
+        val path = note.path
+        val documents = library.documents.toMutableMap()
+        path?.let { documents[it] = note.content.toOrgDocument(library.fallbackKeywords) }
+        val cut = note.content.cutOrgSubtree(index)
+        return linkTargetsOf(documents).filter { target ->
+            val offset = target.offset
+            val inside = cut != null && target.path == path && offset != null && offset in cut.start until cut.end
+            !inside && (target.isNote || target.title.isNotBlank())
+        }
+    }
+
+    /**
+     * Refiles the heading at element [index] of the open note, with its subtree, under [target] —
+     * after what is already there, one level below it — or to the end of [target] when it is a note,
+     * as `org-refile` (`C-c C-w`) does. Into another note, that note is written first.
+     */
+    suspend fun refile(index: Int, target: LinkTarget) {
+        val source = note.path ?: return
+        if (editor.editingIndex != null) {
+            showMessage(getString(Res.string.vm_finish_editing_first))
+            return
+        }
+        val where = target.title.ifBlank { target.noteTitle }
+        val moved = if (target.path == source) {
+            editor.refileSection(index, target.offset)
+        } else {
+            editor.moveSectionOut(index) { subtree ->
+                val before = library[target.path]?.text ?: return@moveSectionOut false
+                val filed = before.withOrgSubtreeFiled(subtree, target.offset) ?: return@moveSectionOut false
+                // The heading's `[2/5]` counts what is under it, which now includes this.
+                val updated = updateStatisticsCookies(filed, todoKeywordsOf(filed, library.fallbackKeywords), before = before)
+                store.save(target.path, updated)
+                library.put(target.path, updated.toOrgDocument(library.fallbackKeywords))
+                true
+            }
+        }
+        if (moved) {
+            showMessage(getString(Res.string.vm_refiled, where))
+        } else if (editor.editingIndex == null) {
+            showMessage(getString(Res.string.vm_refile_target_gone, where))
         }
     }
 

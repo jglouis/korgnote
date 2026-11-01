@@ -72,6 +72,7 @@ import korgnote.composeapp.generated.resources.editor_move_up
 import korgnote.composeapp.generated.resources.editor_note_details
 import korgnote.composeapp.generated.resources.editor_open
 import korgnote.composeapp.generated.resources.editor_promote
+import korgnote.composeapp.generated.resources.editor_refile
 import korgnote.composeapp.generated.resources.editor_this_heading
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.pluralStringResource
@@ -117,6 +118,8 @@ fun OrgDocumentView(
     onMoveSection: ((elementIndex: Int, up: Boolean) -> Unit)? = null,
     /** From the long-press menu: the heading and its subtree one level shallower (-1) or deeper (1). */
     onShiftSection: ((elementIndex: Int, delta: Int) -> Unit)? = null,
+    /** From the long-press menu: the heading and its subtree to another heading or note, chosen next. */
+    onRefileSection: ((elementIndex: Int) -> Unit)? = null,
     /** Folded headings: each shows only its heading line, and its descendants render nothing. */
     foldedElements: Set<Int> = emptySet(),
     onToggleFold: ((elementIndex: Int) -> Unit)? = null,
@@ -280,6 +283,7 @@ fun OrgDocumentView(
                                 onPromote = onShiftSection?.takeIf { element.level > 1 }
                                     ?.let { shift -> { shift(index, -1) } },
                                 onDemote = onShiftSection?.let { shift -> { shift(index, 1) } },
+                                onRefile = onRefileSection?.let { refile -> { refile(index) } },
                             )
                         }
                         if (editDetails != null && element.isPreamble) NoteDetailsButton(editDetails)
@@ -462,6 +466,7 @@ private fun ElementMenu(
     onMoveDown: (() -> Unit)?,
     onPromote: (() -> Unit)?,
     onDemote: (() -> Unit)?,
+    onRefile: (() -> Unit)?,
 ) {
     @Composable
     fun Item(label: String, action: (() -> Unit)?) = DropdownMenuItem(
@@ -490,6 +495,8 @@ private fun ElementMenu(
             Item(stringResource(Res.string.editor_move_down), onMoveDown)
             Item(stringResource(Res.string.editor_promote), onPromote)
             Item(stringResource(Res.string.editor_demote), onDemote)
+            // Out of this place entirely, `C-c C-w`: under a heading here or in another note.
+            if (onRefile != null) Item(stringResource(Res.string.editor_refile), onRefile)
         }
         if (onDelete != null && !isPreamble) {
             HorizontalDivider()

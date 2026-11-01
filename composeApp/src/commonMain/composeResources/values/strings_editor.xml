@@ -18,6 +18,8 @@
     <string name="editor_move_right">Move right</string>
     <string name="editor_promote">Promote</string>
     <string name="editor_demote">Demote</string>
+    <string name="editor_refile">Refile…</string>
+    <string name="editor_refile_title">Refile under</string>
     <string name="editor_delete_heading">Delete heading</string>
     <string name="editor_delete_heading_title">Delete this heading?</string>
     <string name="editor_this_heading">This heading</string>

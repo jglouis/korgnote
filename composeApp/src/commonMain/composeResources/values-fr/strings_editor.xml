@@ -17,6 +17,8 @@
     <string name="editor_move_right">Déplacer vers la droite</string>
     <string name="editor_promote">Remonter d’un niveau</string>
     <string name="editor_demote">Descendre d’un niveau</string>
+    <string name="editor_refile">Déplacer vers…</string>
+    <string name="editor_refile_title">Déplacer sous</string>
     <string name="editor_delete_heading">Supprimer le titre</string>
     <string name="editor_delete_heading_title">Supprimer ce titre ?</string>
     <string name="editor_this_heading">Ce titre</string>

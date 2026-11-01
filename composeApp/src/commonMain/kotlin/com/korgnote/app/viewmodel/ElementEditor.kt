@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import com.korgnote.common.org.cutOrgSubtree
 import com.korgnote.common.org.edit.continueList
 import com.korgnote.common.org.edit.pastedLink
 import com.korgnote.common.org.nextSibling
@@ -14,6 +15,7 @@ import com.korgnote.common.org.replaceOrgElement
 import com.korgnote.common.org.sliceOf
 import com.korgnote.common.org.subtreeEnd
 import com.korgnote.common.org.withNewOrgElement
+import com.korgnote.common.org.withOrgSubtreeRefiled
 import com.korgnote.common.org.withOrgSubtreeShifted
 import com.korgnote.common.org.withOrgSubtreesSwapped
 import com.korgnote.common.org.withoutOrgSubtree
@@ -22,6 +24,7 @@ import com.korgnote.common.sync.merge
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.vm_edit_conflict
 import korgnote.composeapp.generated.resources.vm_finish_editing_first
+import korgnote.composeapp.generated.resources.vm_refile_left_copy
 import org.jetbrains.compose.resources.getString
 
 /**
@@ -294,6 +297,41 @@ class ElementEditor(
 
     /** Makes the heading at [index] and its subtree one level deeper — `org-demote-subtree`. */
     suspend fun demoteSection(index: Int): Boolean = shiftSection(index, +1)
+
+    /**
+     * Moves the heading at [index], with its subtree, under the heading of this note that starts at
+     * [headingStart] — or to the end of the note with none — as `org-refile` does within a file,
+     * then saves. Refused when that heading is gone or is inside the subtree.
+     */
+    suspend fun refileSection(index: Int, headingStart: Int?): Boolean =
+        restructure { it.withOrgSubtreeRefiled(index, headingStart) }
+
+    /**
+     * Takes the heading at [index], with its subtree, out of this note once [fileElsewhere] has put
+     * it in another one, then saves: the other note is written first, so a move cut short leaves
+     * the heading in both places rather than in neither. Refused while an element is being edited,
+     * and left alone when [fileElsewhere] declines.
+     */
+    suspend fun moveSectionOut(index: Int, fileElsewhere: suspend (subtree: String) -> Boolean): Boolean {
+        if (editingIndex != null) {
+            showMessage(getString(Res.string.vm_finish_editing_first))
+            return false
+        }
+        val before = note.content
+        val cut = before.cutOrgSubtree(index) ?: return false
+        if (!fileElsewhere(cut.subtree)) return false
+        // A checkbox ticked meanwhile changed the note; the heading is cut from it as it now is,
+        // and only if it is still the same heading.
+        val now = note.content
+        val rest = if (now == before) cut.rest else now.cutOrgSubtree(index)?.takeIf { it.subtree == cut.subtree }?.rest
+        if (rest == null) {
+            showMessage(getString(Res.string.vm_refile_left_copy))
+            return false
+        }
+        note.content = rest
+        save()
+        return true
+    }
 
     /** Elements keep their order when restarred, so every fold stays on its index. */
     private suspend fun shiftSection(index: Int, delta: Int): Boolean =

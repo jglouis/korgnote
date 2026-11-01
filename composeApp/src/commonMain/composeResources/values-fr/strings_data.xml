@@ -1,6 +1,9 @@
 <resources>
     <string name="vm_edit_conflict">Cette partie de la note a aussi changé ailleurs pendant que vous la modifiiez ; rien n’a été enregistré.</string>
     <string name="vm_finish_editing_first">Enregistrez ou abandonnez d’abord l’élément en cours de modification.</string>
+    <string name="vm_refiled">Déplacé sous %1$s.</string>
+    <string name="vm_refile_target_gone">%1$s n’existe plus ; rien n’a été déplacé.</string>
+    <string name="vm_refile_left_copy">La note a changé pendant le déplacement ; le titre est maintenant aux deux endroits.</string>
     <string name="vm_table_changed">La note a changé pendant que le tableau était ouvert ; le tableau n’a donc pas été enregistré.</string>
     <string name="vm_note_title_needed">Une note doit avoir un titre contenant au moins une lettre ou un chiffre.</string>
     <string name="vm_note_exists">Il existe déjà une note nommée %1$s.</string>
