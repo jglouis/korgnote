@@ -1,5 +1,6 @@
 package com.korgnote.common
 
+import com.korgnote.common.org.OrgPriority
 import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTodoConfig
@@ -33,7 +34,7 @@ class OrgHeadingKeywordsTest {
     fun aDeclaredKeywordIsTheHeadingsKeyword() {
         val heading = orgHeadingOf("** FINISHED [#A] Party", events)
         assertEquals("FINISHED", heading.todo)
-        assertEquals('A', heading.priority)
+        assertEquals(OrgPriority.of("A"), heading.priority)
         assertEquals("Party", heading.title)
     }
 

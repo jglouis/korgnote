@@ -1,5 +1,6 @@
 package com.korgnote.common
 
+import com.korgnote.common.org.OrgPriority
 import com.korgnote.common.org.OrgLatexEnvironment
 import com.korgnote.common.org.OrgRaw
 import com.korgnote.common.org.OrgSection
@@ -130,7 +131,7 @@ class OrgSmallGapsTests {
     @Test
     fun todoAndPriorityTermsParse() {
         assertEquals(SearchQuery(todo = listOf("next")), SearchQuery.parse("todo:NEXT"))
-        assertEquals(SearchQuery(priority = listOf('A')), SearchQuery.parse("priority:a"))
+        assertEquals(SearchQuery(priority = listOf(OrgPriority.of("A")!!)), SearchQuery.parse("priority:a"))
         // Not a keyword or a priority: words to find.
         assertEquals(SearchQuery(text = listOf("todo:")), SearchQuery.parse("todo:"))
         assertEquals(SearchQuery(text = listOf("priority:high")), SearchQuery.parse("priority:high"))

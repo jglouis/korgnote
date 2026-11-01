@@ -70,7 +70,7 @@ data class OrgSection(
     val tags: List<String> = emptyList(),
     override val children: List<OrgNode> = emptyList(),
     /** The `[#A]` cookie, without its brackets, or null when the heading has none. */
-    val priority: Char? = null,
+    val priority: OrgPriority? = null,
 ) : OrgNode()
 
 /**
@@ -231,8 +231,8 @@ data class OrgHeading(
     val todo: String?,
     val title: String,
     val tags: List<String>,
-    /** The `[#A]` cookie's letter, or null when the heading carries none. */
-    val priority: Char? = null,
+    /** The `[#A]` or `[#10]` cookie's priority, or null when the heading carries none. */
+    val priority: OrgPriority? = null,
 )
 
 /**
@@ -261,7 +261,7 @@ fun orgHeadingOf(line: String, keywords: OrgTodoConfig): OrgHeading {
     // A leading [#A] cookie is a priority, not part of the title.
     val priority = OrgSyntax.priority.find(title)?.let { pm ->
         title = title.substring(pm.value.length).trimStart()
-        pm.value[2]
+        OrgPriority.of(pm.groupValues[1])
     }
     return OrgHeading(level = level, todo = todo, title = title, tags = tags, priority = priority)
 }
@@ -895,7 +895,7 @@ fun OrgNode.toOrgString(): String = when (this) {
     is OrgSection -> buildString {
         append("*".repeat(level.coerceAtLeast(1))).append(' ')
         if (todo != null) append(todo).append(' ')
-        if (priority != null) append("[#").append(priority).append("] ")
+        if (priority != null) append("[#").append(priority.text).append("] ")
         append(title)
         if (tags.isNotEmpty()) append(" :").append(tags.joinToString(":")).append(':')
         // The body and the sub-headings are children now, so printing a section prints its subtree.

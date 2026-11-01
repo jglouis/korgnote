@@ -85,6 +85,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import com.korgnote.common.org.orgHeadingOf
 import com.korgnote.common.org.prioritiesOf
 import korgnote.composeapp.generated.resources.editor_priority
+import com.korgnote.common.org.OrgPriority
 
 /**
  * Reading view of a whole document, rendered one editable element at a time.
@@ -128,7 +129,7 @@ fun OrgDocumentView(
     /** From the long-press menu: the heading and its subtree to another heading or note, chosen next. */
     onRefileSection: ((elementIndex: Int) -> Unit)? = null,
     /** A priority picked for the heading at an offset in [text], or null to remove it. */
-    onSetPriority: ((offsetInDocument: Int, priority: Char?) -> Unit)? = null,
+    onSetPriority: ((offsetInDocument: Int, priority: OrgPriority?) -> Unit)? = null,
     /**
      * From the long-press menu: the stamp beginning at this offset in [text] made inactive when it
      * is active, and active when it is not.

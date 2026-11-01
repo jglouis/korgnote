@@ -114,6 +114,7 @@ import androidx.compose.runtime.compositionLocalOf
 import com.korgnote.common.org.OrgPriorities
 import korgnote.composeapp.generated.resources.editor_current_priority
 import korgnote.composeapp.generated.resources.editor_no_priority
+import com.korgnote.common.org.OrgPriority
 
 
 
@@ -353,7 +354,7 @@ private fun RenderNode(
  * Choosing a heading's priority, where it can be: the file's priorities, and what to do with the
  * one picked. Provided around a note's headings rather than handed down through every node.
  */
-class PriorityEditing(val priorities: OrgPriorities, val onSet: (heading: OrgSection, priority: Char?) -> Unit)
+class PriorityEditing(val priorities: OrgPriorities, val onSet: (heading: OrgSection, priority: OrgPriority?) -> Unit)
 
 val LocalPriorityEditing = compositionLocalOf<PriorityEditing?> { null }
 
@@ -523,15 +524,15 @@ internal fun OrgSection.location(): String? =
 @Composable
 fun PriorityMenu(
     expanded: Boolean,
-    current: Char?,
+    current: OrgPriority?,
     priorities: OrgPriorities,
-    onPick: (priority: Char?) -> Unit,
+    onPick: (priority: OrgPriority?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         for (priority in priorities.range) {
             DropdownMenuItem(
-                text = { Text("[#$priority]", color = OrgColors.priority, fontWeight = FontWeight.Bold) },
+                text = { Text("[#${priority.text}]", color = OrgColors.priority, fontWeight = FontWeight.Bold) },
                 trailingIcon = if (priority == current) {
                     { Icon(Icons.Filled.Check, contentDescription = stringResource(Res.string.editor_current_priority)) }
                 } else null,

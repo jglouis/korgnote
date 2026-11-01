@@ -37,4 +37,14 @@ class AgendaSerializationTest {
 
         assertEquals(entries, Json.decodeFromString(serializer, json))
     }
+
+    /** A priority is kept as the cookie writes it, `"A"` or `"10"`: what a widget kept before numeric priorities still reads. */
+    @Test
+    fun aPriorityIsKeptAsItsText() {
+        val entries = agendaEntries(mapOf("n.org" to "* TODO [#10] Numeric <2026-09-21 Mon>\n* TODO [#A] Letter <2026-09-21 Mon>\n"))
+        val json = Json.encodeToString(serializer, entries)
+        assertTrue("\"priority\":\"10\"" in json, json)
+        assertTrue("\"priority\":\"A\"" in json, json)
+        assertEquals(entries, Json.decodeFromString(serializer, json))
+    }
 }

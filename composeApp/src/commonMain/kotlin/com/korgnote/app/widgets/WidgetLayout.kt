@@ -83,7 +83,7 @@ fun AgendaOccurrence.plainHeadline(): String = buildString {
 
 /** [plainHeadline] without its keyword, for a widget that shows the keyword as a label of its own. */
 fun AgendaOccurrence.plainTitle(): String = buildString {
-    entry.priority?.let { append("[#$it] ") }
+    entry.priority?.let { append("[#${it.text}] ") }
     append(buildOrgInlineString(entry.title, viewMode = true).text)
 }
 

@@ -22,6 +22,7 @@ import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.serialization.Serializable
+import com.korgnote.common.org.OrgPriority
 
 /** Where an entry's date came from. */
 enum class AgendaKind {
@@ -57,7 +58,7 @@ data class AgendaEntry(
     val done: Boolean,
     /** The heading's own tags, then those it inherits from its parents and from `#+FILETAGS:`. */
     val tags: List<String>,
-    val priority: Char?,
+    val priority: OrgPriority?,
     /**
      * Where [priority] stands against its file's default — see [com.korgnote.common.org.OrgPriorities.orderOf]
      * — so that a day's entries can put the important first, as Org's agenda does.

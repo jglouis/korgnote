@@ -22,6 +22,7 @@ import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.plus
+import com.korgnote.common.org.OrgPriority
 
 /**
  * Structural edits, each of which is a text replacement over a range.
@@ -170,13 +171,13 @@ fun OrgDocument.setTodo(heading: OrgSection, keyword: String?): OrgDocument {
  * `C-c ,` does: the cookie goes after the TODO keyword, or first in the title when there is none,
  * and only the cookie and the space after it change.
  */
-fun OrgDocument.setPriority(heading: OrgSection, priority: Char?): OrgDocument {
+fun OrgDocument.setPriority(heading: OrgSection, priority: OrgPriority?): OrgDocument {
     val parts = headingPartsOf(heading) ?: return this
     // Where the cookie is, or goes: after the keyword and its space, else right after the stars.
     var at = parts.todo?.let { it.last + 1 } ?: parts.afterStars
     if (parts.todo != null) while (at < parts.lineEnd && text[at] == ' ') at++
     val existing = OrgSyntax.priority.find(text.substring(at, parts.lineEnd))?.let { at until (at + it.value.length) }
-    val cookie = priority?.let { "[#$it]" }
+    val cookie = priority?.let { "[#${it.text}]" }
     return when {
         existing != null && cookie != null -> replace(existing, cookie)
         // Take the space after it too, so removing a cookie does not leave a double space.

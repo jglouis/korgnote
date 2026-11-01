@@ -1,5 +1,6 @@
 package com.korgnote.app.viewmodel
 
+import com.korgnote.common.org.OrgPriority
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
@@ -42,7 +43,7 @@ class PriorityTest {
         viewModel.server.load()
         viewModel.onFileSelected(path)
 
-        viewModel.setPriorityAt(0, 'A', this)
+        viewModel.setPriorityAt(0, OrgPriority.of("A"), this)
         // Where the second heading is now: the first one's cookie moved it.
         viewModel.setPriorityAt(viewModel.note.content.indexOf("* TODO [#B]"), null, this)
 

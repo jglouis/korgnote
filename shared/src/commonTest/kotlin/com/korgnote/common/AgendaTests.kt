@@ -1,5 +1,6 @@
 package com.korgnote.common
 
+import com.korgnote.common.org.OrgPriority
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaKind
 import com.korgnote.common.org.agenda.AgendaOccurrence
@@ -343,7 +344,7 @@ class AgendaTests {
         """.trimIndent()
         val entry = agendaEntries("house.org", text).single()
         assertEquals(listOf("weekly", "outdoor", "home"), entry.tags)
-        assertEquals('A', entry.priority)
+        assertEquals(OrgPriority.of("A"), entry.priority)
         assertEquals("Mow the lawn", entry.title)
     }
 

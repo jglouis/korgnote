@@ -231,7 +231,7 @@ private fun AgendaOccurrence.headline(
             withStyle(SpanStyle(color = keywordColor ?: Color.Unspecified)) { append(todo) }
             append(" ")
         }
-        entry.priority?.let { append("[#$it] ") }
+        entry.priority?.let { append("[#${it.text}] ") }
     }
     val title = buildOrgInlineString(entry.title, viewMode = true)
     append(AnnotatedString(title.text, title.spanStyles))

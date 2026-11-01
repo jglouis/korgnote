@@ -45,7 +45,11 @@ object OrgSyntax {
     /** A fixed-width line, `: text` or a lone `:`, shown verbatim in a monospace font. */
     val fixedWidth = Regex("^[ \\t]*:( |$)")
     val descriptionTerm = Regex("^(\\s*)(.+?)(\\s+::)(\\s|$)")
-    val priority = Regex("^\\[#[A-Z0-9]\\]")
+    /**
+     * A priority cookie at the start of a heading's title, capturing its value: an uppercase letter,
+     * or a number from 0 to 64, as Org allows (see [OrgPriority]).
+     */
+    val priority = Regex("^\\[#([A-Z]|6[0-4]|[1-5]?[0-9])\\]")
     val tags = Regex("\\s+(:[\\p{L}\\p{N}_@#%]+(?::[\\p{L}\\p{N}_@#%]+)*:)\\s*$")
     val footnoteDefinition = Regex("^\\[fn:([^\\]]+)\\]\\s*(.*)$")
 

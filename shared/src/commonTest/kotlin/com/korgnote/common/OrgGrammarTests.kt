@@ -1,5 +1,6 @@
 package com.korgnote.common
 
+import com.korgnote.common.org.OrgPriority
 import com.korgnote.common.org.OrgBlock
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgComment
@@ -112,7 +113,7 @@ class OrgGrammarTests {
         val text = "* TODO [#A] Important thing                :work:\n"
         val section = text.toOrgDocument().children.single() as OrgSection
 
-        assertEquals('A', section.priority)
+        assertEquals(OrgPriority.of("A"), section.priority)
         assertEquals("Important thing", section.title)
         assertEquals(listOf("work"), section.tags)
         assertRoundTrips(text)

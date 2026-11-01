@@ -7,6 +7,7 @@ import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.orgHeadingOf
 import com.korgnote.common.org.todoKeywordsOf
 import com.korgnote.common.org.sliceOf
+import com.korgnote.common.org.OrgPriority
 
 /**
  * A query over the corpus.
@@ -35,8 +36,8 @@ data class SearchQuery(
     val tags: List<String> = emptyList(),
     /** The TODO keyword the heading must have, lowercased; more than one can only all match if equal. */
     val todo: List<String> = emptyList(),
-    /** The priority the heading's cookie must give, uppercased. */
-    val priority: List<Char> = emptyList(),
+    /** The priority the heading's cookie must give. */
+    val priority: List<OrgPriority> = emptyList(),
 ) {
     val isEmpty: Boolean get() = text.isEmpty() && tags.isEmpty() && todo.isEmpty() && priority.isEmpty()
 
@@ -49,12 +50,12 @@ data class SearchQuery(
             val text = mutableListOf<String>()
             val tags = mutableListOf<String>()
             val todo = mutableListOf<String>()
-            val priority = mutableListOf<Char>()
+            val priority = mutableListOf<OrgPriority>()
             for (token in tokenize(input)) {
                 val tagged = tagTermsOf(token)
                 val keyword = valueAfter(token, "todo:")?.takeIf { OrgSyntax.todoKeywordDeclaration.matches(it.uppercase()) }
-                val cookie = valueAfter(token, "priority:")?.uppercase()?.singleOrNull()
-                    ?.takeIf { OrgSyntax.priority.matches("[#$it]") }
+                // Typed in a search box, so `priority:a` is taken as `A`.
+                val cookie = valueAfter(token, "priority:")?.uppercase()?.let(OrgPriority::of)
                 when {
                     tagged != null -> tags += tagged
                     keyword != null -> todo += keyword.lowercase()
@@ -189,7 +190,7 @@ fun searchOrgFile(
     // A tag's group members may be what the headings carry, but the group itself is named in the
     // file's `#+TAGS:` line, so this still holds; and so does a keyword, which a heading spells out.
     if ((query.text + query.tags + query.todo).any { !text.contains(it, ignoreCase = true) }) return hits
-    if (query.priority.any { !text.contains("[#$it]", ignoreCase = true) }) return hits
+    if (query.priority.any { !text.contains("[#${it.text}]") }) return hits
 
     val fileTags = fileTagsOf(text)
     val keywords = todoKeywordsOf(text, fallback)
@@ -211,7 +212,7 @@ fun searchOrgFile(
         val carriesTags = wantedTags.all { anyOf -> tags.any { it.lowercase() in anyOf } }
         val own = ancestors.lastOrNull()?.takeIf { !element.isPreamble }
         val hasKeyword = query.todo.all { own?.todo?.equals(it, ignoreCase = true) == true }
-        val hasPriority = query.priority.all { own?.priority?.uppercaseChar() == it }
+        val hasPriority = query.priority.all { own?.priority == it }
         if (carriesTags && hasKeyword && hasPriority && hits.size < limit) {
             val breadcrumb = ancestors.map { it.title }
             if (query.text.isEmpty()) {
@@ -276,7 +277,7 @@ fun searchOrg(
 /** Enough to fill a long screen several times over; past this, narrow the query instead. */
 const val DEFAULT_SEARCH_LIMIT = 200
 
-private class Heading(val level: Int, val title: String, val tags: List<String>, val todo: String?, val priority: Char?)
+private class Heading(val level: Int, val title: String, val tags: List<String>, val todo: String?, val priority: OrgPriority?)
 
 /**
  * The tag groups a file's `#+TAGS:` lines declare, lowercased: each group tag to its members.
