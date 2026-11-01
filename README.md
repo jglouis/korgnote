@@ -47,6 +47,32 @@ phone: your notes are your calendar, and there is no separate one to keep in syn
   notes again. Reminders, the digest and the widgets come from the phone itself, so they work with
   no network.
 
+### What it doesn't do yet
+
+KorgNote reads the parts of Org that notes and an agenda need. Anything it doesn't understand is
+kept exactly as written and shown as plain text, so your files are never changed by it.
+
+- **Time tracking.** `CLOCK:` lines, clock tables, `:Effort:` and column view.
+- **Moving subtrees between files.** Refiling and archiving. `:ARCHIVE:` and `COMMENT` subtrees
+  are left out of the agenda, but nothing moves them for you.
+- **Agenda queries.** Search takes words, tags (with `#+TAGS:` groups), `todo:` and `priority:`.
+  Org's match syntax (`+work-boss/NEXT`), property searches and custom agenda views are not there.
+- **Priorities.** Shown but not editable, and only one character: `[#A]` to `[#Z]`, `[#0]` to `[#9]`.
+- **Diary dates.** `<%%(diary-float t 4 3)>` and other diary expressions don't appear in the agenda.
+- **Some structure.** Paragraphs or blocks indented under a list item, multi-paragraph footnotes,
+  inline tasks, and `#+STARTUP:` folding (`overview`, `content`).
+- **Rich text.** Inline images, LaTeX rendering, radio targets, inline footnotes, citations and
+  macros show as written. Footnote references can't be tapped yet.
+- **Per-keyword logging.** A note is logged on every state change; `TODO(t@/!)` settings and
+  `:LOGGING:` aren't read.
+- **Shared settings.** `#+SETUPFILE:`, `#+PROPERTY:` and property inheritance aren't read.
+
+Out of scope: running code blocks (Babel), export and publishing.
+
+TODO keywords follow Org's rule: a file has the keywords its own `#+TODO:` lines declare, or `TODO`
+and `DONE` when it has none. A file that uses `EVENT`, `WAIT` or `FINISHED` should declare them,
+for example `#+TODO: TODO WAIT | DONE CANCELED`.
+
 ## Get started
 
 1. **Install the app.** On an Android phone (7.0 or later), open the
