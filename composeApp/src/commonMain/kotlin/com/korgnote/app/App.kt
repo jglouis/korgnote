@@ -395,7 +395,19 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                 val day = calendarDayOf(uri)
                 when {
                     uri.startsWith(NOTE_LINK_URI_PREFIX) -> {
-                        if (vm.links.follow(uri.removePrefix(NOTE_LINK_URI_PREFIX))) selectedScreen = BottomItem.FILE
+                        val target = uri.removePrefix(NOTE_LINK_URI_PREFIX)
+                        // A `doi:` or `#+LINK:` abbreviation that stands for a web page goes to the
+                        // browser, as a web link does; anything else is the notes' to follow.
+                        val web = vm.links.webAddressOf(target)
+                        if (web != null) {
+                            try {
+                                platformUriHandler.openUri(web)
+                            } catch (e: Exception) {
+                                vm.links.onExternalLinkFailed(web)
+                            }
+                        } else if (vm.links.follow(target)) {
+                            selectedScreen = BottomItem.FILE
+                        }
                     }
                     uri.startsWith(FILE_LINK_URI_PREFIX) -> vm.files.open(uri.removePrefix(FILE_LINK_URI_PREFIX))
                     day != null -> openCalendar(CalendarTarget(CalendarMode.Day, day))

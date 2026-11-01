@@ -62,6 +62,19 @@ class OrgLinkIndex(
     /** The keywords [text]'s headings are read with, so that a title is the title Org sees. */
     private fun keywordsOf(text: String): OrgTodoConfig = todoKeywordsOf(text, fallback)
 
+    /** Each note's `#+LINK:` abbreviations, for the notes that declare any. */
+    private val abbreviations: Map<String, Map<String, String>> by lazy {
+        buildMap {
+            for ((path, text) in notes) {
+                if (!text.contains("#+LINK:", ignoreCase = true)) continue
+                val declared = mutableMapOf<String, String>()
+                // The first declaration of a key wins.
+                for (m in LINK_KEYWORD.findAll(text)) declared.getOrPut(m.groupValues[1]) { m.groupValues[2] }
+                put(path, declared)
+            }
+        }
+    }
+
     /** `:ID:` value → where it is declared. */
     private val ids: Map<String, OrgLinkResolution.Note> by lazy {
         buildMap {
@@ -77,9 +90,15 @@ class OrgLinkIndex(
     }
 
     fun resolve(link: String, from: String): OrgLinkResolution {
-        val target = link.trim()
+        val written = link.trim()
+        // An abbreviation the linking note declares, `#+LINK: gh https://github.com/%s`, stands for
+        // the link it expands to. Expanded once: what it gives is resolved as written.
+        val target = abbreviations[from]?.let { expandAbbreviation(written, it) } ?: written
         val scheme = SCHEME.find(target)?.groupValues?.get(1)?.lowercase()
         return when {
+            // Org's own `doi:` link, which it opens at the DOI resolver.
+            scheme == "doi" -> OrgLinkResolution.External(DOI_RESOLVER + target.substringAfter(':').trim())
+
             scheme == "id" -> {
                 val (id, search) = splitSearch(target.substringAfter(':'))
                 val declared = ids[id.trim()] ?: return OrgLinkResolution.NotFound(link)
@@ -239,6 +258,42 @@ class OrgLinkIndex(
     }
 
     private companion object {
+        /** `org-link-doi-server-url`. */
+        const val DOI_RESOLVER = "https://doi.org/"
+
+        /** A `#+LINK:` line: the abbreviation, then what it expands to. */
+        val LINK_KEYWORD = Regex("(?im)^[ \\t]*#\\+LINK:[ \\t]+(\\S+)[ \\t]+(\\S.*?)[ \\t]*$")
+
+        /**
+         * [target] expanded by one of [declared], as `org-link-expand-abbrev` does: the
+         * part after the colon replaces `%s`, or `%h` URL-encoded, or is appended when the
+         * expansion has neither. Null when [target] uses none of them. Expansions
+         * that run Emacs Lisp, `%(…)`, are not followed.
+         */
+        fun expandAbbreviation(target: String, declared: Map<String, String>): String? {
+            val colon = target.indexOf(':')
+            val key = if (colon > 0) target.substring(0, colon) else target
+            val tag = if (colon > 0) target.substring(colon + 1) else ""
+            val expansion = declared[key] ?: return null
+            return when {
+                "%(" in expansion -> null
+                "%s" in expansion -> expansion.replace("%s", tag)
+                "%h" in expansion -> expansion.replace("%h", urlEncoded(tag))
+                else -> expansion + tag
+            }
+        }
+
+        /** [text] percent-encoded as a URL's query or path wants it, keeping what needs no escaping. */
+        fun urlEncoded(text: String): String = buildString {
+            for (byte in text.encodeToByteArray()) {
+                val c = byte.toInt() and 0xFF
+                if (c.toChar().isLetterOrDigit() && c < 0x80 || c.toChar() in "-_.~") append(c.toChar())
+                else append('%').append(HEX[c shr 4]).append(HEX[c and 0xF])
+            }
+        }
+
+        const val HEX = "0123456789ABCDEF"
+
         // Any case: `Mu4e:msgid:…` is a link type too. A space after the colon makes it prose —
         // `[[Note: see below]]` is a fuzzy link, not a link of type `Note`.
         val SCHEME = Regex("^([A-Za-z][A-Za-z0-9+-]*):(?!\\s)")

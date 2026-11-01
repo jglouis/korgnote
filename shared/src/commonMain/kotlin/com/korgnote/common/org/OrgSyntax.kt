@@ -36,6 +36,12 @@ object OrgSyntax {
     /** The `[@3]` that sets an item's number, capturing the number. */
     val listCounter = Regex("\\[@(\\d+)\\]")
 
+    /** The `\begin{equation}` that opens a LaTeX environment, capturing its name. */
+    val latexBegin = Regex("^[ \\t]*\\\\begin\\{([A-Za-z0-9*]+)\\}")
+
+    /** The `\end{name}` that closes the LaTeX environment called [name]. */
+    fun latexEnd(name: String) = Regex("\\\\end\\{${Regex.escape(name)}\\}[ \\t]*$")
+
     /** A fixed-width line, `: text` or a lone `:`, shown verbatim in a monospace font. */
     val fixedWidth = Regex("^[ \\t]*:( |$)")
     val descriptionTerm = Regex("^(\\s*)(.+?)(\\s+::)(\\s|$)")
@@ -80,6 +86,9 @@ object OrgSyntax {
 
     /** The tag that marks a subtree archived, which the agenda passes over (`org-archive-tag`). */
     const val ARCHIVE_TAG = "ARCHIVE"
+
+    /** The `#+CAPTION:` that titles the table or figure below it, capturing the caption. */
+    val captionKeyword = Regex("^[ \\t]*#\\+CAPTION(?:\\[[^\\]]*\\])?:[ \\t]*(.*)$", RegexOption.IGNORE_CASE)
 
     /** The `#+TITLE:` keyword, capturing the title. */
     val titleKeyword = Regex("^#\\+TITLE:\\s*(.*)$", RegexOption.IGNORE_CASE)

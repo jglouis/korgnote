@@ -17,32 +17,58 @@ import com.korgnote.common.org.sliceOf
  * Org inherits it, so a tag on a parent heading or in `#+FILETAGS:` counts for everything beneath
  * it. Words can be quoted to search for a phrase: `tag:work "invoice due"`.
  *
- * Every term must match — terms narrow, they do not widen — and matching ignores case throughout,
- * for tags as well as text.
+ * A tag that a file's `#+TAGS:` line declares as a group, `[ work : @office @remote ]`, also finds
+ * the headings carrying one of its members, as Org's tag search does.
  *
- * Text and tags are the two the notes actually need today. The structured queries sketched in
- * `docs/06-editor.md` (`todo:NEXT`, `deadline:<=7d`) are more prefixes in [Companion.parse] plus
- * more predicates in [searchOrgFile]; nothing here assumes there will only ever be two.
+ * `todo:NEXT` keeps headings whose own TODO keyword is `NEXT`, and `priority:A` those whose own
+ * cookie is `[#A]`; neither is inherited, as in Org.
+ *
+ * Every term must match — terms narrow, they do not widen — and matching ignores case throughout,
+ * for tags and keywords as well as text.
+ *
+ * The other structured queries sketched in `docs/06-editor.md` (`deadline:<=7d`) are more prefixes
+ * in [Companion.parse] plus more predicates in [searchOrgFile].
  */
 data class SearchQuery(
     /** Words that must all appear, already lowercased. */
     val text: List<String> = emptyList(),
     /** Tags the containing heading must all carry, already lowercased and without colons. */
     val tags: List<String> = emptyList(),
+    /** The TODO keyword the heading must have, lowercased; more than one can only all match if equal. */
+    val todo: List<String> = emptyList(),
+    /** The priority the heading's cookie must give, uppercased. */
+    val priority: List<Char> = emptyList(),
 ) {
-    val isEmpty: Boolean get() = text.isEmpty() && tags.isEmpty()
+    val isEmpty: Boolean get() = text.isEmpty() && tags.isEmpty() && todo.isEmpty() && priority.isEmpty()
+
+    /** True when the query asks something of the heading itself, so the text before every heading cannot match. */
+    internal val needsHeading: Boolean get() = tags.isNotEmpty() || todo.isNotEmpty() || priority.isNotEmpty()
 
     companion object {
         /** Parses user input. Anything that is not a recognised prefix is a word to find. */
         fun parse(input: String): SearchQuery {
             val text = mutableListOf<String>()
             val tags = mutableListOf<String>()
+            val todo = mutableListOf<String>()
+            val priority = mutableListOf<Char>()
             for (token in tokenize(input)) {
                 val tagged = tagTermsOf(token)
-                if (tagged != null) tags += tagged else text += token.lowercase()
+                val keyword = valueAfter(token, "todo:")?.takeIf { OrgSyntax.todoKeywordDeclaration.matches(it.uppercase()) }
+                val cookie = valueAfter(token, "priority:")?.uppercase()?.singleOrNull()
+                    ?.takeIf { OrgSyntax.priority.matches("[#$it]") }
+                when {
+                    tagged != null -> tags += tagged
+                    keyword != null -> todo += keyword.lowercase()
+                    cookie != null -> priority += cookie
+                    else -> text += token.lowercase()
+                }
             }
-            return SearchQuery(text = text, tags = tags)
+            return SearchQuery(text = text, tags = tags, todo = todo, priority = priority)
         }
+
+        /** What follows [prefix] in [token], or null when it does not start with it or nothing follows. */
+        private fun valueAfter(token: String, prefix: String): String? =
+            token.takeIf { it.length > prefix.length && it.startsWith(prefix, ignoreCase = true) }?.substring(prefix.length)
 
         private val TAG_PREFIXES = listOf("tag:", "tags:")
 
@@ -144,7 +170,7 @@ fun searchOrgFile(
     // A file whose name carries the words is itself a result: this is what the file filter in the
     // drawer does, and it stays available here rather than becoming a second kind of search.
     // Only for a text query — a tag says something about a heading, not about a file name.
-    if (query.tags.isEmpty() && query.text.all { path.contains(it, ignoreCase = true) }) {
+    if (!query.needsHeading && query.text.all { path.contains(it, ignoreCase = true) }) {
         hits += SearchHit(
             path = path,
             breadcrumb = emptyList(),
@@ -161,10 +187,15 @@ fun searchOrgFile(
     // at all. A line hit needs every word in the file, and a tag — on a heading or in `#+FILETAGS:`
     // — is text in the same file, so a file missing any term is passed over unparsed. This is the
     // same case-insensitive test `matchIn` applies per line, so it never drops a real hit.
-    if ((query.text + query.tags).any { !text.contains(it, ignoreCase = true) }) return hits
+    // A tag's group members may be what the headings carry, but the group itself is named in the
+    // file's `#+TAGS:` line, so this still holds; and so does a keyword, which a heading spells out.
+    if ((query.text + query.tags + query.todo).any { !text.contains(it, ignoreCase = true) }) return hits
+    if (query.priority.any { !text.contains("[#$it]", ignoreCase = true) }) return hits
 
     val fileTags = fileTagsOf(text)
     val keywords = todoKeywordsOf(text, fallback)
+    val groups = tagGroupsOf(text)
+    val wantedTags = query.tags.map { groups.expand(it) }
     val ancestors = mutableListOf<Heading>()
     var line = 1
 
@@ -174,12 +205,15 @@ fun searchOrgFile(
             val headingLine = slice.lineSequence().firstOrNull().orEmpty()
             val heading = orgHeadingOf(headingLine, keywords)
             while (ancestors.isNotEmpty() && ancestors.last().level >= element.level) ancestors.removeAt(ancestors.size - 1)
-            ancestors += Heading(element.level, heading.title, heading.tags)
+            ancestors += Heading(element.level, heading.title, heading.tags, heading.todo, heading.priority)
         }
 
         val tags = fileTags + ancestors.flatMap { it.tags }
-        val carriesTags = query.tags.all { wanted -> tags.any { it.equals(wanted, ignoreCase = true) } }
-        if (carriesTags && hits.size < limit) {
+        val carriesTags = wantedTags.all { anyOf -> tags.any { it.lowercase() in anyOf } }
+        val own = ancestors.lastOrNull()?.takeIf { !element.isPreamble }
+        val hasKeyword = query.todo.all { own?.todo?.equals(it, ignoreCase = true) == true }
+        val hasPriority = query.priority.all { own?.priority?.uppercaseChar() == it }
+        if (carriesTags && hasKeyword && hasPriority && hits.size < limit) {
             val breadcrumb = ancestors.map { it.title }
             if (query.text.isEmpty()) {
                 // Nothing to find inside the element: the heading itself is the result. The
@@ -243,7 +277,54 @@ fun searchOrg(
 /** Enough to fill a long screen several times over; past this, narrow the query instead. */
 const val DEFAULT_SEARCH_LIMIT = 200
 
-private class Heading(val level: Int, val title: String, val tags: List<String>)
+private class Heading(val level: Int, val title: String, val tags: List<String>, val todo: String?, val priority: Char?)
+
+/**
+ * The tag groups a file's `#+TAGS:` lines declare, lowercased: each group tag to its members.
+ *
+ * A group is the tag before the `:` inside `[ ]` (a group whose members can go together) or
+ * `{ }` (members that exclude each other). Shortcut keys, `tag(w)`, are not part of the name.
+ * Members written as regular expressions, `{P@.+}`, are left out.
+ */
+internal fun tagGroupsOf(text: String): Map<String, Set<String>> {
+    val groups = mutableMapOf<String, MutableSet<String>>()
+    for (line in text.lineSequence()) {
+        val value = TAGS_KEYWORD.find(line)?.groupValues?.get(1) ?: continue
+        var group: String? = null
+        var open = false
+        var afterColon = false
+        val tokens = value.replace("[", " [ ").replace("]", " ] ").replace("{", " { ").replace("}", " } ")
+            .split(' ', '\t').filter { it.isNotEmpty() }
+        for (token in tokens) {
+            when (token) {
+                "[", "{" -> { open = true; group = null; afterColon = false }
+                "]", "}" -> { open = false; group = null; afterColon = false }
+                ":" -> if (open) afterColon = true
+                else -> {
+                    val name = token.substringBefore('(').lowercase().takeIf { it.isNotEmpty() } ?: continue
+                    when {
+                        !open -> {}
+                        afterColon -> group?.let { groups.getOrPut(it) { mutableSetOf() } += name }
+                        group == null -> group = name
+                    }
+                }
+            }
+        }
+    }
+    return groups
+}
+
+/** [tag], lowercased, with every tag its group stands for, through groups of groups. */
+internal fun Map<String, Set<String>>.expand(tag: String): Set<String> {
+    val found = mutableSetOf(tag.lowercase())
+    val pending = found.toMutableList()
+    while (pending.isNotEmpty()) {
+        for (member in this[pending.removeAt(pending.lastIndex)].orEmpty()) if (found.add(member)) pending += member
+    }
+    return found
+}
+
+private val TAGS_KEYWORD = Regex("^[ \\t]*#\\+TAGS:[ \\t]*(.*)$", RegexOption.IGNORE_CASE)
 
 /** Adds a hit for every line of [slice] carrying all of the query's words. */
 private fun collectLineHits(

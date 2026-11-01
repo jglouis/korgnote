@@ -132,6 +132,13 @@ class LinkNavigator(
         }
     }
 
+    /**
+     * The web address [target] stands for when it is no note but something a browser opens: a
+     * `doi:` link, or an abbreviation the open note declares with `#+LINK:`. Null otherwise.
+     */
+    fun webAddressOf(target: String): String? =
+        (index.resolve(target, note.path.orEmpty()) as? OrgLinkResolution.External)?.url
+
     /** A web or mail link the device has no app for. */
     fun onExternalLinkFailed(target: String) {
         say { getString(Res.string.vm_link_no_app, target) }

@@ -58,6 +58,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
@@ -77,6 +78,7 @@ import com.korgnote.common.org.OrgComment
 import com.korgnote.common.org.OrgDescriptionItem
 import com.korgnote.common.org.OrgDrawer
 import com.korgnote.common.org.OrgFixedWidth
+import com.korgnote.common.org.OrgLatexEnvironment
 import com.korgnote.common.org.OrgFootnoteDefinition
 import com.korgnote.common.org.orderedNumbers
 import com.korgnote.common.org.OrgHorizontalRule
@@ -90,6 +92,7 @@ import com.korgnote.common.org.joinOrgLines
 import com.korgnote.common.org.parseOrgTable
 import com.korgnote.common.org.todoSequencesOf
 import com.korgnote.common.org.srcLanguageOf
+import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.org.toOrgString
 import com.korgnote.common.org.edit.Progress
 import com.korgnote.common.org.edit.STATISTICS_COOKIE
@@ -211,7 +214,7 @@ private fun RenderNode(
 
         // The grammar models these now, so they render from the node rather than by re-scanning
         // text. The views themselves are the ones OrgBody already used.
-        is OrgBlock -> OrgBlockView(node.type.lowercase(), node.parameters, node.body.trimEnd('\n').split('\n'))
+        is OrgBlock -> OrgBlockView(node.type.lowercase(), node.parameters, node.body.trimEnd('\n').split('\n'), todoConfig)
 
         is OrgDrawer -> OrgDrawerView(node.name, node.lines)
 
@@ -226,6 +229,14 @@ private fun RenderNode(
         // Verbatim, as Org shows `: lines`: one line each, monospace, scrolling rather than wrapping.
         is OrgFixedWidth -> Text(
             text = node.contents.joinToString("\n"),
+            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            softWrap = false,
+            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 2.dp),
+        )
+
+        // Shown as written, as Emacs shows it unless asked to preview it.
+        is OrgLatexEnvironment -> Text(
+            text = node.lines.joinToString("\n") { it.trimStart() },
             style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
             softWrap = false,
             modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 2.dp),
@@ -294,7 +305,15 @@ private fun RenderNode(
             val fileTags = OrgSyntax.filetagsKeyword.find(node.content.trim())?.groupValues?.get(1)
                 ?.let(::parseTypedTags)
             val keywords = todoSequencesOf(listOf(node.content)).firstOrNull()
-            if (!fileTags.isNullOrEmpty()) {
+            val caption = OrgSyntax.captionKeyword.find(node.content)?.groupValues?.get(1)
+            if (caption != null) {
+                // What the table or figure below it is, as export shows it.
+                Text(
+                    text = buildOrgInlineString(caption),
+                    style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            } else if (!fileTags.isNullOrEmpty()) {
                 TagChips(fileTags, Modifier.padding(vertical = 2.dp))
             } else if (keywords != null && (keywords.todo.isNotEmpty() || keywords.done.isNotEmpty())) {
                 TodoKeywordsView(keywords)
@@ -630,7 +649,12 @@ fun OrgBody(text: String, todoConfig: OrgTodoConfig = DefaultOrgTodoConfig) {
 }
 
 @Composable
-private fun OrgBlockView(type: String, params: String, lines: List<String>) {
+private fun OrgBlockView(
+    type: String,
+    params: String,
+    lines: List<String>,
+    todoConfig: OrgTodoConfig = DefaultOrgTodoConfig,
+) {
     val label = listOf(type, params).filter { it.isNotBlank() }.joinToString(" ")
     val body = lines.joinToString("\n")
     Surface(
@@ -661,8 +685,23 @@ private fun OrgBlockView(type: String, params: String, lines: List<String>) {
                     ),
                 )
 
-                "quote", "verse" -> Text(
-                    text = buildOrgInlineString(if (type == "verse") body else joinOrgLines(body)),
+                // A quote holds Org like any other text, lists and tables included. Its own
+                // checkboxes are not ticked from here: the block's ranges are not the note's.
+                "quote" -> {
+                    val document = remember(body, todoConfig) { body.toOrgDocument(todoConfig) }
+                    Column(horizontalAlignment = Alignment.Start) {
+                        document.children.forEach { RenderNode(it, todoConfig, onToggleCheckbox = null) }
+                    }
+                }
+
+                "center" -> Text(
+                    text = buildOrgInlineString(body),
+                    style = MaterialTheme.typography.bodyMedium.copy(textAlign = TextAlign.Center),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                "verse" -> Text(
+                    text = buildOrgInlineString(body),
                     style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic)
                 )
 

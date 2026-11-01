@@ -174,6 +174,12 @@ data class OrgFixedWidth(val lines: List<String>) : OrgNode() {
     val contents: List<String> get() = lines.map { it.trimStart().removePrefix(":").removePrefix(" ") }
 }
 
+/**
+ * A LaTeX environment, `\begin{name}` … `\end{name}`, kept verbatim: its lines are math or
+ * markup for an exporter, and joining them into a paragraph would only scramble them.
+ */
+data class OrgLatexEnvironment(val name: String, val lines: List<String>) : OrgNode()
+
 /** A `[fn:name] text` definition at the start of a line. */
 data class OrgFootnoteDefinition(val label: String, val text: String) : OrgNode()
 
@@ -606,6 +612,22 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
             i = next
             continue
         }
+        // A LaTeX environment, when it is closed before the next heading; Org reads an unclosed
+        // `\begin{…}` as text, and so does this.
+        val latexEnd = OrgSyntax.latexBegin.find(line)?.let { begin ->
+            val end = OrgSyntax.latexEnd(begin.groupValues[1])
+            (i until lines.size).asSequence()
+                .takeWhile { it == i || !OrgSyntax.heading.containsMatchIn(lines[it]) }
+                .firstOrNull { end.containsMatchIn(lines[it]) }
+                ?.let { begin.groupValues[1] to it + 1 }
+        }
+        if (latexEnd != null) {
+            flushParagraph()
+            val (name, next) = latexEnd
+            sink().add(OrgLatexEnvironment(name, lines.subList(i, next).map { it.trimEnd() }).spanning(i, next))
+            i = next
+            continue
+        }
         if (OrgSyntax.fixedWidth.containsMatchIn(line)) {
             flushParagraph()
             var next = i + 1
@@ -712,7 +734,8 @@ fun OrgTable.toAlignedLines(): List<String> {
             widths[column] = maxOf(widths[column], orgDisplayWidth(cell))
             when {
                 cookie != null || cell.isEmpty() -> {}
-                alignmentCookie.matches(cell) -> cookie = cell[1]
+                // A width-only cookie, `<10>`, says nothing about alignment, but it is no text either.
+                alignmentCookie.matches(cell) -> if (cell[1] in "lrc") cookie = cell[1]
                 else -> {
                     nonEmpty++
                     if (orgTableNumber.matches(cell)) numbers++
@@ -739,7 +762,8 @@ fun OrgTable.toAlignedLines(): List<String> {
     }
 }
 
-private val alignmentCookie = Regex("""<[lrc][0-9]*>""")
+/** A column cookie: `<l>`, `<c>`, `<r>`, with an optional width (`<l10>`), or a width alone (`<10>`). */
+private val alignmentCookie = Regex("""<(?:[lrc][0-9]*|[0-9]+)>""")
 
 // `org-table-number-regexp`, as Emacs matches it: without regard to case.
 private val orgTableNumber = Regex(
@@ -855,6 +879,7 @@ fun OrgNode.toOrgString(): String = when (this) {
     is OrgComment -> text
     is OrgHorizontalRule -> "-----"
     is OrgFixedWidth -> lines.joinToString("\n")
+    is OrgLatexEnvironment -> lines.joinToString("\n")
     is OrgDescriptionItem -> "- $term :: " + description.indentedBy(2)
     is OrgFootnoteDefinition -> "[fn:$label] $text"
     is OrgBlock -> buildString {

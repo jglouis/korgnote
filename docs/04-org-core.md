@@ -155,7 +155,7 @@ existing `OrgColors` palette and the `OrgSyntaxHighlightingTest` expectations ca
 only the producer changed.
 
 **Drift to fold back.** Org patterns have crept back outside the one grammar since T6. None breaks an
-edit, but each is a second definition that can disagree with the first, and one already does:
+edit, but each is a second definition that can disagree with the first:
 
 | Where | Pattern | Duplicates |
 |---|---|---|
@@ -166,7 +166,6 @@ edit, but each is a second definition that can disagree with the first, and one 
 | `composeApp/…/ui/OrgSyntaxHighlighting.kt` | `timestampDay` | `OrgSyntax.timestampDate`, without its `<` |
 | `composeApp/…/ui/TableFormulas.kt` | `#+TBLFM:` targets (`$3`, `@>$2`) and formats (`;%.2f`) | what `shared/…/org/table/` parses |
 | `shared/…/org/edit/ListContinuation.kt` | `LIST_ITEM` | `OrgSyntax.listItem` |
-| `shared/…/org/edit/StatisticsCookies.kt` | `STATISTICS_COOKIE` | `OrgSyntax.statistics` — and **disagrees**: only the former matches an empty `[/]` or `[%]`, so the highlighter does not show a cookie as one until a save fills it in |
 | `shared/…/org/edit/LinkEditing.kt` | `KEYWORD_LINE`, `PROPERTY_LINE` | `OrgSyntax.keyword`, `OrgSyntax.property` |
 | `shared/…/org/edit/FileKeywords.kt`, `shared/…/org/link/LinkTargets.kt` | `KEYWORD_LINE`; `TITLE`, `PROPERTIES` | `OrgSyntax.keyword`; `OrgSyntax.titleKeyword`, the parser's drawers |
 

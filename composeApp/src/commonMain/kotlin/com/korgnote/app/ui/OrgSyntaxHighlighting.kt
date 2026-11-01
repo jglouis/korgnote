@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import com.korgnote.common.org.link.fileLinkPath
@@ -722,6 +723,27 @@ private fun AnnotatedString.Builder.appendInline(text: String, viewMode: Boolean
             '<' -> OrgSyntax.timestamp.matchAt(text, i)?.let { m ->
                 withStyle(SpanStyle(color = OrgColors.timestamp)) { append(if (viewMode) unbroken(m.value) else m.value) }
                 consumed = m.value.length
+            } ?: if (viewMode) {
+                // A link target reads as its words, as Org exports it; the brackets are for links.
+                orgTargetAt(text, i)?.let { (words, length) ->
+                    append(words)
+                    consumed = length
+                }
+            } else null
+
+            // `\alpha` reads as α, as Org shows it with `org-pretty-entities` and exports it.
+            '\\' -> if (viewMode) {
+                orgEntityAt(text, i)?.let { (shown, length) ->
+                    append(shown)
+                    consumed = length
+                }
+            }
+
+            '^' -> if (viewMode) {
+                orgScriptAt(text, i)?.let { (script, length) ->
+                    withStyle(SpanStyle(baselineShift = BaselineShift.Superscript, fontSize = 0.75.em)) { append(script) }
+                    consumed = length
+                }
             }
 
             'h', 'f', 'm' -> if (i == 0 || !text[i - 1].isLetterOrDigit()) {
@@ -731,16 +753,15 @@ private fun AnnotatedString.Builder.appendInline(text: String, viewMode: Boolean
                 }
             }
 
-            '*', '/', '_', '+', '=', '~' -> if (isEmphasisPre(text, i)) {
-                val spec = emphasisStyles.getValue(c)
-                OrgSyntax.emphasis.getValue(c).matchAt(text, i)?.let { m ->
-                    val end = i + m.value.length
-                    if (isEmphasisPost(text, end)) {
-                        appendEmphasis(spec, m.groupValues[1], viewMode)
-                        consumed = m.value.length
-                    }
-                }
+            '_' -> if (viewMode && orgScriptAt(text, i) != null) {
+                val (script, length) = orgScriptAt(text, i)!!
+                withStyle(SpanStyle(baselineShift = BaselineShift.Subscript, fontSize = 0.75.em)) { append(script) }
+                consumed = length
+            } else {
+                appendEmphasisAt(text, i, c, viewMode)?.let { consumed = it }
             }
+
+            '*', '/', '+', '=', '~' -> appendEmphasisAt(text, i, c, viewMode)?.let { consumed = it }
         }
         if (consumed == 0) {
             // Reading, a run of spaces is one: in the file they line things up, as in a logbook's
@@ -753,6 +774,15 @@ private fun AnnotatedString.Builder.appendInline(text: String, viewMode: Boolean
             i += consumed
         }
     }
+}
+
+/** Appends the emphasis run marked by [marker] at [i] of [text], returning its length; null when none starts there. */
+private fun AnnotatedString.Builder.appendEmphasisAt(text: String, i: Int, marker: Char, viewMode: Boolean): Int? {
+    if (!isEmphasisPre(text, i)) return null
+    val m = OrgSyntax.emphasis.getValue(marker).matchAt(text, i) ?: return null
+    if (!isEmphasisPost(text, i + m.value.length)) return null
+    appendEmphasis(emphasisStyles.getValue(marker), m.groupValues[1], viewMode)
+    return m.value.length
 }
 
 private fun AnnotatedString.Builder.appendEmphasis(spec: EmphasisSpec, content: String, viewMode: Boolean) {
