@@ -6,6 +6,7 @@ import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -32,9 +33,6 @@ class StateNoteTest {
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
-        repository = FakeSyncApi(mutableMapOf(path to text))
-        val store = DocumentStore(InMemoryReplicaStorage())
-        viewModel = NotesViewModel(SyncEngine(store, repository), store, now = { LocalDateTime(2026, 11, 1, 10, 30) })
     }
 
     @AfterTest
@@ -42,7 +40,19 @@ class StateNoteTest {
         Dispatchers.resetMain()
     }
 
-    private suspend fun open() {
+    /**
+     * The view model on this test's scheduler: a keyword change refreshes the agenda and the rest
+     * after a pause, which only a scheduler the test runs can let pass.
+     */
+    private suspend fun TestScope.open() {
+        repository = FakeSyncApi(mutableMapOf(path to text))
+        val store = DocumentStore(InMemoryReplicaStorage())
+        viewModel = NotesViewModel(
+            SyncEngine(store, repository),
+            store,
+            now = { LocalDateTime(2026, 11, 1, 10, 30) },
+            background = UnconfinedTestDispatcher(testScheduler),
+        )
         viewModel.server.load()
         viewModel.onFileSelected(path)
     }

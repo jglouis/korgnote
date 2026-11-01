@@ -488,7 +488,10 @@ class NotesViewModel(
         if (updated.text == document.text) return
         this.note.content = updated.text
         library.put(file, updated)
-        refreshDerivedViews()
+        // Away from the main thread, as a tick is: scanning every note for the links, the agenda and
+        // the search held the keyword menu, and the note dialog's Save, up for a second on a phone.
+        // The note shows the change at once; the calendar follows a moment later.
+        refreshDerivedViewsSoon()
 
         scope?.launch { server.push(writeFirst = { store.save(file, this@NotesViewModel.note.content) }) }
     }
@@ -520,7 +523,8 @@ class NotesViewModel(
         if (updated.text == document.text) return
         note.content = updated.text
         library.put(file, updated)
-        refreshDerivedViews()
+        // As a keyword is: the corpus-wide scans away from the main thread, so the menu closes at once.
+        refreshDerivedViewsSoon()
 
         scope?.launch { server.push(writeFirst = { store.save(file, note.content) }) }
     }
