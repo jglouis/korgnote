@@ -107,8 +107,16 @@ The agenda index also collects every clock in the notes (`clockedSpans`, in
 Emacs runs one clock at a time, and so does KorgNote: clocking in stops the clock running. Several
 run only when devices clocked in apart, which Emacs calls dangling clocks and asks to resolve.
 
+## Effort
+
+A heading's long-press menu has *Set effort…*: what it should take, which its clocked time is
+shown against (`1 h 15 / 2 h`). Five lengths a tap away (15 min to 4 h), another typed as Org reads
+one (`1:30`, `45`, `2h`, `1h 30min`), and *Remove the effort* when it has one. `setEffort` writes
+`:Effort: 1:30` into the property drawer as `org-set-effort` does, making the drawer when there is
+none, and removing the drawer with the effort when nothing else was in it.
+
 ## Not built
 
-A TODO keyword change on clocking in, an Android clock widget, editing `:Effort:`, a consistency
-check for overlapping clocks and gaps, and regenerating `#+BEGIN: clocktable` blocks (shown as
-written).
+A TODO keyword change on clocking in, an Android clock widget, a consistency check for overlapping
+clocks and gaps, and regenerating `#+BEGIN: clocktable` blocks (shown as written): the calendar's
+report covers what a clocktable shows, for now.

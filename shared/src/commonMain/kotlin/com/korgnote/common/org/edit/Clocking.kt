@@ -88,6 +88,33 @@ val OrgSection.effort: String?
         ?.second?.trim()?.takeIf { it.isNotEmpty() }
 
 /**
+ * [heading] with its effort set to [minutes], as `org-set-effort` writes it — `:Effort: 1:30` in its
+ * property drawer, made when it has none — or, for null, without it, and without the drawer when
+ * nothing else was in it.
+ */
+fun OrgDocument.setEffort(heading: OrgSection, minutes: Int?): OrgDocument {
+    if (minutes != null) return setProperty(heading, "Effort", "${minutes / 60}:${(minutes % 60).toString().padStart(2, '0')}")
+    val drawer = heading.children.filterIsInstance<OrgDrawer>()
+        .firstOrNull { it.name.equals("PROPERTIES", ignoreCase = true) && !it.unterminated && !it.range.isEmpty() }
+        ?: return this
+    val rest = drawer.properties.filterNot { it.first.equals("Effort", ignoreCase = true) }
+    if (rest.size == drawer.properties.size) return this
+    // Nothing else in it: the drawer goes with it.
+    if (rest.isEmpty() && drawer.lines.count { it.isNotBlank() } == 1) {
+        return replace(drawer.range.first..drawer.range.last.coerceAtMost(text.length - 1), "")
+    }
+    var lineStart = text.indexOf('\n', drawer.range.first) + 1
+    while (lineStart in 1..drawer.range.last) {
+        val lineEnd = text.indexOf('\n', lineStart).let { if (it < 0) text.length else it }
+        if (text.substring(lineStart, lineEnd).trim().startsWith(":Effort:", ignoreCase = true)) {
+            return replace(lineStart..minOf(lineEnd, text.length - 1), "")
+        }
+        lineStart = lineEnd + 1
+    }
+    return this
+}
+
+/**
  * [heading] clocked in [at], as `org-clock-in` does: a `CLOCK:` line at the top of its `:LOGBOOK:`,
  * the drawer made after the planning line and the property drawer when it has none. A heading
  * whose clock already runs is left as it is.

@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.ExpandMore
@@ -47,6 +48,7 @@ import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.edit.OrgClock
 import com.korgnote.common.org.edit.clocksInText
 import com.korgnote.common.org.edit.effortIn
+import com.korgnote.common.org.edit.effortMinutes
 import com.korgnote.common.org.edit.effortMinutes
 import com.korgnote.common.org.edit.toggleableTimestamps
 import com.korgnote.common.org.link.OrgBacklink
@@ -84,7 +86,13 @@ import korgnote.composeapp.generated.resources.editor_move_up
 import korgnote.composeapp.generated.resources.editor_note_details
 import korgnote.composeapp.generated.resources.editor_open
 import korgnote.composeapp.generated.resources.editor_promote
+import korgnote.composeapp.generated.resources.editor_effort_current
+import korgnote.composeapp.generated.resources.editor_effort_other
+import korgnote.composeapp.generated.resources.editor_effort_title
 import korgnote.composeapp.generated.resources.editor_refile
+import korgnote.composeapp.generated.resources.editor_remove_effort
+import korgnote.composeapp.generated.resources.editor_set_effort
+import korgnote.composeapp.generated.resources.ok
 import korgnote.composeapp.generated.resources.editor_this_heading
 import kotlinx.coroutines.delay
 import kotlinx.datetime.LocalDateTime
@@ -175,6 +183,8 @@ fun OrgDocumentView(
     onClockIn: ((offsetInDocument: Int) -> Unit)? = null,
     onClockOut: ((offsetInDocument: Int) -> Unit)? = null,
     onCancelClock: ((offsetInDocument: Int) -> Unit)? = null,
+    /** From the long-press menu: the heading at this offset in [text] given an effort, in minutes, or none. */
+    onSetEffort: ((offsetInDocument: Int, minutes: Int?) -> Unit)? = null,
     /** The time a running clock counts to, in the totals beside headings; ticks while one runs. */
     clockTime: LocalDateTime? = null,
 ) {
@@ -195,6 +205,8 @@ fun OrgDocumentView(
     var confirmingDelete by remember { mutableStateOf<Int?>(null) }
     /** The heading whose priority is being chosen from its long-press menu, by element index. */
     var choosingPriority by remember { mutableStateOf<Int?>(null) }
+    /** The heading whose effort is being set from its long-press menu, by element index. */
+    var choosingEffort by remember { mutableStateOf<Int?>(null) }
     val priorities = remember(text) { prioritiesOf(text) }
     // The element a jump just landed on — a link, a search hit, an agenda entry, Back — lit for a
     // moment so the eye finds it among its neighbours. A new [Landing] each time, so landing on
@@ -337,7 +349,15 @@ fun OrgDocumentView(
                                 onClockIn = onClockIn?.takeIf { clocks?.running != true }?.let { clock -> { clock(element.start) } },
                                 onClockOut = onClockOut?.takeIf { clocks?.running == true }?.let { clock -> { clock(element.start) } },
                                 onCancelClock = onCancelClock?.takeIf { clocks?.running == true }?.let { cancel -> { cancel(element.start) } },
+                                onEffort = onSetEffort?.let { { choosingEffort = index } },
                             )
+                            if (choosingEffort == index && onSetEffort != null) {
+                                EffortDialog(
+                                    current = remember(slice) { effortIn(slice) },
+                                    onPick = { minutes -> choosingEffort = null; onSetEffort(element.start, minutes) },
+                                    onDismiss = { choosingEffort = null },
+                                )
+                            }
                             // From the long-press menu: the same choices as a tap on the cookie, for
                             // a heading that has none yet to tap.
                             if (choosingPriority == index && onSetPriority != null) {
@@ -504,6 +524,56 @@ private fun ClockedTotal(clocks: ElementClocks, now: LocalDateTime?) {
     }
 }
 
+/** The efforts offered with a tap, in minutes: a quarter of an hour to half a day. */
+private val EFFORT_CHOICES = listOf(15, 30, 60, 120, 240)
+
+/**
+ * What a heading should take, as `org-set-effort` asks it: a few common lengths a tap away, or
+ * another typed as Org reads one (`1:30`, `45`, `2h`, `1h 30min`); and, when it has one, removing it.
+ */
+@Composable
+private fun EffortDialog(current: String?, onPick: (minutes: Int?) -> Unit, onDismiss: () -> Unit) {
+    var typed by remember { mutableStateOf("") }
+    val typedMinutes = effortMinutes(typed)?.takeIf { it > 0 }
+    val currentMinutes = current?.let(::effortMinutes)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.editor_effort_title)) },
+        text = {
+            Column {
+                for (minutes in EFFORT_CHOICES) {
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onPick(minutes) }.padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(clockDuration(minutes), modifier = Modifier.weight(1f))
+                        if (minutes == currentMinutes) {
+                            Icon(Icons.Filled.Check, contentDescription = stringResource(Res.string.editor_effort_current))
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = typed,
+                    onValueChange = { typed = it },
+                    label = { Text(stringResource(Res.string.editor_effort_other)) },
+                    singleLine = true,
+                    isError = typed.isNotBlank() && typedMinutes == null,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                if (current != null) {
+                    TextButton(onClick = { onPick(null) }, modifier = Modifier.padding(top = 8.dp)) {
+                        Text(stringResource(Res.string.editor_remove_effort), color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { typedMinutes?.let(onPick) }, enabled = typedMinutes != null) { Text(stringResource(Res.string.ok)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+    )
+}
+
 /** A jump's arrival at the element at [index]; compared by identity, so each jump is its own. */
 private class Landing(val index: Int)
 
@@ -584,6 +654,7 @@ private fun ElementMenu(
     onClockIn: (() -> Unit)? = null,
     onClockOut: (() -> Unit)? = null,
     onCancelClock: (() -> Unit)? = null,
+    onEffort: (() -> Unit)? = null,
 ) {
     @Composable
     fun Item(label: String, action: (() -> Unit)?) = DropdownMenuItem(
@@ -613,6 +684,8 @@ private fun ElementMenu(
             onClockOut?.let { Item(stringResource(Res.string.editor_clock_out), it) }
             onCancelClock?.let { Item(stringResource(Res.string.editor_cancel_clock), it) }
         }
+        // What it should take, which its clocked time is shown against.
+        if (!isPreamble && onEffort != null) Item(stringResource(Res.string.editor_set_effort), onEffort)
         if (stamps.isNotEmpty()) {
             HorizontalDivider()
             for (stamp in stamps) {

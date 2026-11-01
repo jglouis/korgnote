@@ -900,6 +900,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                         onClockIn = { vm.clockInAt(it) },
                                         onClockOut = { vm.clockOutAt(it) },
                                         onCancelClock = { vm.cancelClockAt(it) },
+                                        onSetEffort = { offset, minutes -> vm.setEffortAt(offset, minutes) },
                                         clockTime = clockTime,
                                         foldedElements = vm.folds.folded,
                                         onToggleFold = { vm.folds.toggle(it) },

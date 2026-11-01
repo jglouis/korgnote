@@ -156,4 +156,11 @@
     <string name="editor_cancel_clock">Cancel clock</string>
     <!-- Beside a heading, for a screen reader: the time clocked on it, %1$s, as 1:15 or 1:15 / 2:00 against its effort. -->
     <string name="editor_clocked">%1$s clocked</string>
+    <!-- The long-press menu and its dialog: Org's :Effort:, what a heading should take, which the
+         time clocked on it is shown against. -->
+    <string name="editor_set_effort">Set effort…</string>
+    <string name="editor_effort_title">How long should it take?</string>
+    <string name="editor_effort_other">Other: 1:30, 45, 2h</string>
+    <string name="editor_effort_current">Current effort</string>
+    <string name="editor_remove_effort">Remove the effort</string>
 </resources>

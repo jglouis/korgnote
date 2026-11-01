@@ -11,6 +11,7 @@ import com.korgnote.common.org.edit.clocksOf
 import com.korgnote.common.org.edit.effort
 import com.korgnote.common.org.edit.effortMinutes
 import com.korgnote.common.org.edit.runningClocks
+import com.korgnote.common.org.edit.setEffort
 import com.korgnote.common.org.edit.updateClockDurations
 import com.korgnote.common.org.toOrgDocument
 import kotlinx.datetime.LocalDateTime
@@ -163,6 +164,29 @@ class ClockingTest {
     fun theEffortIsReadFromTheProperties() {
         val doc = "* Task\n:PROPERTIES:\n:Effort:   1:30\n:END:\n".toOrgDocument()
         assertEquals("1:30", doc.heading("Task").effort)
+    }
+
+    private fun withEffort(text: String, minutes: Int?): String {
+        val doc = text.toOrgDocument()
+        return doc.setEffort(doc.heading("Task"), minutes).text
+    }
+
+    @Test
+    fun anEffortIsWrittenAsEmacsWritesIt() {
+        assertEquals("* Task\n:PROPERTIES:\n:Effort: 0:15\n:END:\nBody\n", withEffort("* Task\nBody\n", 15))
+        // Under the planning line, into the drawer there is, in place of the one there was.
+        assertEquals(
+            "* Task\nSCHEDULED: <2026-11-02 Mon>\n:PROPERTIES:\n:ID: x\n:Effort: 2:00\n:END:\n",
+            withEffort("* Task\nSCHEDULED: <2026-11-02 Mon>\n:PROPERTIES:\n:ID: x\n:END:\n", 120),
+        )
+        assertEquals("* Task\n:PROPERTIES:\n:Effort: 1:30\n:END:\n", withEffort("* Task\n:PROPERTIES:\n:EFFORT: 45\n:END:\n", 90))
+    }
+
+    @Test
+    fun anEffortIsRemovedWithADrawerItLeavesEmpty() {
+        assertEquals("* Task\nBody\n", withEffort("* Task\n:PROPERTIES:\n:Effort: 0:15\n:END:\nBody\n", null))
+        assertEquals("* Task\n:PROPERTIES:\n:ID: x\n:END:\n", withEffort("* Task\n:PROPERTIES:\n:Effort: 0:15\n:ID: x\n:END:\n", null))
+        assertEquals("* Task\n", withEffort("* Task\n", null))
     }
 
     @Test

@@ -48,6 +48,7 @@ import com.korgnote.common.org.todoKeywordsOf
 import com.korgnote.common.org.withOrgSubtreeFiled
 import com.korgnote.common.org.edit.updateStatisticsCookies
 import com.korgnote.common.org.edit.cancelClock
+import com.korgnote.common.org.edit.setEffort
 import com.korgnote.common.org.edit.clockIn
 import com.korgnote.common.org.edit.clockOut
 import com.korgnote.common.org.edit.runningClocks
@@ -626,6 +627,9 @@ class NotesViewModel(
 
     /** Removes the clock running on the heading at [offsetInDocument], as `org-clock-cancel` does. */
     fun cancelClockAt(offsetInDocument: Int) = changeHeading(offsetInDocument) { doc, h -> doc.cancelClock(h) }
+
+    /** Sets the effort of the heading at [offsetInDocument] to [minutes], or removes it for null, as `org-set-effort`. */
+    fun setEffortAt(offsetInDocument: Int, minutes: Int?) = changeHeading(offsetInDocument) { doc, h -> doc.setEffort(h, minutes) }
 
     /** Stops [clock], wherever it runs: now, or at [at] for one left running. */
     fun clockOut(clock: ClockRunning, at: LocalDateTime? = null) {
