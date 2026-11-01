@@ -5,7 +5,6 @@ import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.orgHeadingOf
 import com.korgnote.common.org.OrgTodoConfig
-import com.korgnote.common.org.corpusTodoKeywords
 import com.korgnote.common.org.todoKeywordsOf
 import com.korgnote.common.org.search.fileTagsOf
 import com.korgnote.common.org.sliceOf
@@ -107,13 +106,12 @@ data class AgendaOptions(
 /**
  * Every entry in every file.
  *
- * A file that declares no keywords of its own is read with [keywords] — by default, those the
- * whole corpus declares, so that a `FINISHED` entry in a note that relies on the editor's global
- * setting is still finished.
+ * A file that declares no keywords of its own is read with [keywords]: Org's own `TODO` and `DONE`
+ * unless told otherwise, as Org reads a file without a `#+TODO:` line.
  */
 fun agendaEntries(
     files: Map<String, String>,
-    keywords: OrgTodoConfig = corpusTodoKeywords(files.values),
+    keywords: OrgTodoConfig = DEFAULT_TODO_KEYWORDS,
 ): List<AgendaEntry> =
     files.keys.sorted().flatMap { agendaEntries(it, files.getValue(it), keywords) }
 

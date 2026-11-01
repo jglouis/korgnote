@@ -44,11 +44,11 @@ class NoteAgenda(
     private val lastSynced: () -> Instant? = { null },
 ) {
     /** Every dated entry in the notes, which the calendar asks for a day at a time. */
-    var index by mutableStateOf(build(library.texts(), library.corpusKeywords))
+    var index by mutableStateOf(build(library.texts(), library.fallbackKeywords))
         private set
 
     /** Rebuilds the index from the notes as they now are, and plans reminders from it. */
-    fun refresh() = show(build(library.texts(), library.corpusKeywords))
+    fun refresh() = show(build(library.texts(), library.fallbackKeywords))
 
     /** [refresh], with the index already built by [build]: away from the main thread, say. */
     fun show(built: AgendaIndex) {

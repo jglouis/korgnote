@@ -32,31 +32,35 @@ class NoteLibraryTest {
         assertEquals("* B, edited\n", library["b.org"]?.text)
     }
 
-    /** A note that declares no keywords reads its headings with those the other notes declare. */
+    /** A note's `#+TODO:` is its own: one that declares none has Org's `TODO` and `DONE`. */
     @Test
-    fun aNoteThatDeclaresNoKeywordsUsesTheOthers() = runTest {
+    fun aNoteThatDeclaresNoKeywordsHasOrgsOwn() = runTest {
         val store = DocumentStore(
-            InMemoryReplicaStorage(mapOf("a.org" to "#+TODO: EVENT | FINISHED\n", "b.org" to "* FINISHED Party\n")),
+            InMemoryReplicaStorage(
+                mapOf("a.org" to "#+TODO: EVENT | FINISHED\n* FINISHED Party\n", "b.org" to "* FINISHED Party\n* DONE Dishes\n"),
+            ),
         )
         val library = NoteLibrary(store)
         library.reload(parseOn = StandardTestDispatcher(testScheduler))
 
-        assertEquals("FINISHED", library.headingOf("b.org").todo)
-        assertEquals("Party", library.headingOf("b.org").title)
+        assertEquals("FINISHED", assertIs<OrgSection>(library["a.org"]?.children?.get(1)).todo)
+        assertEquals(null, library.headingOf("b.org").todo)
+        assertEquals("FINISHED Party", library.headingOf("b.org").title)
+        assertEquals("DONE", assertIs<OrgSection>(library["b.org"]?.children?.get(1)).todo)
     }
 
-    /** A keyword declared in one note, by a save, is a keyword in the notes that rely on the others. */
+    /** Declaring a keyword in one note, by a save, changes nothing in the others. */
     @Test
-    fun aSaveThatDeclaresAKeywordRereadsTheNotesThatRelyOnIt() = runTest {
+    fun aSaveThatDeclaresAKeywordLeavesTheOtherNotesAlone() = runTest {
         val store = DocumentStore(InMemoryReplicaStorage(mapOf("a.org" to "* A\n", "b.org" to "* SHIPPED Release\n")))
         val library = NoteLibrary(store)
         library.reload(parseOn = StandardTestDispatcher(testScheduler))
+        val before = library["b.org"]
+
+        library.put("a.org", "#+TODO: NEXT | SHIPPED\n* A\n".toOrgDocument(library.fallbackKeywords))
+
+        assertSame(before, library["b.org"])
         assertEquals("SHIPPED Release", library.headingOf("b.org").title)
-
-        library.put("a.org", "#+TODO: NEXT | SHIPPED\n* A\n".toOrgDocument(library.corpusKeywords))
-
-        assertEquals("SHIPPED", library.headingOf("b.org").todo)
-        assertEquals("Release", library.headingOf("b.org").title)
     }
 
     private fun NoteLibrary.headingOf(path: String): OrgSection = assertIs<OrgSection>(get(path)?.children?.first())

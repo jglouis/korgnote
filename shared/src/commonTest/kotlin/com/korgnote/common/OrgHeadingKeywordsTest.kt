@@ -93,10 +93,11 @@ class OrgHeadingKeywordsTest {
     @Test
     fun aBacklinkUnderAHeadingNamesItWithoutItsKeyword() {
         val notes = mapOf(
-            "a.org" to "#+TODO: EVENT | FINISHED\n",
-            "b.org" to "* FINISHED Party\nSee [[file:c.org][c]].\n",
+            "b.org" to "#+TODO: EVENT | FINISHED\n* FINISHED Party\nSee [[file:c.org][c]].\n",
             "c.org" to "* C\n",
+            // Another note's keywords are not this one's.
+            "d.org" to "* FINISHED Party\nSee [[file:c.org][c]].\n",
         )
-        assertEquals("Party", OrgLinkIndex(notes).backlinksTo("c.org").single().context)
+        assertEquals(listOf("Party", "FINISHED Party"), OrgLinkIndex(notes).backlinksTo("c.org").map { it.context })
     }
 }

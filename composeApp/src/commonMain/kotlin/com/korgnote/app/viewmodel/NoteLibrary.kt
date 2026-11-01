@@ -11,8 +11,6 @@ import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.readWith
-import com.korgnote.common.org.todoKeywordsOf
-import com.korgnote.common.org.corpusTodoKeywords
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.sync.conflictsIn
@@ -74,35 +72,29 @@ class NoteLibrary(private val store: DocumentStore) {
         private set
 
     /**
-     * The keywords a note that declares none is read with: every `#+TODO:` in the notes, standing
-     * in for the editor-wide setting the app cannot see. See [corpusTodoKeywords].
-     *
-     * Worked out when asked for, not on every change: a ticked checkbox changes a note without
-     * changing its keywords, and should not pay for a scan of every note.
+     * The keywords a note that declares none is read with: Org's own `TODO` and `DONE`, as Org
+     * reads a file without a `#+TODO:` line. Another note's declarations are that note's alone, so
+     * `EVENT` or `FINISHED` is a keyword only where it is declared.
      */
-    val corpusKeywords: OrgTodoConfig
-        get() = keywords ?: corpusTodoKeywords(parsed.values.map { it.text }).also { keywords = it }
-
-    /** [corpusKeywords] as last worked out; null since the notes changed. */
-    private var keywords: OrgTodoConfig? = DEFAULT_TODO_KEYWORDS
+    val fallbackKeywords: OrgTodoConfig get() = DEFAULT_TODO_KEYWORDS
 
     /**
      * Rereads every note from the replica, on [parseOn]. A note whose text has not changed keeps its
      * parse: a sync usually brings one note, and parsing all of them again took seconds on a phone,
      * with the screen frozen while the main thread did it.
      *
-     * Each note's headings are read with its own keywords, or with [corpusKeywords] when it declares
-     * none; a kept parse is read again only if the corpus's keywords changed under it.
+     * Each note's headings are read with its own keywords, or with [fallbackKeywords] when it
+     * declares none.
      */
     suspend fun reload(parseOn: CoroutineDispatcher = Dispatchers.Default) {
         val previous = parsed.toMap()
         val paths = store.paths()
-        val (fresh, corpus) = withContext(parseOn) {
+        val fallback = fallbackKeywords
+        val fresh = withContext(parseOn) {
             val texts = buildMap { for (path in paths) store.read(path)?.let { put(path, it) } }
-            val corpus = corpusTodoKeywords(texts.values)
             texts.mapValues { (path, text) ->
-                previous[path]?.takeIf { it.text == text }?.readWith(corpus) ?: text.toOrgDocument(corpus)
-            } to corpus
+                previous[path]?.takeIf { it.text == text }?.readWith(fallback) ?: text.toOrgDocument(fallback)
+            }
         }
         parsed.clear()
         parsed.putAll(fresh)
@@ -110,27 +102,14 @@ class NoteLibrary(private val store: DocumentStore) {
         tree = mapRootToUiFolder(TreeUtils.buildFromPaths(paths, rootName = "Documents"))
         conflicts = conflictsIn(paths)
         loaded = true
-        keywords = corpus
         revision++
     }
 
-    /**
-     * Replaces one note with [document], as just saved; the tree is unchanged since the path is.
-     *
-     * When the save changed what the note declares with `#+TODO:`, the notes that declare nothing
-     * are read again with what the notes now declare, so a keyword added here is one there too.
-     */
+    /** Replaces one note with [document], as just saved; the tree is unchanged since the path is. */
     fun put(path: String, document: OrgDocument) {
-        val before = parsed.put(path, document)
+        parsed[path] = document
         revision++
-        keywords = null
-        if (before == null || declaredKeywords(before.text) != declaredKeywords(document.text)) {
-            val corpus = corpusKeywords
-            for (entry in parsed.entries) entry.setValue(entry.value.readWith(corpus))
-        }
     }
-
-    private fun declaredKeywords(text: String) = todoKeywordsOf(text, NO_KEYWORDS)
 
     private fun mapSharedToUi(node: SharedNode): Node {
         return when (node) {
@@ -145,6 +124,3 @@ class NoteLibrary(private val store: DocumentStore) {
 
     private fun mapRootToUiFolder(shared: SharedFolder): Folder = mapSharedToUi(shared) as Folder
 }
-
-/** No keywords at all: what [todoKeywordsOf] falls back on to say only what a note declares. */
-private val NO_KEYWORDS = OrgTodoConfig(emptySet(), emptySet())

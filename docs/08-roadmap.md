@@ -641,6 +641,8 @@ months expanded in 7 ms.
 on the Emacs-wide `org-todo-keywords` — so their finished meetings read as undone and are carried
 to today. The app assumes `TODO | DONE` for such files everywhere (highlighting, completion), so
 this wants one app-wide answer: a keyword setting, or the corpus's declared keywords as the default.
+The corpus's keywords were the answer until 2026-11-01; since then a file's keywords are its own
+`#+TODO:` lines or Org's `TODO | DONE`, as in Org, so those files need a `#+TODO:` line of their own.
 **Depends** T15, T5
 **Scope** `AgendaEntry`/`AgendaOccurrence`, occurrence expansion including deadline warning
 windows, repeaters, carried-over scheduled items, body timestamps. Replaces

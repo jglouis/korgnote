@@ -4,7 +4,6 @@ import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.OrgTodoConfig
-import com.korgnote.common.org.corpusTodoKeywords
 import com.korgnote.common.org.orgHeadingOf
 import com.korgnote.common.org.todoKeywordsOf
 import com.korgnote.common.org.sliceOf
@@ -254,7 +253,7 @@ fun searchOrg(
     files: Map<String, String>,
     query: SearchQuery,
     limit: Int = DEFAULT_SEARCH_LIMIT,
-    fallback: OrgTodoConfig = corpusTodoKeywords(files.values),
+    fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS,
 ): List<SearchHit> {
     if (query.isEmpty) return emptyList()
     val hits = mutableListOf<SearchHit>()
@@ -270,7 +269,7 @@ fun searchOrg(
     files: Map<String, String>,
     query: String,
     limit: Int = DEFAULT_SEARCH_LIMIT,
-    fallback: OrgTodoConfig = corpusTodoKeywords(files.values),
+    fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS,
 ): List<SearchHit> =
     searchOrg(files, SearchQuery.parse(query), limit, fallback)
 

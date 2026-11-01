@@ -32,20 +32,21 @@ class BackgroundRemindersTest {
         assertEquals(listOf("Design review"), handedOver.single().map { it.title })
     }
 
-    /** As the app reads them: a keyword one note declares is the corpus's, so its done one is done. */
+    /** As the app reads them: each note with its own keywords, so its done one is done. */
     @Test
     fun theNotesAreReadWithTheirOwnKeywords() = runTest {
         val store = DocumentStore(
             InMemoryReplicaStorage(
                 mapOf(
-                    "setup.org" to "#+TODO: NEXT | FINISHED\n",
-                    "work.org" to "* FINISHED Old call <2026-09-23 Wed 10:00>\n* NEXT New call <2026-09-23 Wed 11:00>\n",
+                    "work.org" to "#+TODO: NEXT | FINISHED\n* FINISHED Old call <2026-09-23 Wed 10:00>\n* NEXT New call <2026-09-23 Wed 11:00>\n",
+                    // Declares nothing, so FINISHED is no keyword here: the lunch is still to come.
+                    "home.org" to "* FINISHED Lunch <2026-09-23 Wed 12:00>\n",
                 ),
             ),
         )
 
         planRemindersFrom(store, scheduler, ReminderSettings(), now)
 
-        assertEquals(listOf("NEXT New call"), handedOver.single().map { it.title })
+        assertEquals(listOf("NEXT New call", "FINISHED Lunch"), handedOver.single().map { it.title })
     }
 }

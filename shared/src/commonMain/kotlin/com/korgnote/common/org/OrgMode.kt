@@ -296,7 +296,7 @@ fun parseOrgTable(lines: List<String>): OrgTable {
  *
  * Its headings are read with the keywords it declares with `#+TODO:`, or with [fallback] when it
  * declares none: what the editor-wide setting would hold, which for the app is what the other notes
- * declare ([corpusTodoKeywords]). A slice of a note, which never holds the note's `#+TODO:` lines,
+ * declare (Org's own `TODO` and `DONE`). A slice of a note, which never holds the note's `#+TODO:` lines,
  * must be given the note's keywords here.
  */
 fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDocument {
@@ -825,30 +825,6 @@ private fun todoLinesOf(text: String): List<String> =
  */
 fun todoKeywordsOf(text: String, fallback: OrgTodoConfig): OrgTodoConfig =
     parseTodoConfigFrom(todoLinesOf(text)).takeUnless { it.todo.isEmpty() && it.done.isEmpty() } ?: fallback
-
-/**
- * Every keyword declared anywhere in [texts], plus Org's own `TODO` and `DONE`: what a file that
- * declares nothing is taken to use.
- *
- * `#+TODO:` only applies to its own file, so a note that uses `FINISHED` without declaring it
- * relies on the editor's global setting (`org-todo-keywords` in Emacs). The app cannot read that
- * setting, but the notes that do declare their keywords are the best evidence of what it holds.
- * A keyword one file calls done and another calls not done is taken as done: mistaking a finished
- * entry for an open one is what fills a calendar with things that are over.
- */
-fun corpusTodoKeywords(texts: Iterable<String>): OrgTodoConfig {
-    val todo = linkedSetOf("TODO")
-    val done = linkedSetOf("DONE")
-    for (text in texts) {
-        if (!text.contains("TODO:", ignoreCase = true)) continue
-        val declared = parseTodoConfigFrom(todoLinesOf(text))
-        todo += declared.todo
-        done += declared.done
-    }
-    todo -= done
-    return OrgTodoConfig(todo, done)
-}
-
 
 // Flips the checked state of the nth (0-based, document order) checkbox item directly in the raw
 // text, changing only that line's "[ ]"/"[X]" marker and leaving every other character - including

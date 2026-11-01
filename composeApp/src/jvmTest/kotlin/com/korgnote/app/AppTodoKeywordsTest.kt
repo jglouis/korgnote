@@ -98,11 +98,12 @@ class AppTodoKeywordsTest {
     }
 
     @Test
-    fun aFileThatDeclaresNothingUsesTheKeywordsOfTheNotes() = runComposeUiTest {
+    fun aFileThatDeclaresNothingHasOnlyOrgsOwnKeywords() = runComposeUiTest {
+        // agenda.org's `#+TODO:` lines are its own, as in Org: here FINISHED is a word of the title.
         viewModel.onFileSelected(meetings)
         setContent { App() }
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Meeting with the board", substring = true).fetchSemanticsNodes().isNotEmpty() }
 
-        assertEquals(OrgColors.done, colorOf("FINISHED", "FINISHED Meeting with the board"))
+        assertEquals(null, colorOf("FINISHED", "FINISHED Meeting with the board"))
     }
 }

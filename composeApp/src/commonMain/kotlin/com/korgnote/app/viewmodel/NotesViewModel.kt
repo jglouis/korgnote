@@ -303,7 +303,7 @@ class NotesViewModel(
             delay(DERIVED_REFRESH_PAUSE)
             // Read here, on the main thread; what is built from them reads nothing else.
             val texts = library.texts()
-            val keywords = library.corpusKeywords
+            val keywords = library.fallbackKeywords
             val linkTables = withContext(background) { LinkNavigator.Tables(texts) }
             val agendaIndex = withContext(background) { agenda.build(texts, keywords) }
             pendingRefresh = null
@@ -324,7 +324,7 @@ class NotesViewModel(
         pendingRefresh?.cancel()
         pendingRefresh = null
         val texts = library.texts()
-        val keywords = withContext(background) { library.corpusKeywords }
+        val keywords = withContext(background) { library.fallbackKeywords }
         val linkTables = withContext(background) { LinkNavigator.Tables(texts) }
         val agendaIndex = withContext(background) { agenda.build(texts, keywords) }
         links.show(linkTables)
@@ -368,7 +368,7 @@ class NotesViewModel(
         // those over the edit: the rest of the note is saved as it was.
         note.content = updateStatisticsCookies(note.content, todoKeywords, before = store.read(path))
         store.save(path, note.content)
-        library.put(path, note.content.toOrgDocument(library.corpusKeywords))
+        library.put(path, note.content.toOrgDocument(library.fallbackKeywords))
         refreshDerivedViews()
         server.push()
     }
@@ -382,7 +382,7 @@ class NotesViewModel(
      */
     fun toggleCheckboxAt(offsetInDocument: Int, scope: CoroutineScope? = null) {
         val file = note.path ?: return
-        val document = note.content.toOrgDocument(library.corpusKeywords)
+        val document = note.content.toOrgDocument(library.fallbackKeywords)
         val item = document.nodeAt<OrgCheckboxItem>(offsetInDocument) ?: return
         val updated = document.tickAsOrgDoes(item).withStatistics(since = document)
         note.content = updated.text
@@ -405,7 +405,7 @@ class NotesViewModel(
      */
     fun setTodoAt(offsetInDocument: Int, keyword: String?, scope: CoroutineScope? = null) {
         val file = note.path ?: return
-        val document = note.content.toOrgDocument(library.corpusKeywords)
+        val document = note.content.toOrgDocument(library.fallbackKeywords)
         val heading = document.nodeAt<OrgSection>(offsetInDocument) ?: return
         val updated = document.changeTodoState(heading, keyword, now(), todoKeywords).withStatistics(since = document)
         if (updated.text == document.text) return
@@ -430,7 +430,7 @@ class NotesViewModel(
      */
     fun linkTargets(): List<LinkTarget> {
         val documents = library.documents.toMutableMap()
-        note.path?.let { documents[it] = note.content.toOrgDocument(library.corpusKeywords) }
+        note.path?.let { documents[it] = note.content.toOrgDocument(library.fallbackKeywords) }
         return linkTargetsOf(documents).filter { target ->
             !(target.isNote && target.path == note.path) && target.title.isNotBlank()
         }
@@ -477,7 +477,7 @@ class NotesViewModel(
             val updated = target.offset?.let { withHeadingId(before, it, id) } ?: withFileId(before, id)
             if (updated != before) {
                 store.save(path, updated)
-                library.put(path, updated.toOrgDocument(library.corpusKeywords))
+                library.put(path, updated.toOrgDocument(library.fallbackKeywords))
                 refreshDerivedViewsSoon()
                 server.pushQuietly()
             }
@@ -578,7 +578,7 @@ class NotesViewModel(
             return
         }
         val content = note.content
-        val table = content.toOrgDocument(library.corpusKeywords).nodeAt<OrgTable>(offsetInDocument) ?: return
+        val table = content.toOrgDocument(library.fallbackKeywords).nodeAt<OrgTable>(offsetInDocument) ?: return
         val formulas = tableFormulaLine(content, table.range.last + 1)
         val end = formulas?.range?.let { it.last + 1 } ?: (table.range.last + 1)
         tableEdit = TableEdit(path, table.range, content.substring(table.range.first, end), TableGrid.of(table, formulas?.formulas.orEmpty()))

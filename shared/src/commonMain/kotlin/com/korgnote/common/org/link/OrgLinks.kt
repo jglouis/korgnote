@@ -3,7 +3,7 @@ package com.korgnote.common.org.link
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.OrgTodoConfig
-import com.korgnote.common.org.corpusTodoKeywords
+import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.orgHeadingOf
 import com.korgnote.common.org.todoKeywordsOf
 import com.korgnote.common.org.sliceOf
@@ -54,10 +54,10 @@ data class OrgBacklink(
  */
 class OrgLinkIndex(
     private val notes: Map<String, String>,
-    /** The keywords a note that declares none is read with; see [corpusTodoKeywords]. */
+    /** The keywords a note that declares none is read with: Org's own `TODO` and `DONE` unless given. */
     fallback: OrgTodoConfig? = null,
 ) {
-    private val fallback: OrgTodoConfig by lazy { fallback ?: corpusTodoKeywords(notes.values) }
+    private val fallback: OrgTodoConfig = fallback ?: DEFAULT_TODO_KEYWORDS
 
     /** The keywords [text]'s headings are read with, so that a title is the title Org sees. */
     private fun keywordsOf(text: String): OrgTodoConfig = todoKeywordsOf(text, fallback)

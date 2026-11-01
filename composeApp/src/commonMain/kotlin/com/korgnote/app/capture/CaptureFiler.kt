@@ -19,7 +19,6 @@ import com.korgnote.common.org.capture.captureEntry
 import com.korgnote.common.org.capture.fileCapture
 import com.korgnote.common.org.template.newNoteText
 import com.korgnote.common.replica.DocumentStore
-import com.korgnote.common.org.corpusTodoKeywords
 import com.korgnote.common.org.link.LinkTarget
 import com.korgnote.common.org.link.linkTargetsOf
 import com.korgnote.common.org.toOrgDocument
@@ -58,8 +57,7 @@ class CaptureFiler(
      */
     suspend fun destinations(store: DocumentStore): List<LinkTarget> = withContext(Dispatchers.Default) {
         val texts = store.paths().filter { it.endsWith(".org") }.mapNotNull { path -> store.read(path)?.let { path to it } }.toMap()
-        val corpus = corpusTodoKeywords(texts.values)
-        destinationsAmong(linkTargetsOf(texts.mapValues { (_, text) -> text.toOrgDocument(corpus) }))
+        destinationsAmong(linkTargetsOf(texts.mapValues { (_, text) -> text.toOrgDocument(DEFAULT_TODO_KEYWORDS) }))
     }
 
     /** Where a capture can go among [targets]: every note and heading with a name. */

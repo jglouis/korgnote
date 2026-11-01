@@ -199,9 +199,9 @@ class CompletionController(
     fun refreshContext() {
         val path = note.path
         val document = path?.let { library[it] }
-        val corpusKeywords = library.corpusKeywords
+        val fallbackKeywords = library.fallbackKeywords
         context = CompletionContext(
-            todoKeywords = document?.let { todoKeywordsOf(it.text, corpusKeywords) } ?: corpusKeywords,
+            todoKeywords = document?.let { todoKeywordsOf(it.text, fallbackKeywords) } ?: fallbackKeywords,
             knownTags = tagsByUse(),
             filePaths = library.documents.keys.sorted(),
             currentPath = path.orEmpty(),
