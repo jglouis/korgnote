@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.korgnote.app.viewmodel.CompletionController
 import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.edit.DraftInsert
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.editor_state_note_closing
@@ -52,11 +53,16 @@ fun StateNoteDialog(
         text = {
             Column {
                 Text(headingTitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+                // As in the element editor: suggestions while typing, and with none, the buttons that
+                // begin a link, a date or a checkbox. Not a table, which wants the grid editor.
                 CompletionStrip(
                     items = completion.suggestions,
                     selectedIndex = completion.selectedIndex,
                     onAccept = { completion.accept(it) },
+                    inserts = completion.inserts.filter { it != DraftInsert.TABLE },
+                    onInsert = { completion.insert(it) },
                     onPickDate = { completion.pickDate() },
+                    clearOfNavigationBar = false,
                 )
                 Column(Modifier.heightIn(min = 96.dp)) {
                     OrgElementEditor(

@@ -130,6 +130,11 @@ fun CompletionStrip(
     onEditLink: (() -> Unit)? = null,
     /** The table button, which opens the grid editor on a new table rather than typing pipes. */
     onInsertTable: (() -> Unit)? = null,
+    /**
+     * Keeps the strip clear of the system's navigation bar, as it must be at the foot of the screen;
+     * off inside a dialog, which the system already keeps clear of it.
+     */
+    clearOfNavigationBar: Boolean = true,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val listState = rememberLazyListState()
@@ -150,7 +155,7 @@ fun CompletionStrip(
         // Clear of the system's navigation bar, as the navigation bar it replaces is: edge to edge,
         // three-button navigation drew over the save button whenever the keyboard was down. With
         // the keyboard up, its padding has taken that space already, and this adds nothing.
-        Row(Modifier.navigationBarsPadding(), verticalAlignment = Alignment.CenterVertically) {
+        Row(if (clearOfNavigationBar) Modifier.navigationBarsPadding() else Modifier, verticalAlignment = Alignment.CenterVertically) {
             // The chips scroll in what the actions leave, so the actions never scroll away.
             BoxWithConstraints(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 if (items.isEmpty()) {

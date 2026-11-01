@@ -1,7 +1,9 @@
 package com.korgnote.app
 
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -63,6 +65,11 @@ class AppStateNoteTest {
 
         viewModel.setTodoAt(viewModel.note.content.indexOf("* TODO"), "WAIT")
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Note for WAIT").fetchSemanticsNodes().isNotEmpty() }
+        // Above the note, the editor's buttons rather than an empty bar: a link, a date, a checkbox.
+        for (button in listOf("Link", "Date", "Checkbox")) {
+            assertTrue(onAllNodes(hasText(button) or hasContentDescription(button)).fetchSemanticsNodes().isNotEmpty(), button)
+        }
+        assertTrue(onAllNodes(hasText("Table") or hasContentDescription("Table")).fetchSemanticsNodes().isEmpty(), "no table in a note")
         // The dialog's field, which takes the focus; the drawer's filter is a text field too.
         onNode(hasSetTextAction() and isFocused()).performTextInput("Waiting for his quote.")
         onNodeWithText("Save").performClick()
