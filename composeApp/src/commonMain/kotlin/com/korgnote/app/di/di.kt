@@ -6,6 +6,7 @@ import com.korgnote.app.capture.CaptureQueueFolder
 import com.korgnote.app.capture.InMemoryCaptureQueueFolder
 import com.korgnote.app.data.CertificatePins
 import com.korgnote.app.data.DevicePairing
+import com.korgnote.app.data.PairingProblem
 import com.korgnote.app.data.KtorSyncApi
 import com.korgnote.app.data.endpointsFor
 import com.korgnote.app.data.SettingsRepository
@@ -54,7 +55,7 @@ val appModule = module {
     }
 
     // A fresh client for each pairing, trusting only the certificate its QR code names.
-    single { DevicePairing({ pins -> platformBuildHttpClient(pins) }, get()) }
+    single { DevicePairing({ pins -> platformBuildHttpClient(pins) }, get(), probe = ::platformProbeConnection) }
 
     single { SyncEngine(get(), get(), ::conflictTimestamp) }
     // The local replica. Each platform contributes the ReplicaStorage it can actually use:
@@ -126,6 +127,13 @@ fun initKoin(extraModules: List<Module> = emptyList()) {
 // Platform-specific client builder (Android adds Logging, others are minimal). Over TLS it trusts
 // what [pins] accepts and nothing else.
 expect fun platformBuildHttpClient(pins: CertificatePins): HttpClient
+
+/**
+ * Why connecting to [host]:[port] failed, from the connection itself, where the platform can say
+ * more than its HTTP engine: nothing listening there, or nothing answering. Null where it cannot
+ * tell, or when something did answer.
+ */
+expect suspend fun platformProbeConnection(host: String, port: Int): PairingProblem?
 
 /**
  * The client for a WebDAV server: one that can send `PROPFIND` and `MKCOL`, and trusts what the

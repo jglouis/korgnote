@@ -161,6 +161,11 @@ internal fun pairingProblemOf(failure: Throwable): PairingProblem {
 class DevicePairing(
     private val newClient: (CertificatePins) -> HttpClient,
     private val settings: SettingsRepository,
+    /**
+     * Looks at the connection itself when the HTTP engine's words do not tell a refused port from
+     * no answer, as Android's do not; null where it cannot tell. See `platformProbeConnection`.
+     */
+    private val probe: suspend (host: String, port: Int) -> PairingProblem? = { _, _ -> null },
 ) {
     suspend fun pair(link: PairingLink, deviceName: String): PairingResult {
         val previous = settings.getPairedServer()?.takeIf { it.serverId == link.serverId }
@@ -178,7 +183,13 @@ class DevicePairing(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    failures[address] = pairingProblemOf(e)
+                    failures[address] = pairingProblemOf(e).let { guessed ->
+                        if (guessed == PairingProblem.NoAnswer) probe(address, link.port) ?: guessed else guessed
+                    }
+                    // What the platform said, for whoever reads the log when a pairing fails.
+                    val said = generateSequence<Throwable>(e) { it.cause }.take(8)
+                        .joinToString(" <- ") { "${it::class.simpleName}: ${it.message}" }
+                    println("[DEBUG_LOG][Pairing] $address:${link.port} ${failures[address]}: $said")
                     continue
                 }
                 if (response.status == HttpStatusCode.Forbidden) {

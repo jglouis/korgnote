@@ -6,6 +6,7 @@ import io.ktor.client.engine.js.Js
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
+import com.korgnote.app.data.PairingProblem
 
 // The page is served by the server it talks to, over the plain port on this computer: no TLS of its
 // own to check, so [pins] has nothing to do here.
@@ -24,3 +25,6 @@ actual fun platformBuildHttpClient(pins: CertificatePins): HttpClient = HttpClie
 
 // WebDAV is not offered on the web: a browser would need the server to allow this page, which few do.
 actual fun platformBuildWebDavClient(): HttpClient = HttpClient(Js) { expectSuccess = false }
+
+/** No socket to look at here: what the HTTP engine said has to do. */
+actual suspend fun platformProbeConnection(host: String, port: Int): PairingProblem? = null

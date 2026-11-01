@@ -25,6 +25,7 @@ import platform.Foundation.serverTrust
 import platform.Security.SecCertificateCopyData
 import platform.Security.SecTrustGetCertificateAtIndex
 import platform.Security.SecTrustRef
+import com.korgnote.app.data.PairingProblem
 
 @OptIn(ExperimentalForeignApi::class)
 actual fun platformBuildHttpClient(pins: CertificatePins): HttpClient = HttpClient(Darwin) {
@@ -79,3 +80,6 @@ actual fun platformBuildWebDavClient(): HttpClient = HttpClient(Darwin) {
     }
     expectSuccess = false
 }
+
+/** No socket to look at here: what the HTTP engine said has to do. */
+actual suspend fun platformProbeConnection(host: String, port: Int): PairingProblem? = null
