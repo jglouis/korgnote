@@ -1,0 +1,5 @@
+* Fixes the server no longer seeing edits made on the computer after a notes folder was deleted or renamed; update the server.
+* The app opens on the note and place you left it at.
+* The table editor completes links and dates in its cells.
+* A Google Maps place shared to KorgNote gets its address.
+* Holding a TODO keyword opens the heading's menu.
