@@ -96,6 +96,36 @@ class ReadingModeInteractionTest {
         onNodeWithText("CANCELLED").assertDoesNotExist()
     }
 
+    /**
+     * Held, the keyword is the element like anywhere else: its menu opens while the finger is still
+     * down, and lifting it then does not open the keywords as well.
+     */
+    @Test
+    fun aLongPressOnATodoKeywordOpensTheElementsMenuWithoutWaitingForTheLift() = runComposeUiTest {
+        val todoText = "* Intro\n* TODO Write the report\nBody.\n"
+        val edited = mutableListOf<Int>()
+        setContent {
+            OrgDocumentView(
+                text = todoText,
+                onEditElement = { edited += it },
+                onSetTodo = { _, _ -> },
+                onAddHeadingBelow = {},
+                todoKeywords = OrgTodoConfig(todo = linkedSetOf("TODO", "NEXT"), done = linkedSetOf("DONE")),
+            )
+        }
+        val keyword = onNodeWithText("TODO Write the report", useUnmergedTree = true).onChildren().onFirst()
+
+        keyword.performTouchInput { down(center) }
+        mainClock.advanceTimeBy(1_000)
+
+        onNodeWithText("Add heading below").assertExists()
+
+        keyword.performTouchInput { up() }
+
+        onNodeWithText("NEXT").assertDoesNotExist()
+        assertTrue(edited.isEmpty(), "a long-press does not edit")
+    }
+
     @Test
     fun noKeywordClearsIt() = runComposeUiTest {
         val todoText = "* TODO Write the report\n"

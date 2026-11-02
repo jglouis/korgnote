@@ -39,6 +39,17 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.input.key.*
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.util.fastAll
+import androidx.compose.ui.util.fastAny
+import androidx.compose.ui.util.fastForEach
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
@@ -294,7 +305,10 @@ fun OrgDocumentView(
                                 onClick = { onEditElement?.invoke(index) },
                                 onLongClickLabel = stringResource(Res.string.editor_more_actions),
                                 onLongClick = { menuOpen = true },
-                            ),
+                            )
+                            // After the clickable, so it sees the press once the inner targets
+                            // have had it but before the element's own long-press does.
+                            .longPressThroughInnerTargets { menuOpen = true },
                         verticalAlignment = Alignment.Top,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
@@ -482,6 +496,41 @@ private fun Modifier.nestingGuides(depth: Int, color: Color): Modifier {
             drawLine(color, Offset(x, 0f), Offset(x, size.height), strokeWidth = width)
         }
     }.padding(start = GUIDE_STEP * shown)
+}
+
+/**
+ * A long-press on an inner target — the TODO keyword, a link, a checkbox — as a long-press on the
+ * element. Each of those is a clickable of its own that takes the press, so the element's
+ * long-press never starts, and the target's tap waits for the finger to lift however long it is
+ * held. Here a press a child has taken that is held past the long-press timeout without moving
+ * fires [onLongPress] then, and the rest of the gesture is taken from the child so its tap does
+ * not follow. A press no child takes is left to the element's own long-press.
+ */
+@Composable
+private fun Modifier.longPressThroughInnerTargets(onLongPress: () -> Unit): Modifier {
+    val haptics = LocalHapticFeedback.current
+    val currentOnLongPress by rememberUpdatedState(onLongPress)
+    return pointerInput(haptics) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            if (!down.isConsumed) return@awaitEachGesture
+            val ended = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val moved = event.changes.fastAny { (it.position - down.position).getDistance() > viewConfiguration.touchSlop }
+                    if (moved || event.changes.fastAll { !it.pressed }) break
+                }
+            }
+            if (ended != null) return@awaitEachGesture
+            currentOnLongPress()
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            // Ahead of the child, which then sees its press cancelled rather than released.
+            do {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                event.changes.fastForEach { it.consume() }
+            } while (event.changes.fastAny { it.pressed })
+        }
+    }
 }
 
 private val GUIDE_STEP = 14.dp
