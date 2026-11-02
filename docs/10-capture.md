@@ -13,9 +13,11 @@ A capture should cost nothing, so the dialog asks only where, and shows what:
    Scheduled, Text) or *Sub-entry*. For a new entry, the destination's own TODO keywords, and
    "None", to mark it with; and for a place, Location and Link boxes, Location alone ticked.
 
-A place is its `:LOCATION:` rather than its link, a link only when asked for: its address, which
-for Google Maps is looked up from where its short link leads (`MapLinks`); its name when that
-cannot be found (offline), as the location must say something (`placeOf`).
+A place is its `:LOCATION:` rather than its link, a link only when asked for: its name and
+address, `Eiffel Tower - Av. Gustave Eiffel, 75007 Paris, France`, name first so that typing it
+completes the place next time; for Google Maps the address is looked up from where its short link
+leads (`MapLinks`); the name alone when that cannot be found (offline), as the location must say
+something (`placeOf`).
 2. **Capture**: the entry, shown as the note shows Org, and edited, on a tap, with the note's own
    element editor. A capture of nothing — the launcher's quick note — opens in the editor.
 

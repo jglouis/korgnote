@@ -140,10 +140,18 @@ private fun placeFrom(link: String, subject: String?, around: List<String>, expa
     if (name == null) name = subject ?: lines.removeFirstOrNull()
     else if (lines.firstOrNull() == name) lines.removeAt(0)
     if (address == null) address = lines.joinToString(", ").takeIf { it.isNotEmpty() }
+    val place = name?.let(::singleLine)
+    val at = address?.let(::singleLine)
     return Captured(
-        title = name?.let(::singleLine) ?: address ?: titleOfUrl(link),
+        title = place ?: at ?: titleOfUrl(link),
         link = link,
-        location = address?.let(::singleLine),
+        // `Eiffel Tower - Av. Gustave Eiffel, 75007 Paris`: the name first, which is what is typed
+        // when the place comes up again and `:LOCATION:` completes it.
+        location = when {
+            at == null -> null
+            place == null || at.startsWith(place) -> at
+            else -> "$place - $at"
+        },
         geo = coordinates?.replace(" ", "")?.takeIf { COORDINATES.matches(it) }?.let { "geo:$it" },
     )
 }

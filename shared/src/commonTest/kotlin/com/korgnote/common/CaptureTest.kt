@@ -72,7 +72,7 @@ class CaptureTest {
     fun aGoogleMapsPlaceIsItsNameAddressAndLink() {
         val captured = read(text = "Tour Eiffel\nAv. Gustave Eiffel, 75007 Paris, France\nhttps://maps.app.goo.gl/Xy12AbCd")
         assertEquals("Tour Eiffel", captured.title)
-        assertEquals("Av. Gustave Eiffel, 75007 Paris, France", captured.location)
+        assertEquals("Tour Eiffel - Av. Gustave Eiffel, 75007 Paris, France", captured.location)
         assertEquals("https://maps.app.goo.gl/Xy12AbCd", captured.link)
         assertNull(captured.geo)
     }
@@ -99,11 +99,11 @@ class CaptureTest {
             zone,
         )
         assertEquals("Eiffel Tower", captured.title)
-        assertEquals("Av. Gustave Eiffel, 75007 Paris, France", captured.location)
+        assertEquals("Eiffel Tower - Av. Gustave Eiffel, 75007 Paris, France", captured.location)
         // The short link stays the link: it is what was shared, and shorter.
         assertEquals("https://maps.app.goo.gl/ne1k1Zy6Prd6t9QC8", captured.link)
         assertNull(captured.geo)
-        assertEquals("* Eiffel Tower\n:PROPERTIES:\n:LOCATION: Av. Gustave Eiffel, 75007 Paris, France\n:END:\n", captureEntry(captured, now).text)
+        assertEquals("* Eiffel Tower\n:PROPERTIES:\n:LOCATION: Eiffel Tower - Av. Gustave Eiffel, 75007 Paris, France\n:END:\n", captureEntry(captured, now).text)
     }
 
     @Test
@@ -117,7 +117,7 @@ class CaptureTest {
             zone,
         )
         assertEquals("Café de Flore", captured.title)
-        assertEquals("172 Bd Saint-Germain, 75006 Paris", captured.location)
+        assertEquals("Café de Flore - 172 Bd Saint-Germain, 75006 Paris", captured.location)
         assertEquals("geo:48.8541,2.3326", captured.geo)
     }
 
@@ -151,7 +151,7 @@ class CaptureTest {
             url = "https://maps.apple.com/place?address=5%20Av.%20Anatole%20France,%2075007%20Paris&coordinate=48.858,2.2945&name=Tour%20Eiffel",
         )
         assertEquals("Tour Eiffel", captured.title)
-        assertEquals("5 Av. Anatole France, 75007 Paris", captured.location)
+        assertEquals("Tour Eiffel - 5 Av. Anatole France, 75007 Paris", captured.location)
         assertEquals("geo:48.858,2.2945", captured.geo)
     }
 
@@ -375,9 +375,9 @@ class CaptureTest {
             "* Eiffel Tower\n:PROPERTIES:\n:LOCATION: Eiffel Tower\n:END:\nhttps://maps.app.goo.gl/x\n",
             captureEntry(place, now, location = true, link = true).text,
         )
-        // With an address, that is the location.
+        // With an address, the name and the address are the location.
         assertEquals(
-            "* Tour Eiffel\n:PROPERTIES:\n:LOCATION: Av. Gustave Eiffel, 75007 Paris\n:END:\n",
+            "* Tour Eiffel\n:PROPERTIES:\n:LOCATION: Tour Eiffel - Av. Gustave Eiffel, 75007 Paris\n:END:\n",
             captureEntry(read(text = "Tour Eiffel\nAv. Gustave Eiffel, 75007 Paris\nhttps://maps.app.goo.gl/y"), now).text,
         )
         // A page is no place: its link, and no location to offer.

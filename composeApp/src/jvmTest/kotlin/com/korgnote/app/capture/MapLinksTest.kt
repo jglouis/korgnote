@@ -70,7 +70,7 @@ class MapLinksTest {
 
         filer.fileWaiting(store)
         assertEquals(
-            "#+TITLE: Inbox\n* Eiffel Tower\n:PROPERTIES:\n:LOCATION: Av. Gustave Eiffel, 75007 Paris, France\n:END:\n",
+            "#+TITLE: Inbox\n* Eiffel Tower\n:PROPERTIES:\n:LOCATION: Eiffel Tower - Av. Gustave Eiffel, 75007 Paris, France\n:END:\n",
             store.read("inbox.org"),
         )
     }
