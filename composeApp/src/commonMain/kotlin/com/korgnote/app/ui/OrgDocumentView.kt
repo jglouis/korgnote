@@ -39,7 +39,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.input.key.*
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.rememberUpdatedState
@@ -849,22 +848,7 @@ internal fun OrgElementEditor(
         value = value,
         onValueChange = onValueChange,
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).focusRequester(focusRequester)
-            .onPreviewKeyEvent { event ->
-                // Only meaningful with a hardware keyboard; on a phone the chips are the interface.
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                val intent = when (event.key) {
-                    Key.Escape -> CompletionKey.DISMISS
-                    // Tab, not Enter: Enter is a newline in a multi-line element and stealing it
-                    // would make an ordinary edit depend on whether a chip happened to be showing.
-                    Key.Tab -> CompletionKey.ACCEPT
-                    Key.DirectionDown, Key.DirectionRight -> CompletionKey.NEXT
-                    Key.DirectionUp, Key.DirectionLeft -> CompletionKey.PREVIOUS
-                    else -> return@onPreviewKeyEvent false
-                }
-                // Unhandled means there were no suggestions, so the key keeps its ordinary meaning
-                // — an arrow still moves the caret.
-                onCompletionKey(intent)
-            },
+            .completionKeys(onCompletionKey),
         textStyle = textStyle,
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         interactionSource = interactionSource,

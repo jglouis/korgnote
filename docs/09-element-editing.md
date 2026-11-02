@@ -246,6 +246,14 @@ over the whole screen as a grid, a field per cell (`composeApp/…/ui/TableEdito
 under a header. The editor's Table button opens the same grid on an empty table and writes it in at
 the caret (`insertTable`).
 
+A cell is written as an element is. Its markup is highlighted as in a table line of the element
+editor (`OrgCellHighlightTransformation`), and while it is typed in, a strip above the table's
+buttons carries the element editor's suggestions — `[[` for a note or heading, `<` or `[` for a date
+— with Link and Date buttons when there are none; Tab, the arrows and Esc work them as in the
+element editor. The suggestions come from a `CompletionController` of the grid's own
+(`NotesViewModel.completionFor`), handed the cell as the line `| cell` (`TableCellLine`): behind the
+bar, what begins a heading, a block or a keyword at the start of a line is text, as it is in a table.
+
 The table's `#+TBLFM:` line comes with it. Cells a formula fills are shaded and open their formula
 when tapped. Nothing is computed until *Recalculate* is pressed, as in Emacs; it computes every
 formula or, when one cannot be computed, nothing, and says why. Numbers follow Calc's arithmetic and
@@ -263,7 +271,8 @@ save is refused when the table's text is no longer what it was when the grid ope
 sync. Opening a table is refused while an element is open in the editor.
 
 Covered by `TableEditTest`, `TableFormulaEditTest`, `TableCalcTest`, `CalcNumberTest`,
-`TableEditingTest` and `TableEditorFormulaTest`.
+`TableEditingTest`, `TableEditorFormulaTest`, `TableCellCompletionTest`, `OrgCellHighlightTest` and
+`TableEditorCompletionTest`.
 
 ## Consequences
 

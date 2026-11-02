@@ -889,6 +889,20 @@ private fun AnnotatedString.withSpans(project: (SpanStyle) -> SpanStyle): Annota
         spanStyles = spanStyles.map { AnnotatedString.Range(project(it.item), it.start, it.end) },
     )
 
+/**
+ * Highlighting for one cell of a table, edited in a field of its own by the grid editor: its inline
+ * markup — emphasis, links, timestamps — as the element editor highlights the cells of a table line,
+ * and with the same subset of each style, for the same reason.
+ *
+ * Nothing is cached: a cell is a few words, and only the one being typed in changes.
+ */
+object OrgCellHighlightTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText = TransformedText(
+        buildAnnotatedString { appendInline(text.text, viewMode = false) }.withSpans(::editorSpanStyle),
+        OffsetMapping.Identity,
+    )
+}
+
 class OrgSyntaxHighlightTransformation(headingColor: Color) : VisualTransformation {
     private val cache = OrgHighlightCache(headingColor)
 

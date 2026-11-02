@@ -362,6 +362,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                 vm.completion.insertTable(grid)
             },
             onDismiss = { insertingTable = false },
+            cellCompletion = vm::completionFor,
         )
     }
     vm.tableEdit?.let { edit ->
@@ -369,6 +370,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
             initial = edit.grid,
             onSave = { grid -> scope.launch { vm.commitTableEdit(grid) } },
             onDismiss = { vm.cancelTableEdit() },
+            cellCompletion = vm::completionFor,
         )
     }
     renamingNote?.let { path ->
@@ -918,16 +920,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                         editingElementIndex = vm.editor.editingIndex,
                                         elementDraftValue = vm.editor.draftValue,
                                         onElementDraftChange = { vm.editor.onDraftChanged(it) },
-                                        onCompletionKey = { key ->
-                                            // Nothing showing means the key was never ours: an arrow
-                                            // has to go on moving the caret.
-                                            if (vm.completion.suggestions.isEmpty()) false else when (key) {
-                                                CompletionKey.ACCEPT -> vm.completion.acceptSelected()
-                                                CompletionKey.DISMISS -> { vm.completion.dismiss(); true }
-                                                CompletionKey.NEXT -> { vm.completion.moveSelection(1); true }
-                                                CompletionKey.PREVIOUS -> { vm.completion.moveSelection(-1); true }
-                                            }
-                                        },
+                                        onCompletionKey = vm.completion::answer,
                                         onEditElement = { vm.editor.beginEdit(it) },
                                         onAddHeadingBelow = { vm.editor.addAfter(it) },
                                         onAddSubheading = { vm.editor.addSubheading(it) },

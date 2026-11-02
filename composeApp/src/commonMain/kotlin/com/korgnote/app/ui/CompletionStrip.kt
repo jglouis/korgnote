@@ -51,6 +51,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import com.korgnote.app.viewmodel.CompletionController
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.complete.CompletionItem
@@ -88,6 +94,36 @@ import kotlinx.datetime.toLocalDateTime
 
 /** What a hardware keyboard can ask of the suggestions. */
 enum class CompletionKey { ACCEPT, DISMISS, NEXT, PREVIOUS }
+
+/**
+ * The keys a field being completed hands to its suggestions, through [onKey]: Tab to accept, the
+ * arrows to move, Esc to dismiss. Only meaningful with a hardware keyboard; on a phone the chips are
+ * the interface.
+ *
+ * Tab, not Enter: Enter is a newline in a multi-line element, and stealing it would make an ordinary
+ * edit depend on whether a chip happened to be showing. A key [onKey] does not take — there was
+ * nothing to suggest — keeps its ordinary meaning: an arrow still moves the caret.
+ */
+internal fun Modifier.completionKeys(onKey: (CompletionKey) -> Boolean): Modifier = onPreviewKeyEvent { event ->
+    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+    val intent = when (event.key) {
+        Key.Escape -> CompletionKey.DISMISS
+        Key.Tab -> CompletionKey.ACCEPT
+        Key.DirectionDown, Key.DirectionRight -> CompletionKey.NEXT
+        Key.DirectionUp, Key.DirectionLeft -> CompletionKey.PREVIOUS
+        else -> return@onPreviewKeyEvent false
+    }
+    onKey(intent)
+}
+
+/** [key] answered by these suggestions; false when there are none, so that the key does its usual thing. */
+internal fun CompletionController.answer(key: CompletionKey): Boolean =
+    if (suggestions.isEmpty()) false else when (key) {
+        CompletionKey.ACCEPT -> acceptSelected()
+        CompletionKey.DISMISS -> { dismiss(); true }
+        CompletionKey.NEXT -> { moveSelection(1); true }
+        CompletionKey.PREVIOUS -> { moveSelection(-1); true }
+    }
 
 /**
  * The suggestions, as a strip of chips **pinned to the bottom of the screen** while an element is

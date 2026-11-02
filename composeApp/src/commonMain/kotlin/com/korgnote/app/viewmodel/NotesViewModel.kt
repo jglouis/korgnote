@@ -251,6 +251,16 @@ class NotesViewModel(
         author = { noteTemplate().author },
     )
 
+    /**
+     * Completion for a field of its own, such as a cell of the table editor: what the element
+     * editor draws on — this note's headings, every note's paths and tags — over [draft], with an
+     * accepted suggestion written back through [replaceDraft]. Its material is gathered now, once,
+     * for a field that is open for a few moments.
+     */
+    fun completionFor(draft: () -> TextFieldValue?, replaceDraft: (TextFieldValue) -> Unit): CompletionController =
+        CompletionController(library, note, links, today, draft, replaceDraft, author = { noteTemplate().author })
+            .also { it.refreshContext() }
+
     fun onStateNoteChanged(value: TextFieldValue) {
         stateNoteDraft = value
         stateNoteCompletion.onDraftChanged()

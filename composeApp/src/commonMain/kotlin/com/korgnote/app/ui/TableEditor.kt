@@ -49,11 +49,16 @@ import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.korgnote.app.viewmodel.CompletionController
+import com.korgnote.app.viewmodel.TableCellLine
+import com.korgnote.common.org.edit.DraftInsert
 import com.korgnote.common.org.edit.TableGrid
 import com.korgnote.common.org.table.FormulaCell
 import com.korgnote.common.org.table.FormulaNote
@@ -115,6 +120,10 @@ import org.jetbrains.compose.resources.stringResource
  * The table's formulas come along. The cells they fill are shaded and not typed into: tapping one
  * opens its formula. Nothing is computed until Recalculate is pressed — as in Emacs, where a table
  * is recalculated on demand — and then only when every formula can be.
+ *
+ * A cell is written as an element is: its markup highlighted, and — given [cellCompletion] — with
+ * the element editor's suggestions while it is typed in, links and dates among them, on a strip
+ * above the table's own buttons.
  */
 @Composable
 fun TableEditorDialog(
@@ -122,6 +131,11 @@ fun TableEditorDialog(
     title: String = stringResource(Res.string.editor_edit_table),
     onSave: (TableGrid) -> Unit,
     onDismiss: () -> Unit,
+    /**
+     * Completion over a cell: given what to read the cell from and where to write a suggestion
+     * back, the controller that offers them. None without it.
+     */
+    cellCompletion: ((draft: () -> TextFieldValue?, replaceDraft: (TextFieldValue) -> Unit) -> CompletionController)? = null,
 ) {
     var grid by remember { mutableStateOf(initial) }
     // What the last Recalculate did, until the table changes again.
@@ -129,12 +143,38 @@ fun TableEditorDialog(
     var showingFormulas by remember { mutableStateOf(false) }
     // The formula open in its editor: its place in the list, or null for a new one, and its text.
     var editingFormula by remember { mutableStateOf<Pair<Int?, String>?>(null) }
+    // The cell being typed in, with its caret, which is what the suggestions are worked out from.
+    var editing by remember { mutableStateOf<EditedCell?>(null) }
     val computed = remember(grid) { formulaCells(grid.rows, grid.formulas) }
     val notes = remember(grid) { reviewFormulas(grid.rows, grid.formulas) }
 
     fun update(changed: TableGrid) {
         grid = changed
         status = null
+    }
+
+    fun editCell(row: Int, column: Int, value: TextFieldValue) {
+        editing = EditedCell(row, column, value)
+        if (grid.rows.getOrNull(row)?.getOrNull(column) != value.text) update(grid.withCell(row, column, value.text))
+    }
+
+    // The edited cell, as long as the table still says what it does: a recalculation, say, may
+    // have written over it since.
+    fun editedDraft(): TextFieldValue? =
+        editing?.takeIf { grid.rows.getOrNull(it.row)?.getOrNull(it.column) == it.value.text }?.value
+
+    val completion = remember {
+        cellCompletion?.invoke(
+            { editedDraft()?.let(TableCellLine::of) },
+            { line -> editing?.let { cell -> TableCellLine.cellOf(line)?.let { editCell(cell.row, cell.column, it) } } },
+        )
+    }
+
+    // Rows and columns inserted, moved or removed: the cell being edited is no longer where it was.
+    fun reshape(changed: TableGrid) {
+        editing = null
+        completion?.reset()
+        update(changed)
     }
 
     fun recalculate() {
@@ -194,12 +234,31 @@ fun TableEditorDialog(
                     TableGridEditor(
                         grid = grid,
                         computed = computed,
-                        onChange = ::update,
+                        onChange = ::reshape,
+                        editing = editing,
+                        onCellChange = { row, column, value ->
+                            editCell(row, column, value)
+                            completion?.onDraftChanged()
+                        },
+                        onCompletionKey = { key -> completion?.answer(key) ?: false },
                         onColumnFormula = { column ->
                             val existing = grid.formulas.indexOfFirst { it.substringBefore('=').trim() == "\$$column" }
                             editingFormula = if (existing >= 0) existing to grid.formulas[existing] else null to "\$$column="
                         },
                         onComputedCell = { index -> editingFormula = index to grid.formulas[index] },
+                    )
+                }
+                if (completion != null && editing != null) {
+                    // As in the element editor: suggestions while typing, and with none, the buttons
+                    // that begin a link or a date — the rest of them have no place in a cell.
+                    CompletionStrip(
+                        items = completion.suggestions,
+                        selectedIndex = completion.selectedIndex,
+                        onAccept = { completion.accept(it) },
+                        inserts = completion.inserts.filter { it == DraftInsert.LINK },
+                        onInsert = { completion.insert(it) },
+                        onPickDate = { completion.pickDate() },
+                        clearOfNavigationBar = false,
                     )
                 }
                 HorizontalDivider()
@@ -255,7 +314,20 @@ fun TableEditorDialog(
             onDismiss = { editingFormula = null },
         )
     }
+    completion?.pendingDatePicker?.let {
+        val stamp = completion.pickerStamp
+        OrgDatePickerDialog(
+            initialDate = stamp?.start ?: completion.context.today,
+            initialTime = stamp?.startTime,
+            initialEndTime = stamp?.endTime,
+            onPick = { date, time, end -> completion.onDatePicked(date, time, end) },
+            onDismiss = { completion.dismissDatePicker() },
+        )
+    }
 }
+
+/** The cell being typed in, by its place in the grid, and its text and caret. */
+private data class EditedCell(val row: Int, val column: Int, val value: TextFieldValue)
 
 /** What the last Recalculate did. */
 private sealed interface TableStatus {
@@ -292,7 +364,14 @@ private fun TableGridEditor(
     grid: TableGrid,
     /** The cells formulas fill, with the formula filling each, by its place in the list. */
     computed: Map<FormulaCell, Int>,
+    /** The table reshaped, by a row's or a column's menu. */
     onChange: (TableGrid) -> Unit,
+    /** The cell being typed in, whose caret is its own; every other shows its text alone. */
+    editing: EditedCell?,
+    /** A cell typed in, or its caret moved, or focused, by its row and column. */
+    onCellChange: (Int, Int, TextFieldValue) -> Unit,
+    /** A key for the suggestions; false when they leave it alone. */
+    onCompletionKey: (CompletionKey) -> Boolean,
     /** Opens the formula of a column, from 1, or a new one for it. */
     onColumnFormula: (Int) -> Unit,
     /** Opens the formula that fills a cell, by its place in the list. */
@@ -353,23 +432,33 @@ private fun TableGridEditor(
                         val requester = remember { BringIntoViewRequester() }
                         val scope = rememberCoroutineScope()
                         val cellDescription = stringResource(Res.string.editor_cell, row + 1, column + 1)
+                        // Always the TextFieldValue form, edited or not: switching forms would make
+                        // it another field, which would lose the focus it was just given.
+                        val edited = editing?.takeIf { it.row == row && it.column == column && it.value.text == text }
+                        val value = edited?.value ?: TextFieldValue(text, TextRange(text.length))
                         BasicTextField(
-                            value = text,
-                            onValueChange = { onChange(grid.withCell(row, column, it)) },
+                            value = value,
+                            onValueChange = { onCellChange(row, column, it) },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyMedium.copy(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontWeight = if (row in header) FontWeight.Bold else FontWeight.Normal,
                             ),
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            visualTransformation = OrgCellHighlightTransformation,
                             modifier = Modifier
                                 .bringIntoViewRequester(requester)
                                 .onFocusEvent { focus ->
-                                    if (focus.isFocused) scope.launch {
-                                        delay(KEYBOARD_SETTLES)
-                                        requester.bringIntoView()
+                                    if (focus.isFocused) {
+                                        // Focused by Tab, say, rather than by a tap that placed the caret.
+                                        if (edited == null) onCellChange(row, column, value)
+                                        scope.launch {
+                                            delay(KEYBOARD_SETTLES)
+                                            requester.bringIntoView()
+                                        }
                                     }
                                 }
+                                .completionKeys(onCompletionKey)
                                 .width(CELL_WIDTH)
                                 .border(0.5.dp, lineColor)
                                 .padding(horizontal = 8.dp, vertical = 10.dp)

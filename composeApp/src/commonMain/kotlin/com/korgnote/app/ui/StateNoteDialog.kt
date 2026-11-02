@@ -69,14 +69,7 @@ fun StateNoteDialog(
                         elementKey = -1,
                         value = value,
                         onValueChange = onValueChange,
-                        onCompletionKey = { key ->
-                            if (completion.suggestions.isEmpty()) false else when (key) {
-                                CompletionKey.ACCEPT -> completion.acceptSelected()
-                                CompletionKey.DISMISS -> { completion.dismiss(); true }
-                                CompletionKey.NEXT -> { completion.moveSelection(1); true }
-                                CompletionKey.PREVIOUS -> { completion.moveSelection(-1); true }
-                            }
-                        },
+                        onCompletionKey = completion::answer,
                         todoKeywords = todoKeywords,
                         label = stringResource(Res.string.editor_state_note_field),
                     )
