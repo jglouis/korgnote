@@ -17,6 +17,7 @@ import kotlin.io.path.writeText
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.fail
 import kotlin.time.Duration
@@ -37,6 +38,7 @@ class NotesWatcherTest {
     private lateinit var root: Path
     private val journal = ChangeJournal()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private lateinit var watcher: NotesWatcher
 
     @BeforeTest
     fun setUp() {
@@ -113,11 +115,50 @@ class NotesWatcherTest {
         val before = journal.generation
         git.resolve("e.org").writeText("* e\n")
         awaitChange(before, ".git/e.org") { it.path == ".git/e.org" && !it.deleted }
+
+        // And it says so, rather than healing it quietly, once no event has come for it.
+        val reported = withTimeoutOrNull(WAIT) { while (watcher.status.missed == 0) delay(100.milliseconds) }
+        assertNotNull(reported, "the missed change was never reported")
+        assertEquals(1, watcher.status.missed)
+        assertEquals(listOf(".git/e.org"), watcher.status.lastMissedPaths)
+    }
+
+    @Test
+    fun aSaveTheServerAlreadyAnnouncedIsNotCountedAsMissed() = runBlocking {
+        startWatching(rescanEvery = 500.milliseconds)
+
+        // What the sync API does on a save: write, then journal at once. The file event comes later,
+        // and a check that runs in between must not take the save for an edit nobody announced.
+        repeat(3) { round ->
+            val file = root.resolve("sub/b.org")
+            file.writeText("* b, saved through the API $round\n")
+            journal.record("sub/b.org", FileStore(root).meta("sub/b.org")!!.etag)
+            delay(1.seconds)
+        }
+        // Past the grace, so a wrong suspicion would have been reported by now.
+        delay(GRACE + 2.seconds)
+        assertEquals(0, watcher.status.missed, "missed: ${watcher.status.lastMissedPaths}")
+    }
+
+    @Test
+    fun theStatusSaysWhatIsWatched() = runBlocking {
+        startWatching()
+        val status = watcher.status
+        assertEquals(WatcherStatus.State.WATCHING, status.state)
+        assertEquals(2, status.folders, "the root and sub/")
+        assertEquals(3, status.notes, "a.org, sub/b.org and the probe")
+        assertNotNull(status.lastCheckAt)
+        assertNotNull(status.lastChangeAt)
+
+        root.resolve("more").createDirectories()
+        val rebuilt = withTimeoutOrNull(WAIT) { while (watcher.status.folders != 3) delay(100.milliseconds) }
+        assertNotNull(rebuilt, "the new folder was never watched: ${watcher.status}")
+        assertEquals(1, watcher.status.rebuilds)
     }
 
     /** Starts the watcher and waits until it is watching: until an edit it should see is journaled. */
     private suspend fun startWatching(rescanEvery: Duration = Duration.INFINITE) {
-        NotesWatcher(root, FileStore(root), journal, rescanEvery).start(scope)
+        watcher = NotesWatcher(root, FileStore(root), journal, rescanEvery, lateEventGrace = GRACE).also { it.start(scope) }
         val probe = root.resolve("probe.org")
         val start = journal.generation
         val seen = withTimeoutOrNull(WAIT) {
@@ -139,5 +180,8 @@ class NotesWatcherTest {
 
     private companion object {
         val WAIT = 20.seconds
+
+        /** Longer than the JDK's polling on macOS takes to report a change. */
+        val GRACE = 4.seconds
     }
 }

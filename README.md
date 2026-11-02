@@ -163,6 +163,10 @@ The server also gives you the **web app**, at <http://localhost:8080/>, and the 
 To give the address at startup rather than on the Devices page, add
 `-e KORGNOTE_ADVERTISED_ADDRESSES=192.168.1.20` to the `docker run` command.
 
+**If the phone doesn't show an edit made on the computer,** open the Devices page. Under *Notes
+folder* it says whether the server is watching your notes, and warns when it isn't. The details are
+in the server's log: `docker logs korgnote`.
+
 #### On a server on the internet
 
 The best way is to keep the server off the internet: run it on your computer or on a machine at

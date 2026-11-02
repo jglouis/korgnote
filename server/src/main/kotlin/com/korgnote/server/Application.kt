@@ -245,7 +245,7 @@ fun Application.module(
             }
         }
 
-        devicesPage(access)
+        devicesPage(access, watcher)
 
         route("/api") {
             // Sync API v1. The endpoints it replaced were deleted in T10.

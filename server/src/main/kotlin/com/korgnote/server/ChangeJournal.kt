@@ -61,6 +61,14 @@ class ChangeJournal(
     }
 
     /**
+     * The latest entry still held for [path], or null when there is none in the log.
+     *
+     * Lets the watcher tell a change the devices were already told of — a save through the API,
+     * whose own file event arrives after it — from one nobody announced.
+     */
+    fun latest(path: String): ChangeEntry? = synchronized(lock) { entries.lastOrNull { it.path == path } }
+
+    /**
      * What changed after [since], or null when the journal cannot answer for that generation and
      * the caller must fall back to a full manifest.
      *
