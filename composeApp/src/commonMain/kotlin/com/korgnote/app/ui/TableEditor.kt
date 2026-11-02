@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -55,7 +55,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.korgnote.app.viewmodel.CompletionController
 import com.korgnote.app.viewmodel.TableCellLine
 import com.korgnote.common.org.edit.DraftInsert
@@ -197,10 +196,13 @@ fun TableEditorDialog(
     var confirmingDiscard by remember { mutableStateOf(false) }
     Dialog(
         onDismissRequest = { if (grid == initial) onDismiss() else confirmingDiscard = true },
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        // Over the whole window, so that what the keyboard covers is known and the suggestions and
+        // the buttons stay above it: in a dialog of its own size Android slides the window up
+        // instead, under the keyboard, and they were out of sight whenever a cell was typed in.
+        properties = cardDialogProperties(),
     ) {
-        Surface(modifier = Modifier.fillMaxSize().imePadding(), color = MaterialTheme.colorScheme.surface) {
-            Column {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+            Column(Modifier.safeDrawingPadding()) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
