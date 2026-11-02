@@ -3,6 +3,7 @@ package com.korgnote.app.viewmodel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.korgnote.app.data.ReadingPlace
 import com.korgnote.common.org.orgElements
 
 /**
@@ -31,7 +32,29 @@ class OpenNote {
 
     fun onScrolledToElement() {
         scrollToElementIndex = null
+        settled = true
     }
+
+    /**
+     * Where to put the reader back in a note opened with no place asked for: where it was left
+     * last time, or its top. Unlike [scrollToElementIndex] nothing is lit there, since nothing was
+     * jumped to. Consumed once, via [onRestored].
+     */
+    var restoreTo: ReadingSpot? by mutableStateOf(null)
+        private set
+
+    fun onRestored() {
+        restoreTo = null
+        settled = true
+    }
+
+    /**
+     * Whether the reading view shows this note where it was opened at. From opening a note until it
+     * has scrolled there, the view is still wherever the last note was, which is no place in this
+     * one: nothing should take it for where the reader is.
+     */
+    var settled by mutableStateOf(true)
+        private set
 
     /**
      * Element to keep in sight after it moved within the note, set by a restructuring. Unlike
@@ -54,16 +77,24 @@ class OpenNote {
         label = "Selected: $path"
         this.path = path
         scrollToElementIndex = null
+        restoreTo = null
+        settled = false
         if (!hasText) content = "* ${path}\nNo content yet."
     }
 
     /**
      * Shows [text], brought into view at the element containing [scrollToOffset]. Returns that
      * element's index, or null when there is nowhere to scroll to.
+     *
+     * With no such element, the note goes back to [place], where it was left, or to its top.
      */
-    internal fun show(text: String, scrollToOffset: Int?): Int? {
+    internal fun show(text: String, scrollToOffset: Int?, place: ReadingPlace? = null): Int? {
         content = text
         scrollToElementIndex = scrollToOffset?.let { text.elementIndexOfOffset(it) }
+        if (scrollToElementIndex == null) {
+            restoreTo = place?.let { kept -> text.elementIndexOfOffset(kept.offset)?.let { ReadingSpot(it, kept.pixels) } }
+                ?: ReadingSpot(0, 0)
+        }
         return scrollToElementIndex
     }
 
@@ -81,6 +112,9 @@ class OpenNote {
         const val NO_FILE_LABEL = "No file selected"
     }
 }
+
+/** A place in the reading view: the element at its top, and how many pixels of it are scrolled past. */
+data class ReadingSpot(val elementIndex: Int, val pixels: Int)
 
 /**
  * The element containing [offset], or null when the text no longer reaches that far.

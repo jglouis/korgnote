@@ -1,5 +1,6 @@
 package com.korgnote.app.ui
 
+import com.korgnote.app.viewmodel.ReadingSpot
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -171,6 +172,9 @@ fun OrgDocumentView(
     onToggleFold: ((elementIndex: Int) -> Unit)? = null,
     scrollToElementIndex: Int? = null,
     onScrolledToElement: () -> Unit = {},
+    /** Where a note opened with no place asked for goes back to: where it was left, or its top. */
+    restoreTo: ReadingSpot? = null,
+    onRestored: () -> Unit = {},
     /** An element that moved within the note: scrolled to only if it went off screen. */
     revealElementIndex: Int? = null,
     onRevealed: () -> Unit = {},
@@ -440,6 +444,17 @@ fun OrgDocumentView(
             landing = Landing(index)
             onScrolledToElement()
         }
+    }
+
+    // Back where the note was left: nothing was jumped to, so nothing is lit.
+    LaunchedEffect(restoreTo, elements) {
+        val spot = restoreTo ?: return@LaunchedEffect
+        if (spot.elementIndex in elements.indices) {
+            listState.scrollToItem(spot.elementIndex, spot.pixels)
+        } else {
+            listState.scrollToItem(0)
+        }
+        onRestored()
     }
 
     LaunchedEffect(revealElementIndex, elements) {

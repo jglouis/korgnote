@@ -1266,6 +1266,21 @@ the notification down; a clock started on the server picked up within seconds, b
 notification; switching to a recent task; the day view's blocks and total, the agenda's report;
 a keyword set from the calendar; an effort set from the menu.
 
+### T42 · Resume where the app was left — ✅ **done** (not released)
+**Landed** The app opens on the tab it was left on, and on the note last read, where it was left in
+it. Every note opened again with no place asked for — from the drawer, a pin, a rename — goes back
+to where it was left, not to its top; a jump (a link, a search hit, an agenda entry, Back) still
+goes where it was asked and lights it. The calendar's tab opens on the view and period it was left
+in, and does so after a relaunch the same day; a later day opens on today, in that view. A note's
+scroll is no longer reset when another tab is looked at.
+**How** `ReadingPlaces` keeps, per device, the 50 notes last read, each by the offset of the element
+at the top of the screen and the pixels scrolled into it. The reading view reports every frame;
+the view model stores the place once scrolling stops for half a second, before another note
+replaces it, and when the app pauses. `OpenNote.settled` keeps a position from being taken for the
+new note while the view still shows the previous one. The tab and calendar view are `LastScreen`,
+kept by the shell. Folds are still session only.
+Covered by `ReadingPlacesTest` and `AppResumeTest`.
+
 ---
 
 ## Open, and known gaps

@@ -89,4 +89,16 @@ class InMemorySettingsRepository(
     override fun setTagColors(colors: Map<String, Int>) {
         tagColors = colors
     }
+
+    private var readingPlaces = emptyList<ReadingPlace>()
+    override fun getReadingPlaces(): List<ReadingPlace> = readingPlaces
+    override fun setReadingPlaces(places: List<ReadingPlace>) {
+        readingPlaces = places
+    }
+
+    private var lastScreen = LastScreen()
+    override fun getLastScreen(): LastScreen = lastScreen
+    override fun setLastScreen(screen: LastScreen) {
+        lastScreen = screen
+    }
 }

@@ -29,6 +29,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.NotesSource
 import com.korgnote.app.data.SavedSearch
+import com.korgnote.app.data.LastScreen
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.data.offersNotesFolder
 import com.korgnote.app.ui.CalendarActions
@@ -126,12 +131,16 @@ fun App() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSource: () -> Unit) {
-    var selectedScreen by rememberSaveable { mutableStateOf(BottomItem.FILE) }
+    val settingsRepo = koinInject<SettingsRepository>()
+    // Where the app was left, to open there again: the tab, and the calendar's view.
+    val resumed = remember { settingsRepo.getLastScreen() }
+    var selectedScreen by rememberSaveable {
+        mutableStateOf(BottomItem.entries.firstOrNull { it.name == resumed.tab } ?: BottomItem.FILE)
+    }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val vm = koinViewModel<NotesViewModel>(key = "notes:${source.encode()}") { parametersOf(source) }
     val focusManager = LocalFocusManager.current
-    val settingsRepo = koinInject<SettingsRepository>()
     LaunchedEffect(Unit) { TagColors.chosen = settingsRepo.getTagColors() }
     LaunchedEffect(vm) {
         choice.active = vm.server
@@ -167,7 +176,11 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
         vm.server.onResume()
         // The share sheet may have queued captures while the app was in the background.
         scope.launch { vm.fileCaptures() }
-        onPauseOrDispose { vm.server.onPause() }
+        onPauseOrDispose {
+            vm.server.onPause()
+            // The app may not come back from the background: where the note was left, kept now.
+            vm.saveReadingPlace()
+        }
     }
     // At most one of these is open; each names the note it is about.
     var creatingNote by remember { mutableStateOf(false) }
@@ -185,16 +198,36 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     var deletingNote by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     // A search being named: one about to be saved, or (true) a saved one being renamed.
     var namingSearch by remember { mutableStateOf<Pair<SavedSearch, Boolean>?>(null) }
-    // The view and day the calendar opens on when asked from elsewhere — a tapped SCHEDULED or
-    // DEADLINE date opens its day, a widget the view it shows — and null for the calendar's own
-    // starting view, as when it is opened from the bottom bar. Each such request is counted, so
-    // asking for the same day again starts there again, wherever the calendar was moved since.
-    var calendarTarget by rememberSaveable(stateSaver = OptionalCalendarTargetSaver) { mutableStateOf<CalendarTarget?>(null) }
+    // The calendar's view and period as last seen there, which its tab opens on again, now or at
+    // the next launch. A period left on an earlier day is not taken back: the calendar opens on
+    // today, in the view it was left in.
+    var calendarView by rememberSaveable(stateSaver = OptionalCalendarTargetSaver) {
+        mutableStateOf(resumed.calendarView(today = currentDate()))
+    }
+    // The view and day the calendar opens on: from its tab, the one it was left on; when asked from
+    // elsewhere — a tapped SCHEDULED or DEADLINE date opens its day, a widget the view it shows —
+    // that one; and null for the calendar's own starting view, when it was never left anywhere.
+    // Each request from elsewhere is counted, so asking for the same day again starts there again,
+    // wherever the calendar was moved since.
+    var calendarTarget by rememberSaveable(stateSaver = OptionalCalendarTargetSaver) { mutableStateOf(calendarView) }
     var calendarRequests by rememberSaveable { mutableIntStateOf(0) }
     val openCalendar = { target: CalendarTarget ->
         calendarTarget = target
         calendarRequests++
         selectedScreen = BottomItem.CALENDAR
+    }
+    // Kept as it changes, so that the app opens on it again however it is closed.
+    LaunchedEffect(Unit) {
+        snapshotFlow { selectedScreen to calendarView }.collect { (tab, view) ->
+            settingsRepo.setLastScreen(
+                LastScreen(
+                    tab = tab.name,
+                    calendarMode = view?.mode?.name,
+                    calendarDate = view?.date?.toString(),
+                    savedOn = currentDate().toString(),
+                ),
+            )
+        }
     }
     // A widget's calendar, tapped, opens the app's at the same place.
     LaunchedEffect(Unit) {
@@ -237,10 +270,19 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                 snackbarHostState.showSnackbar(message, withDismissAction = true, duration = SnackbarDuration.Long)
             }
     }
-    // The open note's scroll position, held here for the floating buttons to read and move.
-    // Keyed by screen so that coming back to File starts at the top, as it did when the
-    // document view owned it.
-    val documentListState = rememberSaveable(selectedScreen, saver = LazyListState.Saver) { LazyListState() }
+    // The open note's scroll position, held here for the floating buttons to read and move, and
+    // kept while another tab shows, so that coming back to File finds the note where it was left.
+    // Another note opened moves it to where that one was left; see OpenNote.restoreTo.
+    val documentListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+    // Where the reader is in the open note, to open it there again; the view model keeps it once
+    // the scrolling stops. Not while the note is still being brought to where it was opened at.
+    LaunchedEffect(vm, documentListState) {
+        snapshotFlow {
+            val path = vm.note.path
+            if (path == null || !vm.note.settled) null
+            else Triple(path, documentListState.firstVisibleItemIndex, documentListState.firstVisibleItemScrollOffset)
+        }.collect { at -> at?.let { (path, index, pixels) -> vm.onReadingPlaceChanged(path, index, pixels) } }
+    }
 
     // The system's back goes where the top bar's does: back from a followed link, to where it
     // was tapped. From another tab it goes to the note first, as Android apps go to their first
@@ -566,7 +608,8 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
             // rail keeps the start one clear and the screen beside it the rest.
             val safeInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
             val selectTab = { item: BottomItem ->
-                if (item == BottomItem.CALENDAR) calendarTarget = null
+                // Back to where the calendar was left; its own tab, tapped again, leaves it be.
+                if (item == BottomItem.CALENDAR && selectedScreen != BottomItem.CALENDAR) calendarTarget = calendarView
                 selectedScreen = item
             }
             Row {
@@ -906,6 +949,8 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                         onToggleFold = { vm.folds.toggle(it) },
                                         scrollToElementIndex = vm.note.scrollToElementIndex,
                                         onScrolledToElement = { vm.note.onScrolledToElement() },
+                                        restoreTo = vm.note.restoreTo,
+                                        onRestored = { vm.note.onRestored() },
                                         revealElementIndex = vm.note.revealElementIndex,
                                         onRevealed = { vm.note.onRevealed() },
                                         onToggleCheckbox = { offset -> vm.toggleCheckboxAt(offset, scope) },
@@ -960,6 +1005,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                     agenda = vm.agenda.index,
                                     initialMode = calendarTarget?.mode,
                                     initialAnchorDate = calendarTarget?.date,
+                                    onViewChanged = { mode, date -> calendarView = CalendarTarget(mode, date) },
                                     onOpenEntry = { entry ->
                                         // The heading is resolved by the view model once the file's text
                                         // has loaded: that text arrives asynchronously, so working it out
@@ -1011,6 +1057,20 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
         }
     }
 }
+
+/**
+ * The calendar's view as it was left, to open on again [today]: in the same period when it was left
+ * today, and on today otherwise. Null when it was never left anywhere.
+ */
+private fun LastScreen.calendarView(today: LocalDate): CalendarTarget? {
+    val mode = CalendarMode.entries.firstOrNull { it.name == calendarMode } ?: return null
+    val date = calendarDate
+        ?.takeIf { savedOn == today.toString() }
+        ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    return CalendarTarget(mode, date ?: today)
+}
+
+private fun currentDate(): LocalDate = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
 
 /** What the system's back does while [enabled]. Of two such handlers the later one is asked first. */
 @Composable

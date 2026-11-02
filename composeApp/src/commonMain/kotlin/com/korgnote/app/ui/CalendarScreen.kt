@@ -30,6 +30,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -86,6 +88,8 @@ fun CalendarScreen(
     onOpenEntry: (AgendaEntry) -> Unit = {},
     initialMode: CalendarMode? = null,
     initialAnchorDate: LocalDate? = null,
+    /** The view and the period now shown, each time either changes: for the app to open on again. */
+    onViewChanged: (CalendarMode, LocalDate) -> Unit = { _, _ -> },
     now: LocalDateTime? = null,
     headerActions: @Composable () -> Unit = {},
     /** What a long-press on an entry does to its heading — its clock, its keyword — and opening clocked time. */
@@ -117,6 +121,8 @@ fun CalendarScreen(
     val scope = rememberCoroutineScope()
     fun dateOf(page: Int) = mode.shift(base, page - CALENDAR_MIDDLE_PAGE)
     val anchorDate = dateOf(pager.currentPage)
+    val currentOnViewChanged by rememberUpdatedState(onViewChanged)
+    LaunchedEffect(mode, anchorDate) { currentOnViewChanged(mode, anchorDate) }
 
     fun show(newMode: CalendarMode, date: LocalDate = anchorDate) {
         mode = newMode

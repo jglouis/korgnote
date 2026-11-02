@@ -81,6 +81,19 @@ interface SettingsRepository {
     fun getTagColors(): Map<String, Int>
 
     fun setTagColors(colors: Map<String, Int>)
+
+    /**
+     * Where each recently read note was left, most recently read first, so a note opens again where
+     * it was left and the first of them is the one the app opens on. Kept per device, like the pins.
+     */
+    fun getReadingPlaces(): List<ReadingPlace>
+
+    fun setReadingPlaces(places: List<ReadingPlace>)
+
+    /** The tab, and the calendar's view, the app was last left on, to open on again. */
+    fun getLastScreen(): LastScreen
+
+    fun setLastScreen(screen: LastScreen)
 }
 
 /** Pinned notes as one stored string, a path per line: a note path never holds a line break. */

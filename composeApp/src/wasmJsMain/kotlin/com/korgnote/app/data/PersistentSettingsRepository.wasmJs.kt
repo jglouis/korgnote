@@ -93,6 +93,18 @@ class PersistentSettingsRepository : SettingsRepository {
         store(KEY_TAG_COLORS, encodeTagColors(colors))
     }
 
+    override fun getReadingPlaces(): List<ReadingPlace> = decodeReadingPlaces(load(KEY_READING_PLACES))
+
+    override fun setReadingPlaces(places: List<ReadingPlace>) {
+        store(KEY_READING_PLACES, encodeReadingPlaces(places))
+    }
+
+    override fun getLastScreen(): LastScreen = decodeLastScreen(load(KEY_LAST_SCREEN))
+
+    override fun setLastScreen(screen: LastScreen) {
+        store(KEY_LAST_SCREEN, encodeLastScreen(screen))
+    }
+
     private fun load(key: String): String? = runCatching { localStorage.getItem(PREFIX + key) }.getOrNull()
 
     private fun store(key: String, value: String) {
@@ -110,5 +122,7 @@ class PersistentSettingsRepository : SettingsRepository {
         private const val KEY_FILE_LINK_MAPPINGS = "file_link_mappings"
         private const val KEY_NOTE_TEMPLATE = "note_template"
         private const val KEY_TAG_COLORS = "tag_colors"
+        private const val KEY_READING_PLACES = "reading_places"
+        private const val KEY_LAST_SCREEN = "last_screen"
     }
 }

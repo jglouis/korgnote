@@ -118,6 +118,18 @@ class PersistentSettingsRepository : SettingsRepository {
         defaults.setObject(encodeTagColors(colors), forKey = KEY_TAG_COLORS)
     }
 
+    override fun getReadingPlaces(): List<ReadingPlace> = decodeReadingPlaces(defaults.stringForKey(KEY_READING_PLACES))
+
+    override fun setReadingPlaces(places: List<ReadingPlace>) {
+        defaults.setObject(encodeReadingPlaces(places), forKey = KEY_READING_PLACES)
+    }
+
+    override fun getLastScreen(): LastScreen = decodeLastScreen(defaults.stringForKey(KEY_LAST_SCREEN))
+
+    override fun setLastScreen(screen: LastScreen) {
+        defaults.setObject(encodeLastScreen(screen), forKey = KEY_LAST_SCREEN)
+    }
+
     private fun loadHost(): String {
         val def = defaultServerBaseUrl().removePrefix("http://").removePrefix("https://").substringBefore(":")
         val value = defaults.stringForKey(KEY_HOST)
@@ -147,5 +159,7 @@ class PersistentSettingsRepository : SettingsRepository {
         private const val KEY_FILE_LINK_MAPPINGS = "file_link_mappings"
         private const val KEY_NOTE_TEMPLATE = "note_template"
         private const val KEY_TAG_COLORS = "tag_colors"
+        private const val KEY_READING_PLACES = "reading_places"
+        private const val KEY_LAST_SCREEN = "last_screen"
     }
 }

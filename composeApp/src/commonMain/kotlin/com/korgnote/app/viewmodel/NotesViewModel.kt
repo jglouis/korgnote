@@ -18,6 +18,7 @@ import com.korgnote.app.widgets.NoAgendaWidgets
 import com.korgnote.app.data.NoteTemplateSettings
 import com.korgnote.app.capture.CaptureFiler
 import com.korgnote.app.data.SavedSearch
+import com.korgnote.app.data.ReadingPlace
 import com.korgnote.common.fs.NotePaths
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgDocument
@@ -146,6 +147,9 @@ class NotesViewModel(
     /** The notes pinned on this device, read once; and where a change to them is kept. */
     pinnedNotes: () -> List<String> = { emptyList() },
     savePinnedNotes: (List<String>) -> Unit = {},
+    /** Where the notes read on this device were left, read once; and where a change to them is kept. */
+    readingPlaces: () -> List<ReadingPlace> = { emptyList() },
+    saveReadingPlaces: (List<ReadingPlace>) -> Unit = {},
     /** The searches saved on this device, read once; and where a change to them is kept. */
     savedSearches: () -> List<SavedSearch> = { emptyList() },
     saveSavedSearches: (List<SavedSearch>) -> Unit = {},
@@ -186,6 +190,9 @@ class NotesViewModel(
     val folds: Folds = Folds(note)
 
     val pins: NotePins = NotePins(library, pinnedNotes, savePinnedNotes)
+
+    /** Where each note was left, so it opens there again; the first is the one the app opens on. */
+    val places: ReadingPlaces = ReadingPlaces(readingPlaces, saveReadingPlaces)
 
     /** The clocks running in the notes, for the bar that shows them on every tab. */
     val clocks: NoteClocks = NoteClocks(library, clockNotifier)
@@ -314,7 +321,10 @@ class NotesViewModel(
     /** The part of opening that needs no text. False when there is no text to wait for. */
     private fun beginOpening(path: String): Boolean {
         val hasText = path in library
+        // Where the note being left was left, while its text is still the one on screen.
+        saveReadingPlace()
         note.beginOpening(path, hasText)
+        if (hasText) places.opened(path)
         links.onOpened()
         // This file's `#+TODO:` keywords and headings are part of what completion offers.
         completion.refreshContext()
@@ -330,8 +340,47 @@ class NotesViewModel(
         if (note.path == path && raw != null) {
             // A jump must never land inside a fold: open everything around the target, and
             // the target itself, since what was asked for may be in its body.
-            note.show(raw, scrollToOffset)?.let { folds.unfoldAncestorsOf(it, includingItself = true) }
+            note.show(raw, scrollToOffset, places.placeOf(path))?.let { folds.unfoldAncestorsOf(it, includingItself = true) }
         }
+    }
+
+    /** Where the reader is in the open note, by element, not yet kept in [places]. */
+    private var unsavedPlace: Pair<String, ReadingSpot>? = null
+    private var placeSave: Job? = null
+
+    /**
+     * The reading view of [path] now has [elementIndex] at its top, scrolled [pixels] into it: to
+     * be kept as where the note was left, once the scrolling stops. Ignored while the view still
+     * shows where it was before this note was opened, and for a note no longer open.
+     *
+     * Called on every frame of a scroll, so it only notes the spot: working out where it is in the
+     * text, and storing it, wait for [saveReadingPlace].
+     */
+    fun onReadingPlaceChanged(path: String, elementIndex: Int, pixels: Int) {
+        if (path != note.path || !note.settled) return
+        unsavedPlace = path to ReadingSpot(elementIndex, pixels)
+        placeSave?.cancel()
+        placeSave = viewModelScope.launch {
+            delay(PLACE_SAVE_PAUSE)
+            saveReadingPlace()
+        }
+    }
+
+    /**
+     * Keeps where the reader is in the open note now, rather than once scrolling stops: before
+     * another note replaces it, or when the app goes to the background and may not come back.
+     */
+    fun saveReadingPlace() {
+        placeSave?.cancel()
+        placeSave = null
+        val (path, spot) = unsavedPlace ?: return
+        unsavedPlace = null
+        // The element is one of the open note's: of any other, its index means nothing.
+        if (path != note.path) return
+        val elements = note.content.orgElements()
+        // Past the last element is the backlinks below it: the last element is near enough.
+        val element = elements.getOrNull(spot.elementIndex) ?: elements.lastOrNull() ?: return
+        places.record(path, element.start, if (spot.elementIndex in elements.indices) spot.pixels else 0)
     }
 
     // --- Keeping everything in step with the notes ---
@@ -405,11 +454,12 @@ class NotesViewModel(
         clocks.refresh()
 
         // The open note may be gone: deleted here, or on another device. With nothing open — at
-        // launch, say — the first pinned note opens: it was pinned to be at hand.
+        // launch, say — the note last read opens, where it was left; failing that the first pinned
+        // note, since it was pinned to be at hand.
         val current = note.path?.takeIf { it in library }
         if (current == null) {
             note.path = null
-            val first = pins.shown.firstOrNull() ?: library.documents.keys.minOrNull()
+            val first = places.lastRead { it in library } ?: pins.shown.firstOrNull() ?: library.documents.keys.minOrNull()
             if (first != null) onFileSelected(first) else note.close()
         } else {
             store.read(current)?.let { fresh ->
@@ -1069,6 +1119,7 @@ class NotesViewModel(
         }
         folds.move(from, target)
         pins.move(from, target)
+        places.move(from, target)
         if (wasOpen) note.path = target
         showFromReplica()
         if (wasOpen) openAndWait(target)
@@ -1091,6 +1142,7 @@ class NotesViewModel(
         }
         folds.forget(path)
         pins.forget(path)
+        places.forget(path)
         store.delete(path)
         showFromReplica()
         server.pushQuietly()
@@ -1139,6 +1191,7 @@ class NotesViewModel(
         if (!store.replaceWithCopy(original, copy)) return false
         folds.forget(copy)
         pins.forget(copy)
+        places.forget(copy)
         if (wasOpen) note.path = original
         showFromReplica()
         if (wasOpen) openAndWait(original)
@@ -1174,6 +1227,7 @@ class NotesViewModel(
         }
         folds.forget(copy)
         pins.forget(copy)
+        places.forget(copy)
         if (wasOpen) note.path = original
         showFromReplica()
         if (wasOpen) openAndWait(original)
@@ -1188,6 +1242,9 @@ class NotesViewModel(
          * time anyone switches to it.
          */
         val DERIVED_REFRESH_PAUSE = 600.milliseconds
+
+        /** How long scrolling has to stop before where the reader stopped is kept. */
+        val PLACE_SAVE_PAUSE = 500.milliseconds
     }
 }
 
