@@ -14,6 +14,7 @@ import com.korgnote.common.org.capture.calendarEventFrom
 import com.korgnote.common.org.capture.captureLinkOf
 import com.korgnote.common.org.capture.capturedFrom
 import com.korgnote.common.org.capture.fileCapture
+import com.korgnote.common.org.capture.mapShortLinkIn
 import com.korgnote.common.org.capture.EntryParts
 import com.korgnote.common.org.capture.captureEntry
 import com.korgnote.common.org.capture.entryKeyword
@@ -83,6 +84,58 @@ class CaptureTest {
         assertEquals("Eiffel Tower", captured.title)
         assertEquals("https://maps.app.goo.gl/ne1k1Zy6Prd6t9QC8", captured.link)
         assertNull(captured.location)
+    }
+
+    @Test
+    fun aGoogleMapsShortLinkLookedUpGivesThePlacesAddress() {
+        // Where https://maps.app.goo.gl/ne1k1Zy6Prd6t9QC8 redirected on 2026-11-02.
+        val captured = capturedFrom(
+            SharedContent(
+                subject = "Eiffel Tower",
+                text = "https://maps.app.goo.gl/ne1k1Zy6Prd6t9QC8",
+                expanded = "https://www.google.com/maps/place/Eiffel+Tower,+Av.+Gustave+Eiffel,+75007+Paris,+France" +
+                    "/data=!4m2!3m1!1s0x47e66e2964e34e2d:0x8ddca9ee380ef7e0!18m1!1e1?utm_source=mstt_1&entry=gps",
+            ),
+            zone,
+        )
+        assertEquals("Eiffel Tower", captured.title)
+        assertEquals("Av. Gustave Eiffel, 75007 Paris, France", captured.location)
+        // The short link stays the link: it is what was shared, and shorter.
+        assertEquals("https://maps.app.goo.gl/ne1k1Zy6Prd6t9QC8", captured.link)
+        assertNull(captured.geo)
+        assertEquals("* Eiffel Tower\n:PROPERTIES:\n:LOCATION: Av. Gustave Eiffel, 75007 Paris, France\n:END:\n", captureEntry(captured, now).text)
+    }
+
+    @Test
+    fun aLookedUpPlaceTakesItsPinAndSplitsItsNameWithoutATitle() {
+        val captured = capturedFrom(
+            SharedContent(
+                text = "https://maps.app.goo.gl/x",
+                expanded = "https://www.google.com/maps/place/Caf%C3%A9+de+Flore,+172+Bd+Saint-Germain,+75006+Paris" +
+                    "/@48.85,2.33,17z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d48.8541!4d2.3326",
+            ),
+            zone,
+        )
+        assertEquals("Café de Flore", captured.title)
+        assertEquals("172 Bd Saint-Germain, 75006 Paris", captured.location)
+        assertEquals("geo:48.8541,2.3326", captured.geo)
+    }
+
+    @Test
+    fun whereAShortLinkLeadsCountsOnlyWhenItIsGoogleMaps() {
+        val shared = SharedContent(subject = "Eiffel Tower", text = "https://maps.app.goo.gl/x", expanded = "https://example.com/maps/place/Elsewhere,+Nowhere")
+        assertEquals("Eiffel Tower", capturedFrom(shared, zone).title)
+        assertNull(capturedFrom(shared, zone).location)
+    }
+
+    @Test
+    fun onlyAMapsShortLinkNotYetLookedUpIsOneToLookUp() {
+        assertEquals("https://maps.app.goo.gl/x", mapShortLinkIn(SharedContent(subject = "Eiffel Tower", text = "https://maps.app.goo.gl/x")))
+        assertEquals("https://goo.gl/maps/abc", mapShortLinkIn(SharedContent(url = "https://goo.gl/maps/abc")))
+        assertNull(mapShortLinkIn(SharedContent(text = "https://maps.app.goo.gl/x", expanded = "https://www.google.com/maps/place/X")))
+        assertNull(mapShortLinkIn(SharedContent(text = "https://www.google.com/maps/place/Tour+Eiffel/@48.85,2.29,17z")))
+        assertNull(mapShortLinkIn(SharedContent(text = "https://orgmode.org", subject = "Org")))
+        assertNull(mapShortLinkIn(SharedContent(text = "Call back after five")))
     }
 
     @Test

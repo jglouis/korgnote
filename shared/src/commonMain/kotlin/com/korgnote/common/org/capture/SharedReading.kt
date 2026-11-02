@@ -7,8 +7,9 @@ import kotlinx.datetime.TimeZone
  * [shared] read for what it is: an event when it carries a calendar file, a place when its link is
  * a map's, a page when it is a link, and text otherwise. Times are moved into [zone].
  *
- * Nothing here goes to the network. A Maps short link stays a link: following it to find the place's
- * coordinates would tell Google what was captured, which is the user's to decide.
+ * Nothing here goes to the network. A Google Maps short link says nothing of the place itself: what
+ * it leads to does, when that was looked up as it was shared ([SharedContent.expanded],
+ * [mapShortLinkIn]); the short link stays the link either way.
  */
 fun capturedFrom(shared: SharedContent, zone: TimeZone): Captured {
     shared.calendar?.let { ics -> calendarEventFrom(ics, zone)?.let { return capturedFrom(it) } }
@@ -19,7 +20,7 @@ fun capturedFrom(shared: SharedContent, zone: TimeZone): Captured {
         // What was shared with the link, but not the link: a place's name and address, a video's
         // title, a line someone wrote about it.
         val around = text.replace(link, "").lines().map { it.trim() }.filter { it.isNotEmpty() }
-        placeFrom(link, subject, around)?.let { return it }
+        placeFrom(link, subject, around, shared.expanded?.trim())?.let { return it }
         return Captured(
             title = subject ?: around.firstOrNull()?.let(::singleLine) ?: titleOfUrl(link),
             link = link,
@@ -63,16 +64,47 @@ private fun titleOfUrl(url: String): String =
     url.substringAfter("://").removePrefix("www.").substringBefore('?').substringBefore('#').trimEnd('/')
 
 /**
- * A place, when [link] is a map's: Google Maps' short and long links, Apple Maps', and `geo:`.
- * The name comes from the link when it says, from [subject] or the first line shared with it
- * otherwise; the lines after that are the address.
+ * The Google Maps short link [shared] holds, `https://maps.app.goo.gl/…`, which is all Google Maps
+ * shares of a place besides its name: where it leads names the place and gives its address. Null
+ * when there is none, or it was already looked up.
  */
-private fun placeFrom(link: String, subject: String?, around: List<String>): Captured? {
-    val host = link.substringAfter("://", "").substringBefore('/').substringBefore('?').lowercase()
-    val path = link.substringAfter("://", "").substringAfter('/', "").substringBefore('?')
-    val query = queryOf(link)
-    val google = host == "maps.app.goo.gl" || (host == "goo.gl" && path.startsWith("maps")) ||
-        host.startsWith("maps.google.") || (host.removePrefix("www.").startsWith("google.") && path.startsWith("maps"))
+fun mapShortLinkIn(shared: SharedContent): String? {
+    if (shared.calendar != null || shared.expanded != null) return null
+    val link = shared.url?.trim()?.takeIf { it.isNotEmpty() } ?: firstUrlIn(shared.text?.trim().orEmpty()) ?: return null
+    return link.takeIf { isMapShortLink(it) }
+}
+
+/** Whether [url] is Google Maps' own, `https://www.google.com/maps/place/…`, as a short link leads to. */
+fun isGoogleMapsPage(url: String): Boolean =
+    url.startsWith("https://") && !isMapShortLink(url) && isGoogleMapsLink(url)
+
+private fun hostOf(link: String) = link.substringAfter("://", "").substringBefore('/').substringBefore('?').substringBefore('#').lowercase()
+
+private fun pathOf(link: String) = link.substringAfter("://", "").substringAfter('/', "").substringBefore('?').substringBefore('#')
+
+private fun isMapShortLink(link: String): Boolean {
+    val host = hostOf(link)
+    return host == "maps.app.goo.gl" || (host == "goo.gl" && pathOf(link).startsWith("maps"))
+}
+
+private fun isGoogleMapsLink(link: String): Boolean {
+    val host = hostOf(link)
+    return isMapShortLink(link) || host.startsWith("maps.google.") ||
+        (host.removePrefix("www.").startsWith("google.") && pathOf(link).startsWith("maps"))
+}
+
+/**
+ * A place, when [link] is a map's: Google Maps' short and long links, Apple Maps', and `geo:`.
+ * The name comes from the link when it says — from [expanded], where a short link leads, when that
+ * was looked up — from [subject] or the first line shared with it otherwise; the lines after that
+ * are the address.
+ */
+private fun placeFrom(link: String, subject: String?, around: List<String>, expanded: String?): Captured? {
+    val host = hostOf(link)
+    val google = isGoogleMapsLink(link)
+    // What the place is read from: where a short link leads, when that is known; the link itself otherwise.
+    val read = expanded?.takeIf { google && isGoogleMapsPage(it) } ?: link
+    val query = queryOf(read)
     val apple = host == "maps.apple.com" || host == "maps.apple"
     val geoUri = link.startsWith("geo:")
     if (!google && !apple && !geoUri) return null
@@ -92,12 +124,16 @@ private fun placeFrom(link: String, subject: String?, around: List<String>): Cap
             coordinates = query["coordinate"] ?: query["ll"] ?: query["sll"]
         }
         else -> {
-            // https://www.google.com/maps/place/Tour+Eiffel/@48.8583701,2.2944813,17z/…
-            name = Regex("/place/([^/@]+)").find(link)?.groupValues?.get(1)?.let(::decoded)
-            coordinates = Regex("@(-?\\d+\\.\\d+),(-?\\d+\\.\\d+)").find(link)?.let { "${it.groupValues[1]},${it.groupValues[2]}" }
+            // https://www.google.com/maps/place/Tour+Eiffel/@48.8583701,2.2944813,17z/…, or where a
+            // short link leads: /maps/place/Eiffel+Tower,+Av.+Gustave+Eiffel,+75007+Paris,+France/data=…
+            val words = Regex("/place/([^/@?]+)").find(read)?.groupValues?.get(1)?.let(::decoded)
+                ?: (query["q"] ?: query["query"])?.takeUnless { COORDINATES.matches(it) }
+            words?.let { nameAndAddress(singleLine(it), subject) }?.let { (named, at) -> name = named; address = at }
+            // The place's own pin (`!3d…!4d…`) before where the map was centred (`@…`).
+            coordinates = Regex("!3d(-?\\d+\\.\\d+)!4d(-?\\d+\\.\\d+)").find(read)?.let { "${it.groupValues[1]},${it.groupValues[2]}" }
+                ?: Regex("@(-?\\d+\\.\\d+),(-?\\d+\\.\\d+)").find(read)?.let { "${it.groupValues[1]},${it.groupValues[2]}" }
                 ?: query["q"]?.takeIf { COORDINATES.matches(it) }
                 ?: query["query"]?.takeIf { COORDINATES.matches(it) }
-            if (name == null) name = (query["q"] ?: query["query"])?.takeUnless { COORDINATES.matches(it) }
         }
     }
     val lines = around.toMutableList()
@@ -110,6 +146,20 @@ private fun placeFrom(link: String, subject: String?, around: List<String>): Cap
         location = address?.let(::singleLine),
         geo = coordinates?.replace(" ", "")?.takeIf { COORDINATES.matches(it) }?.let { "geo:$it" },
     )
+}
+
+/**
+ * Google's words for a place, `Eiffel Tower, Av. Gustave Eiffel, 75007 Paris, France`, as its name
+ * and its address: the name is [subject] when they start with it — Google Maps' own name for it —
+ * what comes before the first comma otherwise.
+ */
+private fun nameAndAddress(words: String, subject: String?): Pair<String, String?> {
+    val known = subject?.let(::singleLine)
+    val name = when {
+        known != null && (words == known || words.startsWith("$known,")) -> known
+        else -> words.substringBefore(',').trim()
+    }
+    return name to words.removePrefix(name).trimStart(',', ' ').trim().takeIf { it.isNotEmpty() }
 }
 
 private val COORDINATES = Regex("^\\s*-?\\d+(\\.\\d+)?\\s*,\\s*-?\\d+(\\.\\d+)?\\s*$")

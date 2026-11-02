@@ -18,6 +18,11 @@ data class SharedContent(
     val url: String? = null,
     /** An `.ics` file's contents: an invitation, or an event a calendar exported. */
     val calendar: String? = null,
+    /**
+     * Where the map's short link that was shared leads, looked up as it was shared: Google Maps
+     * gives a place's address only there. See [mapShortLinkIn].
+     */
+    val expanded: String? = null,
 )
 
 /**

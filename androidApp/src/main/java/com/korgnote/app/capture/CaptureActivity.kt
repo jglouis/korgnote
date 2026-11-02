@@ -44,7 +44,9 @@ class CaptureActivity : ComponentActivity() {
         val queue = koin.get<CaptureQueue>()
         lifecycleScope.launch {
             val link = intent.dataString?.let(::captureLinkOf)
-            val shared = link?.shared ?: withContext(Dispatchers.IO) { sharedContentOf(intent) }
+            val received = link?.shared ?: withContext(Dispatchers.IO) { sharedContentOf(intent) }
+            // A Google Maps place comes as its name and a short link: where that leads has its address.
+            val shared = koin.get<MapLinks>().expanded(received)
             setContent {
                 KorgNoteTheme {
                     CaptureSheet(
@@ -80,7 +82,8 @@ class CaptureActivity : ComponentActivity() {
             Intent.ACTION_SEND -> {
                 val stream = streamOf(intent)
                 SharedContent(
-                    // Google Maps names the place only in the share sheet's title, beside a short link.
+                    // Google Maps names the place only in the share sheet's title, beside a short link
+                    // whose address MapLinks looks up.
                     subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)
                         ?: intent.getCharSequenceExtra(Intent.EXTRA_TITLE)?.toString(),
                     text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()

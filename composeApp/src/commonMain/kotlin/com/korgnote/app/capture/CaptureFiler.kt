@@ -50,6 +50,8 @@ class CaptureFiler(
     private val zone: () -> TimeZone = { TimeZone.currentSystemDefault() },
     private val now: () -> Instant = { Clock.System.now() },
     private val newId: () -> String = { @OptIn(ExperimentalUuidApi::class) Uuid.random().toString() },
+    /** [SharedContent] with what can still be looked up about it: where a map's short link leads ([MapLinks]). */
+    private val expand: suspend (SharedContent) -> SharedContent = { it },
 ) {
     /**
      * Every heading in [store]'s notes, to choose one to capture into: what the sheet offers when the
@@ -116,7 +118,10 @@ class CaptureFiler(
         val waiting = queue.waiting()
         if (waiting.isEmpty()) return@withLock emptySet()
         val changed = mutableSetOf<String>()
-        for (request in waiting) {
+        for (queued in waiting) {
+            // Made into an entry here, not in the sheet — iOS's share extension cannot: what its
+            // map's short link leads to is looked up now, as the sheet does on Android.
+            val request = if (queued.entry == null) queued.copy(shared = expand(queued.shared)) else queued
             val into = request.into
             if (into != null) {
                 when (addInto(store, into, captured(request), request.additions ?: HeadingAdditions.defaultsFor(captured(request)))) {

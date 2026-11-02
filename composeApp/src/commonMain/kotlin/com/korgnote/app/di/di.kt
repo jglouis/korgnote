@@ -4,6 +4,7 @@ import com.korgnote.app.capture.CaptureFiler
 import com.korgnote.app.capture.CaptureQueue
 import com.korgnote.app.capture.CaptureQueueFolder
 import com.korgnote.app.capture.InMemoryCaptureQueueFolder
+import com.korgnote.app.capture.MapLinks
 import com.korgnote.app.data.CertificatePins
 import com.korgnote.app.data.DevicePairing
 import com.korgnote.app.data.PairingProblem
@@ -77,9 +78,12 @@ val appModule = module {
     // Captures wait in a queue each platform keeps — the App Group's on iOS, which the share
     // extension adds to — and only the app files them, into whichever notes are in use.
     single { CaptureQueue(getOrNull<CaptureQueueFolder>() ?: InMemoryCaptureQueueFolder()) }
+    // Where a Google Maps short link leads, for the place's address: a client of its own, trusting
+    // the certificates the platform trusts, that reads a redirect rather than following it.
+    single { MapLinks(platformBuildWebDavClient().config { followRedirects = false }) }
     single {
         val settings = get<SettingsRepository>()
-        CaptureFiler(get(), settings::getNewNotesFolder, settings::getNoteTemplate)
+        CaptureFiler(get(), settings::getNewNotesFolder, settings::getNoteTemplate, expand = get<MapLinks>()::expanded)
     }
 
     // Which of the sources the notes are in: the server's replica, the WebDAV one, or a folder of

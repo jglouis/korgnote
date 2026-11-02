@@ -13,9 +13,9 @@ A capture should cost nothing, so the dialog asks only where, and shows what:
    Scheduled, Text) or *Sub-entry*. For a new entry, the destination's own TODO keywords, and
    "None", to mark it with; and for a place, Location and Link boxes, Location alone ticked.
 
-A place is its `:LOCATION:` rather than its link, a link only when asked for: Google Maps shares
-a name and a short link, no address, so the name is the location (`placeOf`); with an address, the
-address is.
+A place is its `:LOCATION:` rather than its link, a link only when asked for: its address, which
+for Google Maps is looked up from where its short link leads (`MapLinks`); its name when that
+cannot be found (offline), as the location must say something (`placeOf`).
 2. **Capture**: the entry, shown as the note shows Org, and edited, on a tap, with the note's own
    element editor. A capture of nothing — the launcher's quick note — opens in the editor.
 
@@ -50,8 +50,13 @@ iPhone simulator (a link, and a page shared from Safari through the extension). 
 
 What the apps send, as seen on the phone: Chrome, the page's URL as the text and its title as the
 subject. Google Maps, only a short link (`maps.app.goo.gl/…`) as the text, and the place's name as
-`EXTRA_TITLE` — no address and no coordinates. So a place is its name and link; its address would
-need the short link followed, over the network (open question 4). Chrome's own share sheet lists a
+`EXTRA_TITLE` — no address and no coordinates. The short link redirects to
+`https://www.google.com/maps/place/Eiffel+Tower,+Av.+Gustave+Eiffel,+75007+Paris,+France/data=…`
+(seen 2026-11-02), so `MapLinks` asks for the short link, reads the redirect without following it,
+and keeps it as `SharedContent.expanded`: the name, then the address, comes from there, and the
+short link stays the link. That one request, before the sheet shows (3 s at most), is all
+that goes to the network; on iOS, where the extension does not render the entry, the app makes it
+when it files the capture. Chrome's own share sheet lists a
 few apps; KorgNote is under its "More", in Android's.
 
 Not built: the calendar from iOS's share extension (EventKit is in the app); App Intents for
@@ -90,8 +95,8 @@ losing it. iOS's extension offers the headings the app last left in the App Grou
 - **`capturedFrom`** reads it for what it is: a calendar file is an event (`CalendarEvents.kt`:
   times into the device's zone, an Org range, a repeater when the RRULE is one Org can say); a
   Google or Apple Maps link, or `geo:`, is a place (name, address, coordinates when the link has
-  them); a link is a page (its title, or the words shared with it); anything else is text. Nothing
-  goes to the network: a Maps short link stays a link.
+  them; for a Google Maps short link, where it leads, when `MapLinks` looked that up); a link is a
+  page (its title, or the words shared with it); anything else is text. Reading it goes nowhere.
 - **`captureEntry`** makes the one entry, through `renderCapture`'s escapes (org-capture's, and
   KorgNote's `%:location`, `%:scheduled`, `%:range`). A line whose escapes all came to nothing goes,
   and a property drawer left empty with it, so one entry serves a page, a place and an event. The
@@ -131,6 +136,8 @@ three fields; reading what was shared, and the entry, stay in Kotlin, in the app
 ## Open questions
 
 1. One inbox file with headings (now), or a file per capture?
-2. Network enrichment — a page's title when none was shared, a Maps link's address — opt-in, or never?
+2. Network enrichment: a Maps short link's address is looked up, always (the user asked for the
+   address, 2026-11-02; the request only tells Google its own link was opened). A page's title
+   when none was shared is not: opt-in, or never?
 3. The share extension on iOS asks for a title and a note in fields: the app's sheet shows the entry
    instead. Should the extension show the Org too, which needs it rendered without the app?
