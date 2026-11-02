@@ -519,6 +519,11 @@ private fun Modifier.nestingGuides(depth: Int, color: Color): Modifier {
  * held. Here a press a child has taken that is held past the long-press timeout without moving
  * fires [onLongPress] then, and the rest of the gesture is taken from the child so its tap does
  * not follow. A press no child takes is left to the element's own long-press.
+ *
+ * A press an ancestor took before any child saw it is not a child's: a list that is still flinging
+ * takes the finger that stops it on the way down, and drags from there at once with the content
+ * under the finger, so that a drag would look to this element like a press held still. That press
+ * stops the list, as it did before, and opens nothing.
  */
 @Composable
 private fun Modifier.longPressThroughInnerTargets(onLongPress: () -> Unit): Modifier {
@@ -526,7 +531,11 @@ private fun Modifier.longPressThroughInnerTargets(onLongPress: () -> Unit): Modi
     val currentOnLongPress by rememberUpdatedState(onLongPress)
     return pointerInput(haptics) {
         awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false)
+            // On the way down first: consumed already, it is an ancestor's, a flinging list's.
+            val arriving = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            if (arriving.isConsumed) return@awaitEachGesture
+            // The same press on its way back up, once the inner targets have had it.
+            val down = awaitPointerEvent().changes.firstOrNull { it.id == arriving.id } ?: return@awaitEachGesture
             if (!down.isConsumed) return@awaitEachGesture
             val ended = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                 while (true) {

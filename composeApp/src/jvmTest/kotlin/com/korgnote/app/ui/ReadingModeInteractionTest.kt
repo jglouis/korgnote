@@ -10,6 +10,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
@@ -124,6 +129,48 @@ class ReadingModeInteractionTest {
 
         onNodeWithText("NEXT").assertDoesNotExist()
         assertTrue(edited.isEmpty(), "a long-press does not edit")
+    }
+
+    /**
+     * A finger that stops a flinging list is the list's: the list takes it on its way down, before
+     * the element or anything in it sees it, and drags from there with the content under the
+     * finger. Held there, or dragged on, it opens nothing.
+     */
+    @Test
+    fun aPressAFlingingListTakesDoesNotOpenTheElementsMenu() = runComposeUiTest {
+        val text = "* Intro\n* TODO Write the report\nBody of the report.\n"
+        val edited = mutableListOf<Int>()
+        setContent {
+            // What a flinging list does with a new finger: consumed on the Initial pass.
+            Box(
+                Modifier.pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).consume()
+                    }
+                },
+            ) {
+                OrgDocumentView(
+                    text = text,
+                    onEditElement = { edited += it },
+                    onSetTodo = { _, _ -> },
+                    onAddHeadingBelow = {},
+                    todoKeywords = OrgTodoConfig(todo = linkedSetOf("TODO", "NEXT"), done = linkedSetOf("DONE")),
+                )
+            }
+        }
+
+        onNodeWithText("Body of the report.", substring = true).performTouchInput { down(center) }
+        mainClock.advanceTimeBy(1_000)
+        onNodeWithText("Add heading below").assertDoesNotExist()
+        onNodeWithText("Body of the report.", substring = true).performTouchInput { up() }
+
+        val keyword = onNodeWithText("TODO Write the report", useUnmergedTree = true).onChildren().onFirst()
+        keyword.performTouchInput { down(center) }
+        mainClock.advanceTimeBy(1_000)
+        onNodeWithText("Add heading below").assertDoesNotExist()
+        keyword.performTouchInput { up() }
+
+        assertTrue(edited.isEmpty(), "a press the list took edits nothing")
     }
 
     @Test
