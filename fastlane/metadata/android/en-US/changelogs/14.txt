@@ -1,0 +1,5 @@
+* Hold a calendar entry to reschedule it or change its deadline.
+* Tap the calendar's period to go straight to any date.
+* Showing done entries is a switch in the calendar's ⋮ menu.
+* "Capture an event" is now the calendar's + button.
+* Folds open and close the same way, animated, in the drawer and in notes.
