@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.SyncProblem
@@ -33,8 +32,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.tooling.preview.Preview
@@ -147,11 +144,6 @@ private fun TreeFolderItem(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val rotation = animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        label = "expand_rotation"
-    ).value
-
     Column(modifier = modifier) {
         Row(
             modifier = Modifier
@@ -171,10 +163,9 @@ private fun TreeFolderItem(
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.weight(1f)
             )
-            Icon(
-                imageVector = Icons.Filled.ExpandMore,
+            DisclosureChevron(
+                expanded = expanded,
                 contentDescription = stringResource(if (expanded) Res.string.editor_collapse else Res.string.editor_expand),
-                modifier = Modifier.rotate(rotation)
             )
         }
         HorizontalDivider()

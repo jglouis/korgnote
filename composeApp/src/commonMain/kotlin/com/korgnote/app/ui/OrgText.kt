@@ -1,5 +1,11 @@
 package com.korgnote.app.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,8 +29,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Checklist
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.ui.state.ToggleableState
@@ -910,8 +914,8 @@ private fun OrgDrawerView(name: String, lines: List<String>, showId: Boolean = f
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.clickable { expanded = !expanded }
         ) {
-            Icon(
-                imageVector = if (expanded) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight,
+            DisclosureChevron(
+                expanded = expanded,
                 contentDescription = stringResource(if (expanded) Res.string.editor_collapse_drawer else Res.string.editor_expand_drawer),
                 tint = OrgColors.drawer,
                 modifier = Modifier.width(16.dp)
@@ -936,7 +940,11 @@ private fun OrgDrawerView(name: String, lines: List<String>, showId: Boolean = f
                 )
             }
         }
-        if (expanded) {
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(tween(DISCLOSURE_MILLIS)) + fadeIn(tween(DISCLOSURE_MILLIS)),
+            exit = shrinkVertically(tween(DISCLOSURE_MILLIS)) + fadeOut(tween(DISCLOSURE_MILLIS)),
+        ) {
             Text(
                 text = buildOrgHighlightedString(
                     orgDrawerSource(name, lines),

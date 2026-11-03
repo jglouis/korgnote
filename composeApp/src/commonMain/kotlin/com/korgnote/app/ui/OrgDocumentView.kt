@@ -1,7 +1,14 @@
 package com.korgnote.app.ui
 
 import com.korgnote.app.viewmodel.ReadingSpot
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -15,9 +22,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EditNote
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -249,7 +254,16 @@ fun OrgDocumentView(
         // renders nothing, so that an item's index is its element's index and a scroll target
         // needs no translation.
         itemsIndexed(elements, key = { index, _ -> index }) { index, element ->
-            if (hidden[index]) return@itemsIndexed
+            // A fold opens and closes as the drawer's folders do, the subtree sliding under its
+            // heading. Started afresh when the note itself changes — another note opened, an edit
+            // saved — so that only a fold, never a load, is animated.
+            val visibility = remember(elements) { MutableTransitionState(!hidden[index]) }
+            visibility.targetState = !hidden[index]
+            AnimatedVisibility(
+                visibleState = visibility,
+                enter = expandVertically(tween(DISCLOSURE_MILLIS)) + fadeIn(tween(DISCLOSURE_MILLIS)),
+                exit = shrinkVertically(tween(DISCLOSURE_MILLIS)) + fadeOut(tween(DISCLOSURE_MILLIS)),
+            ) {
             val slice = remember(text, element) { element.sliceOf(text) }
             // Not while an element is being edited: the form rewrites the top of the note.
             val editDetails = onEditDetails?.takeIf { index == 0 && editingElementIndex == null }
@@ -257,7 +271,7 @@ fun OrgDocumentView(
                 if (editDetails != null) {
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { NoteDetailsButton(editDetails) }
                 }
-                return@itemsIndexed
+                return@AnimatedVisibility
             }
 
             Column(
@@ -315,7 +329,8 @@ fun OrgDocumentView(
                         verticalAlignment = Alignment.Top,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Box(modifier = Modifier.weight(1f)) {
+                        // Sized as it changes, so a heading's own body unfolds with its subtree.
+                        Box(modifier = Modifier.weight(1f).animateContentSize(tween(DISCLOSURE_MILLIS))) {
                             // Folded, only the heading line shows, as `org-cycle` leaves it.
                             val shown = if (folded) slice.substringBefore('\n') else slice
                             val document = remember(shown, todoKeywords) { shown.toOrgDocument(todoKeywords) }
@@ -398,8 +413,8 @@ fun OrgDocumentView(
                                 modifier = Modifier.size(32.dp)
                                     .semantics { contentDescription = foldDescription },
                             ) {
-                                Icon(
-                                    if (folded) Icons.Filled.ChevronRight else Icons.Filled.ExpandMore,
+                                DisclosureChevron(
+                                    expanded = !folded,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.outline,
                                 )
@@ -407,6 +422,7 @@ fun OrgDocumentView(
                         }
                     }
                 }
+            }
             }
         }
 
