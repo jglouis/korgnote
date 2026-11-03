@@ -151,7 +151,7 @@ start and end hours (the grid opens an hour before now, or at 7:00 on any other 
 `dayStartHour` in `CalendarViews.kt`, fixed) and the week's drag horizon.
 
 The header's period opens a date picker, to go straight to a day, a month or a year away in the
-same view. Done entries are hidden until the *Done* chip, after the views', is on.
+same view. Done entries are hidden until *Show done* is switched on, in the header's ⋮ menu.
 
 Editing from the calendar: a long-press on an entry offers *Reschedule…* (a `SCHEDULED`),
 *Change deadline…* or *Change date…* (a stamp in the body), which opens the editor's date and time

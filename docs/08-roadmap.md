@@ -663,7 +663,7 @@ calendar renders from the new index unchanged (D7).
   appointments when space runs out, and a count of the rest. Tapping a day opens it in Day.
 
 Deadlines, scheduled items, appointments and closed items each have a colour and an icon, the
-same in every view; done entries are dimmed, and hidden until the *Done* chip is on (an eye toggle, at first). Every entry opens its
+same in every view; done entries are dimmed, and hidden until *Show done* is switched on in the header's ⋮ menu (an eye toggle, at first). Every entry opens its
 heading.
 **Decisions** A deadline's countdown shows on today only — the engine gives one for every day of
 the warning period, and the agenda list would otherwise repeat it daily, as org-agenda's week

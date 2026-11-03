@@ -6,8 +6,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotSelected
-import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.pinch
@@ -178,10 +178,12 @@ class CalendarScreenTest {
         show(CalendarMode.Agenda)
         onAllNodesWithText("Water plants", substring = true).assertCountEquals(0)
 
-        onNodeWithText("Done").assertIsNotSelected().performClick()
+        onNodeWithContentDescription("Calendar options").performClick()
+        onNodeWithText("Show done").assertIsOff().performClick()
         assertShown("Water plants")
 
-        onNodeWithText("Done").assertIsSelected().performClick()
+        // The menu stays open, the switch now on.
+        onNodeWithText("Show done").assertIsOn().performClick()
         onAllNodesWithText("Water plants", substring = true).assertCountEquals(0)
     }
 

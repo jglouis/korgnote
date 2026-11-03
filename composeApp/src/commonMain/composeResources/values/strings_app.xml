@@ -23,7 +23,8 @@
     <string name="cal_mode_day">Day</string>
     <string name="cal_mode_week">Week</string>
     <string name="cal_mode_month">Month</string>
-    <string name="cal_show_done">Done</string>
+    <string name="cal_show_done">Show done</string>
+    <string name="cal_options">Calendar options</string>
     <string name="cal_go_to_date">Go to a date</string>
     <string name="cal_go">Go</string>
     <string name="cal_reschedule">Reschedule…</string>

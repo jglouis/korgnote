@@ -21,7 +21,8 @@
     <string name="cal_mode_day">Jour</string>
     <string name="cal_mode_week">Semaine</string>
     <string name="cal_mode_month">Mois</string>
-    <string name="cal_show_done">Finies</string>
+    <string name="cal_show_done">Afficher les tâches terminées</string>
+    <string name="cal_options">Options du calendrier</string>
     <string name="cal_go_to_date">Aller à une date</string>
     <string name="cal_go">Aller</string>
     <string name="cal_reschedule">Reporter…</string>

@@ -22,12 +22,16 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +52,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -60,6 +69,7 @@ import com.korgnote.common.org.agenda.AgendaOptions
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.cal_go
 import korgnote.composeapp.generated.resources.cal_go_to_date
+import korgnote.composeapp.generated.resources.cal_options
 import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.cal_mode_agenda
 import korgnote.composeapp.generated.resources.cal_mode_day
@@ -301,15 +311,8 @@ private fun CalendarHeader(
             )
         }
     }
-    // The views, one of them chosen, then whether done entries show: a chip of its own, lit when
-    // on, after a rule — a filter on whichever view is shown, not another view. It was an
-    // eye that opened and shut, which said neither what it hid nor whether it was hiding it.
     val modes: @Composable (Modifier) -> Unit = { modifier ->
-        Row(
-            modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for (m in CalendarMode.entries) {
                 FilterChip(
                     selected = mode == m,
@@ -317,13 +320,29 @@ private fun CalendarHeader(
                     label = { Text(m.label()) }
                 )
             }
-            VerticalDivider(Modifier.height(24.dp).padding(horizontal = 2.dp))
-            FilterChip(
-                selected = showDone,
-                onClick = onToggleDone,
-                // Lit when on, as the chosen view is: a tick would widen it off a phone's width.
-                label = { Text(stringResource(Res.string.cal_show_done)) },
-            )
+        }
+    }
+    // How the calendar shows what it shows, behind ⋮: whether done entries show, as a switch. It was
+    // an eye that opened and shut, which said neither what it hid nor whether it was hiding it, and
+    // then a chip that a phone's width pushed off the end of the views'.
+    val options = @Composable {
+        var open by remember { mutableStateOf(false) }
+        Box {
+            IconButton(onClick = { open = true }) {
+                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(Res.string.cal_options))
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                // Left open on a tap, so the switch is seen to move.
+                DropdownMenuItem(
+                    text = { Text(stringResource(Res.string.cal_show_done)) },
+                    trailingIcon = { Switch(checked = showDone, onCheckedChange = null) },
+                    onClick = onToggleDone,
+                    modifier = Modifier.semantics {
+                        role = Role.Switch
+                        toggleableState = ToggleableState(showDone)
+                    },
+                )
+            }
         }
     }
 
@@ -334,6 +353,7 @@ private fun CalendarHeader(
                 modes(Modifier.padding(horizontal = 8.dp))
                 navigation()
                 actions()
+                options()
             }
         } else {
             // The chips scroll sideways where they do not fit a phone held upright.
@@ -342,6 +362,7 @@ private fun CalendarHeader(
                     period(Modifier.weight(1f))
                     navigation()
                     actions()
+                    options()
                 }
                 Spacer(Modifier.height(8.dp))
                 modes(Modifier.fillMaxWidth())
