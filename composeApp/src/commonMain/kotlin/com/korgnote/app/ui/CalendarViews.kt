@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Schedule
@@ -96,6 +97,9 @@ import com.korgnote.common.org.agenda.report
 import com.korgnote.common.org.agenda.DaySpan
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.cal_all_day
+import korgnote.composeapp.generated.resources.cal_change_date
+import korgnote.composeapp.generated.resources.cal_change_deadline
+import korgnote.composeapp.generated.resources.cal_reschedule
 import korgnote.composeapp.generated.resources.cal_clocked_block
 import korgnote.composeapp.generated.resources.cal_clocked_period
 import korgnote.composeapp.generated.resources.cal_clocked_report
@@ -282,19 +286,57 @@ class CalendarActions(
     val keywords: (file: String) -> OrgTodoConfig,
     /** Sets the heading's keyword, or clears it for null, as the note's keyword menu does. */
     val setTodo: (file: String, headingOffset: Int, keyword: String?) -> Unit,
+    /** Moves an entry's date to the one picked, with its time or none. */
+    val reschedule: ((entry: AgendaEntry, date: LocalDate, time: LocalTime?, endTime: LocalTime?) -> Unit)? = null,
 )
 
 val LocalCalendarActions = compositionLocalOf<CalendarActions?> { null }
 
 /**
- * A long-press's menu on an entry or a clocked block: *Clock in* on its heading, or *Clock out* when
- * its clock runs, then its keywords, [todo] ticked, as the note's keyword menu offers them. Put
- * inside what is pressed, which it drops down from.
+ * A long-press's menu on an entry or a clocked block: for an [entry], moving its date first —
+ * *Reschedule*, *Change deadline* — then *Clock in* on its heading, or *Clock out* when its clock
+ * runs, then its keywords, [todo] ticked, as the note's keyword menu offers them. Put inside what is
+ * pressed, which it drops down from.
  */
 @Composable
-private fun EntryMenu(file: String, headingOffset: Int, todo: String?, expanded: Boolean, onDismiss: () -> Unit) {
+private fun EntryMenu(
+    file: String,
+    headingOffset: Int,
+    todo: String?,
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    entry: AgendaEntry? = null,
+) {
     val actions = LocalCalendarActions.current ?: return
+    // Outside the menu, which closes as the picker opens.
+    var rescheduling by remember { mutableStateOf(false) }
+    val reschedule = actions.reschedule?.takeIf { entry != null && entry.kind != AgendaKind.Closed }
+    if (rescheduling && entry != null && reschedule != null) {
+        val stamp = entry.stamp
+        // Over several days, the end's time is the last day's, not a range within the first.
+        val endTime = stamp.endTime.takeIf { stamp.end == null }
+        OrgDatePickerDialog(
+            initialDate = stamp.start,
+            initialTime = stamp.startTime,
+            initialEndTime = endTime,
+            onPick = { date, time, end -> rescheduling = false; reschedule(entry, date, time, end) },
+            onDismiss = { rescheduling = false },
+        )
+    }
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        if (reschedule != null && entry != null) {
+            val label = when (entry.kind) {
+                AgendaKind.Deadline -> Res.string.cal_change_deadline
+                AgendaKind.Scheduled -> Res.string.cal_reschedule
+                else -> Res.string.cal_change_date
+            }
+            DropdownMenuItem(
+                text = { Text(stringResource(label)) },
+                leadingIcon = { Icon(Icons.Filled.EditCalendar, contentDescription = null) },
+                onClick = { onDismiss(); rescheduling = true },
+            )
+            HorizontalDivider()
+        }
         if (actions.isRunning(file, headingOffset)) {
             DropdownMenuItem(text = { Text(stringResource(Res.string.editor_clock_out)) }, onClick = { onDismiss(); actions.clockOut(file, headingOffset) })
         } else {
@@ -505,7 +547,7 @@ private fun AgendaRow(occurrence: AgendaOccurrence, today: LocalDate, leading: D
             .padding(vertical = 6.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        EntryMenu(occurrence.entry.file, occurrence.entry.headingOffset, occurrence.entry.todo, menu) { menu = false }
+        EntryMenu(occurrence.entry.file, occurrence.entry.headingOffset, occurrence.entry.todo, menu, onDismiss = { menu = false }, entry = occurrence.entry)
         Box(Modifier.width(3.dp).height(36.dp).background(accent, RoundedCornerShape(2.dp)))
         Spacer(Modifier.width(8.dp))
         Box(Modifier.width(leading)) {
@@ -809,7 +851,7 @@ private fun DayColumn(
                         bottom = 1.dp,
                     ),
             ) {
-                EntryMenu(occurrence.entry.file, occurrence.entry.headingOffset, occurrence.entry.todo, menu) { menu = false }
+                EntryMenu(occurrence.entry.file, occurrence.entry.headingOffset, occurrence.entry.todo, menu, onDismiss = { menu = false }, entry = occurrence.entry)
                 Text(
                     occurrence.headline(keywordColor = keywordColor, titleOnly = compact),
                     modifier = Modifier.keywordDescription(occurrence, compact),
@@ -868,7 +910,7 @@ private fun ClockedBlockView(block: ClockedBlock, width: Dp, hourHeight: Dp, com
             .testTag("clocked-${span.file}-${span.headingOffset}-${block.piece.startMinute}")
             .padding(horizontal = if (compact) 2.dp else 4.dp, vertical = 1.dp),
     ) {
-        EntryMenu(span.file, span.headingOffset, span.todo, menu) { menu = false }
+        EntryMenu(span.file, span.headingOffset, span.todo, menu, onDismiss = { menu = false })
         Row(verticalAlignment = Alignment.Top) {
             Icon(Icons.Filled.Timer, contentDescription = null, tint = accent, modifier = Modifier.padding(top = 2.dp, end = 2.dp).size(10.dp))
             Text(
@@ -1034,7 +1076,7 @@ private fun EventChip(
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        EntryMenu(occurrence.entry.file, occurrence.entry.headingOffset, occurrence.entry.todo, menu) { menu = false }
+        EntryMenu(occurrence.entry.file, occurrence.entry.headingOffset, occurrence.entry.todo, menu, onDismiss = { menu = false }, entry = occurrence.entry)
         if (!compact) {
             Icon(occurrence.entry.kind.icon(), contentDescription = null, tint = accent, modifier = Modifier.size(10.dp))
             Spacer(Modifier.width(2.dp))

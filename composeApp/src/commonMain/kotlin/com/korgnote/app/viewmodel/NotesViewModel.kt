@@ -29,6 +29,10 @@ import com.korgnote.common.org.edit.DraftLink
 import com.korgnote.common.org.edit.FileKeywords
 import com.korgnote.common.org.edit.TableGrid
 import com.korgnote.common.org.edit.replaceOrgTable
+import com.korgnote.common.org.edit.replace
+import com.korgnote.common.org.agenda.AgendaEntry
+import com.korgnote.common.org.agenda.parseOrgTimestamp
+import com.korgnote.common.org.complete.restampRange
 import com.korgnote.common.org.edit.tableFormulaLine
 import com.korgnote.common.org.edit.linkAt
 import com.korgnote.common.org.edit.orgLinkOf
@@ -84,6 +88,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.getString
@@ -97,6 +102,7 @@ import com.korgnote.common.org.LogKind
 import com.korgnote.common.org.edit.stateChangeLog
 import com.korgnote.common.org.todoLoggingOf
 import korgnote.composeapp.generated.resources.vm_edit_conflict
+import korgnote.composeapp.generated.resources.vm_reschedule_moved
 
 /**
  * The app's notes, and everything shown about them.
@@ -586,6 +592,34 @@ class NotesViewModel(
                 val target = doc.nodeAt<OrgSection>(headingOffset) ?: return@changeNote doc
                 doc.changeTodoState(target, keyword, at, keywords).withStatistics(since = doc)
             }
+        }
+    }
+
+    /**
+     * Moves the date of the calendar's [entry] — its `SCHEDULED:`, its `DEADLINE:`, or the stamp in
+     * its body — to [date] at [time], or with no time when that is null, as Org's `C-c C-s` and
+     * `C-c C-d` do from the agenda: in its note, open or not, saved and pushed. What the picker does
+     * not ask about stays: the brackets, a repeater, a warning, the length of a range over days.
+     *
+     * The stamp is replaced where the agenda found it, once it is checked to be still there and
+     * still the same: the note may have changed since, here, on another device or in Emacs.
+     */
+    fun reschedule(entry: AgendaEntry, date: LocalDate, time: LocalTime?, endTime: LocalTime?) {
+        val path = entry.file
+        if (path == note.path && refuseWhileEditing()) return
+        val range = entry.stamp.range
+        viewModelScope.launch {
+            var moved = false
+            changeNote(path) { doc ->
+                val written = doc.text.takeIf { !range.isEmpty() && range.last < it.length }?.substring(range)
+                val stamp = written?.let(::parseOrgTimestamp)
+                if (stamp == null || stamp.copy(range = IntRange.EMPTY) != entry.stamp.copy(range = IntRange.EMPTY)) {
+                    moved = true
+                    return@changeNote doc
+                }
+                doc.replace(range, restampRange(written, date, time, endTime))
+            }
+            if (moved) showMessage(getString(Res.string.vm_reschedule_moved))
         }
     }
 

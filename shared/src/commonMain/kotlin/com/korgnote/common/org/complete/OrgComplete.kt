@@ -523,6 +523,21 @@ fun restamp(stamp: String, date: LocalDate, time: LocalTime?, endTime: LocalTime
 }
 
 /**
+ * [restamp] for whatever an agenda entry's date is written as, a `<a>--<b>` range over several days
+ * included: that keeps its length, its end moved by as many days as its start, each end keeping its
+ * own time. Rescheduling a week away from the calendar moves the whole week.
+ */
+fun restampRange(stamp: String, date: LocalDate, time: LocalTime?, endTime: LocalTime? = null): String {
+    val old = parseOrgTimestamp(stamp)
+    if (old?.end == null) return restamp(stamp, date, time, endTime)
+    val split = stamp.indexOfFirst { it == '>' || it == ']' } + 1
+    val first = stamp.substring(0, split)
+    val second = stamp.substring(split + 2)
+    val newEnd = old.end.plus(DatePeriod(days = date.toEpochDays().toInt() - old.start.toEpochDays().toInt()))
+    return restamp(first, date, time) + "--" + restamp(second, newEnd, parseOrgTimestamp(second)?.startTime)
+}
+
+/**
  * Where a range that ran [oldStart]–[oldEnd] ends once its start moves to [newStart]: the same
  * length later, so moving a meeting does not change how long it is. Null when there was no range,
  * or when the same length would run past midnight, which a range within one day cannot.

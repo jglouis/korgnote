@@ -150,9 +150,15 @@ that day. In the month, too, a multi-day range is one bar across its days. In re
 start and end hours (the grid opens an hour before now, or at 7:00 on any other day —
 `dayStartHour` in `CalendarViews.kt`, fixed) and the week's drag horizon.
 
-Editing from the calendar becomes possible once `org.edit` exists: dragging an event calls
-`setPlanning(heading, SCHEDULED, newStamp)`, which rewrites only the timestamp's source
-range. **Not built:** `setPlanning` exists (T7), but nothing in the calendar drags yet.
+The header's period opens a date picker, to go straight to a day, a month or a year away in the
+same view. Done entries are hidden until the *Done* chip, after the views', is on.
+
+Editing from the calendar: a long-press on an entry offers *Reschedule…* (a `SCHEDULED`),
+*Change deadline…* or *Change date…* (a stamp in the body), which opens the editor's date and time
+picker on the entry's date. `NotesViewModel.reschedule` replaces the stamp over exactly its source
+range (`OrgTimestamp.range`), once it has checked the stamp is still there and unchanged, with
+`restampRange`: brackets, repeater and warning stay, and a range over days keeps its length.
+**Not built:** dragging an event to another time.
 
 ## Notifications
 
@@ -239,5 +245,5 @@ a tapped day or title opens the app's calendar there (`CalendarTaps`).
 - **CalDAV export** so the same agenda appears in your phone's native calendar app. This is
   read-only publishing of `AgendaOccurrence`s and does not affect the sync design; it is
   the cheapest way to get your Org agenda in front of other tools.
-- **Capture**: create a dated entry from the calendar into an inbox file. Capture from other apps
-  is in [10](10-capture.md); from the calendar, and from the phone's own calendar, not yet.
+- **Capture**: create a dated entry from the calendar into an inbox file. Capture from other apps,
+  and of the phone's own events from the calendar's button, is in [10](10-capture.md).

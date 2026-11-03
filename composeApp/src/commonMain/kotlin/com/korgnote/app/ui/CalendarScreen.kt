@@ -21,10 +21,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -43,6 +47,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -53,7 +58,9 @@ import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.AgendaOptions
 import korgnote.composeapp.generated.resources.Res
-import korgnote.composeapp.generated.resources.cal_hide_done
+import korgnote.composeapp.generated.resources.cal_go
+import korgnote.composeapp.generated.resources.cal_go_to_date
+import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.cal_mode_agenda
 import korgnote.composeapp.generated.resources.cal_mode_day
 import korgnote.composeapp.generated.resources.cal_mode_month
@@ -68,6 +75,7 @@ import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
@@ -115,6 +123,8 @@ fun CalendarScreen(
     var base by rememberSaveable(stateSaver = LocalDateSaver) { mutableStateOf(initialAnchorDate ?: today) }
     // Finished entries are history, and a year of them buries what is still to do.
     var showDone by rememberSaveable { mutableStateOf(false) }
+    // The date picker the title opens, to go straight to a day however far away.
+    var pickingDate by remember { mutableStateOf(false) }
     // How far the hours are pinched, kept from one day or week to the next and between the two.
     var hourHeight by rememberSaveable { mutableStateOf(DEFAULT_HOUR_HEIGHT.value) }
     val pager = key(mode, base) { rememberPagerState(initialPage = CALENDAR_MIDDLE_PAGE) { CALENDAR_PAGES } }
@@ -150,8 +160,16 @@ fun CalendarScreen(
             onNext = { scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } },
             onMode = { show(it) },
             onToggleDone = { showDone = !showDone },
+            onPickDate = { pickingDate = true },
             actions = headerActions,
         )
+        if (pickingDate) {
+            GoToDateDialog(
+                initial = anchorDate,
+                onPick = { date -> pickingDate = false; show(mode, date) },
+                onDismiss = { pickingDate = false },
+            )
+        }
 
         Spacer(Modifier.height(8.dp))
 
@@ -228,10 +246,19 @@ private fun CalendarHeader(
     onNext: () -> Unit,
     onMode: (CalendarMode) -> Unit,
     onToggleDone: () -> Unit,
+    onPickDate: () -> Unit,
     actions: @Composable () -> Unit,
 ) {
+    // A tap on the period picks a date to go to: a day, a month or a year away, without swiping
+    // through everything between. The icon beside it says it is there to be tapped.
     val period: @Composable (Modifier) -> Unit = { modifier ->
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = modifier
+                .clip(MaterialTheme.shapes.small)
+                .clickable(onClickLabel = stringResource(Res.string.cal_go_to_date), onClick = onPickDate)
+                .padding(vertical = 4.dp),
+        ) {
             Icon(Icons.Filled.CalendarMonth, contentDescription = null)
             Text(
                 text = title,
@@ -239,6 +266,12 @@ private fun CalendarHeader(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 8.dp)
+            )
+            Icon(
+                Icons.Filled.ArrowDropDown,
+                // The row's click label says it already.
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -268,8 +301,15 @@ private fun CalendarHeader(
             )
         }
     }
+    // The views, one of them chosen, then whether done entries show: a chip of its own, lit when
+    // on, after a rule — a filter on whichever view is shown, not another view. It was an
+    // eye that opened and shut, which said neither what it hid nor whether it was hiding it.
     val modes: @Composable (Modifier) -> Unit = { modifier ->
-        Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             for (m in CalendarMode.entries) {
                 FilterChip(
                     selected = mode == m,
@@ -277,14 +317,12 @@ private fun CalendarHeader(
                     label = { Text(m.label()) }
                 )
             }
-        }
-    }
-    val doneToggle = @Composable {
-        IconButton(onClick = onToggleDone) {
-            Icon(
-                if (showDone) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                contentDescription = stringResource(if (showDone) Res.string.cal_hide_done else Res.string.cal_show_done),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            VerticalDivider(Modifier.height(24.dp).padding(horizontal = 2.dp))
+            FilterChip(
+                selected = showDone,
+                onClick = onToggleDone,
+                // Lit when on, as the chosen view is: a tick would widen it off a phone's width.
+                label = { Text(stringResource(Res.string.cal_show_done)) },
             )
         }
     }
@@ -294,17 +332,14 @@ private fun CalendarHeader(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 period(Modifier.weight(1f))
                 modes(Modifier.padding(horizontal = 8.dp))
-                doneToggle()
                 navigation()
                 actions()
             }
         } else {
-            // The toggle sits up with the navigation, so that the modes have the second row to
-            // themselves and fit a phone held upright.
+            // The chips scroll sideways where they do not fit a phone held upright.
             Column {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     period(Modifier.weight(1f))
-                    doneToggle()
                     navigation()
                     actions()
                 }
@@ -312,6 +347,26 @@ private fun CalendarHeader(
                 modes(Modifier.fillMaxWidth())
             }
         }
+    }
+}
+
+/** The date picker the header's title opens: the calendar goes to the day picked, in the same view. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GoToDateDialog(initial: LocalDate, onPick: (LocalDate) -> Unit, onDismiss: () -> Unit) {
+    val state = rememberDatePickerState(
+        initialSelectedDateMillis = initial.atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds(),
+    )
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = { onPick(state.selectedDateMillis?.toUtcDate() ?: initial) }) {
+                Text(stringResource(Res.string.cal_go))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+    ) {
+        DatePicker(state = state)
     }
 }
 

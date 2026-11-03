@@ -439,5 +439,5 @@ private fun hourAfter(time: LocalTime): LocalTime =
 
 private fun currentHour(): Int = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
 
-private fun Long.toUtcDate(): LocalDate =
+internal fun Long.toUtcDate(): LocalDate =
     Instant.fromEpochMilliseconds(this).toLocalDateTime(TimeZone.UTC).date

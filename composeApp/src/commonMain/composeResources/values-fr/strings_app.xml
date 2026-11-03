@@ -21,8 +21,12 @@
     <string name="cal_mode_day">Jour</string>
     <string name="cal_mode_week">Semaine</string>
     <string name="cal_mode_month">Mois</string>
-    <string name="cal_show_done">Afficher les tâches terminées</string>
-    <string name="cal_hide_done">Masquer les tâches terminées</string>
+    <string name="cal_show_done">Finies</string>
+    <string name="cal_go_to_date">Aller à une date</string>
+    <string name="cal_go">Aller</string>
+    <string name="cal_reschedule">Reporter…</string>
+    <string name="cal_change_deadline">Modifier l’échéance…</string>
+    <string name="cal_change_date">Modifier la date…</string>
     <string name="cal_overdue">En retard</string>
     <string name="cal_nothing_planned">Rien de prévu</string>
     <string name="cal_clocked_report">Temps chronométré</string>

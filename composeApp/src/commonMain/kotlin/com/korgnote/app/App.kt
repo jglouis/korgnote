@@ -44,7 +44,6 @@ import com.korgnote.app.data.DevicePairing
 import com.korgnote.app.capture.CaptureLinks
 import com.korgnote.app.capture.DeviceCalendar
 import com.korgnote.common.org.capture.SharedContent
-import androidx.compose.material.icons.filled.Event
 import org.koin.compose.getKoin
 import korgnote.composeapp.generated.resources.editor_refile_title
 import korgnote.composeapp.generated.resources.capture_event
@@ -184,7 +183,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     }
     // At most one of these is open; each names the note it is about.
     var creatingNote by remember { mutableStateOf(false) }
-    // The drawer's "Capture an event": the capture sheet, open on the phone's calendar.
+    // The calendar's "Capture an event": the capture sheet, open on the phone's calendar.
     var capturingEvent by remember { mutableStateOf(false) }
     var editingDetails by remember { mutableStateOf(false) }
     // The notes and headings a link can go to, while the link picker is open.
@@ -292,7 +291,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     OnBack(enabled = selectedScreen == BottomItem.FILE && vm.links.canGoBack) { vm.links.goBack() }
     OnBack(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
 
-    // A `korgnote://capture` link, or the drawer's event: what is captured, shown before it is saved.
+    // A `korgnote://capture` link, or the calendar's event: what is captured, shown before it is saved.
     val captureLink by CaptureLinks.pending.collectAsState()
     val filer = vm.captureFiler
     if (filer != null && (captureLink != null || capturingEvent)) {
@@ -503,11 +502,6 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                         ) {
                             DrawerAction(Icons.AutoMirrored.Filled.NoteAdd, stringResource(Res.string.app_new_note)) { creatingNote = true }
                             DrawerAction(Icons.Filled.Today, stringResource(Res.string.app_todays_daily)) { openToday() }
-                            // In the app, what there is to capture is what is not in the notes yet: an event.
-                            DrawerAction(Icons.Filled.Event, stringResource(Res.string.capture_event)) {
-                                capturingEvent = true
-                                scope.launch { drawerState.close() }
-                            }
                         }
                         Text(
                             stringResource(Res.string.app_files),
@@ -673,6 +667,14 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                         )
                     },
                     floatingActionButton = {
+                        // In the app, what there is to capture is what is not in the notes yet: an
+                        // event from the phone's calendar, put into the notes' own. It was in the
+                        // files' drawer, which is about notes, not dates.
+                        if (selectedScreen == BottomItem.CALENDAR) {
+                            FloatingActionButton(onClick = { capturingEvent = true }) {
+                                Icon(Icons.Filled.Add, contentDescription = stringResource(Res.string.capture_event))
+                            }
+                        }
                         // While editing, the element's own actions live on the completion strip.
                         if (
                             vm.editor.editingIndex == null &&
@@ -1018,6 +1020,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                             },
                                             keywords = { file -> vm.todoKeywordsOf(file) },
                                             setTodo = { file, offset, keyword -> vm.setTodo(file, offset, keyword) },
+                                            reschedule = { entry, date, time, end -> vm.reschedule(entry, date, time, end) },
                                         )
                                     },
                                 )

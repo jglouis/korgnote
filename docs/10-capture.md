@@ -25,8 +25,8 @@ No templates: one entry (`captureEntry`) reads whatever was shared and leaves ou
 Not org-capture to the letter, on purpose, and not its `org-capture-templates` either: what made
 templates worth having in Emacs — where the entry goes, what it is — the dialog now asks directly.
 
-Inside the app, capturing is capturing an event: the drawer's "Capture an event" opens the phone's
-calendar. What is anywhere else is captured from where it is: the share sheet, the text selection,
+Inside the app, capturing is capturing an event: the calendar tab's button, "Capture an event",
+opens the phone's calendar. It was in the files' drawer, which is about notes rather than dates. What is anywhere else is captured from where it is: the share sheet, the text selection,
 a link, the launcher.
 
 An event's time is a `SCHEDULED:`, as Org files an appointment: under a new entry's heading, and as
@@ -41,7 +41,7 @@ timestamp.
 | Calendar file (`.ics` from Mail, Gmail) | `ACTION_SEND` / `ACTION_VIEW` of `text/calendar` | the share extension accepts `public.calendar-event` |
 | Selected text | `ACTION_PROCESS_TEXT`: "Capture in KorgNote" in the selection menu | the share sheet on the selection |
 | `korgnote://capture?…` (org-protocol's `capture`) | `CaptureActivity` | the app's sheet (`CaptureLinks`) |
-| The phone's calendar (Google Calendar's events, which no app shares) | the drawer's "Capture an event", and the launcher's "Event" shortcut: `CalendarContract.Instances`, asked for `READ_CALENDAR` on first use; the picker asks the calendars' accounts to sync (`requestSync`), which Android ignores for an account the app may not see, so Android's account chooser is shown once to make the Google account visible ("Fetch new events" after a no) | the drawer's "Capture an event": EventKit, full access asked on first use; Google's events are there once the account is added in Settings; the picker asks for a fetch (`refreshSourcesIfNecessary`) |
+| The phone's calendar (Google Calendar's events, which no app shares) | the calendar's "Capture an event", and the launcher's "Event" shortcut: `CalendarContract.Instances`, asked for `READ_CALENDAR` on first use; the picker asks the calendars' accounts to sync (`requestSync`), which Android ignores for an account the app may not see, so Android's account chooser is shown once to make the Google account visible ("Fetch new events" after a no) | the calendar's "Capture an event": EventKit, full access asked on first use; Google's events are there once the account is added in Settings; the picker asks for a fetch (`refreshSourcesIfNecessary`) |
 | ↳ events just added elsewhere | the phone's copy of Google's calendars syncs on Google's push, which a phone may not get (a Galaxy A52s went ten hours without one on 2026-11-01): the open picker reads again on each change of the provider (a `ContentObserver`) | Google's calendars are fetched on the schedule in Settings, never pushed: the open picker reads again on `EKEventStoreChangedNotification` |
 | Launcher | long-press shortcuts "Capture" (a quick note) and "Event" (`CaptureShortcut`) | — |
 

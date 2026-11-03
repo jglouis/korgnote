@@ -6,6 +6,7 @@ import com.korgnote.common.org.complete.CompletionItem
 import com.korgnote.common.org.complete.applyTo
 import com.korgnote.common.org.complete.complete
 import com.korgnote.common.org.complete.restamp
+import com.korgnote.common.org.complete.restampRange
 import com.korgnote.common.org.complete.shiftedEnd
 import com.korgnote.common.org.toOrgDocument
 import kotlinx.datetime.LocalDate
@@ -253,6 +254,21 @@ class OrgCompleteTests {
         // An end with no start, or not after it, is not a range.
         assertEquals("<2026-12-24 Thu>", restamp("<2026-09-23 Wed 10:00-11:00>", date, null, LocalTime(11, 0)))
         assertEquals("<2026-12-24 Thu 14:00>", restamp("<2026-09-23 Wed>", date, LocalTime(14, 0), LocalTime(13, 0)))
+    }
+
+    @Test
+    fun restampingARangeOverDaysMovesBothEnds() {
+        // A trip moved a week later stays three days long, each end with its own time.
+        assertEquals(
+            "<2026-10-02 Fri 08:00>--<2026-10-04 Sun 18:00>",
+            restampRange("<2026-09-25 Fri 08:00>--<2026-09-27 Sun 18:00>", LocalDate(2026, 10, 2), LocalTime(8, 0)),
+        )
+        assertEquals(
+            "[2026-12-31 Thu]--[2027-01-02 Sat]",
+            restampRange("[2026-09-23 Wed]--[2026-09-25 Fri]", LocalDate(2026, 12, 31), null),
+        )
+        // A single stamp, as restamp writes it.
+        assertEquals("<2026-12-24 Thu 14:00 +1w>", restampRange("<2026-09-23 Wed 10:00 +1w>", LocalDate(2026, 12, 24), LocalTime(14, 0)))
     }
 
     @Test
