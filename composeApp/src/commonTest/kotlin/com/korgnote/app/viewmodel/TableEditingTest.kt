@@ -44,16 +44,16 @@ class TableEditingTest {
         viewModel.server.load()
         viewModel.onFileSelected(path)
 
-        viewModel.beginTableEdit(text.indexOf("Milk"))
-        val grid = viewModel.tableEdit!!.grid
+        viewModel.tables.begin(text.indexOf("Milk"))
+        val grid = viewModel.tables.edit!!.grid
         assertEquals(listOf(listOf("Item", "Qty"), listOf("Milk", "2")), grid.rows)
 
-        viewModel.commitTableEdit(grid.withRowInserted(2).withCell(2, 0, "Bread").withCell(2, 1, "1"))
+        viewModel.tables.commit(grid.withRowInserted(2).withCell(2, 0, "Bread").withCell(2, 1, "1"))
 
         val expected = "* Shopping\n| Item  | Qty |\n| Milk  |   2 |\n| Bread |   1 |\nThat is all.\n"
         assertEquals(expected, viewModel.note.content)
         assertEquals(expected, server.files[path])
-        assertNull(viewModel.tableEdit)
+        assertNull(viewModel.tables.edit)
     }
 
     /** Opening and closing a table is not an edit, so not even its alignment is touched. */
@@ -62,8 +62,8 @@ class TableEditingTest {
         viewModel.server.load()
         viewModel.onFileSelected(path)
 
-        viewModel.beginTableEdit(text.indexOf("Milk"))
-        viewModel.commitTableEdit(viewModel.tableEdit!!.grid)
+        viewModel.tables.begin(text.indexOf("Milk"))
+        viewModel.tables.commit(viewModel.tables.edit!!.grid)
 
         assertEquals(text, viewModel.note.content)
     }
@@ -72,11 +72,11 @@ class TableEditingTest {
     fun aTableWhoseTextMovedMeanwhileIsNotOverwritten() = runTest {
         viewModel.server.load()
         viewModel.onFileSelected(path)
-        viewModel.beginTableEdit(text.indexOf("Milk"))
-        val grid = viewModel.tableEdit!!.grid
+        viewModel.tables.begin(text.indexOf("Milk"))
+        val grid = viewModel.tables.edit!!.grid
 
         viewModel.note.content = "Inserted above.\n" + text
-        viewModel.commitTableEdit(grid.withCell(1, 0, "Oat milk"))
+        viewModel.tables.commit(grid.withCell(1, 0, "Oat milk"))
 
         assertEquals("Inserted above.\n" + text, viewModel.note.content)
     }
@@ -89,13 +89,13 @@ class TableEditingTest {
         viewModel.server.load()
         viewModel.onFileSelected(budget)
 
-        viewModel.beginTableEdit(source.indexOf("Rent"))
-        val grid = viewModel.tableEdit!!.grid
+        viewModel.tables.begin(source.indexOf("Rent"))
+        val grid = viewModel.tables.edit!!.grid
         assertEquals(listOf("@>$2=vsum(@I..@-I)"), grid.formulas)
 
         val edited = grid.withRowInserted(3).withCell(3, 0, "Food").withCell(3, 1, "20")
         val recalculated = edited.recalculated() as Recalculation.Done
-        viewModel.commitTableEdit(edited.copy(rows = recalculated.rows))
+        viewModel.tables.commit(edited.copy(rows = recalculated.rows))
 
         assertEquals(
             "| Item | Cost |\n|------+------|\n| Rent |  100 |\n| Food |   20 |\n|------+------|\n|      |  120 |\n#+TBLFM: @>$2=vsum(@I..@-I)\nAfter.\n",
@@ -110,11 +110,11 @@ class TableEditingTest {
         server.files[budget] = source
         viewModel.server.load()
         viewModel.onFileSelected(budget)
-        viewModel.beginTableEdit(source.indexOf("Rent"))
-        val grid = viewModel.tableEdit!!.grid
+        viewModel.tables.begin(source.indexOf("Rent"))
+        val grid = viewModel.tables.edit!!.grid
 
         viewModel.note.content = source.replace("$2=1", "$2=2")
-        viewModel.commitTableEdit(grid.withCell(1, 0, "Rent!"))
+        viewModel.tables.commit(grid.withCell(1, 0, "Rent!"))
 
         assertEquals(source.replace("$2=1", "$2=2"), viewModel.note.content)
     }
@@ -124,8 +124,8 @@ class TableEditingTest {
         viewModel.server.load()
         viewModel.onFileSelected(path)
 
-        viewModel.beginTableEdit(text.indexOf("That"))
+        viewModel.tables.begin(text.indexOf("That"))
 
-        assertNull(viewModel.tableEdit)
+        assertNull(viewModel.tables.edit)
     }
 }

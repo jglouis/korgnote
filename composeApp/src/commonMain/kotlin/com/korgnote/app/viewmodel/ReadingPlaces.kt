@@ -1,6 +1,12 @@
 package com.korgnote.app.viewmodel
 
 import com.korgnote.app.data.ReadingPlace
+import com.korgnote.common.org.orgElements
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Where each recently read note was left, so that opening it again — from the drawer, a pin, or
@@ -13,8 +19,49 @@ import com.korgnote.app.data.ReadingPlace
 class ReadingPlaces(
     load: () -> List<ReadingPlace>,
     private val save: (List<ReadingPlace>) -> Unit,
+    private val note: OpenNote,
+    private val scope: CoroutineScope,
 ) {
     private var places: List<ReadingPlace> = load()
+
+    /** Where the reader is in the open note, by element, not yet kept. */
+    private var unsavedPlace: Pair<String, ReadingSpot>? = null
+    private var placeSave: Job? = null
+
+    /**
+     * The reading view of [path] now has [elementIndex] at its top, scrolled [pixels] into it: to
+     * be kept as where the note was left, once the scrolling stops. Ignored while the view still
+     * shows where it was before this note was opened, and for a note no longer open.
+     *
+     * Called on every frame of a scroll, so it only notes the spot: working out where it is in the
+     * text, and storing it, wait for [saveReadingPlace].
+     */
+    fun onReadingPlaceChanged(path: String, elementIndex: Int, pixels: Int) {
+        if (path != note.path || !note.settled) return
+        unsavedPlace = path to ReadingSpot(elementIndex, pixels)
+        placeSave?.cancel()
+        placeSave = scope.launch {
+            delay(PLACE_SAVE_PAUSE)
+            saveReadingPlace()
+        }
+    }
+
+    /**
+     * Keeps where the reader is in the open note now, rather than once scrolling stops: before
+     * another note replaces it, or when the app goes to the background and may not come back.
+     */
+    fun saveReadingPlace() {
+        placeSave?.cancel()
+        placeSave = null
+        val (path, spot) = unsavedPlace ?: return
+        unsavedPlace = null
+        // The element is one of the open note's: of any other, its index means nothing.
+        if (path != note.path) return
+        val elements = note.content.orgElements()
+        // Past the last element is the backlinks below it: the last element is near enough.
+        val element = elements.getOrNull(spot.elementIndex) ?: elements.lastOrNull() ?: return
+        record(path, element.start, if (spot.elementIndex in elements.indices) spot.pixels else 0)
+    }
 
     /** Where [path] was left, or null when it has not been read here lately. */
     fun placeOf(path: String): ReadingPlace? = places.firstOrNull { it.path == path }
@@ -55,5 +102,8 @@ class ReadingPlaces(
     companion object {
         /** Enough for every note read in a good while, and small enough to store in one setting. */
         const val MAX_PLACES = 50
+
+        /** How long scrolling has to stop before where the reader stopped is kept. */
+        internal val PLACE_SAVE_PAUSE = 500.milliseconds
     }
 }

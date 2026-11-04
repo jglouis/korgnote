@@ -18,23 +18,15 @@ import com.korgnote.app.data.NoteTemplateSettings
 import com.korgnote.app.capture.CaptureFiler
 import com.korgnote.app.data.SavedSearch
 import com.korgnote.app.data.ReadingPlace
-import com.korgnote.common.org.OrgTable
 import com.korgnote.common.org.OrgTodoConfig
-import com.korgnote.common.org.edit.TableGrid
-import com.korgnote.common.org.edit.replaceOrgTable
-import com.korgnote.common.org.edit.tableFormulaLine
-import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.link.LinkTarget
 import com.korgnote.common.org.link.linkTargetsOf
-import com.korgnote.common.org.orgElements
-import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.FolderNoteStorage
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.vm_finish_editing_first
-import korgnote.composeapp.generated.resources.vm_table_changed
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -144,7 +136,7 @@ class NotesViewModel(
     val pins: NotePins = NotePins(library, pinnedNotes, savePinnedNotes)
 
     /** Where each note was left, so it opens there again; the first is the one the app opens on. */
-    val places: ReadingPlaces = ReadingPlaces(readingPlaces, saveReadingPlaces)
+    val places: ReadingPlaces = ReadingPlaces(readingPlaces, saveReadingPlaces, note, viewModelScope)
 
     /** The clocks running in the notes, for the bar that shows them on every tab. */
     val clocks: NoteClocks = NoteClocks(library, clockNotifier)
@@ -230,6 +222,9 @@ class NotesViewModel(
         replaceDraft = { editor.replaceDraft(it) },
         author = { noteTemplate().author },
     )
+
+    /** The table being edited as a grid. */
+    val tables: TableEditing = TableEditing(viewModelScope, library, note, editor, changes, showMessage = ::showMessage)
 
     /** Keywords, and the notes a keyword's `@` asks for. */
     val stateNotes: StateNotes = StateNotes(
@@ -325,7 +320,7 @@ class NotesViewModel(
     private fun beginOpening(path: String): Boolean {
         val hasText = path in library
         // Where the note being left was left, while its text is still the one on screen.
-        saveReadingPlace()
+        places.saveReadingPlace()
         note.beginOpening(path, hasText)
         if (hasText) places.opened(path)
         links.onOpened()
@@ -354,45 +349,6 @@ class NotesViewModel(
             }
             index?.let { folds.unfoldAncestorsOf(it, includingItself = true) }
         }
-    }
-
-    /** Where the reader is in the open note, by element, not yet kept in [places]. */
-    private var unsavedPlace: Pair<String, ReadingSpot>? = null
-    private var placeSave: Job? = null
-
-    /**
-     * The reading view of [path] now has [elementIndex] at its top, scrolled [pixels] into it: to
-     * be kept as where the note was left, once the scrolling stops. Ignored while the view still
-     * shows where it was before this note was opened, and for a note no longer open.
-     *
-     * Called on every frame of a scroll, so it only notes the spot: working out where it is in the
-     * text, and storing it, wait for [saveReadingPlace].
-     */
-    fun onReadingPlaceChanged(path: String, elementIndex: Int, pixels: Int) {
-        if (path != note.path || !note.settled) return
-        unsavedPlace = path to ReadingSpot(elementIndex, pixels)
-        placeSave?.cancel()
-        placeSave = viewModelScope.launch {
-            delay(PLACE_SAVE_PAUSE)
-            saveReadingPlace()
-        }
-    }
-
-    /**
-     * Keeps where the reader is in the open note now, rather than once scrolling stops: before
-     * another note replaces it, or when the app goes to the background and may not come back.
-     */
-    fun saveReadingPlace() {
-        placeSave?.cancel()
-        placeSave = null
-        val (path, spot) = unsavedPlace ?: return
-        unsavedPlace = null
-        // The element is one of the open note's: of any other, its index means nothing.
-        if (path != note.path) return
-        val elements = note.content.orgElements()
-        // Past the last element is the backlinks below it: the last element is near enough.
-        val element = elements.getOrNull(spot.elementIndex) ?: elements.lastOrNull() ?: return
-        places.record(path, element.start, if (spot.elementIndex in elements.indices) spot.pixels else 0)
     }
 
     // --- Keeping everything in step with the notes ---
@@ -505,59 +461,6 @@ class NotesViewModel(
         agenda.onNotesShown()
     }
 
-    /**
-     * A table of the open note being edited as a grid, as [beginTableEdit] opened it: [original] is
-     * its text as it was then, its `#+TBLFM:` line included.
-     */
-    data class TableEdit(val path: String, val range: IntRange, val original: String, val grid: TableGrid)
-
-    /** The table being edited in its own editor, or null when none is. */
-    var tableEdit by mutableStateOf<TableEdit?>(null)
-        private set
-
-    /**
-     * Opens the table whose source contains [offsetInDocument] as a grid, cell by cell: a table is
-     * all but impossible to keep aligned as text on a phone. Refused while an element is being
-     * edited, as the note's details are.
-     */
-    fun beginTableEdit(offsetInDocument: Int) {
-        val path = note.path ?: return
-        if (editor.editingIndex != null) {
-            viewModelScope.launch { showMessage(getString(Res.string.vm_finish_editing_first)) }
-            return
-        }
-        val content = note.content
-        val table = content.toOrgDocument(library.fallbackKeywords).nodeAt<OrgTable>(offsetInDocument) ?: return
-        val formulas = tableFormulaLine(content, table.range.last + 1)
-        val end = formulas?.range?.let { it.last + 1 } ?: (table.range.last + 1)
-        tableEdit = TableEdit(path, table.range, content.substring(table.range.first, end), TableGrid.of(table, formulas?.formulas.orEmpty()))
-    }
-
-    fun cancelTableEdit() {
-        tableEdit = null
-    }
-
-    /**
-     * Writes [grid] over the table being edited, aligned, and saves. Nothing is written when nothing
-     * changed — not even the alignment — or when the table's text moved while the editor was open,
-     * say by a sync, since the range would then cover something else.
-     */
-    suspend fun commitTableEdit(grid: TableGrid) {
-        val edit = tableEdit ?: return
-        tableEdit = null
-        if (grid == edit.grid) return
-        val content = note.content
-        val end = edit.range.first + edit.original.length
-        val unchanged = note.path == edit.path && end <= content.length &&
-            content.substring(edit.range.first, end) == edit.original
-        if (!unchanged) {
-            showMessage(getString(Res.string.vm_table_changed))
-            return
-        }
-        note.content = replaceOrgTable(content, edit.range, grid)
-        changes.saveCurrentFile()
-    }
-
     /** The filer captures go through, with these notes' templates and inbox; null where nothing captures. */
     val captureFiler: CaptureFiler? get() = captures
 
@@ -587,8 +490,5 @@ class NotesViewModel(
          * time anyone switches to it.
          */
         val DERIVED_REFRESH_PAUSE = 600.milliseconds
-
-        /** How long scrolling has to stop before where the reader stopped is kept. */
-        val PLACE_SAVE_PAUSE = 500.milliseconds
     }
 }

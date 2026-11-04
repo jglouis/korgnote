@@ -7,6 +7,7 @@ import com.korgnote.common.org.orgElements
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -67,7 +68,7 @@ class ReadingPlacesTest {
         vm.onFileSelected(long)
         vm.viewSettles()
 
-        vm.onReadingPlaceChanged(long, 2, 40)
+        vm.places.onReadingPlaceChanged(long, 2, 40)
         vm.onFileSelected(other)
         vm.viewSettles()
         vm.onFileSelected(long)
@@ -82,7 +83,7 @@ class ReadingPlacesTest {
         val vm = viewModel()
         vm.server.load()
         vm.viewSettles()
-        vm.onReadingPlaceChanged(vm.note.path!!, 0, 12)
+        vm.places.onReadingPlaceChanged(vm.note.path!!, 0, 12)
 
         vm.onFileSelected(long)
 
@@ -131,8 +132,8 @@ class ReadingPlacesTest {
         vm.server.load()
 
         // Still showing the note opened before, three elements down.
-        vm.onReadingPlaceChanged(long, 3, 0)
-        vm.saveReadingPlace()
+        vm.places.onReadingPlaceChanged(long, 3, 0)
+        vm.places.saveReadingPlace()
 
         assertEquals(ReadingPlace(long, startOf(1), 15), saved.first())
     }
@@ -144,11 +145,11 @@ class ReadingPlacesTest {
         vm.onFileSelected(long)
         vm.viewSettles()
 
-        vm.onReadingPlaceChanged(long, 1, 0)
-        vm.onReadingPlaceChanged(long, 3, 7)
+        vm.places.onReadingPlaceChanged(long, 1, 0)
+        vm.places.onReadingPlaceChanged(long, 3, 7)
         assertEquals(ReadingPlace(long, 0), saved.first(), "not on every frame of the scroll")
 
-        advanceTimeBy(NotesViewModel.PLACE_SAVE_PAUSE.inWholeMilliseconds + 1)
+        advanceTimeBy(ReadingPlaces.PLACE_SAVE_PAUSE.inWholeMilliseconds + 1)
         assertEquals(ReadingPlace(long, startOf(3), 7), saved.first())
     }
 
@@ -169,7 +170,7 @@ class ReadingPlacesTest {
     @Test
     fun onlyTheMostRecentPlacesAreKept() {
         var kept = emptyList<ReadingPlace>()
-        val places = ReadingPlaces({ kept }, { kept = it })
+        val places = ReadingPlaces({ kept }, { kept = it }, OpenNote(), CoroutineScope(Dispatchers.Unconfined))
 
         repeat(ReadingPlaces.MAX_PLACES + 5) { places.record("note$it.org", it, 0) }
 

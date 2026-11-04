@@ -179,7 +179,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
         onPauseOrDispose {
             vm.server.onPause()
             // The app may not come back from the background: where the note was left, kept now.
-            vm.saveReadingPlace()
+            vm.places.saveReadingPlace()
         }
     }
     // At most one of these is open; each names the note it is about.
@@ -281,7 +281,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
             val path = vm.note.path
             if (path == null || !vm.note.settled) null
             else Triple(path, documentListState.firstVisibleItemIndex, documentListState.firstVisibleItemScrollOffset)
-        }.collect { at -> at?.let { (path, index, pixels) -> vm.onReadingPlaceChanged(path, index, pixels) } }
+        }.collect { at -> at?.let { (path, index, pixels) -> vm.places.onReadingPlaceChanged(path, index, pixels) } }
     }
 
     // The system's back goes where the top bar's does: back from a followed link, to where it
@@ -367,11 +367,11 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
             cellCompletion = vm::completionFor,
         )
     }
-    vm.tableEdit?.let { edit ->
+    vm.tables.edit?.let { edit ->
         TableEditorDialog(
             initial = edit.grid,
-            onSave = { grid -> scope.launch { vm.commitTableEdit(grid) } },
-            onDismiss = { vm.cancelTableEdit() },
+            onSave = { grid -> scope.launch { vm.tables.commit(grid) } },
+            onDismiss = { vm.tables.cancel() },
             cellCompletion = vm::completionFor,
         )
     }
@@ -954,7 +954,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                         onToggleCheckbox = { offset -> vm.changes.toggleCheckboxAt(offset) },
                                         onToggleTimestamp = { offset -> vm.changes.toggleTimestampAt(offset) },
                                         onSetTodo = { offset, keyword -> vm.stateNotes.setTodoAt(offset, keyword) },
-                                        onEditTable = { vm.beginTableEdit(it) },
+                                        onEditTable = { vm.tables.begin(it) },
                                         backlinks = vm.links.backlinks,
                                         onOpenBacklink = { vm.links.openBacklink(it) },
                                         onFirstVisibleElement = { vm.links.onReadingPositionChanged(it) },
