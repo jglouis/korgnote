@@ -227,6 +227,47 @@ class FileStoreTest {
         }
     }
 
+    // --- The hash cache: where timestamps are coarse, a file can change and keep its size and time ---
+
+    private fun setModified(relative: String, millis: Long) {
+        java.nio.file.Files.setLastModifiedTime(root.resolve(relative), java.nio.file.attribute.FileTime.fromMillis(millis))
+    }
+
+    /**
+     * TODO to DONE keeps the size, and on a filesystem with one-second timestamps an edit made in the
+     * same second as the last one keeps the time too. The old etag would then pass `If-Match`, and a
+     * phone's push would overwrite the edit.
+     */
+    @Test
+    fun anEditInTheSameSecondAsTheLastIsSeen() {
+        val now = System.currentTimeMillis()
+        writeFile("inbox.org", "* TODO one\n")
+        setModified("inbox.org", now)
+        val before = store.meta("inbox.org")!!.etag
+
+        writeFile("inbox.org", "* DONE one\n")
+        setModified("inbox.org", now)
+
+        assertNotEquals(before, store.meta("inbox.org")!!.etag)
+        assertIs<WriteResult.Conflict>(store.put("inbox.org", "* TODO one, from a phone\n", ifMatch = before))
+        assertEquals("* DONE one\n", root.resolve("inbox.org").readText())
+    }
+
+    /** What the cache is for: a file left alone a while is not read again to be listed. */
+    @Test
+    fun aFileLeftAloneIsNotHashedAgain() {
+        val aMinuteAgo = System.currentTimeMillis() - 60_000
+        writeFile("inbox.org", "* TODO one\n")
+        setModified("inbox.org", aMinuteAgo)
+        val before = store.meta("inbox.org")!!.etag
+
+        // Swapped behind the store's back so that only a fresh read could tell.
+        writeFile("inbox.org", "* DONE one\n")
+        setModified("inbox.org", aMinuteAgo)
+
+        assertEquals(before, store.meta("inbox.org")!!.etag)
+    }
+
     // --- What the library is: Syncthing's old versions and the like are not notes ---
 
     @Test

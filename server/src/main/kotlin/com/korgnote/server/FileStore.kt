@@ -271,7 +271,12 @@ class FileStore(
         val etag = if (cached != null && cached.size == size && cached.mtimeMillis == mtime) {
             cached.etag
         } else {
-            hashOf(file).also { hashes[path] = HashEntry(size, mtime, it) }
+            hashOf(file).also {
+                // Where timestamps are coarse, an edit moments from now could keep this size and this
+                // time: TODO to DONE does. So a file only just changed is hashed again next time, as
+                // a stale etag here would pass `If-Match` and let a push overwrite that edit.
+                if (System.currentTimeMillis() - mtime >= TIMESTAMP_GRAIN_MILLIS) hashes[path] = HashEntry(size, mtime, it)
+            }
         }
         return FileMeta(path, size, mtime, etag)
     }
@@ -311,6 +316,9 @@ class FileStore(
 
     private companion object {
         const val ETAG_BYTES = 16
+
+        /** FAT keeps two seconds, ext3 and HFS+ one; anything finer is safe under this too. */
+        const val TIMESTAMP_GRAIN_MILLIS = 2_000L
         const val MAX_BYTES = 32 * 1024 * 1024
     }
 }
