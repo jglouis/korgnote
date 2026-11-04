@@ -903,7 +903,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                         text = vm.note.content,
                                         todoKeywords = vm.todoKeywords,
                                         editingElementIndex = vm.editor.editingIndex,
-                                        elementDraftValue = vm.editor.draftValue,
+                                        elementDraft = { vm.editor.draftValue },
                                         onElementDraftChange = { vm.editor.onDraftChanged(it) },
                                         onCompletionKey = vm.completion::answer,
                                         onEditElement = { vm.editor.beginEdit(it) },

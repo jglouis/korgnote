@@ -144,7 +144,8 @@ fun OrgDocumentView(
     /** A tap on a table, with its offset in [text]: tables are edited as a grid, not as text. */
     onEditTable: ((offsetInDocument: Int) -> Unit)? = null,
     editingElementIndex: Int? = null,
-    elementDraftValue: TextFieldValue = TextFieldValue(""),
+    /** Read only by the element being edited, so that a keystroke composes that element alone. */
+    elementDraft: () -> TextFieldValue = { TextFieldValue("") },
     onElementDraftChange: (TextFieldValue) -> Unit = {},
     /**
      * A keyboard key aimed at the suggestions. Returns true when it was used, so an unhandled Tab
@@ -294,7 +295,7 @@ fun OrgDocumentView(
                 if (index == editingElementIndex) {
                     OrgElementEditor(
                         elementKey = index,
-                        value = elementDraftValue,
+                        value = elementDraft(),
                         onValueChange = onElementDraftChange,
                         onCompletionKey = onCompletionKey,
                         todoKeywords = todoKeywords,
