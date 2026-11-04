@@ -65,6 +65,10 @@ This is the only status list; the rules for keeping it are in the [docs README](
 - **On iOS, closing the drawer on its scrim with Filter focused** leaves the keyboard up over the bottom
   bar.
 - **On iOS, the Keychain outlives the app**, so a reinstall starts paired with the old server.
+- **On iOS, an unreadable `meta.json` with an unsent edit, under a name the server spells with its accents
+  apart**, loses the edit to the server's copy and pushes a second note. The file has no record to say
+  which spelling it goes by, so it is listed with its accents together. That is what nearly every server
+  has, where it is kept as a conflict copy.
 - **On the desktop, Week view at 800x600** clips Monday's column.
 - **The delete confirmation shows a heading's raw tags**, as in `Soup :winter:`.
 - **A first sync over the bundle's 8 MB cap writes what the bundle held only after the fetches**, so a

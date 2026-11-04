@@ -80,8 +80,8 @@ class FileSystemReplicaStorage(root: String) : ReplicaStorage {
     private fun accentsTogether(path: String): String = NSString.create(string = path).precomposedStringWithCanonicalMapping
 
     /**
-     * Earlier versions could record a file under both spellings. Whichever goes first, the file stays
-     * for the other, which may hold an edit not yet sent.
+     * A server on Linux can hold both spellings as two notes, which here are one file. Whichever goes
+     * first, the file stays for the other, which may hold an edit not yet sent.
      */
     private suspend fun isRecordedUnderAnotherName(path: String): Boolean {
         val name = accentsTogether(path)
@@ -116,7 +116,9 @@ class FileSystemReplicaStorage(root: String) : ReplicaStorage {
         val stamp = metaStamp() ?: return@withContext ReplicaMeta()
         decoded.read(stamp) {
             // Metadata can be rebuilt by the next sync; the notes cannot. Never fail the open.
-            readText(metaFile)?.let { text -> runCatching { json.decodeFromString<ReplicaMeta>(text) }.getOrNull() }
+            readText(metaFile)
+                ?.let { text -> runCatching { json.decodeFromString<ReplicaMeta>(text) }.getOrNull() }
+                ?.withBothSpellingsSettled()
         }
     }
 
@@ -124,6 +126,20 @@ class FileSystemReplicaStorage(root: String) : ReplicaStorage {
         writeText(metaFile, json.encodeToString(meta))
         metaStamp()?.let { decoded.wrote(it, meta) }
         Unit
+    }
+
+    /**
+     * What an earlier version left: both spellings on record, for one file, so one note listed twice.
+     * It goes by the spelling nearly every server has, with any edit made under the other. Generation 0
+     * asks for a complete manifest, which brings the other back if this server really does hold both.
+     * Here and not in [readMeta]'s callers, as it costs a look at every name: once per decoding.
+     */
+    private fun ReplicaMeta.withBothSpellingsSettled(): ReplicaMeta {
+        val extra = files.values.filter { accentsTogether(it.path).let { name -> name != it.path && name in files } }
+        if (extra.isEmpty()) return this
+        val edited = extra.filter { it.dirty }.mapNotNull { files[accentsTogether(it.path)] }
+            .associate { it.path to it.copy(dirty = true, deleted = false) }
+        return copy(generation = 0, files = files - extra.map { it.path }.toSet() + edited)
     }
 
     /** Null when there is no `meta.json`, or its attributes cannot be read. */
