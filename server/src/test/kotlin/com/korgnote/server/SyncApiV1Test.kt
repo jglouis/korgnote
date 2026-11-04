@@ -70,6 +70,17 @@ class SyncApiV1Test {
         assertTrue(body.contains("sub/b.org"))
     }
 
+    /** Phones already out there read these names: they are the wire format, whatever the classes do. */
+    @Test
+    fun theManifestKeepsItsFieldNames() = testApplication {
+        serve(notesDir("a.org" to "* A\n"))
+
+        val manifest = manifestOf(client.get("/api/v1/manifest").bodyAsText())
+
+        assertEquals(setOf("generation", "complete", "entries", "deleted"), manifest.keys)
+        assertEquals(setOf("path", "size", "mtime", "etag"), manifest["entries"]!!.jsonArray.single().jsonObject.keys)
+    }
+
     /** The bandwidth saver: nothing changed, so send nothing. */
     @Test
     fun aConditionalGetReturns304WhenNothingChanged() = testApplication {
