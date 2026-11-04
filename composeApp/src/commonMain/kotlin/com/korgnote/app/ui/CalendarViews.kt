@@ -818,7 +818,9 @@ private fun DayColumn(
         Box(Modifier.fillMaxHeight().width(1.dp).background(lineColor.copy(alpha = 0.5f)))
 
         for (block in layout.clocked) {
-            ClockedBlockView(block, width = maxWidth / block.columns, hourHeight = hourHeight, compact = compact, titleLine = titleLine, timeLine = timeLine)
+            key(block.piece.span.file, block.piece.span.headingOffset, block.piece.startMinute) {
+                ClockedBlockView(block, width = maxWidth / block.columns, hourHeight = hourHeight, compact = compact, titleLine = titleLine, timeLine = timeLine)
+            }
         }
 
         for (block in layout.events) {

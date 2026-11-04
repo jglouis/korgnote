@@ -10,6 +10,7 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -32,6 +33,7 @@ class CalendarEntryStateTest {
     private val today = LocalDate(2026, 9, 23)
     private val now = LocalDateTime(2026, 9, 23, 7, 0)
     private val moved = mutableListOf<String>()
+    private val clockedIn = mutableListOf<Pair<String, Int>>()
 
     private fun agendaOf(vararg notes: Pair<String, String>) = AgendaIndex.of(mapOf(*notes), AgendaOptions(today = today))
 
@@ -44,7 +46,7 @@ class CalendarEntryStateTest {
                 now = now,
                 actions = CalendarActions(
                     isRunning = { _, _ -> false },
-                    clockIn = { _, _ -> },
+                    clockIn = { file, offset -> clockedIn += file to offset },
                     clockOut = { _, _ -> },
                     open = { _, _ -> },
                     keywords = { DEFAULT_TODO_KEYWORDS },
@@ -92,6 +94,21 @@ class CalendarEntryStateTest {
         waitForIdle()
 
         onNodeWithText("OK").assertDoesNotExist()
+    }
+
+    @Test
+    fun aClockedBlockKeepsItsMenuWhenAnEarlierOneArrives() = runComposeUiTest {
+        val report = "* Report\n:LOGBOOK:\nCLOCK: [2026-09-23 Wed 05:00]--[2026-09-23 Wed 06:00] =>  1:00\n:END:\n"
+        val figures = "* Figures\n:LOGBOOK:\nCLOCK: [2026-09-23 Wed 03:00]--[2026-09-23 Wed 04:00] =>  1:00\n:END:\n"
+        var agenda by mutableStateOf(agendaOf("work.org" to report))
+        show(CalendarMode.Day, { agenda })
+
+        onNodeWithContentDescription("Clocked on Report from 05:00, 1\u00A0h").performTouchInput { longClick() }
+        agenda = agendaOf("work.org" to report, "synced.org" to figures)
+        waitForIdle()
+        onNodeWithText("Clock in").performClick()
+
+        assertEquals(listOf("work.org" to 0), clockedIn)
     }
 
     @Test
