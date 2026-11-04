@@ -127,7 +127,7 @@ shows the new day's overdue items and warnings without the notes changing. No se
 | **Day** | all-day strip on top (scrolling past a third of the screen), hour grid with timed events as blocks, "now" line; pinch (or Ctrl and the wheel) to stretch or squeeze the hours, kept between day and week | where Google Calendar beats org-agenda |
 | **Week** | 7 columns, hour grid, and an all-day strip of three rows, ranges first, as bars, with a "+N" for the rest of a day, which opens that day; on a phone held upright the days scroll sideways, three and a bit on screen | planning the week |
 | **Month** | a grid with per-day chips: deadline vs scheduled colours, DONE de-emphasised, a multi-day range one bar across its days; each week as tall as its busiest day, scrolling when they need more than the screen | overview |
-| **Agenda list** | grouped by day, `TODO`-keyword and tag chips, overdue section on top, and the clock report under its seven days ([11](11-clocking.md#in-the-calendar-phase-2)) | the closest thing to `org-agenda` |
+| **Agenda list** | grouped by day, `TODO`-keyword and tag chips, overdue section on top, and the clock report under its seven days ([11](11-clocking.md#in-the-calendar)) | the closest thing to `org-agenda` |
 
 Each period is a page that turns under the finger. Deadlines and scheduled items are visually distinct
 (colour and icon), DONE items dimmed, and every occurrence opens the document at `headingOffset`. In reading

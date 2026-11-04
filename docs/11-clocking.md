@@ -13,9 +13,6 @@ CLOCK: [2026-11-01 Sun 09:30]--[2026-11-01 Sun 10:45] =>  1:15
 :END:
 ```
 
-The proposal this came from, with the reasoning and the later phases, is the shared doc
-*Org clocking in KorgNote — proposal* (2026-11-01). Phases 1 and 2 are built; this document says how.
-
 ## What is written
 
 All in `shared/…/org/edit/Clocking.kt`, each a range replacement like every other edit.
@@ -39,7 +36,7 @@ the drawer, because Emacs sums them wherever they are. A heading's total is its 
 
 - **The heading's long-press menu** has *Clock in*, or *Clock out* and *Cancel clock* when its clock
   runs. Clocking in stops every other running clock at the same minute, in this note or another
-  (`NotesViewModel.clockInAt`). Refused while an element is being edited, as the note would change
+  (`ClockActions.clockInAt`). Refused while an element is being edited, as the note would change
   under it.
 - **The total beside a heading**, its subtree's clocks included: `1 h 15`, or `1 h 15 / 2 h` against an
   `:Effort:`, with a red warning sign once the total is past it (one Org can read — `1:30`, `45`, `2h`, `1h 30min` — is shown the same way; any other as
@@ -71,13 +68,13 @@ start so that a notification left from before is corrected.
 
 *Clock out* is a broadcast to `ClockOutReceiver` (androidApp), which hands the stop, with the minute
 it was tapped, to `ClockOutWorker`. The worker finds the heading by its title and start in the notes
-where they are kept (`notesStore`, as a capture is filed), writes the stop, takes the notification
+where they are kept (`notesStore`, over `backendFor`, as a capture is filed), writes the stop, takes the notification
 down, then syncs as a capture does and puts the notification back up if a clock started elsewhere
 came in with the sync.
 
 iOS and the web have the bar only: a lock-screen Live Activity needs a Swift widget extension (G7).
 
-## In the calendar (phase 2)
+## In the calendar
 
 The agenda index also collects every clock in the notes (`clockedSpans`, in
 `shared/…/org/agenda/Clocked.kt`), in the same pass off the main thread, and keeps them across days
@@ -99,8 +96,8 @@ The agenda index also collects every clock in the notes (`clockedSpans`, in
   the day or the week, or on a clocked block, offers — after *Reschedule…* or *Change deadline…*
   on an entry ([07](07-calendar-agenda.md#views)) — *Clock in* (or *Clock out* when its clock runs)
   and then the note's keywords, the current one ticked, and *No keyword*, as the note's own keyword
-  menu does (`CalendarActions`, which the app gives). `NotesViewModel.clockIn(path, offset)` and
-  `setTodo(path, offset, keyword)` work on a note that is not open: a keyword change is logged and
+  menu does (`CalendarActions`, which the app gives). `ClockActions.clockIn(path, offset)` and
+  `StateNotes.setTodo(path, offset, keyword)` work on a note that is not open: a keyword change is logged and
   repeated as from the note, and its statistics cookies counted again; one that asks for a note
   (`@`) opens its note first, so the note is asked for there. The month is left out: its chips are
   too small to aim a long-press at.

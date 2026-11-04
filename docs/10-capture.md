@@ -3,8 +3,7 @@
 Org's `org-capture` on a phone: put something down from wherever it is — a page in the browser, a
 place on a map, an event in the calendar, a line of text — without opening the notes, and have it
 land in the inbox, in a note or a new one, or in a heading that already exists: a place as its
-`:LOCATION:`, a page as a link under it, an event as its `SCHEDULED:`. On branch
-`feature/capture`; not released.
+`:LOCATION:`, a page as a link under it, an event as its `SCHEDULED:`. Shipped in 1.5.0.
 
 A capture should cost nothing, so the dialog asks only where, and shows what:
 
@@ -26,8 +25,8 @@ Not org-capture to the letter, on purpose, and not its `org-capture-templates` e
 templates worth having in Emacs — where the entry goes, what it is — the dialog now asks directly.
 
 Inside the app, capturing is capturing an event: the calendar tab's button, "Capture an event",
-opens the phone's calendar. It was in the files' drawer, which is about notes rather than dates. What is anywhere else is captured from where it is: the share sheet, the text selection,
-a link, the launcher.
+opens the phone's calendar. It was in the files' drawer, which is about notes rather than dates. What
+is anywhere else is captured from where it is: the share sheet, the text selection, a link, the launcher.
 
 An event's time is a `SCHEDULED:`, as Org files an appointment: under a new entry's heading, and as
 the heading's own when added to one. A range across days, which Org cannot schedule, stays a plain
@@ -45,10 +44,10 @@ timestamp.
 | ↳ events just added elsewhere | the phone's copy of Google's calendars syncs on Google's push, which a phone may not get (a Galaxy A52s went ten hours without one on 2026-11-01): the open picker reads again on each change of the provider (a `ContentObserver`) | Google's calendars are fetched on the schedule in Settings, never pushed: the open picker reads again on `EKEventStoreChangedNotification` |
 | Launcher | long-press shortcuts "Capture" (a quick note) and "Event" (`CaptureShortcut`) | — |
 
-Seen working on 2026-10-31 against a scratch server, which received the entries: on a Galaxy A52s
-(Android 14) from Chrome's share sheet, Google Maps' share button and Chrome's text-selection menu;
-on an emulator (the app closed, a local calendar's events); and on an
-iPhone simulator (a link, and a page shared from Safari through the extension). Not yet on an iPhone.
+Seen working against a scratch server, which received the entries: on a Galaxy A52s (Android 14) from
+Chrome's share sheet, Google Maps' share button and Chrome's text-selection menu; on an emulator (the app
+closed, a local calendar's events); and on an iPhone simulator (a link, and a page shared from Safari
+through the extension).
 
 What the apps send, as seen on the phone: Chrome, the page's URL as the text and its title as the
 subject. Google Maps, only a short link (`maps.app.goo.gl/…`) as the text, and the place's name as
@@ -121,7 +120,7 @@ iOS only.
 On Android the same queue is used for the same reason in miniature: the sheet closes as soon as the
 capture is queued, and `CaptureWorker` files and syncs it, with the app open or not.
 
-**The cost: Swift.** The extension is ~250 lines of SwiftUI, beside the ~33 the iOS shell had (G7).
+**The cost: Swift.** The extension is ~280 lines of SwiftUI, beside the ~33 of the iOS shell (G7).
 Compose in an extension was possible but heavy for its memory budget, and the extension only needs
 three fields; reading what was shared, and the entry, stay in Kotlin, in the app.
 
