@@ -198,6 +198,27 @@ class TransportSecurityTest {
         assertTrue(devices.all().isEmpty())
     }
 
+    /**
+     * The browser decodes an attribute before it parses it as script, so no escaping keeps a name
+     * safely inside inline script: `Jean's phone` was a syntax error there, and Revoke went ahead
+     * unasked, and a device can pick a name that runs.
+     */
+    @Test
+    fun aDeviceNameNeverReachesInlineScript() = testApplication {
+        asThisComputer()
+        val name = "Jean's \"phone\"'); fetch('/x'); ('"
+        devices.pair(PairRequest(devices.newPairingCode(), name))
+
+        val page = client.get("/devices").bodyAsText()
+
+        assertFalse(page.contains("onsubmit"), page)
+        val quoted = name.replace("\"", "&quot;")
+        assertTrue(page.contains("data-name=\"$quoted\""), page)
+        val script = page.substringAfter("<script>").substringBefore("</script>")
+        assertTrue(script.contains("confirm("), "the confirmation is still asked")
+        assertFalse(script.contains("Jean"), script)
+    }
+
     @Test
     fun theDevicesPageShowsAPairingCode() = testApplication {
         asThisComputer()

@@ -136,9 +136,10 @@ private fun devicesBody(
             append("<tr><td>").append(escape(device.name)).append("</td>")
             append("<td>").append(time(device.pairedAt)).append("</td>")
             append("<td>").append(device.lastSeen?.let(::time) ?: "never").append("</td>")
+            // The name goes in an attribute for the page's script to read, never into script itself:
+            // a browser decodes `onsubmit` before parsing it, so no escaping keeps a name in its string.
             append("<td><form method=post action=\"/devices/").append(escape(device.id)).append("/revoke\" ")
-            append("onsubmit=\"return confirm('Revoke ").append(escape(device.name).replace("'", "&#39;"))
-            append("? It will stop syncing until it is paired again.')\"><button>Revoke</button></form></td></tr>")
+            append("data-name=\"").append(escape(device.name)).append("\"><button>Revoke</button></form></td></tr>")
         }
         append("</table>")
     }
@@ -251,6 +252,11 @@ button{font:inherit;padding:.3rem .9rem;cursor:pointer}input{font:inherit;paddin
 for (const t of document.querySelectorAll("time[datetime]")) {
   const d = new Date(t.dateTime)
   if (!isNaN(d)) t.textContent = d.toLocaleString(undefined, {dateStyle: "medium", timeStyle: "medium"})
+}
+for (const form of document.querySelectorAll("form[data-name]")) {
+  form.addEventListener("submit", event => {
+    if (!confirm("Revoke " + form.dataset.name + "? It will stop syncing until it is paired again.")) event.preventDefault()
+  })
 }
 </script></body></html>"""
 
