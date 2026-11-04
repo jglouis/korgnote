@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgKeyword
+import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.agenda.parseOrgTimestamp
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.author
@@ -45,13 +46,17 @@ internal fun noteBylineOf(document: OrgDocument): NoteByline? {
     val indices = mutableSetOf<Int>()
     document.children.forEachIndexed { index, child ->
         val line = (child as? OrgKeyword)?.content?.trim() ?: return@forEachIndexed
-        AUTHOR.matchEntire(line)?.let { match ->
-            if (author == null) author = match.groupValues[1].trim().takeIf { it.isNotEmpty() }
-            indices += index
-        }
-        DATE.matchEntire(line)?.let { match ->
-            if (date == null) date = match.groupValues[1].trim().takeIf { it.isNotEmpty() }
-            indices += index
+        val match = OrgSyntax.fileKeyword.matchEntire(line) ?: return@forEachIndexed
+        val value = match.groupValues[2].trim().takeIf { it.isNotEmpty() }
+        when (match.groupValues[1].uppercase()) {
+            "AUTHOR" -> {
+                if (author == null) author = value
+                indices += index
+            }
+            "DATE" -> {
+                if (date == null) date = value
+                indices += index
+            }
         }
     }
     return if (indices.isEmpty()) null else NoteByline(author, date, indices)
@@ -108,6 +113,3 @@ private fun BylinePart(icon: ImageVector, text: String, what: String) {
         )
     }
 }
-
-private val AUTHOR = Regex("^#\\+AUTHOR:\\s*(.*)$", RegexOption.IGNORE_CASE)
-private val DATE = Regex("^#\\+DATE:\\s*(.*)$", RegexOption.IGNORE_CASE)
