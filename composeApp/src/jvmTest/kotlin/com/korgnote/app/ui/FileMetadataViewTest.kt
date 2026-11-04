@@ -21,7 +21,7 @@ class FileMetadataViewTest {
 
     @Test
     fun theNotesOwnDrawerIsLabelledWithItsId() = runComposeUiTest {
-        setContent { OrgDocumentView(text = text, onEditElement = {}) }
+        setContent { OrgDocumentView(text = text, actions = ElementActions(onEditElement = {})) }
 
         onNodeWithText("3f2a9c1e-7b4d-4e0a-9f61-2c8d5b7a0e14").assertExists()
         onNodeWithText(":PROPERTIES:").assertDoesNotExist()
@@ -30,7 +30,7 @@ class FileMetadataViewTest {
     @Test
     fun aDrawerUnderAHeadingKeepsItsName() = runComposeUiTest {
         setContent {
-            OrgDocumentView(text = "* Heading\n:PROPERTIES:\n:ID: abc\n:END:\n", onEditElement = {})
+            OrgDocumentView(text = "* Heading\n:PROPERTIES:\n:ID: abc\n:END:\n", actions = ElementActions(onEditElement = {}))
         }
 
         onNodeWithText(":PROPERTIES:").assertExists()
@@ -39,14 +39,14 @@ class FileMetadataViewTest {
     /** Org reads `#+SEQ_TODO:` as `#+TODO:`, and so do the headings: the chips and the heading agree. */
     @Test
     fun aSeqTodoLineDeclaresWhatItsHeadingsUse() = runComposeUiTest {
-        setContent { OrgDocumentView(text = "#+SEQ_TODO: NEXT SHIPPED\n* SHIPPED Release\n", onEditElement = {}) }
+        setContent { OrgDocumentView(text = "#+SEQ_TODO: NEXT SHIPPED\n* SHIPPED Release\n", actions = ElementActions(onEditElement = {})) }
 
         onNodeWithContentDescription("Keywords: NEXT, done: SHIPPED").assertExists()
     }
 
     @Test
     fun theTodoLineShowsItsKeywordsRatherThanItsSyntax() = runComposeUiTest {
-        setContent { OrgDocumentView(text = text, onEditElement = {}) }
+        setContent { OrgDocumentView(text = text, actions = ElementActions(onEditElement = {})) }
 
         onNodeWithText("#+TODO: TODO NEXT | DONE CANCELLED").assertDoesNotExist()
         onNodeWithContentDescription("Keywords: TODO, NEXT, done: DONE, CANCELLED").assertExists()

@@ -53,7 +53,7 @@ class ReadingModeInteractionTest {
     @Test
     fun aTapOnTextEditsThatElement() = runComposeUiTest {
         val edited = mutableListOf<Int>()
-        setContent { OrgDocumentView(text = text, onEditElement = { edited += it }) }
+        setContent { OrgDocumentView(text = text, actions = ElementActions(onEditElement = { edited += it })) }
 
         onNodeWithText("Step body.").performClick()
 
@@ -65,7 +65,7 @@ class ReadingModeInteractionTest {
         val edited = mutableListOf<Int>()
         val toggled = mutableListOf<Int>()
         setContent {
-            OrgDocumentView(text = text, onEditElement = { edited += it }, onToggleCheckbox = { toggled += it })
+            OrgDocumentView(text = text, actions = ElementActions(onEditElement = { edited += it }, onToggleCheckbox = { toggled += it }))
         }
 
         onAllNodes(isToggleable()).onFirst().performClick()
@@ -83,9 +83,11 @@ class ReadingModeInteractionTest {
         setContent {
             OrgDocumentView(
                 text = todoText,
-                onEditElement = { edited += it },
-                onSetTodo = { offset, keyword -> picked += offset to keyword },
                 todoKeywords = OrgTodoConfig(todo = linkedSetOf("TODO", "NEXT", "WAITING"), done = linkedSetOf("DONE", "CANCELLED")),
+                actions = ElementActions(
+                    onEditElement = { edited += it },
+                    onSetTodo = { offset, keyword -> picked += offset to keyword },
+                ),
             )
         }
 
@@ -112,10 +114,12 @@ class ReadingModeInteractionTest {
         setContent {
             OrgDocumentView(
                 text = todoText,
-                onEditElement = { edited += it },
-                onSetTodo = { _, _ -> },
-                onAddHeadingBelow = {},
                 todoKeywords = OrgTodoConfig(todo = linkedSetOf("TODO", "NEXT"), done = linkedSetOf("DONE")),
+                actions = ElementActions(
+                    onEditElement = { edited += it },
+                    onSetTodo = { _, _ -> },
+                    onAddHeadingBelow = {},
+                ),
             )
         }
         val keyword = onNodeWithText("TODO Write the report", useUnmergedTree = true).onChildren().onFirst()
@@ -151,10 +155,12 @@ class ReadingModeInteractionTest {
             ) {
                 OrgDocumentView(
                     text = text,
-                    onEditElement = { edited += it },
-                    onSetTodo = { _, _ -> },
-                    onAddHeadingBelow = {},
                     todoKeywords = OrgTodoConfig(todo = linkedSetOf("TODO", "NEXT"), done = linkedSetOf("DONE")),
+                    actions = ElementActions(
+                        onEditElement = { edited += it },
+                        onSetTodo = { _, _ -> },
+                        onAddHeadingBelow = {},
+                    ),
                 )
             }
         }
@@ -177,7 +183,7 @@ class ReadingModeInteractionTest {
     fun noKeywordClearsIt() = runComposeUiTest {
         val todoText = "* TODO Write the report\n"
         val picked = mutableListOf<Pair<Int, String?>>()
-        setContent { OrgDocumentView(text = todoText, onSetTodo = { offset, keyword -> picked += offset to keyword }) }
+        setContent { OrgDocumentView(text = todoText, actions = ElementActions(onSetTodo = { offset, keyword -> picked += offset to keyword })) }
 
         onNodeWithText("TODO Write the report", useUnmergedTree = true).onChildren().onFirst().performClick()
         onNodeWithText("No keyword").performClick()
@@ -191,7 +197,7 @@ class ReadingModeInteractionTest {
         val edited = mutableListOf<Int>()
         val picked = mutableListOf<Int>()
         setContent {
-            OrgDocumentView(text = "* API design\n", onEditElement = { edited += it }, onSetTodo = { offset, _ -> picked += offset })
+            OrgDocumentView(text = "* API design\n", actions = ElementActions(onEditElement = { edited += it }, onSetTodo = { offset, _ -> picked += offset }))
         }
 
         onNodeWithText("API design", useUnmergedTree = true).onChildren().assertCountEquals(0)
@@ -209,9 +215,11 @@ class ReadingModeInteractionTest {
         setContent {
             OrgDocumentView(
                 text = text,
-                onEditElement = { edited += it },
-                onAddHeadingBelow = { below += it },
-                onAddSubheading = { sub += it },
+                actions = ElementActions(
+                    onEditElement = { edited += it },
+                    onAddHeadingBelow = { below += it },
+                    onAddSubheading = { sub += it },
+                ),
             )
         }
 
@@ -232,8 +240,10 @@ class ReadingModeInteractionTest {
         setContent {
             OrgDocumentView(
                 text = text,
-                onMoveSection = { index, up -> moved += index to up },
-                onShiftSection = { index, delta -> shifted += index to delta },
+                actions = ElementActions(
+                    onMoveSection = { index, up -> moved += index to up },
+                    onShiftSection = { index, delta -> shifted += index to delta },
+                ),
             )
         }
 
@@ -257,7 +267,9 @@ class ReadingModeInteractionTest {
                 modifier = Modifier.fillMaxSize(),
                 text = text,
                 foldedElements = folded,
-                onToggleFold = { folded = if (it in folded) folded - it else folded + it },
+                actions = ElementActions(
+                    onToggleFold = { folded = if (it in folded) folded - it else folded + it },
+                ),
             )
         }
         // Other has nothing under it, so it has nothing to fold.
@@ -275,7 +287,7 @@ class ReadingModeInteractionTest {
     @Test
     fun deletingAHeadingIsConfirmedAndSaysWhatGoesWithIt() = runComposeUiTest {
         val deleted = mutableListOf<Int>()
-        setContent { OrgDocumentView(text = text, onDeleteSection = { deleted += it }) }
+        setContent { OrgDocumentView(text = text, actions = ElementActions(onDeleteSection = { deleted += it })) }
 
         onNodeWithText("Project").performTouchInput { longClick() }
         onNodeWithText("Delete heading").performClick()
@@ -289,7 +301,7 @@ class ReadingModeInteractionTest {
     @Test
     fun cancellingADeleteKeepsTheHeading() = runComposeUiTest {
         val deleted = mutableListOf<Int>()
-        setContent { OrgDocumentView(text = text, onDeleteSection = { deleted += it }) }
+        setContent { OrgDocumentView(text = text, actions = ElementActions(onDeleteSection = { deleted += it })) }
 
         onNodeWithText("Step body.").performTouchInput { longClick() }
         onNodeWithText("Delete heading").performClick()
@@ -308,7 +320,7 @@ class ReadingModeInteractionTest {
         }
         setContent {
             CompositionLocalProvider(LocalUriHandler provides handler) {
-                OrgDocumentView(text = "* Links\n[[id:plan-id][the plan]]\n", onEditElement = { edited += it })
+                OrgDocumentView(text = "* Links\n[[id:plan-id][the plan]]\n", actions = ElementActions(onEditElement = { edited += it }))
             }
         }
 
@@ -345,7 +357,7 @@ class ReadingModeInteractionTest {
         val noteText = "#+TITLE: Plans\n#+filetags: :work:\n\n* First\nBody.\n* Second\n"
         val edited = mutableListOf<Int>()
         var opened = 0
-        setContent { OrgDocumentView(text = noteText, onEditElement = { edited += it }, onEditDetails = { opened++ }) }
+        setContent { OrgDocumentView(text = noteText, onEditDetails = { opened++ }, actions = ElementActions(onEditElement = { edited += it })) }
 
         onAllNodesWithContentDescription("Note details").assertCountEquals(1)
         onNodeWithContentDescription("Note details").performClick()
@@ -380,7 +392,7 @@ class ReadingModeInteractionTest {
         val edited = mutableListOf<Int>()
         val tables = mutableListOf<Int>()
         setContent {
-            OrgDocumentView(text = tableText, onEditElement = { edited += it }, onEditTable = { tables += it })
+            OrgDocumentView(text = tableText, actions = ElementActions(onEditElement = { edited += it }, onEditTable = { tables += it }))
         }
 
         onNodeWithText("Milk").performClick()

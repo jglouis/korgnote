@@ -36,10 +36,12 @@ class ElementStateTest {
     private fun ComposeUiTest.showDocument() = setContent {
         OrgDocumentView(
             text = shown,
-            onEditElement = {},
-            onSetEffort = { offset, _ -> effortSetAt += offset },
-            onSetPriority = { offset, _ -> prioritySetAt += offset },
-            onAddHeadingBelow = {},
+            actions = ElementActions(
+                onEditElement = {},
+                onSetEffort = { offset, _ -> effortSetAt += offset },
+                onSetPriority = { offset, _ -> prioritySetAt += offset },
+                onAddHeadingBelow = {},
+            ),
         )
     }
 

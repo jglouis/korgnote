@@ -84,6 +84,48 @@ import com.korgnote.common.org.prioritiesOf
 import com.korgnote.common.org.OrgPriority
 
 /**
+ * What can be done to a note from its reading view, given by the app. An action left out is one not
+ * offered. Places are element indexes, or offsets into the whole text of the note, whichever the
+ * view model finds its way from.
+ */
+class ElementActions(
+    // The offset of the tapped checkbox; the view model finds the node there.
+    val onToggleCheckbox: ((offsetInDocument: Int) -> Unit)? = null,
+    /** A keyword picked from a heading's TODO keyword, or null to clear it, with that heading's offset. */
+    val onSetTodo: ((offsetInDocument: Int, keyword: String?) -> Unit)? = null,
+    /** A tap on a table, with its offset: tables are edited as a grid, not as text. */
+    val onEditTable: ((offsetInDocument: Int) -> Unit)? = null,
+    /** A plain tap on an element, anywhere an inner target (checkbox, link, drawer) does not claim. */
+    val onEditElement: ((elementIndex: Int) -> Unit)? = null,
+    /** From the long-press menu: a sibling after the element's whole subtree. */
+    val onAddHeadingBelow: ((elementIndex: Int) -> Unit)? = null,
+    /** From the long-press menu: a first child of the element. */
+    val onAddSubheading: ((elementIndex: Int) -> Unit)? = null,
+    /** From the long-press menu, once confirmed: the heading with its body and sub-headings. */
+    val onDeleteSection: ((elementIndex: Int) -> Unit)? = null,
+    /** From the long-press menu: past the previous sibling (up) or the next one, subtree and all. */
+    val onMoveSection: ((elementIndex: Int, up: Boolean) -> Unit)? = null,
+    /** From the long-press menu: the heading and its subtree one level shallower (-1) or deeper (1). */
+    val onShiftSection: ((elementIndex: Int, delta: Int) -> Unit)? = null,
+    /** From the long-press menu: the heading and its subtree to another heading or note, chosen next. */
+    val onRefileSection: ((elementIndex: Int) -> Unit)? = null,
+    /** A priority picked for the heading at an offset, or null to remove it. */
+    val onSetPriority: ((offsetInDocument: Int, priority: OrgPriority?) -> Unit)? = null,
+    /**
+     * From the long-press menu: the stamp beginning at this offset made inactive when it is active,
+     * and active when it is not.
+     */
+    val onToggleTimestamp: ((offsetInDocument: Int) -> Unit)? = null,
+    val onToggleFold: ((elementIndex: Int) -> Unit)? = null,
+    /** From the long-press menu: the heading at this offset clocked in, out, or its clock cancelled. */
+    val onClockIn: ((offsetInDocument: Int) -> Unit)? = null,
+    val onClockOut: ((offsetInDocument: Int) -> Unit)? = null,
+    val onCancelClock: ((offsetInDocument: Int) -> Unit)? = null,
+    /** From the long-press menu: the heading at this offset given an effort, in minutes, or none. */
+    val onSetEffort: ((offsetInDocument: Int, minutes: Int?) -> Unit)? = null,
+)
+
+/**
  * Reading view of a whole document, rendered one editable element at a time.
  *
  * Each element is parsed and rendered from its own slice of [text] rather than from a single parse
@@ -96,12 +138,7 @@ import com.korgnote.common.org.OrgPriority
 fun OrgDocumentView(
     text: String,
     modifier: Modifier = Modifier,
-    // The offset of the tapped checkbox in [text]; the view model finds the node there.
-    onToggleCheckbox: ((offsetInDocument: Int) -> Unit)? = null,
-    /** A keyword picked from a heading's TODO keyword, or null to clear it, with that heading's offset in [text]. */
-    onSetTodo: ((offsetInDocument: Int, keyword: String?) -> Unit)? = null,
-    /** A tap on a table, with its offset in [text]: tables are edited as a grid, not as text. */
-    onEditTable: ((offsetInDocument: Int) -> Unit)? = null,
+    actions: ElementActions = ElementActions(),
     editingElementIndex: Int? = null,
     /** Read only by the element being edited, so that a keystroke composes that element alone. */
     elementDraft: () -> TextFieldValue = { TextFieldValue("") },
@@ -111,30 +148,8 @@ fun OrgDocumentView(
      * or Escape still does whatever it would normally do.
      */
     onCompletionKey: (CompletionKey) -> Boolean = { false },
-    /** A plain tap on an element, anywhere an inner target (checkbox, link, drawer) does not claim. */
-    onEditElement: ((elementIndex: Int) -> Unit)? = null,
-    /** From the long-press menu: a sibling after the element's whole subtree. */
-    onAddHeadingBelow: ((elementIndex: Int) -> Unit)? = null,
-    /** From the long-press menu: a first child of the element. */
-    onAddSubheading: ((elementIndex: Int) -> Unit)? = null,
-    /** From the long-press menu, once confirmed: the heading with its body and sub-headings. */
-    onDeleteSection: ((elementIndex: Int) -> Unit)? = null,
-    /** From the long-press menu: past the previous sibling (up) or the next one, subtree and all. */
-    onMoveSection: ((elementIndex: Int, up: Boolean) -> Unit)? = null,
-    /** From the long-press menu: the heading and its subtree one level shallower (-1) or deeper (1). */
-    onShiftSection: ((elementIndex: Int, delta: Int) -> Unit)? = null,
-    /** From the long-press menu: the heading and its subtree to another heading or note, chosen next. */
-    onRefileSection: ((elementIndex: Int) -> Unit)? = null,
-    /** A priority picked for the heading at an offset in [text], or null to remove it. */
-    onSetPriority: ((offsetInDocument: Int, priority: OrgPriority?) -> Unit)? = null,
-    /**
-     * From the long-press menu: the stamp beginning at this offset in [text] made inactive when it
-     * is active, and active when it is not.
-     */
-    onToggleTimestamp: ((offsetInDocument: Int) -> Unit)? = null,
     /** Folded headings: each shows only its heading line, and its descendants render nothing. */
     foldedElements: Set<Int> = emptySet(),
-    onToggleFold: ((elementIndex: Int) -> Unit)? = null,
     scrollToElementIndex: Int? = null,
     onScrolledToElement: () -> Unit = {},
     /** Where a note opened with no place asked for goes back to: where it was left, or its top. */
@@ -161,12 +176,6 @@ fun OrgDocumentView(
      * above the first heading — or on its own over that heading, in a note that has none yet.
      */
     onEditDetails: (() -> Unit)? = null,
-    /** From the long-press menu: the heading at this offset in [text] clocked in, out, or its clock cancelled. */
-    onClockIn: ((offsetInDocument: Int) -> Unit)? = null,
-    onClockOut: ((offsetInDocument: Int) -> Unit)? = null,
-    onCancelClock: ((offsetInDocument: Int) -> Unit)? = null,
-    /** From the long-press menu: the heading at this offset in [text] given an effort, in minutes, or none. */
-    onSetEffort: ((offsetInDocument: Int, minutes: Int?) -> Unit)? = null,
     /** The time a running clock counts to, in the totals beside headings; ticks while one runs. */
     clockTime: LocalDateTime? = null,
 ) {
@@ -286,7 +295,7 @@ fun OrgDocumentView(
                                 // clickables of their own and take their tap first; anything
                                 // else in the element edits it. A scroll never becomes a tap.
                                 onClickLabel = stringResource(Res.string.editor_edit),
-                                onClick = { onEditElement?.invoke(index) },
+                                onClick = { actions.onEditElement?.invoke(index) },
                                 onLongClickLabel = stringResource(Res.string.editor_more_actions),
                                 onLongClick = { menuOpen = true },
                             )
@@ -301,8 +310,8 @@ fun OrgDocumentView(
                             // Folded, only the heading line shows, as `org-cycle` leaves it.
                             val shown = if (folded) slice.substringBefore('\n') else slice
                             val document = remember(shown, todoKeywords) { shown.toOrgDocument(todoKeywords) }
-                            val priorityEditing = remember(onSetPriority, priorities, element.start) {
-                                onSetPriority?.let { set ->
+                            val priorityEditing = remember(actions.onSetPriority, priorities, element.start) {
+                                actions.onSetPriority?.let { set ->
                                     PriorityEditing(priorities) { heading, priority -> set(element.start + heading.range.first, priority) }
                                 }
                             }
@@ -314,13 +323,13 @@ fun OrgDocumentView(
                                 // The element was parsed from its own slice, so its nodes carry
                                 // slice-relative ranges; shifting by the element's start makes them
                                 // offsets into the whole document.
-                                onToggleCheckbox = onToggleCheckbox?.let { toggle ->
+                                onToggleCheckbox = actions.onToggleCheckbox?.let { toggle ->
                                     { item -> toggle(element.start + item.range.first) }
                                 },
-                                onSetTodo = onSetTodo?.let { set ->
+                                onSetTodo = actions.onSetTodo?.let { set ->
                                     { heading, keyword -> set(element.start + heading.range.first, keyword) }
                                 },
-                                onEditTable = onEditTable?.let { edit ->
+                                onEditTable = actions.onEditTable?.let { edit ->
                                     { table -> edit(element.start + table.range.first) }
                                 },
                             )
@@ -332,53 +341,53 @@ fun OrgDocumentView(
                                 expanded = menuOpen,
                                 onDismiss = { menuOpen = false },
                                 isPreamble = element.isPreamble,
-                                stamps = onToggleTimestamp?.let { toggle ->
+                                stamps = actions.onToggleTimestamp?.let { toggle ->
                                     stamps.map { stamp ->
                                         MenuStamp(shown.substring(stamp.range), stamp.active) { toggle(element.start + stamp.range.first) }
                                     }
                                 }.orEmpty(),
-                                onAddHeadingBelow = onAddHeadingBelow?.let { add -> { add(index) } },
-                                onAddSubheading = onAddSubheading?.let { add -> { add(index) } },
-                                onDelete = onDeleteSection?.let { { confirmingDelete = index to element.title } },
-                                onMoveUp = onMoveSection?.takeIf { elements.previousSibling(index) != null }
+                                onAddHeadingBelow = actions.onAddHeadingBelow?.let { add -> { add(index) } },
+                                onAddSubheading = actions.onAddSubheading?.let { add -> { add(index) } },
+                                onDelete = actions.onDeleteSection?.let { { confirmingDelete = index to element.title } },
+                                onMoveUp = actions.onMoveSection?.takeIf { elements.previousSibling(index) != null }
                                     ?.let { move -> { move(index, true) } },
-                                onMoveDown = onMoveSection?.takeIf { elements.nextSibling(index) != null }
+                                onMoveDown = actions.onMoveSection?.takeIf { elements.nextSibling(index) != null }
                                     ?.let { move -> { move(index, false) } },
-                                onPromote = onShiftSection?.takeIf { element.level > 1 }
+                                onPromote = actions.onShiftSection?.takeIf { element.level > 1 }
                                     ?.let { shift -> { shift(index, -1) } },
-                                onDemote = onShiftSection?.let { shift -> { shift(index, 1) } },
-                                onRefile = onRefileSection?.let { refile -> { refile(index) } },
-                                onPriority = onSetPriority?.let { { choosingPriority = true } },
-                                onClockIn = onClockIn?.takeIf { clocks?.running != true }?.let { clock -> { clock(element.start) } },
-                                onClockOut = onClockOut?.takeIf { clocks?.running == true }?.let { clock -> { clock(element.start) } },
-                                onCancelClock = onCancelClock?.takeIf { clocks?.running == true }?.let { cancel -> { cancel(element.start) } },
-                                onEffort = onSetEffort?.let { { choosingEffort = true } },
+                                onDemote = actions.onShiftSection?.let { shift -> { shift(index, 1) } },
+                                onRefile = actions.onRefileSection?.let { refile -> { refile(index) } },
+                                onPriority = actions.onSetPriority?.let { { choosingPriority = true } },
+                                onClockIn = actions.onClockIn?.takeIf { clocks?.running != true }?.let { clock -> { clock(element.start) } },
+                                onClockOut = actions.onClockOut?.takeIf { clocks?.running == true }?.let { clock -> { clock(element.start) } },
+                                onCancelClock = actions.onCancelClock?.takeIf { clocks?.running == true }?.let { cancel -> { cancel(element.start) } },
+                                onEffort = actions.onSetEffort?.let { { choosingEffort = true } },
                             )
-                            if (choosingEffort && onSetEffort != null) {
+                            if (choosingEffort && actions.onSetEffort != null) {
                                 EffortDialog(
                                     current = remember(slice) { effortIn(slice) },
-                                    onPick = { minutes -> choosingEffort = false; onSetEffort(element.start, minutes) },
+                                    onPick = { minutes -> choosingEffort = false; actions.onSetEffort(element.start, minutes) },
                                     onDismiss = { choosingEffort = false },
                                 )
                             }
                             // From the long-press menu: the same choices as a tap on the cookie, for
                             // a heading that has none yet to tap.
-                            if (choosingPriority && onSetPriority != null) {
+                            if (choosingPriority && actions.onSetPriority != null) {
                                 PriorityMenu(
                                     expanded = true,
                                     current = orgHeadingOf(slice.substringBefore('\n'), todoKeywords).priority,
                                     priorities = priorities,
-                                    onPick = { priority -> choosingPriority = false; onSetPriority(element.start, priority) },
+                                    onPick = { priority -> choosingPriority = false; actions.onSetPriority(element.start, priority) },
                                     onDismiss = { choosingPriority = false },
                                 )
                             }
                         }
                         if (editDetails != null && element.isPreamble) NoteDetailsButton(editDetails)
                         if (clocks != null && clocks.subtree.isNotEmpty()) ClockedTotal(clocks, clockTime)
-                        if (foldable && onToggleFold != null) {
+                        if (foldable && actions.onToggleFold != null) {
                             val foldDescription = stringResource(if (folded) Res.string.editor_expand_heading else Res.string.editor_collapse_heading, element.title)
                             IconButton(
-                                onClick = { onToggleFold(index) },
+                                onClick = { actions.onToggleFold(index) },
                                 modifier = Modifier.size(32.dp)
                                     .semantics { contentDescription = foldDescription },
                             ) {
@@ -407,13 +416,13 @@ fun OrgDocumentView(
 
     confirmingDelete?.let { (index, title) ->
         val element = elements.getOrNull(index)?.takeIf { it.title == title }
-        if (element == null || onDeleteSection == null) {
+        if (element == null || actions.onDeleteSection == null) {
             LaunchedEffect(Unit) { confirmingDelete = null }
         } else {
             DeleteSectionDialog(
                 title = element.title,
                 subheadings = elements.subtreeEnd(index) - index - 1,
-                onDelete = { confirmingDelete = null; onDeleteSection(index) },
+                onDelete = { confirmingDelete = null; actions.onDeleteSection(index) },
                 onDismiss = { confirmingDelete = null },
             )
         }

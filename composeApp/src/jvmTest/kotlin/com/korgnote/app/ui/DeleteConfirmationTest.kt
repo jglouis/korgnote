@@ -24,7 +24,7 @@ class DeleteConfirmationTest {
     @Test
     fun itClosesWhenAHeadingAddedAboveMovesAnotherIntoItsPlace() = runComposeUiTest {
         val deleted = mutableListOf<Int>()
-        setContent { OrgDocumentView(text = shown, onDeleteSection = { deleted += it }) }
+        setContent { OrgDocumentView(text = shown, actions = ElementActions(onDeleteSection = { deleted += it })) }
         onNodeWithText("Beta", substring = true).performTouchInput { longClick() }
         onNodeWithText("Delete heading").performClick()
 
@@ -38,7 +38,7 @@ class DeleteConfirmationTest {
     @Test
     fun itStaysOpenForAnEditThatLeavesItsHeadingWhereItIs() = runComposeUiTest {
         val deleted = mutableListOf<Int>()
-        setContent { OrgDocumentView(text = shown, onDeleteSection = { deleted += it }) }
+        setContent { OrgDocumentView(text = shown, actions = ElementActions(onDeleteSection = { deleted += it })) }
         onNodeWithText("Beta", substring = true).performTouchInput { longClick() }
         onNodeWithText("Delete heading").performClick()
 
@@ -51,7 +51,7 @@ class DeleteConfirmationTest {
 
     @Test
     fun itClosesWhenItsHeadingIsGoneAndDoesNotComeBackWithIt() = runComposeUiTest {
-        setContent { OrgDocumentView(text = shown, onDeleteSection = {}) }
+        setContent { OrgDocumentView(text = shown, actions = ElementActions(onDeleteSection = {})) }
         onNodeWithText("Beta", substring = true).performTouchInput { longClick() }
         onNodeWithText("Delete heading").performClick()
         onNodeWithText("Delete").assertExists()

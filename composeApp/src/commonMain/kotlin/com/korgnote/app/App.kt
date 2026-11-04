@@ -906,35 +906,39 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                         elementDraft = { vm.editor.draftValue },
                                         onElementDraftChange = { vm.editor.onDraftChanged(it) },
                                         onCompletionKey = vm.completion::answer,
-                                        onEditElement = { vm.editor.beginEdit(it) },
-                                        onAddHeadingBelow = { vm.editor.addAfter(it) },
-                                        onAddSubheading = { vm.editor.addSubheading(it) },
-                                        onDeleteSection = { scope.launch { vm.editor.deleteSection(it) } },
-                                        onMoveSection = { index, up -> scope.launch { vm.editor.moveSection(index, up) } },
-                                        onShiftSection = { index, delta ->
-                                            scope.launch {
-                                                if (delta < 0) vm.editor.promoteSection(index) else vm.editor.demoteSection(index)
-                                            }
+                                        actions = remember(vm) {
+                                            ElementActions(
+                                                onEditElement = { vm.editor.beginEdit(it) },
+                                                onAddHeadingBelow = { vm.editor.addAfter(it) },
+                                                onAddSubheading = { vm.editor.addSubheading(it) },
+                                                onDeleteSection = { scope.launch { vm.editor.deleteSection(it) } },
+                                                onMoveSection = { index, up -> scope.launch { vm.editor.moveSection(index, up) } },
+                                                onShiftSection = { index, delta ->
+                                                    scope.launch {
+                                                        if (delta < 0) vm.editor.promoteSection(index) else vm.editor.demoteSection(index)
+                                                    }
+                                                },
+                                                onRefileSection = { index -> refiling = index to vm.changes.refileTargets(index) },
+                                                onSetPriority = { offset, priority -> vm.changes.setPriorityAt(offset, priority) },
+                                                onClockIn = { vm.clockActions.clockInAt(it) },
+                                                onClockOut = { vm.clockActions.clockOutAt(it) },
+                                                onCancelClock = { vm.clockActions.cancelClockAt(it) },
+                                                onSetEffort = { offset, minutes -> vm.clockActions.setEffortAt(offset, minutes) },
+                                                onToggleFold = { vm.folds.toggle(it) },
+                                                onToggleCheckbox = { offset -> vm.changes.toggleCheckboxAt(offset) },
+                                                onToggleTimestamp = { offset -> vm.changes.toggleTimestampAt(offset) },
+                                                onSetTodo = { offset, keyword -> vm.stateNotes.setTodoAt(offset, keyword) },
+                                                onEditTable = { vm.tables.begin(it) },
+                                            )
                                         },
-                                        onRefileSection = { index -> refiling = index to vm.changes.refileTargets(index) },
-                                        onSetPriority = { offset, priority -> vm.changes.setPriorityAt(offset, priority) },
-                                        onClockIn = { vm.clockActions.clockInAt(it) },
-                                        onClockOut = { vm.clockActions.clockOutAt(it) },
-                                        onCancelClock = { vm.clockActions.cancelClockAt(it) },
-                                        onSetEffort = { offset, minutes -> vm.clockActions.setEffortAt(offset, minutes) },
                                         clockTime = clockTime,
                                         foldedElements = vm.folds.folded,
-                                        onToggleFold = { vm.folds.toggle(it) },
                                         scrollToElementIndex = vm.note.scrollToElementIndex,
                                         onScrolledToElement = { vm.note.onScrolledToElement() },
                                         restoreTo = vm.note.restoreTo,
                                         onRestored = { vm.note.onRestored() },
                                         revealElementIndex = vm.note.revealElementIndex,
                                         onRevealed = { vm.note.onRevealed() },
-                                        onToggleCheckbox = { offset -> vm.changes.toggleCheckboxAt(offset) },
-                                        onToggleTimestamp = { offset -> vm.changes.toggleTimestampAt(offset) },
-                                        onSetTodo = { offset, keyword -> vm.stateNotes.setTodoAt(offset, keyword) },
-                                        onEditTable = { vm.tables.begin(it) },
                                         backlinks = vm.links.backlinks,
                                         onOpenBacklink = { vm.links.openBacklink(it) },
                                         onFirstVisibleElement = { vm.links.onReadingPositionChanged(it) },
