@@ -293,7 +293,7 @@ private fun NotesAppState.NotesShell(choice: NotesSourceChoice, onChangeSource: 
                                 conflictShown(vm.note.path, vm.library.conflicts)?.let { conflict ->
                                     ConflictBanner(
                                         conflict,
-                                        onCompare = { comparingCopy = conflict.copy },
+                                        onCompare = { dialog = NoteDialog.ComparingCopy(conflict.copy) },
                                         onKeepNote = { scope.launch { vm.noteFiles.discardConflictCopy(conflict.copy) } },
                                         onUseCopy = { scope.launch { vm.noteFiles.useConflictCopy(conflict.copy) } },
                                         keptSide = keptSide,
@@ -326,7 +326,7 @@ private fun NotesAppState.NotesShell(choice: NotesSourceChoice, onChangeSource: 
                                                         if (delta < 0) vm.editor.promoteSection(index) else vm.editor.demoteSection(index)
                                                     }
                                                 },
-                                                onRefileSection = { index -> refiling = index to vm.changes.refileTargets(index) },
+                                                onRefileSection = { index -> dialog = NoteDialog.Refiling(index, vm.changes.refileTargets(index)) },
                                                 onSetPriority = { offset, priority -> vm.changes.setPriorityAt(offset, priority) },
                                                 onClockIn = { vm.clockActions.clockInAt(it) },
                                                 onClockOut = { vm.clockActions.clockOutAt(it) },
@@ -352,7 +352,7 @@ private fun NotesAppState.NotesShell(choice: NotesSourceChoice, onChangeSource: 
                                         onFirstVisibleElement = { vm.links.onReadingPositionChanged(it) },
                                         listState = documentListState,
                                         onEditDetails = if (vm.note.path != null) {
-                                            { editingDetails = true }
+                                            { dialog = NoteDialog.NoteDetails }
                                         } else {
                                             null
                                         },
@@ -378,7 +378,7 @@ private fun NotesAppState.NotesShell(choice: NotesSourceChoice, onChangeSource: 
                                         if (vm.savedSearches.find(query) != null) {
                                             vm.savedSearches.remove(query)
                                         } else {
-                                            namingSearch = SavedSearch(name = query, query = query) to false
+                                            dialog = NoteDialog.NamingSearch(SavedSearch(name = query, query = query), renaming = false)
                                         }
                                     },
                                     onShowSaved = {

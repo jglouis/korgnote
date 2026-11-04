@@ -175,9 +175,9 @@ internal fun NotesAppState.NotesBottomBar(wide: Boolean, safeInsets: WindowInset
     if (vm.editor.editingIndex != null) {
         CompletionStrip(
             vm.completion,
-            onPickLink = { pickingLink = vm.linkForm.linkTargets() },
-            onEditLink = vm.linkForm.linkToEdit()?.takeUnless { it.isNew }?.let { edit -> { editingLink = edit } },
-            onInsertTable = { insertingTable = true },
+            onPickLink = { dialog = NoteDialog.PickingLink(vm.linkForm.linkTargets()) },
+            onEditLink = vm.linkForm.linkToEdit()?.takeUnless { it.isNew }?.let { edit -> { dialog = NoteDialog.EditingLink(edit) } },
+            onInsertTable = { dialog = NoteDialog.NewTable },
         ) {
             // Saving an element is explicit: edits stay local until this is pressed.
             IconButton(onClick = { vm.editor.cancel() }) {

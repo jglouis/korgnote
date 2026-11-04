@@ -73,37 +73,24 @@ internal class NotesAppState(
     /** Each request from elsewhere is counted, so asking for the same day again starts there again, wherever the calendar was moved since. */
     var calendarRequests by calendarRequests
 
-    // At most one of these is open; each names the note it is about.
-    var creatingNote by mutableStateOf(false)
+    var dialog by mutableStateOf<NoteDialog?>(null)
 
     // The calendar's "Capture an event": the capture sheet, open on the phone's calendar.
     var capturingEvent by mutableStateOf(false)
-    var editingDetails by mutableStateOf(false)
 
-    // The notes and headings a link can go to, while the link picker is open.
-    var pickingLink by mutableStateOf<List<LinkTarget>?>(null)
-
-    /** The heading being refiled, by element index, with where it can go. */
-    var refiling by mutableStateOf<Pair<Int, List<LinkTarget>>?>(null)
-    var editingLink by mutableStateOf<LinkEdit?>(null)
-
-    // A table being made from the editor's Table button, before it goes into the element.
-    var insertingTable by mutableStateOf(false)
-    var renamingNote by mutableStateOf<String?>(null)
-    var deletingNote by mutableStateOf<Pair<String, Boolean>?>(null)
-
-    // A search being named: one about to be saved, or (true) a saved one being renamed.
-    var namingSearch by mutableStateOf<Pair<SavedSearch, Boolean>?>(null)
+    // Why the note could not be made or renamed, in the dialog that tried.
     var noteDialogError by mutableStateOf<String?>(null)
-
-    // The conflict copy being compared with its note.
-    var comparingCopy by mutableStateOf<String?>(null)
 
     // Why something could not be done, shown for a moment.
     val snackbarHostState = SnackbarHostState()
 
     // Whose version a note in conflict holds, for the banner and the comparison to say.
     val keptSide = if (source is NotesSource.Folder) KeptSide.FOLDER else KeptSide.SERVER
+
+    /** Closes [which], if it is still what is open: what finished may have been dismissed meanwhile. */
+    fun close(which: NoteDialog) {
+        if (dialog == which) dialog = null
+    }
 
     fun openCalendar(target: CalendarTarget) {
         calendarTarget = target
@@ -125,6 +112,34 @@ internal class NotesAppState(
         if (item == BottomItem.CALENDAR && selectedScreen != BottomItem.CALENDAR) calendarTarget = calendarView
         selectedScreen = item
     }
+}
+
+/**
+ * What is open over the notes, of what a tap on the screen beneath opens, which a dialog's scrim makes
+ * one at a time. Not among them is what comes from elsewhere: the capture sheet, which a link from
+ * another app opens over anything, and what the view model asks for, a table or a date to pick.
+ */
+internal sealed interface NoteDialog {
+    data object NewNote : NoteDialog
+    data object NoteDetails : NoteDialog
+
+    /** The notes and headings a link can go to, while the link picker is open. */
+    data class PickingLink(val targets: List<LinkTarget>) : NoteDialog
+
+    /** The heading being refiled, by element index, with where it can go. */
+    data class Refiling(val index: Int, val targets: List<LinkTarget>) : NoteDialog
+    data class EditingLink(val edit: LinkEdit) : NoteDialog
+
+    /** A table being made from the editor's Table button, before it goes into the element. */
+    data object NewTable : NoteDialog
+    data class RenamingNote(val path: String) : NoteDialog
+    data class DeletingNote(val path: String, val unsynced: Boolean) : NoteDialog
+
+    /** A search being named: one about to be saved, or a saved one being renamed. */
+    data class NamingSearch(val search: SavedSearch, val renaming: Boolean) : NoteDialog
+
+    /** The conflict copy being compared with its note. */
+    data class ComparingCopy(val copy: String) : NoteDialog
 }
 
 @Composable

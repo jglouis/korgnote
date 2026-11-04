@@ -55,53 +55,6 @@ internal fun NotesAppState.NotesDialogs() {
             },
         )
     }
-    if (creatingNote) {
-        NewNoteDialog(
-            pathFor = vm.noteFiles::newNotePathFor,
-            knownTags = vm.completion.context.knownTags,
-            error = noteDialogError,
-            onDismiss = { creatingNote = false; noteDialogError = null },
-            onCreate = { title, tags ->
-                scope.launch {
-                    when (val result = vm.noteFiles.createNote(title, tags)) {
-                        // Stays open when refused, saying why.
-                        is NoteFileResult.Refused -> noteDialogError = result.reason
-                        is NoteFileResult.Done -> {
-                            creatingNote = false
-                            noteDialogError = null
-                            selectedScreen = BottomItem.FILE
-                            drawerState.close()
-                        }
-                    }
-                }
-            },
-        )
-    }
-    if (editingDetails) {
-        NoteDetailsDialog(
-            initial = remember { vm.changes.openNoteKeywords() },
-            knownTags = vm.completion.context.knownTags,
-            defaultAuthor = remember { settingsRepo.getNoteTemplate().author },
-            today = vm.completion.context.today,
-            onSave = { keywords ->
-                editingDetails = false
-                scope.launch { vm.changes.setOpenNoteKeywords(keywords) }
-            },
-            onDismiss = { editingDetails = false },
-        )
-    }
-    if (insertingTable) {
-        TableEditorDialog(
-            initial = TableGrid.starter(),
-            title = stringResource(Res.string.app_new_table),
-            onSave = { grid ->
-                insertingTable = false
-                vm.completion.insertTable(grid)
-            },
-            onDismiss = { insertingTable = false },
-            cellCompletion = vm::completionFor,
-        )
-    }
     vm.tables.edit?.let { edit ->
         TableEditorDialog(
             initial = edit.grid,
@@ -110,119 +63,154 @@ internal fun NotesAppState.NotesDialogs() {
             cellCompletion = vm::completionFor,
         )
     }
-    renamingNote?.let { path ->
-        RenameNoteDialog(
-            path = path,
+    when (val open = dialog) {
+        NoteDialog.NewNote -> NewNoteDialog(
+            pathFor = vm.noteFiles::newNotePathFor,
+            knownTags = vm.completion.context.knownTags,
             error = noteDialogError,
-            onDismiss = { renamingNote = null; noteDialogError = null },
-            onRename = { target ->
+            onDismiss = { close(open); noteDialogError = null },
+            onCreate = { title, tags ->
                 scope.launch {
-                    when (val result = vm.noteFiles.renameNote(path, target)) {
+                    when (val result = vm.noteFiles.createNote(title, tags)) {
+                        // Stays open when refused, saying why.
                         is NoteFileResult.Refused -> noteDialogError = result.reason
                         is NoteFileResult.Done -> {
-                            renamingNote = null
+                            close(open)
+                            noteDialogError = null
+                            selectedScreen = BottomItem.FILE
+                            drawerState.close()
+                        }
+                    }
+                }
+            },
+        )
+        NoteDialog.NoteDetails -> NoteDetailsDialog(
+            initial = remember { vm.changes.openNoteKeywords() },
+            knownTags = vm.completion.context.knownTags,
+            defaultAuthor = remember { settingsRepo.getNoteTemplate().author },
+            today = vm.completion.context.today,
+            onSave = { keywords ->
+                close(open)
+                scope.launch { vm.changes.setOpenNoteKeywords(keywords) }
+            },
+            onDismiss = { close(open) },
+        )
+        NoteDialog.NewTable -> TableEditorDialog(
+            initial = TableGrid.starter(),
+            title = stringResource(Res.string.app_new_table),
+            onSave = { grid ->
+                close(open)
+                vm.completion.insertTable(grid)
+            },
+            onDismiss = { close(open) },
+            cellCompletion = vm::completionFor,
+        )
+        is NoteDialog.RenamingNote -> RenameNoteDialog(
+            path = open.path,
+            error = noteDialogError,
+            onDismiss = { close(open); noteDialogError = null },
+            onRename = { target ->
+                scope.launch {
+                    when (val result = vm.noteFiles.renameNote(open.path, target)) {
+                        is NoteFileResult.Refused -> noteDialogError = result.reason
+                        is NoteFileResult.Done -> {
+                            close(open)
                             noteDialogError = null
                         }
                     }
                 }
             },
         )
-    }
-    comparingCopy?.let { copy ->
-        // Worked out again whenever a note's text changes, so the chunks are always the current ones.
-        val comparison = remember(copy, vm.library.revision) { vm.noteFiles.conflictComparison(copy) }
-        var refused by remember(copy) { mutableStateOf(false) }
-        if (comparison == null) {
-            // Settled meanwhile, here or on another device.
-            LaunchedEffect(Unit) { comparingCopy = null }
-        } else {
-            val moved = stringResource(Res.string.notes_conflict_moved)
-            ConflictCompareDialog(
-                comparison = comparison,
-                onApply = { choices ->
-                    scope.launch {
-                        if (vm.noteFiles.resolveConflictCopy(comparison, choices)) comparingCopy = null else refused = true
-                    }
-                },
-                onDismiss = { comparingCopy = null },
-                keptSide = keptSide,
-                error = moved.takeIf { refused },
-            )
+        is NoteDialog.ComparingCopy -> {
+            // Worked out again whenever a note's text changes, so the chunks are always the current ones.
+            val comparison = remember(open.copy, vm.library.revision) { vm.noteFiles.conflictComparison(open.copy) }
+            var refused by remember(open.copy) { mutableStateOf(false) }
+            if (comparison == null) {
+                // Settled meanwhile, here or on another device.
+                LaunchedEffect(Unit) { close(open) }
+            } else {
+                val moved = stringResource(Res.string.notes_conflict_moved)
+                ConflictCompareDialog(
+                    comparison = comparison,
+                    onApply = { choices ->
+                        scope.launch {
+                            if (vm.noteFiles.resolveConflictCopy(comparison, choices)) close(open) else refused = true
+                        }
+                    },
+                    onDismiss = { close(open) },
+                    keptSide = keptSide,
+                    error = moved.takeIf { refused },
+                )
+            }
         }
-    }
-    deletingNote?.let { (path, unsynced) ->
-        DeleteNoteDialog(
-            path = path,
-            hasUnsyncedChanges = unsynced,
-            onDismiss = { deletingNote = null },
+        is NoteDialog.DeletingNote -> DeleteNoteDialog(
+            path = open.path,
+            hasUnsyncedChanges = open.unsynced,
+            onDismiss = { close(open) },
             onDelete = {
-                deletingNote = null
-                scope.launch { vm.noteFiles.deleteNote(path) }
+                close(open)
+                scope.launch { vm.noteFiles.deleteNote(open.path) }
             },
         )
-    }
-    namingSearch?.let { (search, renaming) ->
-        SaveSearchDialog(
-            query = search.query,
-            name = search.name,
-            renaming = renaming,
-            onDismiss = { namingSearch = null },
+        is NoteDialog.NamingSearch -> SaveSearchDialog(
+            query = open.search.query,
+            name = open.search.name,
+            renaming = open.renaming,
+            onDismiss = { close(open) },
             onSave = { name ->
-                namingSearch = null
-                vm.savedSearches.save(search.query, name)
+                close(open)
+                vm.savedSearches.save(open.search.query, name)
             },
         )
+        // Within the screen, in what follows.
+        is NoteDialog.PickingLink, is NoteDialog.Refiling, is NoteDialog.EditingLink, null -> Unit
     }
 }
 
 /** What opens from the note being read or edited, within what handles its links. */
 @Composable
 internal fun NotesAppState.NotesScreenDialogs() {
-    pickingLink?.let { targets ->
-        LinkPickerDialog(
-            targets = targets,
+    when (val open = dialog) {
+        is NoteDialog.PickingLink -> LinkPickerDialog(
+            targets = open.targets,
             currentPath = vm.note.path.orEmpty(),
             onPick = { target ->
-                pickingLink = null
+                close(open)
                 scope.launch { vm.linkForm.insertLinkTo(target) }
             },
             onTypeLink = {
-                pickingLink = null
-                editingLink = vm.linkForm.linkToEdit()
+                dialog = vm.linkForm.linkToEdit()?.let { NoteDialog.EditingLink(it) }
             },
-            onDismiss = { pickingLink = null },
+            onDismiss = { close(open) },
         )
-    }
-    refiling?.let { (index, targets) ->
-        LinkPickerDialog(
-            targets = targets,
+        is NoteDialog.Refiling -> LinkPickerDialog(
+            targets = open.targets,
             currentPath = vm.note.path.orEmpty(),
             onPick = { target ->
-                refiling = null
-                scope.launch { vm.changes.refile(index, target) }
+                close(open)
+                scope.launch { vm.changes.refile(open.index, target) }
             },
             onTypeLink = null,
-            onDismiss = { refiling = null },
+            onDismiss = { close(open) },
             title = stringResource(Res.string.editor_refile_title),
         )
-    }
-    editingLink?.let { edit ->
-        LinkEditorDialog(
-            edit = edit,
+        is NoteDialog.EditingLink -> LinkEditorDialog(
+            edit = open.edit,
             noteTitle = vm.linkForm::noteLinkTitle,
             linkTargets = vm.linkForm::linkTargets,
             currentPath = vm.note.path.orEmpty(),
             fileLinkMappings = vm.files.mappings(),
             onSave = { target, description, note ->
-                editingLink = null
-                scope.launch { vm.linkForm.saveLink(edit, target, description, note) }
+                close(open)
+                scope.launch { vm.linkForm.saveLink(open.edit, target, description, note) }
             },
             onRemove = {
-                editingLink = null
-                vm.linkForm.removeLink(edit)
+                close(open)
+                vm.linkForm.removeLink(open.edit)
             },
-            onDismiss = { editingLink = null },
+            onDismiss = { close(open) },
         )
+        else -> Unit
     }
     vm.stateNotes.pending?.let { pending ->
         StateNoteDialog(

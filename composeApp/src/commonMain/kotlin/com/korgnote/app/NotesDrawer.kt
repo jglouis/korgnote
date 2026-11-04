@@ -33,7 +33,7 @@ internal fun NotesAppState.NotesDrawerSheet() {
                     vm.search.run(search.query)
                     scope.launch { drawerState.close() }
                 },
-                onRename = { namingSearch = it to true },
+                onRename = { dialog = NoteDialog.NamingSearch(it, renaming = true) },
                 onRemove = { vm.savedSearches.remove(it.query) },
                 modifier = Modifier.padding(8.dp),
             )
@@ -44,7 +44,7 @@ internal fun NotesAppState.NotesDrawerSheet() {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(bottom = 4.dp),
             ) {
-                DrawerAction(Icons.AutoMirrored.Filled.NoteAdd, stringResource(Res.string.app_new_note)) { creatingNote = true }
+                DrawerAction(Icons.AutoMirrored.Filled.NoteAdd, stringResource(Res.string.app_new_note)) { dialog = NoteDialog.NewNote }
                 DrawerAction(Icons.Filled.Today, stringResource(Res.string.app_todays_daily)) { openToday() }
             }
             Text(
@@ -86,12 +86,12 @@ internal fun NotesAppState.NotesDrawerSheet() {
                         drawerState.close()
                     }
                 },
-                onRenameFile = { renamingNote = it },
+                onRenameFile = { dialog = NoteDialog.RenamingNote(it) },
                 conflicts = vm.library.conflicts,
                 pinned = vm.pins.shown.toSet(),
                 onTogglePin = { vm.pins.toggle(it) },
                 onDeleteFile = { path ->
-                    scope.launch { deletingNote = path to vm.noteFiles.hasUnsyncedChanges(path) }
+                    scope.launch { dialog = NoteDialog.DeletingNote(path, vm.noteFiles.hasUnsyncedChanges(path)) }
                 },
                 modifier = Modifier.weight(1f)
             )
