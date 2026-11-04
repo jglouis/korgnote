@@ -2,6 +2,7 @@ package com.korgnote.app.data
 
 import com.korgnote.common.replica.DeleteResult
 import com.korgnote.common.replica.FetchResult
+import com.korgnote.common.replica.PushCondition
 import com.korgnote.common.replica.PushResult
 import com.korgnote.common.replica.RemoteEntry
 import com.korgnote.common.replica.RemoteFile
@@ -216,21 +217,23 @@ class WebDavSyncApi(
         }
     }
 
-    private suspend fun put(path: String, content: String, ifMatch: String?, mustNotExist: Boolean) =
+    private suspend fun put(path: String, content: String, condition: PushCondition) =
         send(HttpMethod.Put, path) {
-            if (ifMatch != null) header(HttpHeaders.IfMatch, quoted(ifMatch))
-            if (mustNotExist) header(HttpHeaders.IfNoneMatch, "*")
+            when (condition) {
+                is PushCondition.Matches -> header(HttpHeaders.IfMatch, quoted(condition.etag))
+                PushCondition.Absent -> header(HttpHeaders.IfNoneMatch, "*")
+            }
             setBody(TextContent(content, ContentType.Text.Plain.withCharset(Charsets.UTF_8)))
         }
 
-    override suspend fun push(path: String, content: String, ifMatch: String?, mustNotExist: Boolean): PushResult {
-        var response = put(path, content, ifMatch, mustNotExist)
+    override suspend fun push(path: String, content: String, condition: PushCondition): PushResult {
+        var response = put(path, content, condition)
         // WebDAV's 409 is not an edit conflict: a folder above the file is missing. Nextcloud says
         // so with a 404 instead.
         val folderMissing = response.status == HttpStatusCode.Conflict || response.status == HttpStatusCode.NotFound
         if (folderMissing && path.contains('/')) {
             makeFolders(path.substringBeforeLast('/'))
-            response = put(path, content, ifMatch, mustNotExist)
+            response = put(path, content, condition)
         }
         if (!response.status.isSuccess()) {
             return if (response.status == HttpStatusCode.PreconditionFailed) PushResult.Conflict(null)
@@ -242,9 +245,9 @@ class WebDavSyncApi(
         // still holding it could then write over this one unrefused. Written again a second later,
         // it gets an etag of its own.
         repeat(SAME_ETAG_RETRIES) {
-            if (ifMatch == null || etag != canonicalEtag(ifMatch)) return PushResult.Pushed(etag)
+            if (condition !is PushCondition.Matches || etag != canonicalEtag(condition.etag)) return PushResult.Pushed(etag)
             delay(WEAK_ETAG_WAIT)
-            val again = put(path, content, ifMatch = etag, mustNotExist = false)
+            val again = put(path, content, PushCondition.Matches(etag))
             // Someone wrote in between: theirs is merged with this one like any conflict.
             if (!again.status.isSuccess()) return PushResult.Conflict(null)
             etag = etagAfterPut(path, content, again)
@@ -322,12 +325,12 @@ class WebDavSyncApi(
         val unsafe = getString(Res.string.data_webdav_unsafe)
         send(HttpMethod.Delete, PROBE)
         try {
-            val created = put(PROBE, "1", ifMatch = null, mustNotExist = true)
+            val created = put(PROBE, "1", PushCondition.Absent)
             if (!created.status.isSuccess()) return getString(Res.string.data_webdav_cannot_write, created.status.toString())
-            if (put(PROBE, "2", ifMatch = null, mustNotExist = true).status != HttpStatusCode.PreconditionFailed) {
+            if (put(PROBE, "2", PushCondition.Absent).status != HttpStatusCode.PreconditionFailed) {
                 return getString(Res.string.data_webdav_ignores_if_none_match, unsafe)
             }
-            if (put(PROBE, "3", ifMatch = "korgnote-no-such-version", mustNotExist = false).status != HttpStatusCode.PreconditionFailed) {
+            if (put(PROBE, "3", PushCondition.Matches("korgnote-no-such-version")).status != HttpStatusCode.PreconditionFailed) {
                 return getString(Res.string.data_webdav_ignores_if_match, unsafe)
             }
             val fetched = (fetch(PROBE) as? FetchResult.Fetched)?.file ?: return getString(Res.string.data_webdav_lost_file)
@@ -335,7 +338,7 @@ class WebDavSyncApi(
             if (listed != fetched.etag) {
                 return getString(Res.string.data_webdav_etag_mismatch, listed.toString(), fetched.etag, unsafe)
             }
-            val updated = put(PROBE, "4", ifMatch = fetched.etag, mustNotExist = false)
+            val updated = put(PROBE, "4", PushCondition.Matches(fetched.etag))
             if (!updated.status.isSuccess()) {
                 return getString(Res.string.data_webdav_refuses_own_etag, updated.status.toString())
             }

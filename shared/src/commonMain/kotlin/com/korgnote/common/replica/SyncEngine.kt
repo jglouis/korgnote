@@ -146,7 +146,7 @@ class SyncEngine(
                     !dirty -> record(pullOne(entry.path), entry.path)
 
                     // Edited locally, server unchanged since we synced: push.
-                    meta.etag == entry.etag -> record(pushLocal(entry.path, meta.etag), entry.path)
+                    meta.etag == entry.etag -> record(pushLocal(entry.path, entry.etag), entry.path)
 
                     // Both moved: try to reconcile them, and only involve the user if that fails.
                     else -> record(reconcile(entry.path), entry.path)
@@ -322,7 +322,7 @@ class SyncEngine(
             is MergeResult.Merged -> {
                 // Saved here while the server was being asked: merge again next cycle, with it.
                 if (!store.saveIfUnchanged(path, local, result.text)) return PushOutcome.FAILED
-                when (val push = api.push(path, result.text, ifMatch = remote.etag)) {
+                when (val push = api.push(path, result.text, PushCondition.Matches(remote.etag))) {
                     is PushResult.Pushed -> {
                         store.markPushed(path, push.etag, result.text)
                         PushOutcome.MERGED
@@ -349,9 +349,9 @@ class SyncEngine(
 
     private enum class PullOutcome { TAKEN, LEFT, FAILED }
 
-    private suspend fun pushLocal(path: String, ifMatch: String?): PushOutcome {
+    private suspend fun pushLocal(path: String, ifMatch: String): PushOutcome {
         val content = store.read(path) ?: return PushOutcome.SKIPPED
-        return when (val result = api.push(path, content, ifMatch)) {
+        return when (val result = api.push(path, content, PushCondition.Matches(ifMatch))) {
             is PushResult.Pushed -> {
                 store.markPushed(path, result.etag, content)
                 PushOutcome.PUSHED
@@ -373,7 +373,7 @@ class SyncEngine(
      */
     private suspend fun pushNew(path: String): PushOutcome {
         val content = store.read(path) ?: return PushOutcome.SKIPPED
-        return when (val result = api.push(path, content, ifMatch = null, mustNotExist = true)) {
+        return when (val result = api.push(path, content, PushCondition.Absent)) {
             is PushResult.Pushed -> {
                 store.markPushed(path, result.etag, content)
                 PushOutcome.PUSHED

@@ -1,6 +1,7 @@
 package com.korgnote.app.data
 
 import com.korgnote.common.replica.FetchResult
+import com.korgnote.common.replica.PushCondition
 import com.korgnote.common.replica.PushResult
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -162,7 +163,7 @@ class WebDavSyncApiTest {
                 else -> error("unexpected ${request.method.value}")
             }
         }
-        assertEquals(PushResult.Pushed("new"), api.push("a/b/c.org", "* C\n", ifMatch = null, mustNotExist = true))
+        assertEquals(PushResult.Pushed("new"), api.push("a/b/c.org", "* C\n", PushCondition.Absent))
         assertEquals("*", requests.last().headers[HttpHeaders.IfNoneMatch])
     }
 
@@ -186,7 +187,7 @@ class WebDavSyncApiTest {
     @Test
     fun aWriteOverAnotherVersionIsAConflict() = runTest {
         val api = apiWith { respond("", HttpStatusCode.PreconditionFailed) }
-        assertEquals(PushResult.Conflict(null), api.push("a.org", "x", ifMatch = "old"))
+        assertEquals(PushResult.Conflict(null), api.push("a.org", "x", PushCondition.Matches("old")))
         assertEquals("\"old\"", requests.single().headers[HttpHeaders.IfMatch])
     }
 }

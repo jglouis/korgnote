@@ -4,6 +4,7 @@ import com.korgnote.common.replica.DeleteResult
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.FetchResult
 import com.korgnote.common.replica.InMemoryReplicaStorage
+import com.korgnote.common.replica.PushCondition
 import com.korgnote.common.replica.PushResult
 import com.korgnote.common.replica.RemoteEntry
 import com.korgnote.common.replica.RemoteFile
@@ -278,11 +279,13 @@ class SyncEngineRandomTests {
             return files.filterKeys { moved == null || it in moved }.map { (path, v) -> RemoteFile(path, v.first, v.second) }
         }
 
-        override suspend fun push(path: String, content: String, ifMatch: String?, mustNotExist: Boolean): PushResult {
+        override suspend fun push(path: String, content: String, condition: PushCondition): PushResult {
             beforeActing()
             val current = files[path]
-            if (mustNotExist && current != null) return PushResult.Conflict(current.first)
-            if (ifMatch != null && current?.first != ifMatch) return PushResult.Conflict(current?.first)
+            when (condition) {
+                PushCondition.Absent -> if (current != null) return PushResult.Conflict(current.first)
+                is PushCondition.Matches -> if (current?.first != condition.etag) return PushResult.Conflict(current?.first)
+            }
             put(path, content)
             afterActing()
             return PushResult.Pushed(files.getValue(path).first)

@@ -227,7 +227,7 @@ class WebDavServersTest {
         val b = Device(account, client)
         a.store.create("race.org", "* From A\n")
         a.engine.sync()
-        assertTrue(b.api.push("race.org", "* From B\n", ifMatch = null, mustNotExist = true) is com.korgnote.common.replica.PushResult.Conflict)
+        assertTrue(b.api.push("race.org", "* From B\n", com.korgnote.common.replica.PushCondition.Absent) is com.korgnote.common.replica.PushResult.Conflict)
         assertEquals("* From A\n", b.api.fileAt("race.org").text)
     }
 
@@ -239,7 +239,7 @@ class WebDavServersTest {
         val old = a.api.fileAt("versions.org").etag
         a.store.save("versions.org", "* Two\n")
         a.engine.sync()
-        val stale = a.api.push("versions.org", "* Stale\n", ifMatch = old)
+        val stale = a.api.push("versions.org", "* Stale\n", com.korgnote.common.replica.PushCondition.Matches(old))
         assertTrue(stale is com.korgnote.common.replica.PushResult.Conflict, "a write over $old: $stale")
         val gone = a.api.delete("versions.org", ifMatch = old)
         assertTrue(gone is com.korgnote.common.replica.DeleteResult.Conflict, "a delete over $old: $gone")
@@ -271,7 +271,7 @@ class WebDavServersTest {
         a.engine.sync()
         // Written behind the engine's back, as another app would.
         for (path in listOf(".hidden.org", ".git/config.org", "picture.png")) {
-            val pushed = a.api.push(path, "x", ifMatch = null, mustNotExist = true)
+            val pushed = a.api.push(path, "x", com.korgnote.common.replica.PushCondition.Absent)
             if (pushed !is com.korgnote.common.replica.PushResult.Pushed) fail("could not write $path: $pushed")
         }
         assertEquals(listOf("note.org"), a.api.manifest().entries.map { it.path })

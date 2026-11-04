@@ -1,6 +1,7 @@
 package com.korgnote.app.data
 
 import com.korgnote.common.replica.FetchResult
+import com.korgnote.common.replica.PushCondition
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -55,7 +56,7 @@ class KtorSyncApiAuthTest {
         val api = apiWith(Endpoint("https://192.168.1.20:8443", "s3cret"))
         api.manifest()
         api.fetch("notes.org")
-        api.push("notes.org", "* hi\n", ifMatch = null)
+        api.push("notes.org", "* hi\n", PushCondition.Absent)
 
         assertEquals(List<String?>(3) { "Bearer s3cret" }, sent.toList())
     }

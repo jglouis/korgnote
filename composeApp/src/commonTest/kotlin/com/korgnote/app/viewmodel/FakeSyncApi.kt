@@ -2,6 +2,7 @@ package com.korgnote.app.viewmodel
 
 import com.korgnote.common.replica.DeleteResult
 import com.korgnote.common.replica.FetchResult
+import com.korgnote.common.replica.PushCondition
 import com.korgnote.common.replica.PushResult
 import com.korgnote.common.replica.RemoteEntry
 import com.korgnote.common.replica.RemoteFile
@@ -44,12 +45,12 @@ class FakeSyncApi(val files: MutableMap<String, String> = mutableMapOf()) : Sync
         return FetchResult.Fetched(RemoteFile(path, etagOf(path), text))
     }
 
-    override suspend fun push(path: String, content: String, ifMatch: String?, mustNotExist: Boolean): PushResult {
+    override suspend fun push(path: String, content: String, condition: PushCondition): PushResult {
         requireOnline()
-        if (ifMatch != null && files.containsKey(path) && ifMatch != etagOf(path)) {
+        if (condition is PushCondition.Matches && files.containsKey(path) && condition.etag != etagOf(path)) {
             return PushResult.Conflict(etagOf(path))
         }
-        if (mustNotExist && files.containsKey(path)) return PushResult.Conflict(etagOf(path))
+        if (condition == PushCondition.Absent && files.containsKey(path)) return PushResult.Conflict(etagOf(path))
         files[path] = content
         saves.add(path to content)
         generation++

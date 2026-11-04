@@ -13,6 +13,17 @@ data class RemoteManifest(
 
 data class RemoteFile(val path: String, val etag: String, val text: String)
 
+/**
+ * What a write must find on the server, or be refused. There is no unconditional write: the protocol
+ * allows one, and with it a device could replace an edit it never saw.
+ */
+sealed interface PushCondition {
+    /** Only over this version: `If-Match`. */
+    data class Matches(val etag: String) : PushCondition
+    /** Only when the server has nothing there, so a new note never replaces one made elsewhere: `If-None-Match: *`. */
+    data object Absent : PushCondition
+}
+
 sealed interface FetchResult {
     data class Fetched(val file: RemoteFile) : FetchResult
     /** Nothing at that path: it was deleted since it was listed, or never there. */
@@ -53,16 +64,8 @@ interface SyncApi {
      * transport has no such call, which leaves every file to [fetch].
      */
     suspend fun bundle(since: Long? = null): List<RemoteFile>? = null
-    /**
-     * Writes [path]. With [ifMatch], only over that version; with [mustNotExist] (`If-None-Match: *`),
-     * only when the server has nothing there, so a new note never replaces one made elsewhere.
-     */
-    suspend fun push(
-        path: String,
-        content: String,
-        ifMatch: String?,
-        mustNotExist: Boolean = false,
-    ): PushResult
+    /** Writes [path], if the server's copy meets [condition]. */
+    suspend fun push(path: String, content: String, condition: PushCondition): PushResult
 
     /** Deletes [path], but only the version [ifMatch] names: an edit made elsewhere is never deleted. */
     suspend fun delete(path: String, ifMatch: String): DeleteResult

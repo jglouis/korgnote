@@ -2,6 +2,7 @@ package com.korgnote.app.data
 
 import com.korgnote.common.replica.DeleteResult
 import com.korgnote.common.replica.FetchResult
+import com.korgnote.common.replica.PushCondition
 import com.korgnote.common.replica.PushResult
 import com.korgnote.common.replica.RemoteEntry
 import com.korgnote.common.replica.RemoteFile
@@ -154,17 +155,14 @@ class KtorSyncApi(
             .toList()
     }
 
-    override suspend fun push(
-        path: String,
-        content: String,
-        ifMatch: String?,
-        mustNotExist: Boolean,
-    ): PushResult {
+    override suspend fun push(path: String, content: String, condition: PushCondition): PushResult {
         val response = reach { api, token ->
             client.put(api + filePath(path)) {
                 authorize(token)
-                if (ifMatch != null) header(HttpHeaders.IfMatch, ifMatch)
-                if (mustNotExist) header(HttpHeaders.IfNoneMatch, "*")
+                when (condition) {
+                    is PushCondition.Matches -> header(HttpHeaders.IfMatch, condition.etag)
+                    PushCondition.Absent -> header(HttpHeaders.IfNoneMatch, "*")
+                }
                 setBody(content)
             }.unlessRefused()
         }

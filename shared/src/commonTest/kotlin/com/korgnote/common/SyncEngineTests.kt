@@ -4,6 +4,7 @@ import com.korgnote.common.replica.DeleteResult
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.FetchResult
 import com.korgnote.common.replica.InMemoryReplicaStorage
+import com.korgnote.common.replica.PushCondition
 import com.korgnote.common.replica.PushResult
 import com.korgnote.common.replica.RemoteEntry
 import com.korgnote.common.replica.RemoteFile
@@ -111,14 +112,14 @@ class SyncEngineTests {
         /** Runs once, just before the next push is decided: an edit landing after the manifest. */
         var beforeNextPush: (suspend () -> Unit)? = null
 
-        override suspend fun push(path: String, content: String, ifMatch: String?, mustNotExist: Boolean): PushResult {
+        override suspend fun push(path: String, content: String, condition: PushCondition): PushResult {
             beforeNextPush?.also { beforeNextPush = null }?.invoke()
             pushed.add(path)
             val current = files[path]
-            if (ifMatch != null && current != null && current.first != ifMatch) {
+            if (condition is PushCondition.Matches && current != null && current.first != condition.etag) {
                 return PushResult.Conflict(current.first)
             }
-            if (mustNotExist && current != null) return PushResult.Conflict(current.first)
+            if (condition == PushCondition.Absent && current != null) return PushResult.Conflict(current.first)
             log.add("PUT $path")
             val etag = "e-$path-${content.hashCode()}"
             files[path] = etag to content
