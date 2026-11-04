@@ -65,7 +65,9 @@ moved:
   replacing the text under the caret, which made a new heading vanish from the screen.
 - `commit` splices the draft into the note the edit began on, then makes the same edit on the newer
   note. A heading added for this edit goes where it went: at the end, or before the line that
-  followed it, when that line is found exactly once in the newer note. Any other edit — or a new
+  followed it, when that line is found exactly once in the newer note. An element that still stands
+  in the newer note as it was, once only, takes the draft there, whatever moved around it: line by
+  line, a heading added right below it would count as the same change. Any other edit — or a new
   heading whose place cannot be found again — is merged three ways, line by line, over the note
   before the edit: the same `merge` a save goes through with the server.
 - Only a change to the same lines is still refused, and the editor stays open with a message.

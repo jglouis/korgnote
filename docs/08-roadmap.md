@@ -33,11 +33,9 @@ This is the only status list; the rules for keeping it are in the [docs README](
 - **A dirty note in a dot-folder cannot sync.** The server refuses the path with a 422, so a phone with
   an unsent edit to a note it kept from before that rule, or one renamed into `.foo/`, reports it as
   failed every cycle. The text stays on the phone; nothing tells the person why.
-- **An edit is refused beside what came in.** With the file's last heading open, a heading added below
-  it elsewhere makes Save say the part "also changed elsewhere", though that element is untouched: a
-  line-level merge counts adjacent lines as the same change. The text stays in the editor.
-- **A conflict copy stays on the phone after the sync that made it**, and *Keep this one* then deletes it
-  with no copy in the server's trash.
+- **A line merge counts adjacent lines as one change.** An element open in the editor is spared this
+  ([09](09-element-editing.md#a-sync-during-an-edit)), but a tick beside a line that came in is refused,
+  and an edit saved offline beside one becomes a conflict copy, though neither touched the other's line.
 - **Turning the phone** closes an open New note dialog with its title, and reverts unsaved Settings
   values. Both are plain `remember`.
 - **A shared address is cut at a bracket.** `https://example.com/a[1]` in shared text files `/a` as the

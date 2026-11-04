@@ -231,13 +231,28 @@ class ElementEditor(
      *
      * A heading added for this edit is a whole new element, and goes into [newer] where it went in
      * the note: at the end, or before the line that followed it. Merged line by line, a heading
-     * added at the end conflicted with any change to the last line. Anything else is merged as a
-     * save is merged with the server, over the note before this edit touched it.
+     * added at the end conflicted with any change to the last line. An element that still stands in
+     * [newer] as it was takes the draft there, whatever moved around it. Anything else is merged as
+     * a save is merged with the server, over the note before this edit touched it.
      */
     private fun rebased(edited: String, newer: String): String? {
         val before = textBeforeInsertion
-        if (before != null) inserted(newer, before)?.let { return it }
-        return (merge(before ?: note.content, edited, newer) as? MergeResult.Merged)?.text
+        val placed = if (before != null) inserted(newer, before) else spliced(newer)
+        return placed ?: (merge(before ?: note.content, edited, newer) as? MergeResult.Merged)?.text
+    }
+
+    /**
+     * [newer] with the draft in place of the element being edited, when that element stands in it as
+     * it was, and once only. Merged line by line, a change on the line next to it would conflict with
+     * the edit, though nothing touched what is being edited. A final newline is no difference: the
+     * last line of a note gains one as soon as something is added below it.
+     */
+    private fun spliced(newer: String): String? {
+        val asItWas = original?.trimEnd('\n') ?: return null
+        val element = newer.orgElements().singleOrNull { it.sliceOf(newer).trimEnd('\n') == asItWas } ?: return null
+        val slice = element.sliceOf(newer)
+        val replacement = if (slice.endsWith('\n') && draft.isNotEmpty() && !draft.endsWith('\n')) draft + "\n" else draft
+        return newer.replaceOrgElement(element, slice, replacement)
     }
 
     /**

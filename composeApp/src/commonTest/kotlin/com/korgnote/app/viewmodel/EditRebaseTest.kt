@@ -143,6 +143,66 @@ class EditRebaseTest {
         assertEquals("* From Emacs\n* TODO First\nbody one\n* DONE Second\nbody two\n", vm.note.content)
     }
 
+    /**
+     * Seen on an emulator: with the last heading open, one added below it elsewhere made Save say this
+     * part also changed. Line by line the two are adjacent, but the element itself is untouched.
+     */
+    @Test
+    fun anEditSurvivesAHeadingAddedRightBelowItElsewhere() = runTest {
+        vm.server.load()
+        vm.editor.beginEdit(1)
+        type("* TODO Second\nbody two, from the phone\n")
+        editedElsewhere("$original* From Emacs\n")
+
+        vm.editor.commit()
+
+        assertNull(vm.editor.editingIndex)
+        val both = "* TODO First\nbody one\n* TODO Second\nbody two, from the phone\n* From Emacs\n"
+        assertEquals(both, vm.note.content)
+        assertEquals(both, api.files[path])
+    }
+
+    @Test
+    fun anEditSurvivesAHeadingAddedRightAboveItElsewhere() = runTest {
+        vm.server.load()
+        vm.editor.beginEdit(1)
+        type("* DONE Second\nbody two\n")
+        editedElsewhere(original.replace("* TODO Second", "* From Emacs\n* TODO Second"))
+
+        vm.editor.commit()
+
+        assertEquals("* TODO First\nbody one\n* From Emacs\n* DONE Second\nbody two\n", vm.note.content)
+    }
+
+    /** The last line of a note with no final newline gains one as soon as something follows it. */
+    @Test
+    fun anEditOfALastLineWithNoNewlineSurvivesAHeadingAddedBelowIt() = runTest {
+        api.files[path] = "* First\nlast"
+        vm.server.load()
+        vm.editor.beginEdit(0)
+        type("* First\nlast, from the phone")
+        editedElsewhere("* First\nlast\n* From Emacs\n")
+
+        vm.editor.commit()
+
+        assertEquals("* First\nlast, from the phone\n* From Emacs\n", vm.note.content)
+    }
+
+    /** The same element twice, and which one was edited cannot be told: not guessed, nor written twice. */
+    @Test
+    fun anElementThatNowStandsTwiceIsNotGuessedAt() = runTest {
+        api.files[path] = "* Same\nbody\n* Other\n"
+        vm.server.load()
+        vm.editor.beginEdit(0)
+        type("* Same\nbody, from the phone\n")
+        editedElsewhere("* Same\nbody\n* Same\nbody\n* Other\n")
+
+        vm.editor.commit()
+
+        assertTrue(vm.note.content.split("from the phone").size <= 2, vm.note.content)
+        assertTrue(vm.editor.editingIndex != null || vm.note.content.contains("from the phone"), "the text is not lost")
+    }
+
     @Test
     fun anEditOfALineChangedElsewhereIsStillRefused() = runTest {
         vm.server.load()
