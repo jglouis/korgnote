@@ -5,6 +5,7 @@ import com.korgnote.common.org.OrgDrawer
 import com.korgnote.common.org.OrgPlanning
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.complete.orgStamp
+import com.korgnote.common.org.property
 import com.korgnote.common.org.toOrgDocument
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -82,10 +83,7 @@ fun OrgDocument.lastClocked(): List<LastClocked> =
 
 /** The heading's `:Effort:` property, as written (`1:30`, `2h`), or null when it has none. */
 val OrgSection.effort: String?
-    get() = children.filterIsInstance<OrgDrawer>()
-        .firstOrNull { it.name.equals("PROPERTIES", ignoreCase = true) }
-        ?.properties?.firstOrNull { it.first.equals("Effort", ignoreCase = true) }
-        ?.second?.trim()?.takeIf { it.isNotEmpty() }
+    get() = property("Effort")?.takeIf { it.isNotEmpty() }
 
 /**
  * [heading] with its effort set to [minutes], as `org-set-effort` writes it — `:Effort: 1:30` in its

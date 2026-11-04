@@ -2,13 +2,13 @@ package com.korgnote.common.org.edit
 
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgDocument
-import com.korgnote.common.org.OrgDrawer
 import com.korgnote.common.org.OrgList
 import com.korgnote.common.org.OrgListItem
 import com.korgnote.common.org.OrgNode
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.property
 import com.korgnote.common.org.toOrgDocument
 
 /**
@@ -114,11 +114,7 @@ internal fun changedRegion(before: String, after: String): Change? {
  * `:COOKIE_DATA:` property asks for, `todo` or `checkbox`, at every depth below with `recursive`.
  */
 fun headingProgress(section: OrgSection, todoKeywords: OrgTodoConfig): Progress {
-    val cookieData = section.children.filterIsInstance<OrgDrawer>()
-        .firstOrNull { it.name.equals("PROPERTIES", ignoreCase = true) }
-        ?.properties?.firstOrNull { it.first.equals("COOKIE_DATA", ignoreCase = true) }
-        ?.second?.lowercase()?.split(' ', ',')?.filter { it.isNotBlank() }
-        .orEmpty()
+    val cookieData = section.property("COOKIE_DATA")?.lowercase()?.split(' ', ',')?.filter { it.isNotBlank() }.orEmpty()
     val recursive = "recursive" in cookieData
 
     fun keyworded(): List<OrgSection> {

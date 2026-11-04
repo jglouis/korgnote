@@ -16,6 +16,7 @@ import com.korgnote.common.org.agenda.parseOrgTimestamp
 import com.korgnote.common.org.complete.orgStamp
 import com.korgnote.common.org.complete.restamp
 import com.korgnote.common.org.complete.shiftedEnd
+import com.korgnote.common.org.property
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.org.todoSequencesOf
 import kotlinx.datetime.DateTimeUnit
@@ -463,9 +464,7 @@ private const val MINUTES_PER_DAY = 24 * 60
  * for `#+TODO: TODO NEXT | DONE` — as Org does unless told otherwise.
  */
 private fun OrgDocument.repeatStateOf(heading: OrgSection, done: String, keywords: OrgTodoConfig): String {
-    val declared = heading.children.filterIsInstance<OrgDrawer>()
-        .firstOrNull { it.name.equals("PROPERTIES", ignoreCase = true) }
-        ?.properties?.firstOrNull { it.first.equals("REPEAT_TO_STATE", ignoreCase = true) }?.second?.trim()
+    val declared = heading.property("REPEAT_TO_STATE")
     if (declared != null && (declared in keywords.todo || declared in keywords.done)) return declared
     val sequence = todoSequencesOf(metadata).firstOrNull { done in it.done }
     return sequence?.let { (it.todo + it.done).first() } ?: keywords.todo.firstOrNull() ?: done

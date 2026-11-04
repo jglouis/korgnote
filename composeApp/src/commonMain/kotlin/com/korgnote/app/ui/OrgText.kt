@@ -81,6 +81,7 @@ import com.korgnote.common.org.OrgBlock
 import com.korgnote.common.org.OrgComment
 import com.korgnote.common.org.OrgDescriptionItem
 import com.korgnote.common.org.OrgDrawer
+import com.korgnote.common.org.property
 import com.korgnote.common.org.OrgFixedWidth
 import com.korgnote.common.org.OrgLatexEnvironment
 import com.korgnote.common.org.OrgFootnoteDefinition
@@ -539,13 +540,7 @@ private fun ProgressPill(progress: Progress, percent: Boolean) {
 }
 
 /** The heading's own `:LOCATION:` property, or null when it has none. */
-internal fun OrgSection.location(): String? =
-    children.asSequence()
-        .filterIsInstance<OrgDrawer>()
-        .filter { it.name.equals("PROPERTIES", ignoreCase = true) }
-        .flatMap { it.properties }
-        .firstOrNull { (key, _) -> key.equals("LOCATION", ignoreCase = true) }
-        ?.second?.trim()?.takeIf { it.isNotEmpty() }
+internal fun OrgSection.location(): String? = property("LOCATION")?.takeIf { it.isNotEmpty() }
 
 /**
  * The keywords a heading can move to, in the order the file declares them: the not-done ones, then
