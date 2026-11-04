@@ -134,6 +134,16 @@ class TransportSecurityTest {
         assertEquals(HttpStatusCode.Forbidden, client.get("/api/v1/manifest") { header(HttpHeaders.Host, "10.0.2.2:8080") }.status, "the emulator pairs, as a phone does")
     }
 
+    /** Anyone can register a name that starts like a loopback address and point it here. */
+    @Test
+    fun aNameThatOnlyStartsLikeALoopbackAddressIsRefused() = testApplication {
+        asThisComputer()
+        for (host in listOf("127.evil.example", "127.0.0.1.evil.example", "127.0.0.evil")) {
+            assertEquals(HttpStatusCode.Forbidden, client.get("/api/v1/manifest") { header(HttpHeaders.Host, "$host:8080") }.status, host)
+        }
+        assertEquals(HttpStatusCode.OK, client.get("/api/v1/manifest") { header(HttpHeaders.Host, "127.1.2.3:8080") }.status)
+    }
+
     @Test
     fun anotherSitesPageCannotChangeNotes() = testApplication {
         asThisComputer()

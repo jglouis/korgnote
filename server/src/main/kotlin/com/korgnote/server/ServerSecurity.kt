@@ -160,8 +160,11 @@ internal fun interfaceAddresses(): List<String> {
  */
 internal fun namesThisComputer(host: String): Boolean {
     val h = host.trim().removePrefix("[").removeSuffix("]").lowercase()
-    return h == "localhost" || h == "::1" || h.startsWith("127.")
+    return h == "localhost" || h == "::1" || LOOPBACK_IPV4.matches(h)
 }
+
+// Exactly an address: `127.evil.example` starts the same way, and anyone can point it at 127.0.0.1.
+private val LOOPBACK_IPV4 = Regex("^127(\\.\\d{1,3}){3}$")
 
 /**
  * Whether a connection from [address] comes from this computer: loopback, or one of [alsoThisComputer].
