@@ -8,6 +8,8 @@ import com.korgnote.common.replica.PushResult
 import com.korgnote.common.replica.RemoteEntry
 import com.korgnote.common.replica.RemoteFile
 import com.korgnote.common.replica.RemoteManifest
+import com.korgnote.common.replica.ReplicaMeta
+import com.korgnote.common.replica.ReplicaStorage
 import com.korgnote.common.replica.SyncApi
 import com.korgnote.common.replica.SyncEngine
 import kotlinx.coroutines.async
@@ -17,6 +19,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -802,6 +805,139 @@ class SyncEngineTests {
         server.refuses.clear()
         engine.sync()
         assertEquals("* A, edited on the laptop\n", store.read("a.org"))
+    }
+
+    // --- A crash in the middle of a save ---
+
+    private class Crash : RuntimeException("the battery was pulled")
+
+    /** Storage that stops at a chosen write to the working copy or the metadata, as a crash would. */
+    private class CrashingStorage(private val disk: ReplicaStorage) : ReplicaStorage by disk {
+        /** Which write from now on never happens: 1 for the next. */
+        var crashAtWrite: Int? = null
+
+        private fun aboutToWrite() {
+            val left = crashAtWrite ?: return
+            if (left == 1) {
+                crashAtWrite = null
+                throw Crash()
+            }
+            crashAtWrite = left - 1
+        }
+
+        override suspend fun write(path: String, content: String) {
+            aboutToWrite()
+            disk.write(path, content)
+        }
+
+        override suspend fun writeMeta(meta: ReplicaMeta) {
+            aboutToWrite()
+            disk.writeMeta(meta)
+        }
+    }
+
+    /** A synced note's store, and what is on disk for a new store to find after the crash. */
+    private suspend fun syncedThenCrashing(server: FakeServer): Triple<CrashingStorage, DocumentStore, InMemoryReplicaStorage> {
+        val disk = InMemoryReplicaStorage()
+        val crashing = CrashingStorage(disk)
+        val store = DocumentStore(crashing)
+        SyncEngine(store, server).sync()
+        return Triple(crashing, store, disk)
+    }
+
+    /** Whichever write the crash stopped, the record must not call clean a text the server never saw. */
+    @Test
+    fun aCrashDuringASaveNeverLeavesAnEditRecordedAsSynced() = runTest {
+        for (write in 1..2) {
+            val server = FakeServer()
+            server.put("a.org", "* A\n")
+            val (crashing, store, disk) = syncedThenCrashing(server)
+
+            crashing.crashAtWrite = write
+            assertFailsWith<Crash> { store.save("a.org", "* Edited\n") }
+
+            val restarted = DocumentStore(disk)
+            SyncEngine(restarted, server).sync()
+
+            assertEquals(restarted.read("a.org"), server.files["a.org"]?.second, "at write $write")
+            assertFalse(restarted.isDirty("a.org"))
+            assertEquals(listOf("a.org"), restarted.paths(), "no conflict copy of an edit no one made")
+        }
+    }
+
+    /** The server moved while the phone was off: the old text, marked dirty, must not stand in its way. */
+    @Test
+    fun aCrashDuringASaveDoesNotConflictWithTheServerMovingOn() = runTest {
+        for (write in 1..2) {
+            val server = FakeServer()
+            server.put("a.org", "* A\nline\n")
+            val (crashing, store, disk) = syncedThenCrashing(server)
+
+            crashing.crashAtWrite = write
+            assertFailsWith<Crash> { store.save("a.org", "* Edited\nline\n") }
+            val saved = disk.read("a.org") == "* Edited\nline\n"
+            server.put("a.org", "* A\nline\nfrom elsewhere\n")
+
+            val restarted = DocumentStore(disk)
+            SyncEngine(restarted, server).sync()
+
+            val expected = if (saved) "* Edited\nline\nfrom elsewhere\n" else "* A\nline\nfrom elsewhere\n"
+            assertEquals(expected, restarted.read("a.org"), "at write $write")
+            assertEquals(expected, server.files["a.org"]?.second, "at write $write")
+            assertEquals(listOf("a.org"), restarted.paths())
+        }
+    }
+
+    /**
+     * A note with no text yet: whatever the crash leaves must not hold back a note of that name from
+     * elsewhere, and must not sit in the replica as an edit waiting for ever.
+     */
+    @Test
+    fun aCrashDuringTheFirstSaveOfANoteLeavesNothingInTheWay() = runTest {
+        for (write in 1..2) {
+            val server = FakeServer()
+            val (crashing, store, disk) = syncedThenCrashing(server)
+
+            crashing.crashAtWrite = write
+            assertFailsWith<Crash> { store.save("new.org", "* New\n") }
+            val saved = disk.read("new.org") != null
+
+            val restarted = DocumentStore(disk)
+            SyncEngine(restarted, server).sync()
+
+            assertEquals(emptyList(), restarted.dirtyPaths(), "at write $write")
+            assertEquals(if (saved) "* New\n" else null, server.files["new.org"]?.second, "at write $write")
+
+            server.put("elsewhere.org", "* Elsewhere\n")
+            server.put("new.org", "* From elsewhere\n")
+            SyncEngine(restarted, server).sync()
+            assertEquals("* Elsewhere\n", restarted.read("elsewhere.org"))
+            assertEquals("* From elsewhere\n", restarted.read("new.org"), "at write $write")
+        }
+    }
+
+    /** Saved over its own tombstone: the note must survive, whichever of the two the crash kept. */
+    @Test
+    fun aCrashDuringASaveAfterADeleteLosesNeitherTheDeletionNorTheSave() = runTest {
+        for (write in 1..2) {
+            val server = FakeServer()
+            server.put("a.org", "* A\n")
+            val (crashing, store, disk) = syncedThenCrashing(server)
+            store.delete("a.org")
+
+            crashing.crashAtWrite = write
+            assertFailsWith<Crash> { store.save("a.org", "* Saved after\n") }
+            val saved = disk.read("a.org") != null
+
+            val restarted = DocumentStore(disk)
+            SyncEngine(restarted, server).sync()
+            SyncEngine(restarted, server).sync()
+
+            assertEquals(if (saved) "* Saved after\n" else null, restarted.read("a.org"), "at write $write")
+            assertEquals(if (saved) "* Saved after\n" else null, server.files["a.org"]?.second, "at write $write")
+            assertEquals(emptyList(), restarted.dirtyPaths())
+            assertEquals(emptyList(), restarted.tombstones())
+        }
     }
 
     // --- File lifecycle (T20) ---

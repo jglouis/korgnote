@@ -79,21 +79,28 @@ class DocumentStore(private val storage: ReplicaStorage) {
     }
 
     private suspend fun saveLocked(path: String, content: String) {
-        storage.write(path, content)
         val meta = storage.readMeta()
         val existing = meta.files[path]
-        storage.writeMeta(
-            meta.copy(
-                files = meta.files + (path to (existing ?: FileMeta(path)).copy(
-                    path = path,
-                    size = content.length.toLong(),
-                    dirty = true,
-                    // Saved over its own tombstone, which it replaces, keeping the etag: as in
-                    // [create], the text is pushed as an edit of the version that was deleted.
-                    deleted = false,
-                )),
-            ),
+        val saved = meta.copy(
+            files = meta.files + (path to (existing ?: FileMeta(path)).copy(
+                path = path,
+                size = content.length.toLong(),
+                dirty = true,
+                // Saved over its own tombstone, which it replaces, keeping the etag: as in
+                // [create], the text is pushed as an edit of the version that was deleted.
+                deleted = false,
+            )),
         )
+        // What a crash between the two writes leaves has to be harmless. Over a note on record, the
+        // record goes first: the old text marked dirty is pushed as an identical write, where the new
+        // text marked clean would never be pushed, and the next pull would overwrite it. With no text
+        // yet, the file goes first: a file with no record is pushed as a new note, or a tombstone's
+        // deletion is sent first, where a dirty record of no text would refuse the server's note of
+        // that name for ever.
+        val onRecord = existing != null && !existing.deleted
+        if (onRecord) storage.writeMeta(saved)
+        storage.write(path, content)
+        if (!onRecord) storage.writeMeta(saved)
     }
 
     /**
