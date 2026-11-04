@@ -25,7 +25,8 @@ phone: your notes are your calendar, and there is no separate one to keep in syn
 - **Notes and calendar, linked.** Tap a `SCHEDULED` or `DEADLINE` date to open that day in the
   calendar; tap a calendar entry to jump to its heading.
 - **Agenda and calendar views.** The agenda shows what's coming, with overdue tasks on top. Day,
-  week and month views give you the overview; pinch to zoom the hour grid.
+  week and month views give you the overview; pinch to zoom the hour grid. Hold an entry to reschedule
+  it; tap the period at the top to go to any date.
 - **Notifications.** A reminder before each timed entry, and an optional morning digest of the
   day's agenda.
 - **Home-screen widgets** on Android: agenda and month.
@@ -40,23 +41,34 @@ phone: your notes are your calendar, and there is no separate one to keep in syn
   asks in `#+TODO:` — `!` a time stamp, `@` a note, written in a dialog with the editor's
   suggestions. Repeating tasks move to their next date when done. The agenda puts the most
   important first, within a time.
+- **Clocking.** Clock in and out as in Emacs: `CLOCK:` lines in `:LOGBOOK:`, totals against `:Effort:`,
+  a bar for the running clock, with an ongoing notification on Android, and clocked time in the day and
+  week views and the agenda's report.
 - **Tables.** Edit them as a grid. `#+TBLFM` formulas are computed the same way as in Emacs.
-- **Links.** `id:`, `file:`, headings and custom IDs, with backlinks. New notes and daily notes are
-  made the way org-roam makes them.
+- **Links.** `id:`, `file:`, `doi:`, headings, custom IDs and `#+LINK:` abbreviations, with backlinks.
+  New notes and daily notes are made the way org-roam makes them. On Android and the desktop,
+  `[[file:~/…]]` links to other files open too, through **Settings → File links**.
 - **Capture.** Share a link, selected text or a Google Maps place from any app to KorgNote, or pick
   an event from your phone's calendar, Google Calendar's included. It goes to your inbox, another
-  note, or under a heading, in one step.
+  note, or under a heading, in one step. `korgnote://capture` links do the same, for bookmarklets and
+  Shortcuts.
 - **Search** by words and tags, save searches by name, and pin the notes you use most.
 - **Works offline.** Take notes and schedule tasks anywhere; they sync when the app can reach your
   notes again. Reminders, the digest and the widgets come from the phone itself, so they work with
   no network.
+- **Conflicts settled by you.** With the server or WebDAV, what two devices changed in different places
+  is merged. Where a note can't be merged, the other version is kept beside it, and *Compare* goes through
+  the differences one at a time.
+- **Reopens where you left.** The tab, the note and the place in it, and the calendar's view.
+- **In English and French,** with a dark theme that follows the system.
 
 ### What it doesn't do yet
 
 KorgNote reads the parts of Org that notes and an agenda need. Anything it doesn't understand is
 kept exactly as written and shown as plain text, so your files are never changed by it.
 
-- **Time tracking.** `CLOCK:` lines, clock tables, `:Effort:` and column view.
+- **Clock tables and column view.** `#+BEGIN: clocktable` blocks show as written and aren't regenerated;
+  the calendar's clock report covers what a clock table shows.
 - **Archiving.** Nothing moves a heading to an archive. `:ARCHIVE:` and `COMMENT` subtrees are
   left out of the agenda.
 - **Agenda queries.** Search takes words, tags (with `#+TAGS:` groups), `todo:` and `priority:`.
@@ -320,8 +332,8 @@ project with a Compose Multiplatform UI and a Ktor server. Design notes are in [
 
 | Module | Contents |
 |---|---|
-| [shared/](shared/src) | Org parser, agenda and table formulas |
-| [composeApp/](composeApp/src) | The app UI and sync client, for all platforms |
+| [shared/](shared/src) | Org parser, agenda and table formulas; the replica, `SyncEngine` and merge |
+| [composeApp/](composeApp/src) | The app UI and the clients for the sync API and WebDAV, for all platforms |
 | [androidApp/](androidApp) | Android app |
 | [iosApp/](iosApp/iosApp) | iOS app (open in Xcode) |
 | [server/](server/src/main/kotlin) | Sync server, also serves the web app |
@@ -443,12 +455,6 @@ signed with a key other than the release key, which could not update the app. Th
 the 1.0.0 one unless `KORGNOTE_CERT_SHA256` gives another certificate's SHA-256. If the image build fails, the release stays a draft and the script tells you how
 to retry. It needs the GitHub CLI, logged in with `gh auth login`.
 
-### Desktop
-
-```shell
-./gradlew :composeApp:run
-```
-
 ### iOS
 
 Open [iosApp/](iosApp) in Xcode and run it.
@@ -463,27 +469,15 @@ Build the web app, then start the server. The server serves it at <http://localh
 
 ### Server
 
-```shell
-./gradlew :server:run
-```
-
-The server uses two ports:
-
-- **8080 (HTTP)** for this computer only: the web app, the desktop app and the Devices page. It
-  listens on `127.0.0.1` and has no password, so never expose it to the network.
-- **8443 (HTTPS)** for paired devices. The server creates its own certificate on first start, and
-  devices trust it by its fingerprint.
-
-To pair a device, open <http://localhost:8080/devices>, click **Show a pairing code** and scan it in
-the app, on its first start or later under **Settings → Pair with a computer**. `scripts/pair.sh`
-shows the same code in the terminal. You can also revoke devices from the Devices page.
-
-The certificate and the list of paired devices are stored in `~/.korgnote-server`. If you delete
-this folder, every device must pair again.
+[Run it from your checkout](#run-it-from-your-checkout) starts it. What its two ports are for is under
+[Security](#security), and where it keeps its certificate and paired devices under
+[Your computer, with the KorgNote server](#your-computer-with-the-korgnote-server). A device pairs on its
+first start or later under **Settings → Pair with a computer**; `scripts/pair.sh` shows the same code as
+the Devices page, in the terminal.
 
 | Variable | Meaning |
 |---|---|
-| `NOTES_DIR` | Folder with your `.org` files. The `-Dnotes.dir=…` system property wins over it. Without either, the server uses `notes` in its working directory, and if there is none, shows sample notes. |
+| `NOTES_DIR` | Folder with your `.org` files. The `-Dnotes.dir=…` system property wins over it. Without either, the server uses `notes` in its working directory. With no such folder it serves an empty, read-only library, and says so in the log and on the Devices page. |
 | `WASM_DIR` | Folder of the built web app. The `-Dwasm.dir=…` system property wins over it. Without either, the server looks in `composeApp/build/dist/wasmJs/` from the repository root or from `server/`. |
 | `KORGNOTE_PORT` | HTTP port. Default: 8080. |
 | `KORGNOTE_HTTP_HOST` | Address the HTTP port listens on. Default: `127.0.0.1`. |
