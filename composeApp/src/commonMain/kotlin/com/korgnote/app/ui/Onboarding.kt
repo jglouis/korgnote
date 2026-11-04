@@ -396,17 +396,7 @@ private fun ServerStep(repo: SettingsRepository, pairing: DevicePairing?, incomi
         Numbered(2, stringResource(Res.string.notes_onboarding_server_step2, DEVICES_URL))
         Numbered(3, stringResource(Res.string.notes_onboarding_server_step3))
     }
-    if (localNetwork != null && !localNetwork.granted) {
-        OutlinedCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Icon(Icons.Filled.Wifi, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Text(stringResource(Res.string.notes_onboarding_local_network_computer))
-                }
-                Button(onClick = { localNetwork.request { } }) { Text(stringResource(Res.string.notes_onboarding_allow_local_network)) }
-            }
-        }
-    }
+    if (localNetwork != null && !localNetwork.granted) LocalNetworkCard(localNetwork, stringResource(Res.string.notes_onboarding_local_network_computer))
     PairingSettings(
         repo,
         pairing,
@@ -468,17 +458,7 @@ private fun WebDavStep(repo: SettingsRepository, api: WebDavSyncApi, onDone: () 
         modifier = Modifier.fillMaxWidth(),
     )
     FaintHint(stringResource(Res.string.notes_onboarding_app_password))
-    if (localNetwork != null && !localNetwork.granted) {
-        OutlinedCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Icon(Icons.Filled.Wifi, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Text(stringResource(Res.string.notes_onboarding_local_network_server))
-                }
-                Button(onClick = { localNetwork.request { } }) { Text(stringResource(Res.string.notes_onboarding_allow_local_network)) }
-            }
-        }
-    }
+    if (localNetwork != null && !localNetwork.granted) LocalNetworkCard(localNetwork, stringResource(Res.string.notes_onboarding_local_network_server))
     if (account.url.isNotEmpty() && !secure) {
         Text(
             stringResource(Res.string.notes_onboarding_https_needed),
@@ -549,6 +529,20 @@ private fun RemindersStep(permission: PermissionAsk?, onDone: () -> Unit) {
         TextButton(onClick = onDone) { Text(stringResource(Res.string.notes_onboarding_not_now)) }
     }
     FaintHint(stringResource(Res.string.notes_onboarding_reminders_later))
+}
+
+/** Asks for the local network, which the phone forbids until asked, saying what it is wanted for. */
+@Composable
+private fun LocalNetworkCard(permission: PermissionAsk, why: String) {
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(Icons.Filled.Wifi, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(why)
+            }
+            Button(onClick = { permission.request { } }) { Text(stringResource(Res.string.notes_onboarding_allow_local_network)) }
+        }
+    }
 }
 
 /** Where the README says how to install the server; ReadmeLinksTest checks the heading is there. */
