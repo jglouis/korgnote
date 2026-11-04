@@ -18,9 +18,6 @@ import java.nio.file.StandardCopyOption.REPLACE_EXISTING
  * <root>/.korgnote/meta.json
  * ```
  *
- * `notes/` holds ordinary `.org` files in an ordinary directory, so Syncthing or Emacs can keep
- * working against the same folder during the migration.
- *
  * Writes go to a temporary file and are then moved into place, so an app that crashes or is killed
  * leaves either the old content or the new one, never half a note, and a read made meanwhile finds
  * one or the other. There is no `fsync` before the move yet, so a power cut or a pulled battery can

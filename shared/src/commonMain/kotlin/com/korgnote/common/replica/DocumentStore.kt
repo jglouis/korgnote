@@ -9,7 +9,7 @@ import kotlinx.coroutines.sync.withLock
  *
  * Reads and writes are local and always succeed, which is the point — the app works with the server
  * unreachable, and a save is never lost to a network error. Saving marks the file dirty; a dirty
- * file is what the sync engine will later push (T10). Nothing here talks to the network.
+ * file is what the sync engine pushes. Nothing here talks to the network.
  *
  * Every mutation is serialised through a mutex: saves arrive from the UI while pulls arrive from
  * sync, and the metadata must not be read-modify-written by two of them at once.
@@ -177,10 +177,10 @@ class DocumentStore(private val storage: ReplicaStorage) {
      * Records content that came from the server: it becomes both the working copy and the base, and
      * the file is no longer dirty.
      *
-     * This is how the existing network calls populate the replica today, and how the sync engine
-     * will apply a pull tomorrow.
+     * Whatever is here is overwritten, so this is for setting up a replica in a test. Text that took
+     * a network round trip to arrive goes through [acceptIfUntouched] or [acceptAllUntouched].
      */
-    suspend fun acceptFromServer(path: String, content: String, etag: String? = null) {
+    internal suspend fun acceptFromServer(path: String, content: String, etag: String? = null) {
         requireSafeReplicaPath(path)
         mutex.withLock { acceptLocked(path, content, etag) }
     }
@@ -367,6 +367,6 @@ class DocumentStore(private val storage: ReplicaStorage) {
         }
     }
 
-    /** The content as the server last had it: the ancestor a three-way merge (T11) will need. */
+    /** The content as the server last had it: the ancestor of a three-way merge. */
     suspend fun base(path: String): String? = storage.readBase(path)
 }
