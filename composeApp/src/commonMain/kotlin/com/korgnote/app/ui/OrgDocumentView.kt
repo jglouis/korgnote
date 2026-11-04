@@ -223,8 +223,9 @@ fun OrgDocumentView(
     // How many headings each element sits under, which is how far it is indented.
     val depths = remember(elements) { elements.nestingDepths() }
     val guideColor = MaterialTheme.colorScheme.outlineVariant
-    // The heading a delete is waiting to be confirmed for.
-    var confirmingDelete by remember { mutableStateOf<Int?>(null) }
+    // The heading a delete is waiting to be confirmed for, by index and title: when another heading
+    // has moved into its place, the delete is not what was asked for any more.
+    var confirmingDelete by remember { mutableStateOf<Pair<Int, String>?>(null) }
     val priorities = remember(text) { prioritiesOf(text) }
     // The element a jump just landed on — a link, a search hit, an agenda entry, Back — lit for a
     // moment so the eye finds it among its neighbours. A new [Landing] each time, so landing on
@@ -378,7 +379,7 @@ fun OrgDocumentView(
                                 }.orEmpty(),
                                 onAddHeadingBelow = onAddHeadingBelow?.let { add -> { add(index) } },
                                 onAddSubheading = onAddSubheading?.let { add -> { add(index) } },
-                                onDelete = onDeleteSection?.let { { confirmingDelete = index } },
+                                onDelete = onDeleteSection?.let { { confirmingDelete = index to element.title } },
                                 onMoveUp = onMoveSection?.takeIf { elements.previousSibling(index) != null }
                                     ?.let { move -> { move(index, true) } },
                                 onMoveDown = onMoveSection?.takeIf { elements.nextSibling(index) != null }
@@ -444,8 +445,8 @@ fun OrgDocumentView(
         snapshotFlow { listState.firstVisibleItemIndex }.collect { onFirstVisibleElement(it) }
     }
 
-    confirmingDelete?.let { index ->
-        val element = elements.getOrNull(index)
+    confirmingDelete?.let { (index, title) ->
+        val element = elements.getOrNull(index)?.takeIf { it.title == title }
         if (element == null || onDeleteSection == null) {
             LaunchedEffect(Unit) { confirmingDelete = null }
         } else {
