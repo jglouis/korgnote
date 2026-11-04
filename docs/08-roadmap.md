@@ -49,6 +49,13 @@ This is the only status list; the rules for keeping it are in the [docs README](
 - **In Note details the keyboard covers Save**, so a tap there can land on a suggestion instead. In the
   element editor it covers the link picker's *Cancel* and *Web or file link…* the same way.
 - **The Agenda widget at two columns** gives half its width to the time, and a title breaks mid-word.
+- **On the web, losing the server during a save or a sync** throws `MissingResourceException`, since the
+  strings load lazily and cannot arrive. No "Cannot reach" appears and sync does not resume by itself; a
+  tap on sync recovers it.
+- **On iOS, closing the drawer on its scrim with Filter focused** leaves the keyboard up over the bottom
+  bar.
+- **On iOS, the Keychain outlives the app**, so a reinstall starts paired with the old server.
+- **On the desktop, Week view at 800x600** clips Monday's column.
 - **The delete confirmation shows a heading's raw tags**, as in `Soup :winter:`.
 - **A first sync over the bundle's 8 MB cap writes what the bundle held only after the fetches**, so a
   kill partway downloads those notes again. It converges, at the cost of the bandwidth.

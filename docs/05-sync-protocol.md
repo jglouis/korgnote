@@ -251,6 +251,13 @@ Access goes through `ReplicaStorage`, which is also what lets the store be teste
 disk: `FileSystemReplicaStorage` is `java.io` on the JVM and Android and `NSFileManager` on iOS, written
 atomically on both, and `InMemoryReplicaStorage` serves the web and the tests.
 
+An accent can be spelled two ways, and iOS hands a name back with it apart, `e` and then the accent,
+however it was given, and takes both spellings for one file; to a server on Linux they are two. So
+`NSFileManager`'s storage lists a file under the name it is on record under, or with its accents together
+for one with no record. A phone that an earlier version left with both on record loses the extra one at
+the next complete manifest, and the file stays, with any edit on it. Anything that older version pushed to
+a server on Linux is still there, as a second note, for the person to delete.
+
 What keeps a write from landing on another, all in `DocumentStore`, under its one lock:
 
 - **A save over a note on record writes the record first.** A crash between the two writes then leaves

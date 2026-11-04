@@ -15,6 +15,7 @@ import platform.Foundation.NSNumber
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSString
 import platform.Foundation.create
+import platform.Foundation.precomposedStringWithCanonicalMapping
 import platform.Foundation.NSURL
 import platform.Foundation.NSUTF8StringEncoding
 import platform.Foundation.NSUserDomainMask
@@ -57,14 +58,34 @@ class FileSystemReplicaStorage(root: String) : ReplicaStorage {
         check(written) { "could not write $path" }
     }
 
+    /**
+     * iOS hands a name back with its accents apart, however it was given, and takes both spellings for
+     * one file; to a server on Linux they are two. So a file goes by the name it is on record under,
+     * or with its accents together, as nearly every server has it. Sync would otherwise send the
+     * other spelling as a new note, and then take the note for deleted when the server does not list it.
+     */
     override suspend fun list(): List<String> = withContext(Dispatchers.IO) {
         val enumerator = manager.enumeratorAtPath(notesDir) ?: return@withContext emptyList()
+        val recorded = readMeta().files.keys.groupBy(::accentsTogether)
         val found = mutableListOf<String>()
         while (true) {
             val next = enumerator.nextObject() as? String ?: break
-            if (next.endsWith(".org")) found.add(next)
+            if (!next.endsWith(".org")) continue
+            val name = accentsTogether(next)
+            found += recorded[name] ?: listOf(name)
         }
         found.sorted()
+    }
+
+    private fun accentsTogether(path: String): String = NSString.create(string = path).precomposedStringWithCanonicalMapping
+
+    /**
+     * Earlier versions could record a file under both spellings. Whichever goes first, the file stays
+     * for the other, which may hold an edit not yet sent.
+     */
+    private suspend fun isRecordedUnderAnotherName(path: String): Boolean {
+        val name = accentsTogether(path)
+        return readMeta().files.values.any { !it.deleted && it.path != path && accentsTogether(it.path) == name }
     }
 
     override suspend fun read(path: String): String? = withContext(Dispatchers.IO) { readText(pathIn(notesDir, path)) }
@@ -74,7 +95,9 @@ class FileSystemReplicaStorage(root: String) : ReplicaStorage {
     }
 
     override suspend fun delete(path: String) {
-        withContext(Dispatchers.IO) { manager.removeItemAtPath(pathIn(notesDir, path), error = null) }
+        withContext(Dispatchers.IO) {
+            if (!isRecordedUnderAnotherName(path)) manager.removeItemAtPath(pathIn(notesDir, path), error = null)
+        }
     }
 
     override suspend fun readBase(path: String): String? = withContext(Dispatchers.IO) { readText(pathIn(baseDir, path)) }
@@ -84,7 +107,9 @@ class FileSystemReplicaStorage(root: String) : ReplicaStorage {
     }
 
     override suspend fun deleteBase(path: String) {
-        withContext(Dispatchers.IO) { manager.removeItemAtPath(pathIn(baseDir, path), error = null) }
+        withContext(Dispatchers.IO) {
+            if (!isRecordedUnderAnotherName(path)) manager.removeItemAtPath(pathIn(baseDir, path), error = null)
+        }
     }
 
     override suspend fun readMeta(): ReplicaMeta = withContext(Dispatchers.IO) {
