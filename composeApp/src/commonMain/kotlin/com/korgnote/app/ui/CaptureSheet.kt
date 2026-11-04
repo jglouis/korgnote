@@ -284,7 +284,7 @@ fun CaptureSheet(
                 SectionLabel(Res.string.capture_capture)
                 val open = editing
                 when {
-                    adding -> if (added == null) Hint(stringResource(Res.string.capture_nothing_to_add)) else OrgShown(added, keywords, onClick = null)
+                    adding -> if (added == null) FaintHint(stringResource(Res.string.capture_nothing_to_add)) else OrgShown(added, keywords, onClick = null)
                     open != null -> Box(Modifier.fillMaxWidth().orgSurface()) {
                         OrgElementEditor(
                             elementKey = 0,
@@ -360,11 +360,6 @@ private fun OrgShown(text: String, keywords: OrgTodoConfig, onClick: (() -> Unit
 @Composable
 private fun Modifier.orgSurface(): Modifier =
     background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 8.dp)
-
-@Composable
-private fun Hint(text: String) {
-    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-}
 
 /** [heading]'s line with what [additions] add under it: what the heading becomes, as far as the capture goes. */
 private fun previewOfAdditions(heading: LinkTarget, captured: Captured, additions: HeadingAdditions): String? {

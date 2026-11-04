@@ -282,7 +282,7 @@ private fun ChooseStep(changing: Boolean, onFolder: () -> Unit, onServer: () -> 
             onClick = onWebDav,
         )
     }
-    Hint(
+    FaintHint(
         stringResource(
             if (onWebDav != null) Res.string.notes_onboarding_all_offline else Res.string.notes_onboarding_both_offline,
         )
@@ -380,7 +380,7 @@ private fun FolderStep(initial: String?, folders: NoteFolderAccess?, onUse: (Str
             if (pick != null) OutlinedButton(onClick = pick) { Text(stringResource(Res.string.notes_onboarding_choose_another)) }
         }
     }
-    if (pick == null) Hint(stringResource(Res.string.notes_onboarding_no_folder))
+    if (pick == null) FaintHint(stringResource(Res.string.notes_onboarding_no_folder))
 }
 
 @Composable
@@ -419,7 +419,7 @@ private fun ServerStep(repo: SettingsRepository, pairing: DevicePairing?, incomi
         Button(onClick = onDone, enabled = paired) { Text(stringResource(Res.string.notes_onboarding_continue)) }
         if (!paired) TextButton(onClick = onDone) { Text(stringResource(Res.string.notes_onboarding_pair_later)) }
     }
-    if (!paired) Hint(stringResource(Res.string.notes_onboarding_unpaired))
+    if (!paired) FaintHint(stringResource(Res.string.notes_onboarding_unpaired))
 }
 
 /**
@@ -451,7 +451,7 @@ private fun WebDavStep(repo: SettingsRepository, api: WebDavSyncApi, onDone: () 
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
-    Hint(stringResource(Res.string.notes_onboarding_nextcloud_address))
+    FaintHint(stringResource(Res.string.notes_onboarding_nextcloud_address))
     OutlinedTextField(
         value = username,
         onValueChange = { username = it },
@@ -467,7 +467,7 @@ private fun WebDavStep(repo: SettingsRepository, api: WebDavSyncApi, onDone: () 
         visualTransformation = PasswordVisualTransformation(),
         modifier = Modifier.fillMaxWidth(),
     )
-    Hint(stringResource(Res.string.notes_onboarding_app_password))
+    FaintHint(stringResource(Res.string.notes_onboarding_app_password))
     if (localNetwork != null && !localNetwork.granted) {
         OutlinedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -524,7 +524,7 @@ private fun WebDavStep(repo: SettingsRepository, api: WebDavSyncApi, onDone: () 
             ) { Text(stringResource(Res.string.notes_onboarding_check_server)) }
         }
     }
-    Hint(stringResource(Res.string.notes_onboarding_check_explained))
+    FaintHint(stringResource(Res.string.notes_onboarding_check_explained))
 }
 
 @Composable
@@ -548,12 +548,7 @@ private fun RemindersStep(permission: PermissionAsk?, onDone: () -> Unit) {
         }
         TextButton(onClick = onDone) { Text(stringResource(Res.string.notes_onboarding_not_now)) }
     }
-    Hint(stringResource(Res.string.notes_onboarding_reminders_later))
-}
-
-@Composable
-private fun Hint(text: String) {
-    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+    FaintHint(stringResource(Res.string.notes_onboarding_reminders_later))
 }
 
 /** Where the README says how to install the server; ReadmeLinksTest checks the heading is there. */
