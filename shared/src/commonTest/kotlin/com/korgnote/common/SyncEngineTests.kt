@@ -898,6 +898,24 @@ class SyncEngineTests {
         assertEquals(6, store.generation())
     }
 
+    /**
+     * A hint's fetch read the server before the version the manifest lists, and landed while the
+     * cycle fetched that one. Left at the hint's, the generation would move past the newer version.
+     */
+    @Test
+    fun aCycleTakesWhatItFetchedOverAnOlderVersionAHintLeftMeanwhile() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* A\n")
+        engine.sync()
+
+        server.put("a.org", "* A, newest\n")
+        server.whileNextFetchAnswers = { store.acceptFromServer("a.org", "* A, older\n", etag = "older") }
+
+        assertEquals(listOf("a.org"), engine.sync().pulled)
+        assertEquals("* A, newest\n", store.read("a.org"))
+        assertEquals(server.files["a.org"]?.first, store.meta("a.org")?.etag)
+    }
+
     // --- A crash in the middle of a save ---
 
     private class Crash : RuntimeException("the battery was pulled")

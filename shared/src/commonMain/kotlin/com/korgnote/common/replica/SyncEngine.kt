@@ -86,7 +86,7 @@ class SyncEngine(
 
         // Takes the server's copy of [path], from the bundle when it holds it.
         suspend fun pullOne(path: String): PullOutcome {
-            val file = bundled[path] ?: return fetchAndAccept(path)
+            val file = bundled[path] ?: return pullForCycle(path)
             fromBundle += file
             return PullOutcome.LEFT
         }
@@ -213,7 +213,7 @@ class SyncEngine(
                 // Edited elsewhere in the meantime: as above, the edit wins.
                 is DeleteResult.Conflict -> {
                     store.forgetTombstone(tombstone.path)
-                    record(fetchAndAccept(tombstone.path), tombstone.path)
+                    record(pullForCycle(tombstone.path), tombstone.path)
                 }
                 DeleteResult.Gone -> store.forgetTombstone(tombstone.path)
                 is DeleteResult.Failed -> failed.add(tombstone.path)
@@ -263,17 +263,26 @@ class SyncEngine(
      *
      * A local edit wins: the event is a hint, and the next full cycle will decide properly.
      */
-    suspend fun pull(path: String): Boolean = fetchAndAccept(path) == PullOutcome.TAKEN
+    suspend fun pull(path: String): Boolean {
+        // A cycle can run while this is fetched, a save's most of all, and leave something newer.
+        val knownEtag = store.meta(path)?.etag
+        val outcome = fetchAndAccept(path) { store.acceptIfUntouched(path, it.text, it.etag, knownEtag) }
+        return outcome == PullOutcome.TAKEN
+    }
 
-    private suspend fun fetchAndAccept(path: String): PullOutcome {
-        val known = store.meta(path)
+    /**
+     * A pull a cycle decided on. What it fetches is at least as new as the manifest whose generation
+     * the cycle is about to keep, so it is taken over whatever a hint left here meanwhile, or that
+     * generation would have moved past it. Only local work outranks it.
+     */
+    private suspend fun pullForCycle(path: String): PullOutcome =
+        fetchAndAccept(path) { store.acceptAllUntouched(listOf(it)).isNotEmpty() }
+
+    private suspend fun fetchAndAccept(path: String, accept: suspend (RemoteFile) -> Boolean): PullOutcome {
         // A local deletion is local work too: the next full cycle decides, not a hint.
-        if (known?.let { it.dirty || it.deleted } == true) return PullOutcome.LEFT
+        if (store.meta(path)?.let { it.dirty || it.deleted } == true) return PullOutcome.LEFT
         return when (val answer = api.fetch(path)) {
-            is FetchResult.Fetched -> {
-                val file = answer.file
-                if (store.acceptIfUntouched(path, file.text, file.etag, known?.etag)) PullOutcome.TAKEN else PullOutcome.LEFT
-            }
+            is FetchResult.Fetched -> if (accept(answer.file)) PullOutcome.TAKEN else PullOutcome.LEFT
             // Deleted on the server since it was listed, and the next manifest will say so.
             FetchResult.Gone -> PullOutcome.LEFT
             is FetchResult.Failed -> PullOutcome.FAILED
