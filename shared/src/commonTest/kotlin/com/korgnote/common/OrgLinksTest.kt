@@ -11,6 +11,7 @@ import com.korgnote.common.org.link.fileLinkPath
 import com.korgnote.common.org.link.isNoteLink
 import com.korgnote.common.org.link.relativeNotePath
 import com.korgnote.common.org.OrgSyntax
+import com.korgnote.common.org.link.OrgLinkResolution
 import com.korgnote.common.org.toOrgDocument
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
@@ -196,5 +197,45 @@ class OrgLinksTest {
         for (link in listOf("file:~/org-roam/a.org", "~/a.org", "https://example.com", "./linus.jpeg", "file:x.pdf", "kbd:C-c", "Plain")) {
             assertNull(fileLinkPath(link), link)
         }
+    }
+
+    /** The first heading that answers to the words wins, however it answers to them. */
+    @Test
+    fun aHeadingSearchLandsOnTheFirstHeadingThatAnswers() {
+        val text = "* Other\n* TODO Plan [1/2]\n* COMMENT Plan\n* Plan\n* comment later\n"
+        val index = OrgLinkIndex(mapOf("a.org" to text))
+        val first = OrgLinkResolution.Note("a.org", text.indexOf("* TODO Plan"))
+        assertEquals(first, index.resolve("*Plan", "a.org"))
+        assertEquals(first, index.resolve("Plan", "a.org"))
+        assertEquals(first, index.resolve("*todo   PLAN", "a.org"))
+        assertEquals(OrgLinkResolution.Note("a.org", text.indexOf("* COMMENT Plan")), index.resolve("*COMMENT Plan", "a.org"))
+    }
+
+    /** A target comes before a name, and a name before a heading, wherever each is in the note. */
+    @Test
+    fun aPlainLinkPrefersATargetThenANameThenAHeading() {
+        val text = "* Spot\n#+NAME: Spot\n| a |\nThe <<spot>> and <<Spot>>.\n#+NAME: Only named\n* Only named\n"
+        val index = OrgLinkIndex(mapOf("a.org" to text))
+        assertEquals(OrgLinkResolution.Note("a.org", text.indexOf("<<spot>>")), index.resolve("Spot", "a.org"))
+        assertEquals(OrgLinkResolution.Note("a.org", text.indexOf("#+NAME: Only")), index.resolve("Only named", "a.org"))
+        assertEquals(OrgLinkResolution.Note("a.org", 0), index.resolve("*Spot", "a.org"))
+        assertEquals(OrgLinkResolution.NotFound("Nowhere"), index.resolve("Nowhere", "a.org"))
+    }
+
+    /** Above the first heading is what the splitter says it is: a star in a block does not end it. */
+    @Test
+    fun aNotesOwnIdIsFoundPastAStarInABlock() {
+        val text = "#+BEGIN_SRC org\n* code\n#+END_SRC\n:PROPERTIES:\n:ID: note\n:END:\n* H\n:PROPERTIES:\n:ID: heading\n:END:\n"
+        assertEquals("note", OrgLinkIndex(mapOf("a.org" to text)).fileIdOf("a.org"))
+        assertNull(OrgLinkIndex(mapOf("a.org" to "* H\n:PROPERTIES:\n:ID: heading\n:END:\n")).fileIdOf("a.org"))
+        assertNull(OrgLinkIndex(mapOf("a.org" to "")).fileIdOf("a.org"))
+        assertNull(OrgLinkIndex(mapOf("a.org" to "words\n")).fileIdOf("b.org"))
+    }
+
+    @Test
+    fun aBacklinkSaysWhichHeadingItIsUnder() {
+        val text = "[[a.org]] [[file:b.org]]\n* One\n[[file:b.org]] [[file:b.org]]\n* Two\nwords\n** Three\n[[file:b.org]]\n"
+        val index = OrgLinkIndex(mapOf("a.org" to text, "b.org" to ""))
+        assertEquals(listOf("a.org", "One", "One", "Three"), index.backlinksTo("b.org").map { it.context })
     }
 }
