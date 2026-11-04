@@ -135,6 +135,8 @@ private fun findHeading(text: String, ref: HeadingRef): Found? {
     }
     walk(document(text).children, emptyList())
     val match = ref.id?.let { id -> sections.firstOrNull { (section, _) -> idOf(section) == id } }
+        // As written first: passing over what looks like a keyword may land on another heading.
+        ?: sections.firstOrNull { (section, outline) -> outline == ref.outline && descriptionOf(section.title) == ref.title }
         ?: sections.firstOrNull { (section, outline) -> sameOutline(outline, ref.outline) && sameTitle(descriptionOf(section.title), ref.title) }
         ?: return null
     val section = match.first
@@ -156,7 +158,7 @@ private fun sameOutline(a: List<String>, b: List<String>): Boolean =
 private fun withoutKeyword(title: String): String =
     KEYWORD.find(title)?.let { title.substring(it.range.last + 1) } ?: title
 
-private val KEYWORD = Regex("^[A-Z][A-Z_-]+\\s+")
+private val KEYWORD = Regex("^${OrgSyntax.TODO_WORD}\\s+")
 
 /**
  * [file] with [entry] filed as a new entry under the heading [heading] names: after what is there,

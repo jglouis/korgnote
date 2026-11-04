@@ -540,4 +540,31 @@ class CaptureTest {
         val merged = merge(base, fileCapture(base, "* b", "Tasks"), fileCapture(base, "* c", "Tasks"))
         assertEquals(MergeResult.Merged("* Tasks\n** a\n** b\n** c\n* Later\n"), merged)
     }
+
+    /**
+     * A heading written exactly as named goes first: `NASA` looks like a keyword, but this note's
+     * `plans` is the one that was picked, and a real note must not be written under another heading.
+     */
+    @Test
+    fun aHeadingNamedExactlyWinsOverOneThatOnlyLooksLikeItWithoutAKeyword() {
+        val file = "* NASA plans\n* plans\n"
+        assertEquals(
+            "* NASA plans\n* plans\n- [[https://x.org][X]]\n",
+            captureInto(file, HeadingRef("a.org", title = "plans"), Captured(title = "X", link = "https://x.org"), HeadingAdditions(link = true)),
+        )
+        val nested = "* NASA plans\n** Steps\n* plans\n** Steps\n"
+        assertEquals(
+            "* NASA plans\n** Steps\n* plans\n** Steps\n- [[https://x.org][X]]\n",
+            captureInto(nested, HeadingRef("a.org", listOf("plans"), "Steps"), Captured(title = "X", link = "https://x.org"), HeadingAdditions(link = true)),
+        )
+    }
+
+    /** A keyword may hold a digit, as the parser's do: `NEXT2 test` read alone is the picker's `test`. */
+    @Test
+    fun aKeywordWithADigitIsStillPassedOverWhenFindingAHeading() {
+        assertEquals(
+            "* NEXT2 test\n- [[https://x.org][X]]\n",
+            captureInto("* NEXT2 test\n", HeadingRef("a.org", title = "test"), Captured(title = "X", link = "https://x.org"), HeadingAdditions(link = true)),
+        )
+    }
 }
