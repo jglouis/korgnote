@@ -126,10 +126,12 @@ fun CalendarEventPicker(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
-                val shown = all.filter { each ->
-                    val haystack = "${each.event.summary} ${each.event.location.orEmpty()} ${each.calendar}".lowercase()
-                    words.all { it in haystack }
+                val shown = remember(all, query) {
+                    val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+                    all.filter { each ->
+                        val haystack = "${each.event.summary} ${each.event.location.orEmpty()} ${each.calendar}".lowercase()
+                        words.all { it in haystack }
+                    }
                 }
                 if (shown.isEmpty()) {
                     Text(

@@ -118,7 +118,7 @@ fun CaptureSheet(
 ) {
     // Stamped once, when the sheet opens: the entry says when it was captured, not when it was saved.
     var request by remember(shared) { mutableStateOf(filer.request(shared)) }
-    val captured: Captured = filer.captured(request)
+    val captured: Captured = remember(filer, request) { filer.captured(request) }
     var destination by remember { mutableStateOf<Destination?>(null) }
     var addToHeading by remember { mutableStateOf(true) }
     // What to add to a heading: what fits what was shared, until a box is ticked or unticked by hand.
@@ -206,7 +206,9 @@ fun CaptureSheet(
     val heading = (destination as? Destination.Heading)?.target
     val adding = heading != null && addToHeading
     // In a heading, what it becomes: its line, with what is added under it.
-    val added = heading?.takeIf { adding }?.let { previewOfAdditions(it, captured, additions) }
+    val added = remember(heading, adding, captured, additions) {
+        heading?.takeIf { adding }?.let { previewOfAdditions(it, captured, additions) }
+    }
     val where = when (val chosen = destination) {
         is Destination.Note -> if (chosen.isNew) stringResource(Res.string.capture_new_note, chosen.path) else chosen.path
         is Destination.Heading -> "${chosen.target.where} › ${chosen.target.title}"

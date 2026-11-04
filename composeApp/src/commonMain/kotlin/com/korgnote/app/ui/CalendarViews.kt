@@ -1172,7 +1172,7 @@ fun MonthView(
                 for (dates in weeks) {
                     MonthWeek(
                         dates = dates,
-                        days = dates.map { agenda.monthDay(it, showDone).sortedWith(chipOrder) },
+                        days = remember(agenda, dates, showDone) { dates.map { agenda.monthDay(it, showDone).sortedWith(chipOrder) } },
                         month = anchorDate.month,
                         today = today,
                         keywordColors = keywordColors,
