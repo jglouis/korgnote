@@ -185,6 +185,8 @@ class ElementEditor(
         // What a sync brought meanwhile, now that nothing is open on the note; otherwise, a heading
         // inserted for this edit never made it to disk, so discarding the edit discards it too.
         (newer ?: textBeforeInsertion)?.let { note.content = it }
+        // What came in is what the replica holds, and what the next change to the note is made on.
+        newer?.let { note.replicaText = it }
         clear()
         editDiscarded()
     }

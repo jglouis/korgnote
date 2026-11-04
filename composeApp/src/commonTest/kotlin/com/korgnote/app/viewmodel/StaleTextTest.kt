@@ -257,4 +257,46 @@ class StaleTextTest {
         assertEquals(openText.replace("[ ]", "[X]"), store.read(open))
         assertEquals(openText.replace("[ ]", "[X]"), viewModel.note.content)
     }
+
+    // --- An edit discarded over what came in ---
+
+    /** Merged over the note from before, what came in looks added twice: once by each side. */
+    @Test
+    fun anEditDiscardedOverWhatCameInLeavesNothingToAddTwice() = runTest {
+        opened()
+        viewModel.editor.beginEdit(0)
+        val emacs = "$openText* From Emacs\n"
+        api.files[open] = emacs
+        viewModel.server.load()
+        advanceUntilIdle()
+
+        viewModel.editor.cancel()
+        assertEquals(emacs, viewModel.note.content)
+
+        viewModel.editor.addAtEnd()
+        viewModel.editor.onDraftChanged("* From the phone")
+        viewModel.editor.commit()
+        advanceUntilIdle()
+
+        assertEquals("$emacs* From the phone", store.read(open))
+        assertEquals("$emacs* From the phone", api.files[open])
+    }
+
+    @Test
+    fun aTickAfterAnEditDiscardedOverWhatCameInKeepsTheTick() = runTest {
+        opened()
+        viewModel.editor.beginEdit(0)
+        // Beside the box, where a merge over the note from before would call the two a conflict.
+        val emacs = openText.replace("- [ ] one\n\n", "- [ ] one\nfrom Emacs\n\n")
+        api.files[open] = emacs
+        viewModel.server.load()
+        advanceUntilIdle()
+        viewModel.editor.cancel()
+
+        viewModel.changes.toggleCheckboxAt(emacs.indexOf("- [ ] one"))
+        advanceUntilIdle()
+
+        assertEquals(emacs.replace("- [ ] one", "- [X] one"), store.read(open))
+        assertEquals(emacs.replace("- [ ] one", "- [X] one"), viewModel.note.content)
+    }
 }
