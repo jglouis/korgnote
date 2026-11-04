@@ -62,7 +62,7 @@ class NoteLibraryTest {
         library.reload(parseOn = StandardTestDispatcher(testScheduler))
         val before = library["b.org"]
 
-        library.put("a.org", "#+TODO: NEXT | SHIPPED\n* A\n".toOrgDocument(library.fallbackKeywords))
+        library.put("a.org", "#+TODO: NEXT | SHIPPED\n* A\n".toOrgDocument())
 
         assertSame(before, library["b.org"])
         assertEquals("SHIPPED Release", library.headingOf("b.org").title)
@@ -112,7 +112,7 @@ class NoteLibraryTest {
         val stalled = storage.stallRead("a.org")
         launch { library.reload(parseOn = here) }
         runCurrent()
-        library.put("a.org", "- [X] one\n".toOrgDocument(library.fallbackKeywords))
+        library.put("a.org", "- [X] one\n".toOrgDocument())
         stalled.complete(Unit)
         advanceUntilIdle()
 
@@ -130,7 +130,7 @@ class NoteLibraryTest {
         val stalled = storage.stallRead("a.org")
         launch { library.reload(parseOn = here) }
         runCurrent()
-        library.put("a.org", "- [X] one\n".toOrgDocument(library.fallbackKeywords))
+        library.put("a.org", "- [X] one\n".toOrgDocument())
         stalled.complete(Unit)
         advanceUntilIdle()
 

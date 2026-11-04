@@ -37,7 +37,7 @@ class LinkForm(
      */
     fun linkTargets(): List<LinkTarget> {
         val documents = library.documents.toMutableMap()
-        note.path?.let { documents[it] = note.content.toOrgDocument(library.fallbackKeywords) }
+        note.path?.let { documents[it] = note.content.toOrgDocument() }
         return linkTargetsOf(documents).filter { target ->
             !(target.isNote && target.path == note.path) && target.title.isNotBlank()
         }

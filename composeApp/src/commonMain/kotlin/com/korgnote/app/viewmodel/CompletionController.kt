@@ -1,5 +1,6 @@
 package com.korgnote.app.viewmodel
 
+import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -83,8 +84,8 @@ class CompletionController(
     private var dismissed = false
 
     /**
-     * The open file's TODO keywords — its own `#+TODO:`, or what the notes declare when it has
-     * none — for everything that renders or edits it, as well as for completion.
+     * The open file's TODO keywords — its own `#+TODO:`, or Org's own when it has none — for
+     * everything that renders or edits it, as well as for completion.
      */
     val todoKeywords: OrgTodoConfig get() = context.todoKeywords
 
@@ -212,9 +213,8 @@ class CompletionController(
     private fun forOpenNote(base: CompletionContext): CompletionContext {
         val path = note.path
         val document = path?.let { library[it] }
-        val fallbackKeywords = library.fallbackKeywords
         return base.copy(
-            todoKeywords = document?.let { todoKeywordsOf(it.text, fallbackKeywords) } ?: fallbackKeywords,
+            todoKeywords = document?.let { todoKeywordsOf(it.text, DEFAULT_TODO_KEYWORDS) } ?: DEFAULT_TODO_KEYWORDS,
             filePaths = library.documents.keys.sorted(),
             currentPath = path.orEmpty(),
             noteIds = links.noteIds,

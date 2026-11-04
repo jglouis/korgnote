@@ -12,7 +12,6 @@ import com.korgnote.app.notifications.planReminders
 import com.korgnote.app.notifications.reminderWords
 import com.korgnote.app.widgets.AgendaWidgets
 import com.korgnote.app.widgets.NoAgendaWidgets
-import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOptions
@@ -52,11 +51,11 @@ class NoteAgenda(
     private class Dated(val text: String, val entries: List<AgendaEntry>, val clocks: List<ClockedSpan>)
 
     /** Every dated entry in the notes, which the calendar asks for a day at a time. */
-    var index by mutableStateOf(build(library.texts(), library.fallbackKeywords))
+    var index by mutableStateOf(build(library.texts()))
         private set
 
     /** Rebuilds the index from the notes as they now are, and plans reminders from it. */
-    fun refresh() = show(build(library.texts(), library.fallbackKeywords))
+    fun refresh() = show(build(library.texts()))
 
     /** [refresh], with the index already built by [build]: away from the main thread, say. */
     fun show(built: AgendaIndex) {
@@ -66,17 +65,17 @@ class NoteAgenda(
     }
 
     /**
-     * The index of [texts], read with [keywords] where a note declares none. Touches nothing the
+     * The index of [texts]. Touches nothing the
      * screen reads, so it can be built on any thread, one at a time. A note whose text has not changed
      * is not scanned again: a sync usually brings one note.
      *
      * Rebuilt with everything else derived from the notes. Today is read here, so the index a day
      * old still carries over to the right day once anything changes.
      */
-    fun build(texts: Map<String, String>, keywords: OrgTodoConfig): AgendaIndex {
+    fun build(texts: Map<String, String>): AgendaIndex {
         val dated = texts.mapValues { (path, text) ->
             perNote[path]?.takeIf { it.text == text }
-                ?: Dated(text, agendaEntries(path, text, keywords), clockedSpans(path, text, keywords))
+                ?: Dated(text, agendaEntries(path, text), clockedSpans(path, text))
         }
         perNote = dated
         return AgendaIndex(

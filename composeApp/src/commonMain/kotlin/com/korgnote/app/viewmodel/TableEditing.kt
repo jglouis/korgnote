@@ -48,7 +48,7 @@ class TableEditing(
             return
         }
         val content = note.content
-        val table = content.toOrgDocument(library.fallbackKeywords).nodeAt<OrgTable>(offsetInDocument) ?: return
+        val table = content.toOrgDocument().nodeAt<OrgTable>(offsetInDocument) ?: return
         val formulas = tableFormulaLine(content, table.range.last + 1)
         val end = formulas?.range?.let { it.last + 1 } ?: (table.range.last + 1)
         edit = TableEdit(path, table.range, content.substring(table.range.first, end), TableGrid.of(table, formulas?.formulas.orEmpty()))

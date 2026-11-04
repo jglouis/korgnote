@@ -1,5 +1,6 @@
 package com.korgnote.app.viewmodel
 
+import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -80,7 +81,7 @@ class StateNotes(
      * its dates move on to the next occurrence.
      */
     fun setTodoAt(offsetInDocument: Int, keyword: String?) {
-        val document = note.content.toOrgDocument(library.fallbackKeywords)
+        val document = note.content.toOrgDocument()
         val heading = document.nodeAt<OrgSection>(offsetInDocument) ?: return
         // A keyword with `@` wants a note: the change waits for it, as Org's note buffer does.
         if (keyword != null && document.stateChangeLog(heading, keyword, todoKeywords()) == LogKind.Note) {
@@ -97,7 +98,7 @@ class StateNotes(
 
     /** The keywords of the note at [path]: its own `#+TODO:`, or Org's own when it declares none. */
     fun keywordsOf(path: String): OrgTodoConfig =
-        if (path == note.path) todoKeywords() else library[path]?.todoKeywords ?: library.fallbackKeywords
+        if (path == note.path) todoKeywords() else library[path]?.todoKeywords ?: DEFAULT_TODO_KEYWORDS
 
     /**
      * [setTodoAt] for the heading at [headingOffset] of the note at [path], open or not: from the

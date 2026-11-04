@@ -1,5 +1,6 @@
 package com.korgnote.app.viewmodel
 
+import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -124,7 +125,7 @@ class NoteSearch(
      * them. If a corpus ever makes this visible, the fix is an index, not a thread.
      */
     private fun refreshSearch() {
-        results = searchOrg(library.texts(), query, fallback = library.fallbackKeywords)
+        results = searchOrg(library.texts(), query, fallback = DEFAULT_TODO_KEYWORDS)
     }
 
     /** Opens the file a result is in, at the element containing it. */

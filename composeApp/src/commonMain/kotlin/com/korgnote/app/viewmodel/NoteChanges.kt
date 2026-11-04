@@ -1,5 +1,6 @@
 package com.korgnote.app.viewmodel
 
+import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.app.di.conflictTimestamp
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgDocument
@@ -120,7 +121,7 @@ class NoteChanges(
         }
         if (written == null) return keepBeside(path, saved)
         showWritten(path, text, written)
-        library.put(path, written.toOrgDocument(library.fallbackKeywords))
+        library.put(path, written.toOrgDocument())
         if (broughtBack) {
             // Back in the drawer too, which a single note's change does not touch.
             showReplica()
@@ -173,7 +174,7 @@ class NoteChanges(
      * active date is in it and an inactive one is not.
      */
     fun toggleTimestampAt(offsetInDocument: Int) = changeOpenNote(refreshAtOnce = true) { document ->
-        document.text.withTimestampToggledAt(offsetInDocument)?.toOrgDocument(library.fallbackKeywords)
+        document.text.withTimestampToggledAt(offsetInDocument)?.toOrgDocument()
     }
 
     /**
@@ -262,7 +263,7 @@ class NoteChanges(
         val before = library[path]?.text ?: return false
         val updated = edit(before) ?: return false
         if (updated == before) return true
-        library.put(path, updated.toOrgDocument(library.fallbackKeywords))
+        library.put(path, updated.toOrgDocument())
         val base = began(path, before, updated)
         val written = try {
             land(path, base, updated)
@@ -285,7 +286,7 @@ class NoteChanges(
     fun refileTargets(index: Int): List<LinkTarget> {
         val path = note.path
         val documents = library.documents.toMutableMap()
-        path?.let { documents[it] = note.content.toOrgDocument(library.fallbackKeywords) }
+        path?.let { documents[it] = note.content.toOrgDocument() }
         val cut = note.content.cutOrgSubtree(index)
         return linkTargetsOf(documents).filter { target ->
             val offset = target.offset
@@ -313,7 +314,7 @@ class NoteChanges(
                 writeOtherNote(target.path) { before ->
                     before.withOrgSubtreeFiled(subtree, target.offset)?.let { filed ->
                         // The heading's `[2/5]` counts what is under it, which now includes this.
-                        updateStatisticsCookies(filed, todoKeywordsOf(filed, library.fallbackKeywords), before = before)
+                        updateStatisticsCookies(filed, todoKeywordsOf(filed, DEFAULT_TODO_KEYWORDS), before = before)
                     }
                 }
             }
@@ -355,7 +356,7 @@ class NoteChanges(
      */
     private fun changeOnScreen(path: String, edit: (OrgDocument) -> OrgDocument?): Change? {
         if (note.replicaText == null) return null
-        val document = note.content.toOrgDocument(library.fallbackKeywords)
+        val document = note.content.toOrgDocument()
         val updated = edit(document)?.takeIf { it.text != document.text } ?: return null
         note.content = updated.text
         library.put(path, updated)
@@ -414,7 +415,7 @@ class NoteChanges(
     /** [written] landed for a change that made [text]: when something came in, it is now to be seen. */
     private fun showWritten(path: String, text: String, written: String) {
         if (written != text) {
-            library.put(path, written.toOrgDocument(library.fallbackKeywords))
+            library.put(path, written.toOrgDocument())
             refreshSoon()
         }
         if (note.path != path) return

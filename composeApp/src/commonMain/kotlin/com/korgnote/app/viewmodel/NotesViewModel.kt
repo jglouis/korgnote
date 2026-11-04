@@ -282,8 +282,8 @@ class NotesViewModel(
     }
 
     /**
-     * The open file's TODO keywords — its own `#+TODO:`, or what the notes declare when it has
-     * none — for everything that renders or edits it.
+     * The open file's TODO keywords — its own `#+TODO:`, or Org's own when it has none — for
+     * everything that renders or edits it.
      */
     val todoKeywords: OrgTodoConfig get() = completion.todoKeywords
 
@@ -380,9 +380,8 @@ class NotesViewModel(
         pendingRefresh = null
         // Read here, on the main thread; what is built from them reads nothing else.
         val texts = library.texts()
-        val keywords = library.fallbackKeywords
         val linkTables = withContext(background) { LinkNavigator.Tables(texts) }
-        val agendaIndex = withContext(background) { agenda.build(texts, keywords) }
+        val agendaIndex = withContext(background) { agenda.build(texts) }
         // Links first: completion offers the ids and titles they collect.
         links.show(linkTables)
         agenda.show(agendaIndex)

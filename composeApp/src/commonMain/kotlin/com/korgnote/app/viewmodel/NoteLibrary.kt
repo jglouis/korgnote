@@ -8,9 +8,6 @@ import com.korgnote.app.ui.Folder
 import com.korgnote.app.ui.Node
 import com.korgnote.common.fs.TreeUtils
 import com.korgnote.common.org.OrgDocument
-import com.korgnote.common.org.OrgTodoConfig
-import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
-import com.korgnote.common.org.readWith
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.sync.conflictsIn
@@ -74,20 +71,14 @@ class NoteLibrary(private val store: DocumentStore) {
         private set
 
     /**
-     * The keywords a note that declares none is read with: Org's own `TODO` and `DONE`, as Org
-     * reads a file without a `#+TODO:` line. Another note's declarations are that note's alone, so
-     * `EVENT` or `FINISHED` is a keyword only where it is declared.
-     */
-    val fallbackKeywords: OrgTodoConfig get() = DEFAULT_TODO_KEYWORDS
-
-    /**
      * Rereads the notes from the replica, on [parseOn]: every one, or with [only] just those, and any
      * not read yet. A note whose text has not changed keeps its parse: a sync usually brings one note,
      * and parsing all of them again took seconds on a phone, with the screen frozen while the main
      * thread did it.
      *
-     * Each note's headings are read with its own keywords, or with [fallbackKeywords] when it
-     * declares none.
+     * Each note's headings are read with its own keywords, or Org's own `TODO` and `DONE` when it
+     * declares none, as Org reads a file without a `#+TODO:` line: another note's declarations are
+     * that note's alone, so `EVENT` or `FINISHED` is a keyword only where it is declared.
      */
     suspend fun reload(parseOn: CoroutineDispatcher = Dispatchers.Default, only: Set<String>? = null) = reloading.withLock {
         val changedMeanwhile = mutableMapOf<String, OrgDocument>()
@@ -95,7 +86,6 @@ class NoteLibrary(private val store: DocumentStore) {
         try {
             val previous = parsed.toMap()
             val paths = store.paths()
-            val fallback = fallbackKeywords
             val fresh = withContext(parseOn) {
                 buildMap {
                     for (path in paths) {
@@ -104,7 +94,7 @@ class NoteLibrary(private val store: DocumentStore) {
                             put(path, kept)
                         } else {
                             val text = store.read(path) ?: continue
-                            put(path, kept?.takeIf { it.text == text }?.readWith(fallback) ?: text.toOrgDocument(fallback))
+                            put(path, kept?.takeIf { it.text == text } ?: text.toOrgDocument())
                         }
                     }
                 }
