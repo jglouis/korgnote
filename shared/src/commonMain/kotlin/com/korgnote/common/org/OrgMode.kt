@@ -519,7 +519,7 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
                     flush(at)
                     parseDrawer(at).let { (drawer, after) -> nodes += drawer; after }
                 }
-                line.trimStart().startsWith("#+") -> { flush(at); nodes += OrgKeyword(line.trim()).spanning(at, at + 1); at + 1 }
+                OrgSyntax.keyword.containsMatchIn(line) -> { flush(at); nodes += OrgKeyword(line.trim()).spanning(at, at + 1); at + 1 }
                 OrgSyntax.comment.containsMatchIn(line) -> { flush(at); nodes += OrgComment(line.trim()).spanning(at, at + 1); at + 1 }
                 else -> {
                     if (paragraph.isEmpty()) paragraphFrom = at
@@ -669,10 +669,11 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
             i = next
             continue
         }
-        if (line.startsWith("#+")) {
+        if (OrgSyntax.keyword.containsMatchIn(line)) {
             flushParagraph()
-            metadata.add(line)
-            sink().add(OrgKeyword(line).spanning(i, i + 1))
+            val keyword = line.trim()
+            metadata.add(keyword)
+            sink().add(OrgKeyword(keyword).spanning(i, i + 1))
             i++
             continue
         }

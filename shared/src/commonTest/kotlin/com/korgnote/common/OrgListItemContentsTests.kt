@@ -3,6 +3,8 @@ package com.korgnote.common
 import com.korgnote.common.org.OrgBlock
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgDescriptionItem
+import com.korgnote.common.org.OrgFixedWidth
+import com.korgnote.common.org.OrgKeyword
 import com.korgnote.common.org.OrgList
 import com.korgnote.common.org.OrgListItem
 import com.korgnote.common.org.OrgRaw
@@ -107,5 +109,34 @@ class OrgListItemContentsTests {
     fun theFileReadsBackAsItWas() {
         val text = "1. a\n\n   b\n   #+begin_quote\n   q\n   #+end_quote\n2. c\n   | x |\n"
         assertEquals(text, text.toOrgDocument().text)
+    }
+
+    /** `#+RESULTS:` and `#+CAPTION:` under an item, which is where real notes indent keywords. */
+    @Test
+    fun anIndentedKeywordUnderAnItemStaysInItAndTheListRunsOn() {
+        val text = "- Run this\n  #+RESULTS:\n  : 3\n- [ ] Then\n  words\n  #+CAPTION: Shown\n  | a |\n- Last\n"
+        val doc = text.toOrgDocument()
+        val list = assertIs<OrgList>(doc.children.single())
+        assertEquals(3, list.children.size)
+        val first = assertIs<OrgListItem>(list.children[0])
+        assertEquals("Run this", first.text)
+        assertEquals("#+RESULTS:", assertIs<OrgKeyword>(first.children[0]).content)
+        assertIs<OrgFixedWidth>(first.children[1])
+        val second = assertIs<OrgCheckboxItem>(list.children[1])
+        assertEquals("Then\nwords", second.text)
+        assertEquals("#+CAPTION: Shown", assertIs<OrgKeyword>(second.children[0]).content)
+        assertIs<OrgTable>(second.children[1])
+    }
+
+    /** Indented only as far as the bullet, it is no part of the item: the list ends, and it is kept. */
+    @Test
+    fun aKeywordIndentedOnlyAsFarAsTheBulletEndsTheListAndIsKept() {
+        val text = "  - a\n  #+RESULTS:\n  - b\n"
+        val doc = text.toOrgDocument()
+        assertEquals(3, doc.children.size)
+        assertIs<OrgList>(doc.children[0])
+        assertEquals(1, (doc.children[0] as OrgList).children.size)
+        assertIs<OrgList>(doc.children[2])
+        assertEquals("  #+RESULTS:\n", text.substring(doc.children[1].range))
     }
 }

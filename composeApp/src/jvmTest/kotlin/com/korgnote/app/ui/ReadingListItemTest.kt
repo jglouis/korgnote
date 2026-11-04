@@ -45,4 +45,26 @@ class ReadingListItemTest {
         onAllNodesWithText("- bold word").assertCountEquals(1)
         onAllNodesWithText("- term :: words").assertCountEquals(1)
     }
+
+    /** Neither the list nor the keyword may go missing, indented or not. */
+    @Test
+    fun anIndentedKeywordUnderAnItemIsStillShownInTheList() = runComposeUiTest {
+        setContent {
+            OrgDocumentView(text = "- Run this\n  #+RESULTS:\n  : 3\n- [ ] Then\n  #+CAPTION: The words\n  | a |\n- Last\n")
+        }
+
+        onAllNodesWithText("- Run this").assertCountEquals(1)
+        onAllNodesWithText("#+RESULTS:").assertCountEquals(1)
+        onAllNodesWithText("The words").assertCountEquals(1)
+        onAllNodesWithText("- Last").assertCountEquals(1)
+    }
+
+    @Test
+    fun aKeywordIndentedOnlyAsFarAsTheBulletIsStillShown() = runComposeUiTest {
+        setContent { OrgDocumentView(text = "  - a\n  #+RESULTS:\n  - b\n") }
+
+        onAllNodesWithText("#+RESULTS:", substring = true).assertCountEquals(1)
+        onAllNodesWithText("- a", substring = true).assertCountEquals(1)
+        onAllNodesWithText("- b", substring = true).assertCountEquals(1)
+    }
 }
