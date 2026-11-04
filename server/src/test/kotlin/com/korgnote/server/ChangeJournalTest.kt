@@ -1,10 +1,19 @@
 package com.korgnote.server
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.onSubscription
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * The journal is an optimisation, never the source of truth: whenever it cannot answer, the caller
@@ -88,6 +97,29 @@ class ChangeJournalTest {
         repeat(10) { after.record("g$it.org", "e$it") }
 
         assertNull(after.changesSince(handedOut), "the new journal must not pretend to know what changed")
+    }
+
+    /**
+     * A phone that went away without closing its stream stops reading it long before the server can
+     * tell. Its buffer filling must not hold up the save that is announcing the next change, and with
+     * it every other device: events are hints, and the manifest is what a client catches up from.
+     */
+    @Test
+    fun aStreamNobodyIsReadingDoesNotHoldUpWriters() = runBlocking {
+        val journal = ChangeJournal(start = 0)
+        val subscribed = CompletableDeferred<Unit>()
+        val stalled = launch(Dispatchers.Default) {
+            journal.events.onSubscription { subscribed.complete(Unit) }.collect { awaitCancellation() }
+        }
+        subscribed.await()
+        try {
+            val finished = withTimeoutOrNull(5.seconds) {
+                repeat(1_000) { journal.record("f$it.org", "e$it") }
+            }
+            assertNotNull(finished, "only ${journal.generation} changes were recorded before writers froze")
+        } finally {
+            stalled.cancel()
+        }
     }
 
     /** Only where a note ended up matters: deleted and made again, it is there. */

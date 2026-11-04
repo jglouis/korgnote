@@ -1,5 +1,6 @@
 package com.korgnote.server
 
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -41,7 +42,9 @@ class ChangeJournal(
     private val entries = ArrayDeque<ChangeEntry>()
     private val lock = Any()
 
-    private val _events = MutableSharedFlow<ChangeEntry>(extraBufferCapacity = 256)
+    // Dropping the oldest, because a client that stopped reading must not hold up the writer: events
+    // are hints, and whoever misses one catches up from the manifest.
+    private val _events = MutableSharedFlow<ChangeEntry>(extraBufferCapacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     /** Changes as they happen, for the SSE stream. */
     val events: SharedFlow<ChangeEntry> = _events.asSharedFlow()
