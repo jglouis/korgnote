@@ -526,7 +526,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                             },
                             onUnpin = { vm.pins.toggle(it) },
                         )
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.height(8.dp))
                         OutlinedTextField(
                             value = vm.search.filterQuery,
                             onValueChange = { vm.search.onFilterQueryChanged(it) },
@@ -534,7 +534,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                             placeholder = { Text(stringResource(Res.string.app_filter_files_hint)) },
                             singleLine = true
                         )
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.height(8.dp))
                         FileTree(
                             root = vm.search.filteredTree,
                             // While filtering, open the folders holding a match, closed or not:
