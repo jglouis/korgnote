@@ -1,14 +1,9 @@
 package com.korgnote.app.data
 
-import com.korgnote.app.files.FileLinkMapping
-import com.korgnote.app.files.decodeFileLinkMappings
-import com.korgnote.app.files.encodeFileLinkMappings
-import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.common.SERVER_PORT
-import kotlinx.coroutines.flow.MutableStateFlow
 import platform.Foundation.NSUserDefaults
 
-class PersistentSettingsRepository : SettingsRepository {
+class PersistentSettingsRepository : KeyValueSettings() {
     private val defaults = NSUserDefaults.standardUserDefaults()
 
     init {
@@ -17,9 +12,13 @@ class PersistentSettingsRepository : SettingsRepository {
         defaults.removeObjectForKey(KEY_TOKEN)
     }
 
-    private val hostFlow = MutableStateFlow(loadHost())
-    private val portFlow = MutableStateFlow(loadPort())
+    private var host = loadHost()
+    private var port = loadPort()
     private var pairedServer: PairedServer? = PairedServer.decode(readSecret(KEY_PAIRED_SERVER))
+
+    override fun read(key: String): String? = defaults.stringForKey(key)
+
+    override fun write(key: String, value: String) = defaults.setObject(value, forKey = key)
 
     /**
      * The secret kept at [key], from the Keychain. One an older version kept in the user defaults is
@@ -40,29 +39,23 @@ class PersistentSettingsRepository : SettingsRepository {
     }
 
 
-    override fun getServerHost(): String = hostFlow.value
-    override fun getServerPort(): Int = portFlow.value
+    override fun getServerHost(): String = host
+    override fun getServerPort(): Int = port
     override fun getPairedServer(): PairedServer? = pairedServer
 
     override fun setServerHost(host: String) {
-        hostFlow.value = host
+        this.host = host
         defaults.setObject(host, forKey = KEY_HOST)
     }
 
     override fun setServerPort(port: Int) {
-        portFlow.value = port
+        this.port = port
         defaults.setInteger(port.toLong(), forKey = KEY_PORT)
     }
 
     override fun setPairedServer(server: PairedServer?) {
         pairedServer = server
         writeSecret(KEY_PAIRED_SERVER, server?.encode())
-    }
-
-    override fun getNotesSource(): NotesSource? = NotesSource.decode(defaults.stringForKey(KEY_NOTES_SOURCE))
-
-    override fun setNotesSource(source: NotesSource) {
-        defaults.setObject(source.encode(), forKey = KEY_NOTES_SOURCE)
     }
 
     // Read once and kept, as the paired server is: every WebDAV request reads it.
@@ -73,61 +66,6 @@ class PersistentSettingsRepository : SettingsRepository {
     override fun setWebDavAccount(account: WebDavAccount?) {
         webDavAccount = account
         writeSecret(KEY_WEBDAV_ACCOUNT, account?.encode())
-    }
-
-    override fun getReminderSettings(): ReminderSettings = ReminderSettings.decode(defaults.stringForKey(KEY_REMINDERS))
-
-    override fun setReminderSettings(settings: ReminderSettings) {
-        defaults.setObject(settings.encode(), forKey = KEY_REMINDERS)
-    }
-
-    override fun getNewNotesFolder(): String = defaults.stringForKey(KEY_NEW_NOTES_FOLDER) ?: ""
-
-    override fun setNewNotesFolder(folder: String) {
-        defaults.setObject(folder, forKey = KEY_NEW_NOTES_FOLDER)
-    }
-
-    override fun getPinnedNotes(): List<String> = decodePinnedNotes(defaults.stringForKey(KEY_PINNED_NOTES))
-
-    override fun setPinnedNotes(paths: List<String>) {
-        defaults.setObject(encodePinnedNotes(paths), forKey = KEY_PINNED_NOTES)
-    }
-
-    override fun getSavedSearches(): List<SavedSearch> = decodeSavedSearches(defaults.stringForKey(KEY_SAVED_SEARCHES))
-
-    override fun setSavedSearches(searches: List<SavedSearch>) {
-        defaults.setObject(encodeSavedSearches(searches), forKey = KEY_SAVED_SEARCHES)
-    }
-
-    override fun getFileLinkMappings(): List<FileLinkMapping> =
-        decodeFileLinkMappings(defaults.stringForKey(KEY_FILE_LINK_MAPPINGS))
-
-    override fun setFileLinkMappings(mappings: List<FileLinkMapping>) {
-        defaults.setObject(encodeFileLinkMappings(mappings), forKey = KEY_FILE_LINK_MAPPINGS)
-    }
-
-    override fun getNoteTemplate(): NoteTemplateSettings = NoteTemplateSettings.decode(defaults.stringForKey(KEY_NOTE_TEMPLATE))
-
-    override fun setNoteTemplate(settings: NoteTemplateSettings) {
-        defaults.setObject(settings.encode(), forKey = KEY_NOTE_TEMPLATE)
-    }
-
-    override fun getTagColors(): Map<String, Int> = decodeTagColors(defaults.stringForKey(KEY_TAG_COLORS))
-
-    override fun setTagColors(colors: Map<String, Int>) {
-        defaults.setObject(encodeTagColors(colors), forKey = KEY_TAG_COLORS)
-    }
-
-    override fun getReadingPlaces(): List<ReadingPlace> = decodeReadingPlaces(defaults.stringForKey(KEY_READING_PLACES))
-
-    override fun setReadingPlaces(places: List<ReadingPlace>) {
-        defaults.setObject(encodeReadingPlaces(places), forKey = KEY_READING_PLACES)
-    }
-
-    override fun getLastScreen(): LastScreen = decodeLastScreen(defaults.stringForKey(KEY_LAST_SCREEN))
-
-    override fun setLastScreen(screen: LastScreen) {
-        defaults.setObject(encodeLastScreen(screen), forKey = KEY_LAST_SCREEN)
     }
 
     private fun loadHost(): String {
@@ -150,16 +88,6 @@ class PersistentSettingsRepository : SettingsRepository {
         private const val KEY_PORT = "server_port"
         private const val KEY_TOKEN = "server_token"
         private const val KEY_PAIRED_SERVER = "paired_server"
-        private const val KEY_NOTES_SOURCE = "notes_source"
         private const val KEY_WEBDAV_ACCOUNT = "webdav_account"
-        private const val KEY_REMINDERS = "reminders"
-        private const val KEY_NEW_NOTES_FOLDER = "new_notes_folder"
-        private const val KEY_PINNED_NOTES = "pinned_notes"
-        private const val KEY_SAVED_SEARCHES = "saved_searches"
-        private const val KEY_FILE_LINK_MAPPINGS = "file_link_mappings"
-        private const val KEY_NOTE_TEMPLATE = "note_template"
-        private const val KEY_TAG_COLORS = "tag_colors"
-        private const val KEY_READING_PLACES = "reading_places"
-        private const val KEY_LAST_SCREEN = "last_screen"
     }
 }

@@ -1,12 +1,7 @@
 package com.korgnote.app.data
 
-import com.korgnote.app.files.FileLinkMapping
-import com.korgnote.app.files.decodeFileLinkMappings
-import com.korgnote.app.files.encodeFileLinkMappings
-import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.common.SERVER_PORT
 import kotlinx.browser.localStorage
-import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * Settings kept in the page's `localStorage`, so pinned notes, saved searches and the rest of
@@ -17,33 +12,29 @@ import kotlinx.coroutines.flow.MutableStateFlow
  * can be unavailable (blocked site data, some private windows); the app then works as before,
  * forgetting on reload.
  */
-class PersistentSettingsRepository : SettingsRepository {
-    private val hostFlow = MutableStateFlow(
-        defaultServerBaseUrl().removePrefix("http://").removePrefix("https://").substringBefore(":")
-    )
-    private val portFlow = MutableStateFlow(
-        defaultServerBaseUrl().substringAfterLast(':').toIntOrNull() ?: SERVER_PORT
-    )
-    private var pairedServer: PairedServer? = PairedServer.decode(load(KEY_PAIRED_SERVER))
+class PersistentSettingsRepository : KeyValueSettings() {
+    private var host = defaultServerBaseUrl().removePrefix("http://").removePrefix("https://").substringBefore(":")
+    private var port = defaultServerBaseUrl().substringAfterLast(':').toIntOrNull() ?: SERVER_PORT
+    private var pairedServer: PairedServer? = PairedServer.decode(read(KEY_PAIRED_SERVER))
 
 
-    override fun getServerHost(): String = hostFlow.value
-    override fun getServerPort(): Int = portFlow.value
+    override fun getServerHost(): String = host
+    override fun getServerPort(): Int = port
     override fun getPairedServer(): PairedServer? = pairedServer
 
     override fun setServerHost(host: String) {
-        hostFlow.value = host
+        this.host = host
     }
 
     override fun setServerPort(port: Int) {
-        portFlow.value = port
+        this.port = port
     }
 
     override fun setPairedServer(server: PairedServer?) {
         pairedServer = server
-        store(KEY_PAIRED_SERVER, server?.encode().orEmpty())
+        write(KEY_PAIRED_SERVER, server?.encode().orEmpty())
         // The shared token from before pairing, which nothing reads any more.
-        store(KEY_TOKEN, "")
+        write(KEY_TOKEN, "")
     }
 
     // A browser has no folder of notes to offer: the server this page comes from is the only source.
@@ -51,63 +42,9 @@ class PersistentSettingsRepository : SettingsRepository {
 
     override fun setNotesSource(source: NotesSource) {}
 
-    override fun getReminderSettings(): ReminderSettings = ReminderSettings.decode(load(KEY_REMINDERS))
+    override fun read(key: String): String? = runCatching { localStorage.getItem(PREFIX + key) }.getOrNull()
 
-    override fun setReminderSettings(settings: ReminderSettings) {
-        store(KEY_REMINDERS, settings.encode())
-    }
-
-    override fun getNewNotesFolder(): String = load(KEY_NEW_NOTES_FOLDER).orEmpty()
-
-    override fun setNewNotesFolder(folder: String) {
-        store(KEY_NEW_NOTES_FOLDER, folder)
-    }
-
-    override fun getPinnedNotes(): List<String> = decodePinnedNotes(load(KEY_PINNED_NOTES))
-
-    override fun setPinnedNotes(paths: List<String>) {
-        store(KEY_PINNED_NOTES, encodePinnedNotes(paths))
-    }
-
-    override fun getSavedSearches(): List<SavedSearch> = decodeSavedSearches(load(KEY_SAVED_SEARCHES))
-
-    override fun setSavedSearches(searches: List<SavedSearch>) {
-        store(KEY_SAVED_SEARCHES, encodeSavedSearches(searches))
-    }
-
-    override fun getFileLinkMappings(): List<FileLinkMapping> = decodeFileLinkMappings(load(KEY_FILE_LINK_MAPPINGS))
-
-    override fun setFileLinkMappings(mappings: List<FileLinkMapping>) {
-        store(KEY_FILE_LINK_MAPPINGS, encodeFileLinkMappings(mappings))
-    }
-
-    override fun getNoteTemplate(): NoteTemplateSettings = NoteTemplateSettings.decode(load(KEY_NOTE_TEMPLATE))
-
-    override fun setNoteTemplate(settings: NoteTemplateSettings) {
-        store(KEY_NOTE_TEMPLATE, settings.encode())
-    }
-
-    override fun getTagColors(): Map<String, Int> = decodeTagColors(load(KEY_TAG_COLORS))
-
-    override fun setTagColors(colors: Map<String, Int>) {
-        store(KEY_TAG_COLORS, encodeTagColors(colors))
-    }
-
-    override fun getReadingPlaces(): List<ReadingPlace> = decodeReadingPlaces(load(KEY_READING_PLACES))
-
-    override fun setReadingPlaces(places: List<ReadingPlace>) {
-        store(KEY_READING_PLACES, encodeReadingPlaces(places))
-    }
-
-    override fun getLastScreen(): LastScreen = decodeLastScreen(load(KEY_LAST_SCREEN))
-
-    override fun setLastScreen(screen: LastScreen) {
-        store(KEY_LAST_SCREEN, encodeLastScreen(screen))
-    }
-
-    private fun load(key: String): String? = runCatching { localStorage.getItem(PREFIX + key) }.getOrNull()
-
-    private fun store(key: String, value: String) {
+    override fun write(key: String, value: String) {
         runCatching { localStorage.setItem(PREFIX + key, value) }
     }
 
@@ -115,14 +52,5 @@ class PersistentSettingsRepository : SettingsRepository {
         private const val PREFIX = "korgnote."
         private const val KEY_TOKEN = "server_token"
         private const val KEY_PAIRED_SERVER = "paired_server"
-        private const val KEY_REMINDERS = "reminders"
-        private const val KEY_NEW_NOTES_FOLDER = "new_notes_folder"
-        private const val KEY_PINNED_NOTES = "pinned_notes"
-        private const val KEY_SAVED_SEARCHES = "saved_searches"
-        private const val KEY_FILE_LINK_MAPPINGS = "file_link_mappings"
-        private const val KEY_NOTE_TEMPLATE = "note_template"
-        private const val KEY_TAG_COLORS = "tag_colors"
-        private const val KEY_READING_PLACES = "reading_places"
-        private const val KEY_LAST_SCREEN = "last_screen"
     }
 }
