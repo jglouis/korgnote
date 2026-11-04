@@ -732,12 +732,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                         // search, where the keyboard pushed it up over the results.
                         if (vm.editor.editingIndex != null) {
                             CompletionStrip(
-                                items = vm.completion.suggestions,
-                                selectedIndex = vm.completion.selectedIndex,
-                                onAccept = { vm.completion.accept(it) },
-                                inserts = vm.completion.inserts,
-                                onInsert = { vm.completion.insert(it) },
-                                onPickDate = { vm.completion.pickDate() },
+                                vm.completion,
                                 onPickLink = { pickingLink = vm.linkForm.linkTargets() },
                                 onEditLink = vm.linkForm.linkToEdit()?.takeUnless { it.isNew }?.let { edit -> { editingLink = edit } },
                                 onInsertTable = { insertingTable = true },
@@ -849,27 +844,9 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                             onSave = { vm.stateNotes.save() },
                             onCancel = { vm.stateNotes.cancel() },
                         )
-                        vm.stateNotes.completion.pendingDatePicker?.let {
-                            val stamp = vm.stateNotes.completion.pickerStamp
-                            OrgDatePickerDialog(
-                                initialDate = stamp?.start ?: vm.stateNotes.completion.context.today,
-                                initialTime = stamp?.startTime,
-                                initialEndTime = stamp?.endTime,
-                                onPick = { date, time, end -> vm.stateNotes.completion.onDatePicked(date, time, end) },
-                                onDismiss = { vm.stateNotes.completion.dismissDatePicker() },
-                            )
-                        }
+                        CompletionDatePicker(vm.stateNotes.completion)
                     }
-                    vm.completion.pendingDatePicker?.let {
-                        val stamp = vm.completion.pickerStamp
-                        OrgDatePickerDialog(
-                            initialDate = stamp?.start ?: vm.completion.context.today,
-                            initialTime = stamp?.startTime,
-                            initialEndTime = stamp?.endTime,
-                            onPick = { date, time, end -> vm.completion.onDatePicked(date, time, end) },
-                            onDismiss = { vm.completion.dismissDatePicker() },
-                        )
-                    }
+                    CompletionDatePicker(vm.completion)
                     // Reading mode scrolls itself, one element at a time, so that opening a large file
                     // does not have to lay out every element first; search does the same with its
                     // results, and the calendar with its agenda list and hour grid. A lazy list cannot

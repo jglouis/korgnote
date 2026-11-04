@@ -56,12 +56,8 @@ fun StateNoteDialog(
                 // As in the element editor: suggestions while typing, and with none, the buttons that
                 // begin a link, a date or a checkbox. Not a table, which wants the grid editor.
                 CompletionStrip(
-                    items = completion.suggestions,
-                    selectedIndex = completion.selectedIndex,
-                    onAccept = { completion.accept(it) },
+                    completion,
                     inserts = completion.inserts.filter { it != DraftInsert.TABLE },
-                    onInsert = { completion.insert(it) },
-                    onPickDate = { completion.pickDate() },
                     clearOfNavigationBar = false,
                 )
                 Column(Modifier.heightIn(min = 96.dp)) {

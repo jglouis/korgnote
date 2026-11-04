@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.korgnote.app.viewmodel.CompletionController
 import com.korgnote.common.org.complete.shiftedEnd
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.back
@@ -149,6 +150,21 @@ fun OrgDatePickerDialog(
 }
 
 private enum class PickerStep { DATE, TIME, END }
+
+/** The picker [completion] is waiting on, while it is waiting: open on the stamp it is changing, or on today. */
+@Composable
+internal fun CompletionDatePicker(completion: CompletionController) {
+    completion.pendingDatePicker?.let {
+        val stamp = completion.pickerStamp
+        OrgDatePickerDialog(
+            initialDate = stamp?.start ?: completion.context.today,
+            initialTime = stamp?.startTime,
+            initialEndTime = stamp?.endTime,
+            onPick = { date, time, end -> completion.onDatePicked(date, time, end) },
+            onDismiss = { completion.dismissDatePicker() },
+        )
+    }
+}
 
 /** `10:00`, or `10:00–11:30` for a range. */
 private fun timeRangeLabel(start: LocalTime, end: LocalTime?): String =

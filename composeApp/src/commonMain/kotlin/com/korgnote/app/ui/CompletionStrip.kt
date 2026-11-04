@@ -242,6 +242,31 @@ fun CompletionStrip(
     }
 }
 
+/** The strip showing what [completion] offers, and telling it what was tapped. */
+@Composable
+internal fun CompletionStrip(
+    completion: CompletionController,
+    /** Which of its inserts have a place in this field. */
+    inserts: List<DraftInsert> = completion.inserts,
+    onPickLink: (() -> Unit)? = null,
+    onEditLink: (() -> Unit)? = null,
+    onInsertTable: (() -> Unit)? = null,
+    clearOfNavigationBar: Boolean = true,
+    actions: @Composable RowScope.() -> Unit = {},
+) = CompletionStrip(
+    items = completion.suggestions,
+    selectedIndex = completion.selectedIndex,
+    onAccept = { completion.accept(it) },
+    inserts = inserts,
+    onInsert = { completion.insert(it) },
+    onPickDate = { completion.pickDate() },
+    onPickLink = onPickLink,
+    onEditLink = onEditLink,
+    onInsertTable = onInsertTable,
+    clearOfNavigationBar = clearOfNavigationBar,
+    actions = actions,
+)
+
 /**
  * What a suggestion's chip says. Most say what they write, which is Org and needs no translating;
  * the toggle says what it does, in the reader's language.

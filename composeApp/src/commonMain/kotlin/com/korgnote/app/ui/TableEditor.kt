@@ -255,12 +255,8 @@ fun TableEditorDialog(
                     // As in the element editor: suggestions while typing, and with none, the buttons
                     // that begin a link or a date — the rest of them have no place in a cell.
                     CompletionStrip(
-                        items = completion.suggestions,
-                        selectedIndex = completion.selectedIndex,
-                        onAccept = { completion.accept(it) },
+                        completion,
                         inserts = completion.inserts.filter { it == DraftInsert.LINK },
-                        onInsert = { completion.insert(it) },
-                        onPickDate = { completion.pickDate() },
                         clearOfNavigationBar = false,
                     )
                 }
@@ -317,16 +313,7 @@ fun TableEditorDialog(
             onDismiss = { editingFormula = null },
         )
     }
-    completion?.pendingDatePicker?.let {
-        val stamp = completion.pickerStamp
-        OrgDatePickerDialog(
-            initialDate = stamp?.start ?: completion.context.today,
-            initialTime = stamp?.startTime,
-            initialEndTime = stamp?.endTime,
-            onPick = { date, time, end -> completion.onDatePicked(date, time, end) },
-            onDismiss = { completion.dismissDatePicker() },
-        )
-    }
+    completion?.let { CompletionDatePicker(it) }
 }
 
 /** The cell being typed in, by its place in the grid, and its text and caret. */
