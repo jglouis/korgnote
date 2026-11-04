@@ -40,5 +40,6 @@ first planned, [08](08-roadmap.md) records why.
 - **One home per fact.** Each subsystem document owns its feature, and 08 records only why it changed. A
   fact wanted elsewhere is a link.
 - **A shipped feature updates its subsystem document in the same commit.**
-- **Keep the file names and the T- and D-numbers.** Code comments, tests and the app cite them, and git
-  keeps whatever else is taken out.
+- **Keep the file names and the T- and D-numbers.** Code comments and tests cite them, and git keeps
+  whatever else is taken out. The app itself links to one README heading, *Your computer, with the KorgNote
+  server*, which `ReadmeLinksTest` holds.

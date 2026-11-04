@@ -429,7 +429,8 @@ named in the code.
 **Landed** A note's long-press menu in the drawer offers *Pin* (or *Unpin*). Pinned notes are listed
 above the filter, in the order they were pinned, by file name — or by path where two share a name;
 a tap opens one, a long-press unpins it. With nothing pinned the drawer is as it was. At launch the
-first pinned note opens instead of the alphabetically first one.
+first pinned note opens instead of the alphabetically first one; since T42, the note last read comes
+before it.
 **Where pins live** In settings, per device, as paths: pinning changes nothing in the notes and
 syncs nothing, and a phone and a laptop can keep different ones. A rename or move in the app carries
 the pin, in its place; a delete drops it. A pin whose note is missing — renamed on another device,

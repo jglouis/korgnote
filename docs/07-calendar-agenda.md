@@ -228,9 +228,9 @@ a tapped day or title opens the app's calendar there (`CalendarTaps`).
 
 ## Later, if it earns its place
 
-- **CalDAV export** so the same agenda appears in your phone's native calendar app. This is
+- **CalDAV export** so the same agenda appears in the phone's native calendar app. This is
   read-only publishing of `AgendaOccurrence`s and does not affect the sync design; it is
-  the cheapest way to get your Org agenda in front of other tools.
+  the cheapest way to get the Org agenda in front of other tools.
 
 Capture, of the phone's own events from the calendar's button and of anything from other apps, is in
 [10](10-capture.md).
