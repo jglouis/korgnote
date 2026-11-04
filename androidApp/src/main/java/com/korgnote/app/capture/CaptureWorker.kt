@@ -8,10 +8,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.data.chosenNotesSource
-import com.korgnote.app.sync.BackgroundSyncWorker
-import com.korgnote.app.widget.WidgetStore
-import com.korgnote.app.widget.redrawWidgets
-import com.korgnote.app.widget.syncInBackground
+import com.korgnote.app.widget.syncAndRedraw
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.mp.KoinPlatform
@@ -27,10 +24,7 @@ class CaptureWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         val koin = KoinPlatform.getKoin()
         val source = koin.get<SettingsRepository>().chosenNotesSource() ?: return Result.success()
         koin.get<CaptureFiler>().fileWaiting(koin.notesStore(source))
-        // As a widget's sync does: the notes, the widgets' agenda and reminders, and the app if open.
-        val problem = syncInBackground(applicationContext)
-        redrawWidgets(applicationContext)
-        if (problem == WidgetStore.PROBLEM_SERVER) BackgroundSyncWorker.whenOnline(applicationContext)
+        syncAndRedraw(applicationContext)
         return Result.success()
     }
 

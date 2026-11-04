@@ -1,7 +1,10 @@
 package com.korgnote.app.di
 
+import com.korgnote.app.capture.NotesBackend
+import com.korgnote.app.capture.backendFor
 import com.korgnote.app.data.InMemorySettingsRepository
 import com.korgnote.app.data.KtorSyncApi
+import com.korgnote.app.data.NotesSource
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
@@ -17,6 +20,8 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertSame
 import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 
@@ -57,6 +62,18 @@ class WebDavWiringTest {
         assertEquals(listOf("from-server.org"), koin.get<ReplicaStorage>().list())
         assertEquals(listOf("from-webdav.org"), koin.get<ReplicaStorage>(WEBDAV).list())
         assertNotSame(koin.get<SyncEngine>(), koin.get<SyncEngine>(WEBDAV))
+    }
+
+    @Test
+    fun eachSourceIsTurnedIntoItsOwnNotesAndEngine() {
+        val koin = KoinPlatform.getKoin()
+        val server = assertIs<NotesBackend.Replica>(koin.backendFor(NotesSource.Server))
+        val webDav = assertIs<NotesBackend.Replica>(koin.backendFor(NotesSource.WebDav))
+
+        assertSame(koin.get<DocumentStore>(), server.store)
+        assertSame(koin.get<SyncEngine>(), server.engine())
+        assertSame(koin.get<DocumentStore>(WEBDAV), webDav.store)
+        assertSame(koin.get<SyncEngine>(WEBDAV), webDav.engine())
     }
 
     @Test

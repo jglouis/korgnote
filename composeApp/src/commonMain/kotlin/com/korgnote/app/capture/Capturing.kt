@@ -10,6 +10,7 @@ import com.korgnote.common.org.capture.CaptureLink
 import com.korgnote.common.org.capture.captureLinkOf
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.FolderNoteStorage
+import com.korgnote.common.replica.SyncEngine
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.koin.core.Koin
@@ -34,15 +35,28 @@ object CaptureSignals {
     val queued = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 }
 
-/**
- * The notes [source] keeps, as a store to file captures into: the replica the sync engine shares
- * for the server and WebDAV, or the folder's files read afresh.
- */
-fun Koin.notesStore(source: NotesSource): DocumentStore = when (source) {
-    NotesSource.Server -> get()
-    NotesSource.WebDav -> get(WEBDAV)
-    is NotesSource.Folder -> DocumentStore(FolderNoteStorage(get<NoteFolderAccess>().open(source.location), ::conflictTimestamp))
+/** Where the notes of a [NotesSource] are, and what keeps them in step with where they are kept. */
+sealed interface NotesBackend {
+    val store: DocumentStore
+
+    /** A replica the sync engine shares, for the server and for WebDAV. */
+    class Replica(override val store: DocumentStore, val engine: () -> SyncEngine) : NotesBackend
+
+    /** A folder's files, read afresh: there is nothing to sync with, only the folder to look at. */
+    class Folder(val storage: FolderNoteStorage) : NotesBackend {
+        override val store = DocumentStore(storage)
+    }
 }
+
+/** The one place a [NotesSource] is turned into the notes it names. */
+fun Koin.backendFor(source: NotesSource): NotesBackend = when (source) {
+    NotesSource.Server -> NotesBackend.Replica(get()) { get() }
+    NotesSource.WebDav -> NotesBackend.Replica(get(WEBDAV)) { get(WEBDAV) }
+    is NotesSource.Folder -> NotesBackend.Folder(FolderNoteStorage(get<NoteFolderAccess>().open(source.location), ::conflictTimestamp))
+}
+
+/** The notes [source] keeps, as a store to file captures into. */
+fun Koin.notesStore(source: NotesSource): DocumentStore = backendFor(source).store
 
 /** True when the notes in use hold an edit that has not reached where they are kept. */
 suspend fun Koin.hasUnsentEdits(): Boolean {

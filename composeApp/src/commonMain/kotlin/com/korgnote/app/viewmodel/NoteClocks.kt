@@ -3,6 +3,7 @@ package com.korgnote.app.viewmodel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.edit.lastClocked
 import com.korgnote.common.org.edit.runningClocks
 import kotlinx.datetime.LocalDateTime
@@ -27,6 +28,12 @@ interface ClockNotifier {
 object NoClockNotifier : ClockNotifier {
     override fun show(clocks: List<ClockRunning>) = Unit
 }
+
+/** The clocks running in [documents], newest first. */
+fun runningClocksIn(documents: Map<String, OrgDocument>): List<ClockRunning> =
+    documents.flatMap { (path, doc) ->
+        doc.runningClocks().map { ClockRunning(path, it.headingStart, it.title, it.start) }
+    }.sortedWith(compareByDescending<ClockRunning> { it.start }.thenBy { it.path })
 
 /**
  * The clocks running across the notes, read from the notes themselves: a running clock is an open
@@ -54,9 +61,7 @@ class NoteClocks(
     /** Reads the clocks again from the notes as they stand; cheap, since few notes hold any. */
     fun refresh() {
         val clocked = library.documents.filter { (_, doc) -> doc.text.contains("CLOCK:") }
-        val found = clocked.flatMap { (path, doc) ->
-            doc.runningClocks().map { ClockRunning(path, it.headingStart, it.title, it.start) }
-        }.sortedWith(compareByDescending<ClockRunning> { it.start }.thenBy { it.path })
+        val found = runningClocksIn(clocked)
         val runningOn = found.map { it.path to it.headingStart }.toSet()
         recent = clocked.flatMap { (path, doc) ->
             doc.lastClocked().map { ClockRecent(path, it.headingStart, it.title, it.end) }

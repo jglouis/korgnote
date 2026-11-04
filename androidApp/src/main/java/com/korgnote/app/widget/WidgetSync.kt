@@ -9,19 +9,17 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.korgnote.app.data.NotesSource
+import com.korgnote.app.capture.NotesBackend
+import com.korgnote.app.capture.backendFor
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.data.chosenNotesSource
-import com.korgnote.app.di.WEBDAV
 import com.korgnote.app.notifications.NotificationScheduler
 import com.korgnote.app.notifications.planRemindersFrom
 import com.korgnote.app.notifications.reminderWords
-import com.korgnote.app.files.NoteFolderAccess
+import com.korgnote.app.sync.BackgroundSyncWorker
 import com.korgnote.app.widgets.WidgetSyncs
 import com.korgnote.common.org.agenda.agendaEntries
 import com.korgnote.common.replica.DocumentStore
-import com.korgnote.common.replica.FolderNoteStorage
-import com.korgnote.common.replica.SyncEngine
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -93,6 +91,17 @@ suspend fun syncInBackground(context: Context): String? {
     return synced.problem
 }
 
+/**
+ * [syncInBackground] after something was written with the app closed, as a capture is: the notes, the
+ * widgets' agenda and reminders, and the app if it is open. A server that could not be reached is
+ * tried again once the network is back.
+ */
+suspend fun syncAndRedraw(context: Context) {
+    val problem = syncInBackground(context)
+    redrawWidgets(context)
+    if (problem == WidgetStore.PROBLEM_SERVER) BackgroundSyncWorker.whenOnline(context)
+}
+
 /** The notes after a sync: where they are kept now, when it got through, and what stopped it if not. */
 private class SyncedNotes(val store: DocumentStore?, val at: Instant?, val problem: String?)
 
@@ -127,10 +136,11 @@ private suspend fun syncNotes(context: Context): SyncedNotes {
         ?: return SyncedNotes(store = null, at = null, problem = WidgetStore.PROBLEM_SETUP)
     var synced: Instant? = null
     var problem: String? = null
-    val store = when (source) {
-        NotesSource.Server -> {
+    val backend = koin.backendFor(source)
+    when (backend) {
+        is NotesBackend.Replica -> {
             try {
-                koin.get<SyncEngine>().sync()
+                backend.engine().sync()
                 synced = Clock.System.now()
             } catch (e: CancellationException) {
                 throw e
@@ -138,28 +148,11 @@ private suspend fun syncNotes(context: Context): SyncedNotes {
                 println("[DEBUG_LOG][WidgetSync] Sync failed: ${t.message}")
                 problem = WidgetStore.PROBLEM_SERVER
             }
-            koin.get<DocumentStore>()
         }
-        // The same, with the WebDAV sync's own engine and replica.
-        NotesSource.WebDav -> {
-            try {
-                koin.get<SyncEngine>(WEBDAV).sync()
-                synced = Clock.System.now()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (t: Throwable) {
-                println("[DEBUG_LOG][WidgetSync] WebDAV sync failed: ${t.message}")
-                problem = WidgetStore.PROBLEM_SERVER
-            }
-            koin.get<DocumentStore>(WEBDAV)
-        }
-        is NotesSource.Folder -> {
-            // Only read here, never written, so it never makes a conflict copy to name.
-            val storage = FolderNoteStorage(koin.get<NoteFolderAccess>().open(source.location)) { "" }
-            storage.rescan()
-            if (storage.problem == null) synced = Clock.System.now() else problem = WidgetStore.PROBLEM_FOLDER
-            DocumentStore(storage)
+        is NotesBackend.Folder -> {
+            backend.storage.rescan()
+            if (backend.storage.problem == null) synced = Clock.System.now() else problem = WidgetStore.PROBLEM_FOLDER
         }
     }
-    return SyncedNotes(store, synced, problem)
+    return SyncedNotes(backend.store, synced, problem)
 }

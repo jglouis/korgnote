@@ -5,6 +5,8 @@ import com.korgnote.app.capture.CaptureQueue
 import com.korgnote.app.capture.CaptureQueueFolder
 import com.korgnote.app.capture.InMemoryCaptureQueueFolder
 import com.korgnote.app.capture.MapLinks
+import com.korgnote.app.capture.NotesBackend
+import com.korgnote.app.capture.backendFor
 import com.korgnote.app.data.CertificatePins
 import com.korgnote.app.data.DevicePairing
 import com.korgnote.app.data.PairingProblem
@@ -14,9 +16,7 @@ import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.data.NotesSource
 import com.korgnote.app.data.WebDavSyncApi
 import com.korgnote.app.files.FileOpener
-import com.korgnote.app.files.NoteFolderAccess
 import com.korgnote.app.viewmodel.NotesSourceChoice
-import com.korgnote.common.replica.FolderNoteStorage
 import com.korgnote.app.files.NoFileOpener
 import com.korgnote.app.notifications.NoopNotificationScheduler
 import com.korgnote.app.notifications.NotificationScheduler
@@ -90,7 +90,7 @@ val appModule = module {
     // the user's.
     single { NotesSourceChoice(get(), get()) }
 
-    // ViewModel reads and writes the replica; the repository only refreshes it. Reminders go to
+    // ViewModel reads and writes the replica; the sync engine keeps it in step. Reminders go to
     // the platform's scheduler where there is one (Android, iOS) and nowhere otherwise, and the
     // agenda to the home-screen widgets where there are some (Android); linked
     // files, likewise, open where the platform can open them (Android, desktop). There is one for
@@ -99,13 +99,10 @@ val appModule = module {
     viewModel { params ->
         val settings = get<SettingsRepository>()
         val source = params.getOrNull<NotesSource>() ?: NotesSource.Server
-        val folder = (source as? NotesSource.Folder)?.let {
-            FolderNoteStorage(get<NoteFolderAccess>().open(it.location), ::conflictTimestamp)
-        }
-        val webDav = source == NotesSource.WebDav
+        val backend = getKoin().backendFor(source)
         NotesViewModel(
-            if (webDav) get<SyncEngine>(WEBDAV) else get<SyncEngine>(),
-            folder?.let(::DocumentStore) ?: if (webDav) get<DocumentStore>(WEBDAV) else get<DocumentStore>(),
+            (backend as? NotesBackend.Replica)?.engine?.invoke() ?: get<SyncEngine>(),
+            backend.store,
             notifications = getOrNull<NotificationScheduler>() ?: NoopNotificationScheduler,
             backgroundSync = getOrNull<BackgroundSync>() ?: NoBackgroundSync,
             widgets = getOrNull<AgendaWidgets>() ?: NoAgendaWidgets,
@@ -121,7 +118,7 @@ val appModule = module {
             saveSavedSearches = settings::setSavedSearches,
             fileLinkMappings = settings::getFileLinkMappings,
             fileOpener = getOrNull<FileOpener>() ?: NoFileOpener,
-            folder = folder,
+            folder = (backend as? NotesBackend.Folder)?.storage,
             captures = get(),
         )
     }

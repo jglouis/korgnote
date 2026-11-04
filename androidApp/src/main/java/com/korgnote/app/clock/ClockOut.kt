@@ -13,15 +13,12 @@ import com.korgnote.app.capture.notesStore
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.data.chosenNotesSource
 import com.korgnote.app.notifications.AndroidClockNotifier
-import com.korgnote.app.sync.BackgroundSyncWorker
 import com.korgnote.app.viewmodel.ClockRunning
+import com.korgnote.app.viewmodel.runningClocksIn
 import com.korgnote.app.viewmodel.withClock
 import com.korgnote.app.widget.WidgetIntents
-import com.korgnote.app.widget.WidgetStore
-import com.korgnote.app.widget.redrawWidgets
-import com.korgnote.app.widget.syncInBackground
+import com.korgnote.app.widget.syncAndRedraw
 import com.korgnote.common.org.edit.clockOut
-import com.korgnote.common.org.edit.runningClocks
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.replica.DocumentStore
 import kotlinx.datetime.LocalDateTime
@@ -84,10 +81,7 @@ class ClockOutWorker(context: Context, params: WorkerParameters) : CoroutineWork
         }
         // At once, rather than after the sync: the tap should take the notification away.
         clockNotifier(applicationContext).post(runningIn(store))
-        // As a capture's: the notes, the widgets' agenda and reminders, and the app if it is open.
-        val problem = syncInBackground(applicationContext)
-        redrawWidgets(applicationContext)
-        if (problem == WidgetStore.PROBLEM_SERVER) BackgroundSyncWorker.whenOnline(applicationContext)
+        syncAndRedraw(applicationContext)
         // A clock started elsewhere may have come in with the sync.
         clockNotifier(applicationContext).post(runningIn(store))
         return Result.success()
@@ -95,10 +89,9 @@ class ClockOutWorker(context: Context, params: WorkerParameters) : CoroutineWork
 
     /** The clocks running in [store]'s notes, newest first, as the app lists them. */
     private suspend fun runningIn(store: DocumentStore): List<ClockRunning> =
-        store.paths().flatMap { path ->
-            val text = store.read(path)?.takeIf { "CLOCK:" in it } ?: return@flatMap emptyList()
-            text.toOrgDocument().runningClocks().map { ClockRunning(path, it.headingStart, it.title, it.start) }
-        }.sortedWith(compareByDescending<ClockRunning> { it.start }.thenBy { it.path })
+        runningClocksIn(
+            store.paths().mapNotNull { path -> store.read(path)?.takeIf { "CLOCK:" in it }?.let { path to it.toOrgDocument() } }.toMap(),
+        )
 
     companion object {
         private const val KEY_PATH = "path"
