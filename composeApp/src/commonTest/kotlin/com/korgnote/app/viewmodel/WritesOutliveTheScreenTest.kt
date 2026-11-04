@@ -1,6 +1,7 @@
 package com.korgnote.app.viewmodel
 
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.lifecycle.viewModelScope
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.SyncEngine
 import kotlinx.coroutines.CoroutineScope
@@ -68,6 +69,21 @@ class WritesOutliveTheScreenTest {
         composition.launch { viewModel.changes.toggleCheckboxAt(text.indexOf("- [ ]")) }
         runCurrent()
         composition.cancel()
+        disk.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(text.replace("[ ]", "[X]"), store.read(path))
+    }
+
+    /** Leaving the app ends the view model too: a write already begun has shown its change, and finishes. */
+    @Test
+    fun aTickSurvivesTheViewModelGoingAwayMidWrite() = runTest {
+        opened()
+        val disk = storage.stallWrite(path)
+
+        viewModel.changes.toggleCheckboxAt(text.indexOf("- [ ]"))
+        runCurrent()
+        viewModel.viewModelScope.cancel()
         disk.complete(Unit)
         advanceUntilIdle()
 

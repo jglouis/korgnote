@@ -23,11 +23,13 @@ import korgnote.composeapp.generated.resources.vm_edit_conflict
 import korgnote.composeapp.generated.resources.vm_kept_beside
 import korgnote.composeapp.generated.resources.vm_note_brought_back
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDateTime
 import org.jetbrains.compose.resources.getString
 
@@ -269,20 +271,24 @@ class NoteChanges(
      * text now in the replica; null, with nothing written, when the two changed the same lines or the
      * note is gone. Only [bringBack] writes a note that is gone.
      */
-    private suspend fun land(path: String, base: String?, text: String, bringBack: Boolean = false): String? = landing.withLock {
-        repeat(WRITE_ATTEMPTS) {
-            val current = store.read(path)
-            if (current == null) {
-                if (!bringBack) return@withLock null
-                store.save(path, text)
-                return@withLock text
+    private suspend fun land(path: String, base: String?, text: String, bringBack: Boolean = false): String? =
+        // Once begun, finished: the change is on screen, and leaving the app must not cut off its write.
+        withContext(NonCancellable) {
+            landing.withLock {
+                repeat(WRITE_ATTEMPTS) {
+                    val current = store.read(path)
+                    if (current == null) {
+                        if (!bringBack) return@withLock null
+                        store.save(path, text)
+                        return@withLock text
+                    }
+                    val merged = if (base == null || current == base) text else (merge(base, text, current) as? MergeResult.Merged)?.text
+                    if (merged == null) return@withLock null
+                    if (store.saveIfUnchanged(path, current, merged)) return@withLock merged
+                }
+                null
             }
-            val merged = if (base == null || current == base) text else (merge(base, text, current) as? MergeResult.Merged)?.text
-            if (merged == null) return@withLock null
-            if (store.saveIfUnchanged(path, current, merged)) return@withLock merged
         }
-        null
-    }
 
     /** [written] landed for a change that made [text]: when something came in, it is now to be seen. */
     private fun showWritten(path: String, text: String, written: String) {
