@@ -221,9 +221,10 @@ class OrgLinkIndex(
 
     private fun fuzzyOffset(text: String, search: String): Int? {
         val wanted = search.normalised()
-        Regex("<<([^<>\\n]+)>>").findAll(text)
-            .firstOrNull { it.groupValues[1].normalised() == wanted }?.let { return it.range.first }
-        Regex("(?im)^[ \\t]*#\\+NAME:[ \\t]*(.+)$").findAll(text)
+        OrgSyntax.target.findAll(text)
+            .firstOrNull { it.groupValues[1].length == it.groupValues[3].length && it.groupValues[2].normalised() == wanted }
+            ?.let { return it.range.first }
+        NAME_KEYWORD.findAll(text)
             .firstOrNull { it.groupValues[1].normalised() == wanted }?.let { return it.range.first }
         return headingOffset(text, search)
     }
@@ -294,6 +295,7 @@ class OrgLinkIndex(
 
         val EXTERNAL_SCHEMES = setOf("http", "https", "mailto", "ftp")
         val CUSTOM_ID = Regex("(?im)^[ \\t]*:CUSTOM_ID:[ \\t]+(\\S+)[ \\t]*$")
+        val NAME_KEYWORD = Regex("(?im)^[ \\t]*#\\+NAME:[ \\t]*(.+)$")
         val COOKIE = Regex("\\[\\d*/\\d*]|\\[\\d*%]")
 
         fun splitSearch(target: String): Pair<String, String?> {

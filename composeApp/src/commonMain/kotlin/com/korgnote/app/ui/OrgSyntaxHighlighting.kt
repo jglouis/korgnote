@@ -25,7 +25,10 @@ import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgLineState
 import com.korgnote.common.org.OrgSpan
 import com.korgnote.common.org.OrgSpanKind
+import com.korgnote.common.org.orgEntityAt
+import com.korgnote.common.org.orgScriptAt
 import com.korgnote.common.org.orgSpansForLine
+import com.korgnote.common.org.orgTargetAt
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS

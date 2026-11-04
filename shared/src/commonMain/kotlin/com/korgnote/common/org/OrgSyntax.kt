@@ -97,6 +97,12 @@ object OrgSyntax {
      */
     val statistics = Regex("\\[(\\d*)(?:/(\\d*)|%)\\]")
 
+    /**
+     * A `<<target>>` or `<<<radio target>>>`, capturing its opening brackets, its words and its
+     * closing brackets, which a real one has as many of on each side.
+     */
+    val target = Regex("(<<<?)([^<>\\n]+?)(>>>?)")
+
     /** Characters an emphasis run may open after, and close before. */
     const val EMPHASIS_PRE = " \t-('\"{"
     const val EMPHASIS_POST = " \t-.,:!?;'\")}["

@@ -1,11 +1,11 @@
-package com.korgnote.app.ui
+package com.korgnote.common.org
 
 /**
  * Org's named entities, `\alpha` or `\to{}`, as reading mode shows them: the character each stands
  * for. A subset of `org-entities` — Greek, arrows, maths, typography, currency and the common
  * accented letters — chosen for what notes actually write; a name not here stays as typed.
  */
-internal val ORG_ENTITIES: Map<String, String> = mapOf(
+private val ORG_ENTITIES: Map<String, String> = mapOf(
     // Greek
     "alpha" to "α", "beta" to "β", "gamma" to "γ", "delta" to "δ", "epsilon" to "ε", "varepsilon" to "ε",
     "zeta" to "ζ", "eta" to "η", "theta" to "θ", "vartheta" to "ϑ", "iota" to "ι", "kappa" to "κ",
@@ -73,7 +73,7 @@ private val ENTITY = Regex("""\\([A-Za-z]+[0-9]*)(\{\})?""")
  * The entity at [index] of [text] as `(what it shows, how many characters it takes)`, or null when
  * none starts there or the name is not one Org knows.
  */
-internal fun orgEntityAt(text: String, index: Int): Pair<String, Int>? {
+fun orgEntityAt(text: String, index: Int): Pair<String, Int>? {
     val m = ENTITY.matchAt(text, index) ?: return null
     val shown = ORG_ENTITIES[m.groupValues[1]] ?: return null
     // Without `{}`, the name must end at a non-letter, so `\alphabet` is no `\alpha` followed by `bet`.
@@ -89,7 +89,7 @@ internal fun orgEntityAt(text: String, index: Int): Pair<String, Int>? {
  * takes)`, or null. Only the braced form: Org's bare `x_2` would turn every `snake_case` word in a
  * note into a subscript, which Org itself only does when exporting with `^:t`.
  */
-internal fun orgScriptAt(text: String, index: Int): Pair<String, Int>? {
+fun orgScriptAt(text: String, index: Int): Pair<String, Int>? {
     if (index == 0 || text[index - 1].isWhitespace()) return null
     val m = SCRIPT.matchAt(text, index) ?: return null
     return m.groupValues[1] to m.value.length
@@ -98,10 +98,8 @@ internal fun orgScriptAt(text: String, index: Int): Pair<String, Int>? {
 private val SCRIPT = Regex("""[_^]\{([^{}\n]+)\}""")
 
 /** A `<<target>>` or `<<<radio target>>>` at [index] as `(its text, how many characters it takes)`, or null. */
-internal fun orgTargetAt(text: String, index: Int): Pair<String, Int>? {
-    val m = TARGET.matchAt(text, index) ?: return null
+fun orgTargetAt(text: String, index: Int): Pair<String, Int>? {
+    val m = OrgSyntax.target.matchAt(text, index) ?: return null
     if (m.groupValues[1].length != m.groupValues[3].length) return null
     return m.groupValues[2] to m.value.length
 }
-
-private val TARGET = Regex("""(<<<?)([^<>\n]+?)(>>>?)""")
