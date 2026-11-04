@@ -344,16 +344,3 @@ private fun AgendaOccurrence.spanStatus(): AgendaStatus? = when (span) {
     DaySpan.Middle -> AgendaStatus.Continues
     DaySpan.End -> AgendaStatus.Ends
 }
-
-/** [status] in English: "Deadline", "Due in 3 d.", "Scheduled 2 d. ago". */
-fun AgendaOccurrence.statusLabel(today: LocalDate): String? = when (val status = status(today)) {
-    null -> null
-    AgendaStatus.Deadline -> "Deadline"
-    is AgendaStatus.DueIn -> "Due in ${status.days} d."
-    is AgendaStatus.Overdue -> "${status.days} d. overdue"
-    is AgendaStatus.ScheduledAgo -> "Scheduled ${status.days} d. ago"
-    AgendaStatus.Closed -> "Closed"
-    AgendaStatus.Starts -> "Starts"
-    AgendaStatus.Continues -> "Continues"
-    AgendaStatus.Ends -> "Ends"
-}

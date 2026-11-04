@@ -39,13 +39,11 @@ class ReadingDetailsTest {
     @Test
     fun aSyncsAgeIsShortUnderTheCloud() {
         val at = Instant.fromEpochSeconds(1_800_000_000)
-        assertEquals("now", syncAgeLabel(at, at + 40.seconds))
-        assertEquals("5m", syncAgeLabel(at, at + 5.minutes))
-        assertEquals("3h", syncAgeLabel(at, at + 3.hours))
-        assertEquals("2d", syncAgeLabel(at, at + 2.days))
-        assertEquals("now", syncAgeLabel(at, at - 1.minutes), "a clock set back is not a negative age")
-        assertEquals("5 min ago", syncAgeSentence(at, at + 5.minutes))
-        assertEquals("a day ago", syncAgeSentence(at, at + 1.days))
+        assertEquals(SyncAge(SyncAge.Span.NOW, 0), syncAgeOf(at, at + 40.seconds))
+        assertEquals(SyncAge(SyncAge.Span.MINUTES, 5), syncAgeOf(at, at + 5.minutes))
+        assertEquals(SyncAge(SyncAge.Span.HOURS, 3), syncAgeOf(at, at + 3.hours))
+        assertEquals(SyncAge(SyncAge.Span.DAYS, 2), syncAgeOf(at, at + 2.days))
+        assertEquals(SyncAge(SyncAge.Span.NOW, 0), syncAgeOf(at, at - 1.minutes), "a clock set back is not a negative age")
     }
 
     /** The label on a drawer says what the rest of the app reads as this heading's id, or nothing. */

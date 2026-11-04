@@ -242,28 +242,6 @@ private fun SyncAge.sentence(): String = when (span) {
     SyncAge.Span.DAYS -> if (count == 1L) stringResource(Res.string.notes_sync_ago_day) else stringResource(Res.string.notes_sync_ago_days, count)
 }
 
-/** [SyncAge.label] in English. */
-internal fun syncAgeLabel(lastSynced: Instant, now: Instant): String {
-    val age = syncAgeOf(lastSynced, now)
-    return when (age.span) {
-        SyncAge.Span.NOW -> "now"
-        SyncAge.Span.MINUTES -> "${age.count}m"
-        SyncAge.Span.HOURS -> "${age.count}h"
-        SyncAge.Span.DAYS -> "${age.count}d"
-    }
-}
-
-/** [SyncAge.sentence] in English. */
-internal fun syncAgeSentence(lastSynced: Instant, now: Instant): String {
-    val age = syncAgeOf(lastSynced, now)
-    return when (age.span) {
-        SyncAge.Span.NOW -> "just now"
-        SyncAge.Span.MINUTES -> "${age.count} min ago"
-        SyncAge.Span.HOURS -> "${age.count} h ago"
-        SyncAge.Span.DAYS -> if (age.count == 1L) "a day ago" else "${age.count} days ago"
-    }
-}
-
 private fun clockTime(at: Instant): String {
     val time = at.toLocalDateTime(TimeZone.currentSystemDefault()).time
     return "${time.hour.toString().padStart(2, '0')}:${time.minute.toString().padStart(2, '0')}"

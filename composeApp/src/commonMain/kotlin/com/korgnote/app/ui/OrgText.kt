@@ -21,8 +21,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,7 +40,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -138,10 +135,6 @@ fun OrgText(
     onSetTodo: ((heading: OrgSection, keyword: String?) -> Unit)? = null,
     // A tap on a table, which is edited as a grid rather than as the element's text.
     onEditTable: ((table: OrgTable) -> Unit)? = null,
-    // Index into content.children (when content is an OrgDocument) to scroll into view, e.g. after
-    // opening a file from a calendar entry. Consumed once via onScrolledToChildIndex.
-    scrollToChildIndex: Int? = null,
-    onScrolledToChildIndex: () -> Unit = {},
     /**
      * Keywords for a document that declares none of its own. Reading mode renders one heading at a
      * time, which never holds the file's `#+TODO:` lines, so it passes the file's keywords here.
@@ -151,18 +144,12 @@ fun OrgText(
     val todoConfig = if (content is OrgDocument) orgTodoConfigOf(content, todoKeywords) else todoKeywords
     Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
         if (content is OrgDocument) {
-            // One requester per top-level node so a calendar entry (which always refers to a
-            // top-level OrgSection) can be scrolled into view within the surrounding scroll container.
-            val requesters = remember(content) { content.children.map { BringIntoViewRequester() } }
             // The author and the date, as one line where the first of them is written.
             val byline = remember(content) { noteBylineOf(content) }
             content.children.forEachIndexed { idx, child ->
                 // A Column, not a Box: some nodes (e.g. a heading plus its body) render as several
                 // sibling composables that must stack vertically, which a Box would overlay instead.
-                Column(
-                    modifier = Modifier.bringIntoViewRequester(requesters[idx]),
-                    horizontalAlignment = Alignment.Start
-                ) {
+                Column(horizontalAlignment = Alignment.Start) {
                     when {
                         // The note's own drawer, above its first heading, says what its ID is.
                         child is OrgDrawer -> OrgDrawerView(child.name, child.lines, showId = true)
@@ -175,13 +162,6 @@ fun OrgText(
                         )
                         idx == byline.indices.min() -> NoteBylineView(byline)
                     }
-                }
-            }
-            LaunchedEffect(scrollToChildIndex, requesters) {
-                val idx = scrollToChildIndex
-                if (idx != null && idx in requesters.indices) {
-                    requesters[idx].bringIntoView()
-                    onScrolledToChildIndex()
                 }
             }
         } else {

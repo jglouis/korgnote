@@ -227,13 +227,9 @@ class CalendarLayoutTest {
             * Meeting <2026-09-23 Wed 10:00-11:30>
             """.trimIndent(),
         )
-        val labels = agenda.shownOn(today, today, showDone = true).associate { it.entry.title to it.statusLabel(today) }
-        assertEquals("Deadline", labels["Due today"])
-        assertEquals("Due in 3 d.", labels["Due soon"])
-        assertEquals("2 d. overdue", labels["Missed"])
-        assertEquals("Scheduled 5 d. ago", labels["Late"])
-        assertNull(labels["Meeting"])
         val statuses = agenda.shownOn(today, today, showDone = true).associate { it.entry.title to it.status(today) }
+        assertEquals(AgendaStatus.Deadline, statuses["Due today"])
+        assertNull(statuses["Meeting"])
         assertEquals(AgendaStatus.DueIn(3), statuses["Due soon"])
         assertEquals(AgendaStatus.Overdue(2), statuses["Missed"])
         assertEquals(AgendaStatus.ScheduledAgo(5), statuses["Late"])
@@ -244,7 +240,7 @@ class CalendarLayoutTest {
     fun aScheduledRangeSaysWhichOfItsDaysThisIs() {
         val agenda = index("* Holidays\nSCHEDULED: <2026-09-22 Tue>--<2026-09-24 Thu>\n")
         val days = listOf(day(22), today, day(24)).map { agenda.shownOn(it, today, showDone = true).single() }
-        assertEquals(listOf("Starts", "Continues", "Ends"), days.map { it.statusLabel(today) })
+        assertEquals(listOf(AgendaStatus.Starts, AgendaStatus.Continues, AgendaStatus.Ends), days.map { it.status(today) })
         assertTrue(days.all { it.isAllDay })
         assertEquals(listOf("Holidays"), agenda.monthDay(day(24), showDone = true).map { it.entry.title })
     }
