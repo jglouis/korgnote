@@ -81,11 +81,14 @@ class SyncEngine(
         val tombstones = store.tombstones().associateBy { it.path }
         val bundled = bundleFor(manifest, since, localPaths, tombstones.keys)
 
+        // What the bundle holds of what the loop below decides to pull, all written at once after it.
+        val fromBundle = mutableListOf<RemoteFile>()
+
         // Takes the server's copy of [path], from the bundle when it holds it.
         suspend fun pullOne(path: String): PullOutcome {
             val file = bundled[path] ?: return fetchAndAccept(path)
-            val accepted = store.acceptIfUntouched(path, file.text, file.etag, knownEtag = store.meta(path)?.etag)
-            return if (accepted) PullOutcome.TAKEN else PullOutcome.LEFT
+            fromBundle += file
+            return PullOutcome.LEFT
         }
         var pullFailed = false
 
@@ -108,44 +111,50 @@ class SyncEngine(
             PushOutcome.SKIPPED -> Unit
         }
 
-        for (entry in manifest.entries) {
-            val tombstone = tombstones[entry.path]
-            if (tombstone != null) {
-                if (tombstone.etag == entry.etag) {
-                    pendingDeletes.add(tombstone)
-                } else {
-                    // Edited elsewhere after the version deleted here: the edit wins, and the note
-                    // comes back rather than taking someone's work with it.
-                    store.forgetTombstone(entry.path)
-                    record(pullOne(entry.path), entry.path)
+        try {
+            for (entry in manifest.entries) {
+                val tombstone = tombstones[entry.path]
+                if (tombstone != null) {
+                    if (tombstone.etag == entry.etag) {
+                        pendingDeletes.add(tombstone)
+                    } else {
+                        // Edited elsewhere after the version deleted here: the edit wins, and the note
+                        // comes back rather than taking someone's work with it.
+                        store.forgetTombstone(entry.path)
+                        record(pullOne(entry.path), entry.path)
+                    }
+                    continue
                 }
-                continue
+                val meta = store.meta(entry.path)
+                val haveLocally = entry.path in localPaths
+                val dirty = meta?.dirty == true
+
+                when {
+                    // Never seen it, or the copy went missing: take the server's.
+                    !haveLocally -> record(pullOne(entry.path), entry.path)
+
+                    // Here, but with no record of what was synced — a corrupt meta.json is read as
+                    // empty — so it may hold edits never pushed. Theirs takes the path, and ours is kept
+                    // beside it unless the two are the same.
+                    meta == null -> record(keepTheirs(entry.path), entry.path)
+
+                    // Untouched locally and unchanged remotely: nothing to do.
+                    !dirty && meta.etag == entry.etag -> Unit
+
+                    // Untouched locally, moved remotely: take theirs.
+                    !dirty -> record(pullOne(entry.path), entry.path)
+
+                    // Edited locally, server unchanged since we synced: push.
+                    meta.etag == entry.etag -> record(pushLocal(entry.path, meta.etag), entry.path)
+
+                    // Both moved: try to reconcile them, and only involve the user if that fails.
+                    else -> record(reconcile(entry.path), entry.path)
+                }
             }
-            val meta = store.meta(entry.path)
-            val haveLocally = entry.path in localPaths
-            val dirty = meta?.dirty == true
-
-            when {
-                // Never seen it, or the copy went missing: take the server's.
-                !haveLocally -> record(pullOne(entry.path), entry.path)
-
-                // Here, but with no record of what was synced — a corrupt meta.json is read as
-                // empty — so it may hold edits never pushed. Theirs takes the path, and ours is kept
-                // beside it unless the two are the same.
-                meta == null -> record(keepTheirs(entry.path), entry.path)
-
-                // Untouched locally and unchanged remotely: nothing to do.
-                !dirty && meta.etag == entry.etag -> Unit
-
-                // Untouched locally, moved remotely: take theirs.
-                !dirty -> record(pullOne(entry.path), entry.path)
-
-                // Edited locally, server unchanged since we synced: push.
-                meta.etag == entry.etag -> record(pushLocal(entry.path, meta.etag), entry.path)
-
-                // Both moved: try to reconcile them, and only involve the user if that fails.
-                else -> record(reconcile(entry.path), entry.path)
-            }
+        } finally {
+            // Even when the server is lost partway, what already arrived is kept: a first sync that
+            // fails near the end need not start again.
+            pulled += store.acceptAllUntouched(fromBundle)
         }
 
         // A complete manifest is authoritative about what exists; a delta is not, so absence from a
@@ -182,8 +191,9 @@ class SyncEngine(
         // absent from it. Absence means "unchanged remotely": push it against the etag we hold.
         if (!manifest.complete) {
             val covered = remote.keys + manifest.deleted
+            val records = store.records()
             val unsynced = store.dirtyPaths().toSet() +
-                localPaths.filter { store.meta(it)?.etag == null }
+                localPaths.filter { records[it]?.etag == null }
             for (path in unsynced - covered) {
                 val etag = store.meta(path)?.etag
                 record(if (etag == null) pushNew(path) else pushLocal(path, etag), path)
@@ -237,9 +247,10 @@ class SyncEngine(
         localPaths: Set<String>,
         tombstones: Set<String>,
     ): Map<String, RemoteFile> {
+        val records = store.records()
         val wanted = manifest.entries.count { entry ->
             if (entry.path in tombstones) return@count false
-            val meta = store.meta(entry.path)
+            val meta = records[entry.path]
             entry.path !in localPaths || meta == null || (!meta.dirty && meta.etag != entry.etag)
         }
         if (wanted < BUNDLE_FROM) return emptyMap()

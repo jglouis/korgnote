@@ -30,6 +30,9 @@ class DocumentStore(private val storage: ReplicaStorage) {
 
     suspend fun meta(path: String): FileMeta? = storage.readMeta().files[path]
 
+    /** Every file's record at once, for a loop over many: each [meta] looks at the disk. */
+    suspend fun records(): Map<String, FileMeta> = storage.readMeta().files
+
     /**
      * Writes [content] locally and marks it dirty.
      *
@@ -201,6 +204,30 @@ class DocumentStore(private val storage: ReplicaStorage) {
         }
     }
 
+    /**
+     * Takes many files from the server under one lock with one metadata write, leaving out any with
+     * local work: an edit, or a deletion. Returns the paths taken.
+     *
+     * One lock so that a save cannot land between the check and the write; one metadata write because
+     * one for each is what made a first sync quadratic. A crash partway leaves files with an old
+     * record or none, which the next cycle takes again or finds identical.
+     */
+    suspend fun acceptAllUntouched(files: List<RemoteFile>): List<String> {
+        files.forEach { requireSafeReplicaPath(it.path) }
+        if (files.isEmpty()) return emptyList()
+        return mutex.withLock {
+            val meta = storage.readMeta()
+            val taken = files.filterNot { file -> meta.files[file.path]?.let { it.dirty || it.deleted } == true }
+            if (taken.isEmpty()) return@withLock emptyList()
+            for (file in taken) {
+                storage.write(file.path, file.text)
+                storage.writeBase(file.path, file.text)
+            }
+            storage.writeMeta(meta.copy(files = meta.files + taken.map { it.path to FileMeta(it.path, etag = it.etag) }))
+            taken.map { it.path }
+        }
+    }
+
     private suspend fun acceptLocked(path: String, content: String, etag: String?) {
         storage.write(path, content)
         storage.writeBase(path, content)
@@ -324,7 +351,7 @@ class DocumentStore(private val storage: ReplicaStorage) {
     suspend fun setGeneration(generation: Long) {
         mutex.withLock {
             val meta = storage.readMeta()
-            storage.writeMeta(meta.copy(generation = generation))
+            if (meta.generation != generation) storage.writeMeta(meta.copy(generation = generation))
         }
     }
 

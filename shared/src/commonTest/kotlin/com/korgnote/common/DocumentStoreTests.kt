@@ -2,6 +2,7 @@ package com.korgnote.common
 
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
+import com.korgnote.common.replica.RemoteFile
 import com.korgnote.common.replica.ReplicaStorage
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -62,6 +63,36 @@ abstract class DocumentStoreContract {
         assertEquals("* Edited locally\n", store.read("inbox.org"))
         assertEquals("* From server\n", store.base("inbox.org"), "the merge ancestor must survive")
         assertTrue(store.isDirty("inbox.org"))
+    }
+
+    /** What used to be asked of a bulk refresh, and is of a bundle: local work outranks what arrived. */
+    @Test
+    fun takingManyFilesLeavesAloneThoseWithLocalWork() = runTest {
+        val store = store()
+        store.acceptFromServer("edited.org", "* Edited\n", etag = "e1")
+        store.acceptFromServer("deleted.org", "* Deleted\n", etag = "e1")
+        store.acceptFromServer("clean.org", "* Clean\n", etag = "e1")
+        store.save("edited.org", "* Edited offline\n")
+        store.delete("deleted.org")
+
+        val taken = store.acceptAllUntouched(
+            listOf(
+                RemoteFile("edited.org", "e2", "* From server\n"),
+                RemoteFile("deleted.org", "e2", "* From server\n"),
+                RemoteFile("clean.org", "e2", "* From server\n"),
+                RemoteFile("new.org", "e2", "* From server\n"),
+            ),
+        )
+
+        assertEquals(listOf("clean.org", "new.org"), taken)
+        assertEquals("* Edited offline\n", store.read("edited.org"))
+        assertTrue(store.isDirty("edited.org"))
+        assertNull(store.read("deleted.org"))
+        assertEquals("e1", store.meta("deleted.org")?.etag)
+        assertEquals("* From server\n", store.read("clean.org"))
+        assertEquals("* From server\n", store.base("new.org"))
+        assertEquals("e2", store.meta("new.org")?.etag)
+        assertFalse(store.isDirty("new.org"))
     }
 
     @Test

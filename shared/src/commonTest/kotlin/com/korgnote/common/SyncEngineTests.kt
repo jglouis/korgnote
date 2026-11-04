@@ -205,6 +205,69 @@ class SyncEngineTests {
         assertEquals(1, server.bundleRequests)
     }
 
+    /** One metadata write for each note is what made a first sync quadratic. */
+    @Test
+    fun aColdStartFromABundleWritesTheMetadataOnce() = runTest {
+        val server = FakeServer()
+        server.bundles = true
+        repeat(50) { server.put("n$it.org", "* Note $it\n") }
+        var writes = 0
+        val disk = InMemoryReplicaStorage()
+        val store = DocumentStore(object : ReplicaStorage by disk {
+            override suspend fun writeMeta(meta: ReplicaMeta) {
+                writes++
+                disk.writeMeta(meta)
+            }
+        })
+
+        val report = SyncEngine(store, server).sync()
+
+        assertEquals(50, report.pulled.size)
+        assertEquals(2, writes, "the files, then the generation")
+        assertEquals(50, store.records().size)
+        assertEquals("* Note 7\n", store.base("n7.org"))
+    }
+
+    /** Taken in one go after the rest of the cycle, so a save may land first: it must not be lost. */
+    @Test
+    fun anEditSavedBeforeABundleIsWrittenIsKept() = runTest {
+        val (server, store, engine) = setUp()
+        server.bundles = true
+        repeat(10) { server.put("n$it.org", "* Note $it\n") }
+        engine.sync()
+
+        repeat(9) { server.put("n$it.org", "* Note $it, changed\n") }
+        server.put("zz.org", "* Elsewhere\n")
+        server.bundleCap = 9
+        // zz.org sorts last, so the bundle leaves it out and it is fetched before the bundle is written.
+        server.whileNextFetchAnswers = { store.save("n3.org", "* Note 3, edited here\n") }
+        val report = engine.sync()
+
+        assertFalse("n3.org" in report.pulled)
+        assertEquals("* Note 3, edited here\n", store.read("n3.org"))
+        assertTrue(store.isDirty("n3.org"))
+        assertEquals("* Note 4, changed\n", store.read("n4.org"))
+
+        engine.sync()
+        assertEquals("n3.sync-conflict-20260921-101500.org", store.paths().single { it.startsWith("n3.sync-") })
+    }
+
+    /** The server is lost partway through a first sync: what the bundle brought is not fetched again. */
+    @Test
+    fun aColdStartCutShortKeepsWhatTheBundleBrought() = runTest {
+        val (server, store, engine) = setUp()
+        server.bundles = true
+        repeat(10) { server.put("n$it.org", "* Note $it\n") }
+        server.bundleCap = 6
+        server.whileNextFetchAnswers = { throw RuntimeException("connection lost") }
+
+        assertFailsWith<RuntimeException> { engine.sync() }
+
+        assertEquals(6, store.paths().size)
+        assertEquals("* Note 3\n", store.read("n3.org"))
+        assertEquals(0, store.generation(), "the rest are still to come")
+    }
+
     @Test
     fun whatABundleLeavesOutIsFetchedOneByOne() = runTest {
         val (server, store, engine) = setUp()
