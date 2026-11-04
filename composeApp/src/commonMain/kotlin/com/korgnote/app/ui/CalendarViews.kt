@@ -661,8 +661,8 @@ fun TimeGridView(
             // All-day strip: untimed entries, deadlines, and the days of multi-day ranges.
             // Multi-day ranges first, in the same order on every day, so that each one keeps its row
             // and reads as one bar across the columns.
-            val allDay = dates.map { date ->
-                byDate.getValue(date).filter { it.isAllDay }.sortedWith(chipOrder)
+            val allDay = remember(dates, byDate) {
+                dates.map { date -> byDate.getValue(date).filter { it.isAllDay }.sortedWith(chipOrder) }
             }
             val compact = dates.size > 1
             if (allDay.any { it.isNotEmpty() }) {
@@ -695,10 +695,12 @@ fun TimeGridView(
 
             // Opens an hour before now on today, or at the day's start, but never below the first
             // timed entry on screen: an early meeting scrolled out of sight is a meeting missed.
-            val firstEvent = (
-                dates.flatMap { byDate.getValue(it) }.filter { !it.isAllDay }.map { it.time!!.hour } +
-                    dates.flatMap { date -> clockedByDate.getValue(date).filter { it.span.start.date == date } }.map { it.startMinute / 60 }
-                ).minOrNull()
+            val firstEvent = remember(dates, byDate, clockedByDate) {
+                (
+                    dates.flatMap { byDate.getValue(it) }.filter { !it.isAllDay }.map { it.time!!.hour } +
+                        dates.flatMap { date -> clockedByDate.getValue(date).filter { it.span.start.date == date } }.map { it.startMinute / 60 }
+                    ).minOrNull()
+            }
             val preferred = if (today in dates) (now.hour - 1).coerceAtLeast(0) else dayStartHour
             val initialHour = minOf(preferred, firstEvent ?: preferred)
             // A little above the hour, so its label is not cut in half.
@@ -867,6 +869,8 @@ private fun EventBlock(
     // narrow column is otherwise two lines of title and a long empty block under them.
     val lines = ((height - 4.dp - (if (time != null) timeLine else 0.dp)) / titleLine).toInt().coerceAtLeast(1)
     val inset = if (compact) 1.dp else 3.dp
+    // A pinch comes here with every move of the fingers, and only the block's size has changed.
+    val headline = remember(occurrence, keywordColor, compact) { occurrence.headline(keywordColor = keywordColor, titleOnly = compact) }
     var menu by remember { mutableStateOf(false) }
     Column(
         Modifier
@@ -890,7 +894,7 @@ private fun EventBlock(
     ) {
         EntryMenu(occurrence.entry.file, occurrence.entry.headingOffset, occurrence.entry.todo, menu, onDismiss = { menu = false }, entry = occurrence.entry)
         Text(
-            occurrence.headline(keywordColor = keywordColor, titleOnly = compact),
+            headline,
             modifier = Modifier.keywordDescription(occurrence, compact),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurface,
