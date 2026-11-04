@@ -7,6 +7,7 @@ import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.DaySpan
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.daysUntil
 import kotlinx.datetime.isoDayNumber
@@ -291,6 +292,26 @@ fun AgendaIndex.agendaList(from: LocalDate, days: Int, today: LocalDate, showDon
         if (shown.isNotEmpty() || date == today) sections += AgendaSection(date, shown)
     }
     return sections
+}
+
+/**
+ * The hour a grid of [dates] opens scrolled to: an hour before now on today, or the day's start, but
+ * never below the first timed entry on screen: an early meeting scrolled out of sight is a meeting
+ * missed. Clocked time from a stretch begun the day before starts no earlier for it.
+ */
+fun initialHour(
+    dates: List<LocalDate>,
+    shown: Map<LocalDate, List<AgendaOccurrence>>,
+    clocked: Map<LocalDate, List<ClockedPiece>>,
+    now: LocalDateTime,
+    dayStartHour: Int,
+): Int {
+    val firstEvent = (
+        dates.flatMap { shown.getValue(it) }.filter { !it.isAllDay }.map { it.time!!.hour } +
+            dates.flatMap { date -> clocked.getValue(date).filter { it.span.start.date == date } }.map { it.startMinute / 60 }
+        ).minOrNull()
+    val preferred = if (now.date in dates) (now.hour - 1).coerceAtLeast(0) else dayStartHour
+    return minOf(preferred, firstEvent ?: preferred)
 }
 
 // --- How an occurrence describes itself --------------------------------------------------------

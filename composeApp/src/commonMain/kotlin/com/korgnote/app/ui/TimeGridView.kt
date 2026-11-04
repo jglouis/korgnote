@@ -228,16 +228,9 @@ fun TimeGridView(
                 HorizontalDivider()
             }
 
-            // Opens an hour before now on today, or at the day's start, but never below the first
-            // timed entry on screen: an early meeting scrolled out of sight is a meeting missed.
-            val firstEvent = remember(dates, byDate, clockedByDate) {
-                (
-                    dates.flatMap { byDate.getValue(it) }.filter { !it.isAllDay }.map { it.time!!.hour } +
-                        dates.flatMap { date -> clockedByDate.getValue(date).filter { it.span.start.date == date } }.map { it.startMinute / 60 }
-                    ).minOrNull()
+            val initialHour = remember(dates, byDate, clockedByDate, now, dayStartHour) {
+                initialHour(dates, byDate, clockedByDate, now, dayStartHour)
             }
-            val preferred = if (today in dates) (now.hour - 1).coerceAtLeast(0) else dayStartHour
-            val initialHour = minOf(preferred, firstEvent ?: preferred)
             // A little above the hour, so its label is not cut in half.
             val initialScroll = with(LocalDensity.current) { (hourHeight * initialHour - 8.dp).coerceAtLeast(0.dp).roundToPx() }
             val scroll = rememberScrollState(initialScroll)

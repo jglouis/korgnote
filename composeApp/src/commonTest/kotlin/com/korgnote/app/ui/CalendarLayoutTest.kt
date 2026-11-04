@@ -5,6 +5,7 @@ import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.AgendaOptions
 import com.korgnote.common.org.agenda.on
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -25,6 +26,59 @@ class CalendarLayoutTest {
         index(events.joinToString("\n") { "* $it" }).on(today)
 
     private fun List<TimedBlock>.byTitle() = associate { it.occurrence.entry.title to (it.column to it.columns) }
+
+    // --- Where the hour grid opens ---
+
+    private fun openingHour(text: String, date: LocalDate, now: LocalDateTime): Int {
+        val agenda = index(text)
+        val dates = listOf(date)
+        return initialHour(
+            dates,
+            dates.associateWith { agenda.shownOn(it, now.date, showDone = false) },
+            dates.associateWith { agenda.clocks.on(it, now) },
+            now,
+            dayStartHour = 7,
+        )
+    }
+
+    private val midMorning = LocalDateTime(2026, 9, 23, 11, 20)
+
+    @Test
+    fun theGridOpensAnHourBeforeNowOnToday() {
+        assertEquals(10, openingHour("* Nothing timed\n", today, midMorning))
+    }
+
+    @Test
+    fun theGridOpensAtTheDaysStartOnAnotherDay() {
+        assertEquals(7, openingHour("* Nothing timed\n", day(24), midMorning))
+    }
+
+    @Test
+    fun theGridNeverOpensBelowTheFirstTimedEntry() {
+        assertEquals(6, openingHour("* Early <2026-09-24 Thu 06:30>\n", day(24), midMorning))
+    }
+
+    @Test
+    fun aLaterEntryLeavesTheGridWhereItWouldOpen() {
+        assertEquals(10, openingHour("* Late <2026-09-23 Wed 15:00>\n", today, midMorning))
+    }
+
+    @Test
+    fun theGridOpensAtClockedTimeEarlierThanAnything() {
+        val clocked = "* Work\n:LOGBOOK:\nCLOCK: [2026-09-23 Wed 05:15]--[2026-09-23 Wed 06:00] =>  0:45\n:END:\n"
+        assertEquals(5, openingHour(clocked, today, midMorning))
+    }
+
+    @Test
+    fun aClockRunningOverFromTheDayBeforeDoesNotOpenTheGridAtMidnight() {
+        val clocked = "* Work\n:LOGBOOK:\nCLOCK: [2026-09-22 Tue 23:00]--[2026-09-23 Wed 01:00] =>  2:00\n:END:\n"
+        assertEquals(10, openingHour(clocked, today, midMorning))
+    }
+
+    @Test
+    fun earlyInTheMorningTheGridOpensAtMidnight() {
+        assertEquals(0, openingHour("* Nothing timed\n", today, LocalDateTime(2026, 9, 23, 0, 30)))
+    }
 
     // --- The month's weeks ---
 
