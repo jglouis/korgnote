@@ -203,6 +203,13 @@ class NotesViewModel(
         save = { changes.saveCurrentFile() },
         draftMoved = { completion.onDraftChanged() },
         editEnded = { completion.reset() },
+        editDiscarded = {
+            // The note was deleted elsewhere and stayed open only for this edit.
+            val path = note.path
+            if (path != null && library.loaded && path !in library && note.replicaText != null) {
+                viewModelScope.launch { showFromReplica() }
+            }
+        },
     )
 
     /** What changes a note's text. */
@@ -495,8 +502,12 @@ class NotesViewModel(
         // launch, say — the note last read opens, where it was left; failing that the first pinned
         // note, since it was pinned to be at hand.
         val current = note.path?.takeIf { it in library }
-        if (current == null) {
+        if (current == null && note.path != null && editor.editingIndex != null && !editor.isUntouched) {
+            // Except under an edit with changes: what was typed is not lost to a deletion made
+            // elsewhere. It stays open, for its save to bring the note back or its discard to end it.
+        } else if (current == null) {
             note.path = null
+            editor.cancel()
             val first = places.lastRead { it in library } ?: pins.shown.firstOrNull() ?: library.documents.keys.minOrNull()
             if (first != null) onFileSelected(first) else note.close()
         } else {

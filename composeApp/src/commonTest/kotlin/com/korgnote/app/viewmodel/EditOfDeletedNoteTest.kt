@@ -6,18 +6,22 @@ import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * A note deleted on another device while an element of it is being edited here. Save used to clear
@@ -63,6 +67,15 @@ class EditOfDeletedNoteTest {
         advanceUntilIdle()
     }
 
+    /** Until something is said: the words come from the app's resources, on a thread of their own. */
+    private suspend fun TestScope.advanceUntilSaid() {
+        while (viewModel.lastErrorMessage.isEmpty()) {
+            withContext(Dispatchers.Default) { delay(5.milliseconds) }
+            runCurrent()
+        }
+        advanceUntilIdle()
+    }
+
     @Test
     fun theEditStaysOpenOnItsNote() = runTest {
         editing("* First, typed\nbody\n")
@@ -81,7 +94,7 @@ class EditOfDeletedNoteTest {
         deletedElsewhere()
 
         viewModel.editor.commit()
-        advanceUntilIdle()
+        advanceUntilSaid()
 
         assertNull(viewModel.editor.editingIndex)
         assertEquals(path, viewModel.note.path)
@@ -137,9 +150,10 @@ class EditOfDeletedNoteTest {
         advanceUntilIdle()
 
         // Gone from the replica, and the app has not read it again yet.
+        api.files.remove(path)
         store.removeLocally(path)
         viewModel.changes.toggleCheckboxAt(0)
-        advanceUntilIdle()
+        advanceUntilSaid()
 
         assertNull(store.read(path))
     }

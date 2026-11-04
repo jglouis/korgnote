@@ -21,6 +21,7 @@ import com.korgnote.common.sync.merge
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.vm_edit_conflict
 import korgnote.composeapp.generated.resources.vm_kept_beside
+import korgnote.composeapp.generated.resources.vm_note_brought_back
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -84,12 +85,15 @@ class NoteChanges(
 
     private suspend fun save(path: String, base: String?, text: String, keywords: OrgTodoConfig) {
         var saved = text
+        var broughtBack = false
         val written = try {
             // A heading's `[2/5]` counts what is under it, which the edit may have changed — and only
             // those over the edit: the rest of the note is saved as it was.
             // And a clock edited by hand sums its stamps again, as `C-c C-c` on its line would.
             val before = base ?: store.read(path)
             saved = updateClockDurations(updateStatisticsCookies(text, keywords, before = before), before)
+            // A note that was read and is not there now was deleted, here or elsewhere, under the edit.
+            broughtBack = base != null && store.read(path) == null
             land(path, base, saved, bringBack = true)
         } finally {
             landed(path)
@@ -97,7 +101,13 @@ class NoteChanges(
         if (written == null) return keepBeside(path, saved)
         showWritten(path, text, written)
         library.put(path, written.toOrgDocument(library.fallbackKeywords))
-        refresh()
+        if (broughtBack) {
+            // Back in the drawer too, which a single note's change does not touch.
+            showReplica()
+            showMessage(getString(Res.string.vm_note_brought_back, path))
+        } else {
+            refresh()
+        }
         server().push()
     }
 

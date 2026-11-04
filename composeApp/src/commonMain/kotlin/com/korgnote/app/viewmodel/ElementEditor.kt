@@ -42,6 +42,8 @@ class ElementEditor(
     private val draftMoved: () -> Unit,
     /** Told when an edit ends, committed or not. */
     private val editEnded: () -> Unit,
+    /** Told when an edit was discarded rather than committed. */
+    private val editDiscarded: () -> Unit = {},
 ) {
     /** Index into the open note's elements, or null when not editing one. */
     var editingIndex: Int? by mutableStateOf(null)
@@ -187,6 +189,7 @@ class ElementEditor(
         // inserted for this edit never made it to disk, so discarding the edit discards it too.
         (newer ?: textBeforeInsertion)?.let { note.content = it }
         clear()
+        editDiscarded()
     }
 
     /**

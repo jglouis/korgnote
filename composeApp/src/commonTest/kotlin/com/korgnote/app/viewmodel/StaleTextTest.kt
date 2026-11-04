@@ -236,7 +236,7 @@ class StaleTextTest {
         viewModel.editor.onDraftChanged(TextFieldValue(viewModel.editor.draft.replace("* Open", "* Open, typed here")))
 
         viewModel.editor.commit()
-        advanceUntilIdle()
+        advanceUntilSaid()
 
         assertEquals(emacs, store.read(open))
         assertEquals(emacs, viewModel.note.content)
