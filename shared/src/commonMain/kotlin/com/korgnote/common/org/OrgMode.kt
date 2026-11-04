@@ -258,15 +258,15 @@ data class OrgHeading(
  * title, and setting one would then put a second keyword in front of it.
  */
 fun orgHeadingOf(line: String, keywords: OrgTodoConfig): OrgHeading {
-    val trimmed = line.trim()
-    val m = headingLineRegex.find(trimmed)
+    // Trimmed only at the start: the space that makes `** ` a heading may be all that follows it.
+    val m = headingLineRegex.find(line.trimStart())
     val level = m?.groupValues?.getOrNull(1)?.length?.coerceAtLeast(1) ?: 1
-    var rest = m?.groupValues?.getOrNull(2)
+    var rest = m?.groupValues?.getOrNull(2)?.trimEnd()
     val word = rest?.let { headingKeywordRegex.find(it) }
     val todo = word?.groupValues?.get(1)?.takeIf { it in keywords.todo || it in keywords.done }
     if (todo != null) rest = rest!!.substring(word.value.length)
-    // A heading that is only its keyword, `* TODO`, has an empty title, as in Org.
-    var title = if (todo != null) rest.orEmpty() else rest?.ifBlank { null } ?: trimmed
+    // A heading that is only its keyword, `* TODO`, or only its stars has an empty title, as in Org.
+    var title = rest ?: line.trim()
     // Trailing :tag1:tag2: are stripped from the title and kept separately
     val tags = headingTagsRegex.find(title)?.let { tm ->
         title = title.substring(0, tm.range.first).trimEnd()
@@ -456,7 +456,11 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
         val more = mutableListOf<String>()
         while (idx < lines.size) {
             val line = lines[idx].trimEnd()
-            if (!isPlainLine(line) || line.length - line.trimStart().length < minIndent) break
+            if (!isPlainLine(line) || OrgSyntax.heading.containsMatchIn(lines[idx]) ||
+                line.length - line.trimStart().length < minIndent
+            ) {
+                break
+            }
             more.add(line.trim())
             idx++
         }
@@ -749,10 +753,11 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
             continue
         }
         // Headings (stars, then a space) open sections before `*` lists are tried. A line that only
-        // starts with a star, as `*bold* text` does, is a paragraph.
-        if (OrgSyntax.heading.containsMatchIn(line)) {
+        // starts with a star, as `*bold* text` does, is a paragraph. Read before the trim above: the
+        // trailing space is what makes `* `, a heading with no title yet, a heading at all.
+        if (OrgSyntax.heading.containsMatchIn(raw)) {
             flushParagraph()
-            val heading = orgHeadingOf(line, keywords)
+            val heading = orgHeadingOf(raw, keywords)
             // A heading ends every open heading at its level or deeper; what remains is its parent.
             closeSectionsDownTo(heading.level, i)
             openSections.add(OpenSection(i, heading))

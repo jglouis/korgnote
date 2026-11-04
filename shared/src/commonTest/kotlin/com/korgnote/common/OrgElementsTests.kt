@@ -1,9 +1,13 @@
 package com.korgnote.common
 
+import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.ancestorsOf
+import com.korgnote.common.org.edit.nodeAt
+import com.korgnote.common.org.edit.setTodo
 import com.korgnote.common.org.nextSibling
 import com.korgnote.common.org.orgElements
+import com.korgnote.common.org.orgHeadingOf
 import com.korgnote.common.org.previousSibling
 import com.korgnote.common.org.replaceOrgElement
 import com.korgnote.common.org.sliceOf
@@ -104,6 +108,15 @@ class OrgElementsTests {
             "* real\n#+BEGIN_SRC kotlin\n* not a heading\n#+END_SRC\n* also real\n",
             "* real\n#+begin_example\n** neither is this\n#+end_example\n",
             "* real\n:PROPERTIES:\n:ID: 1\n:END:\n* second\n",
+            // Stars and a space are a heading with nothing typed yet, which is what adding one writes.
+            "* ",
+            "* \n",
+            "** \nbody\n",
+            "* a\n* \n* b\n",
+            "[fn:1] note\n* \n",
+            // Stars alone are not.
+            "*\n",
+            "* a\n**\n",
         )
         for (text in corpus) {
             // Headings nest now, so the parser's count is over the whole tree, not the top level.
@@ -325,5 +338,20 @@ class OrgElementsTests {
         assertNull(nested.withOrgSubtreeShifted(1, -1))
         assertNull(nested.withOrgSubtreeShifted(0, 1))
         assertNull(nested.withOrgSubtreeShifted(42, 1))
+    }
+
+    /** A heading just added has no title yet, and setting its keyword must not land on the one above. */
+    @Test
+    fun aHeadingWithNoTitleYetIsOneToEveryone() {
+        val heading = orgHeadingOf("** ", DEFAULT_TODO_KEYWORDS)
+        assertEquals(2, heading.level)
+        assertEquals("", heading.title)
+
+        val text = "* First\n* \n* Last\n"
+        val doc = text.toOrgDocument()
+        val added = assertNotNull(doc.nodeAt<OrgSection>(text.indexOf("* \n")))
+        assertEquals("", added.title)
+        assertEquals(1, added.level)
+        assertEquals("* First\n* TODO \n* Last\n", doc.setTodo(added, "TODO").text)
     }
 }
