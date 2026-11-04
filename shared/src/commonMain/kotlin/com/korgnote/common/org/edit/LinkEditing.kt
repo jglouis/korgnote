@@ -32,9 +32,9 @@ enum class LinkKind {
 
 fun linkKindOf(target: String): LinkKind {
     val t = target.trim()
-    val scheme = SCHEME.find(t)?.groupValues?.get(1)?.lowercase()
+    val scheme = OrgSyntax.linkSchemeOf(t)
     return when {
-        scheme in FILE_SCHEMES -> if (isNoteLink(t)) LinkKind.NOTE else LinkKind.FILE
+        scheme in OrgSyntax.fileLinkSchemes -> if (isNoteLink(t)) LinkKind.NOTE else LinkKind.FILE
         scheme == null && (t.startsWith("/") || t.startsWith("~") || t.startsWith("./") || t.startsWith("../")) ->
             if (isNoteLink(t)) LinkKind.NOTE else LinkKind.FILE
         scheme == null || scheme == "id" -> LinkKind.NOTE
@@ -123,8 +123,6 @@ private fun insideBlock(text: String): Boolean {
     return open
 }
 
-private val SCHEME = Regex("^([A-Za-z][A-Za-z0-9+-]*):(?!\\s)")
-private val FILE_SCHEMES = setOf("file", "file+sys", "file+emacs")
 private val WEB_ADDRESS = Regex("^(?:https?|ftp)://\\S+$|^mailto:\\S+$", RegexOption.IGNORE_CASE)
 private val KEYWORD_LINE = Regex("^\\s*#\\+")
 private val PROPERTY_LINE = Regex("^\\s*:[A-Za-z0-9_+-]+:")

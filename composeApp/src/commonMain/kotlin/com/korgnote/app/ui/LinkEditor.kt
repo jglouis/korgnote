@@ -72,7 +72,7 @@ fun LinkEditorDialog(
     var kind by remember { mutableStateOf(originalKind) }
     var description by remember { mutableStateOf(edit.link.description) }
     var address by remember { mutableStateOf(if (originalKind == LinkKind.WEB) original else "") }
-    val filePrefix = if (originalKind == LinkKind.FILE) FILE_SCHEME.find(original)?.value.orEmpty() else "file:"
+    val filePrefix = if (originalKind == LinkKind.FILE) filePrefixOf(original) else "file:"
     var filePath by remember { mutableStateOf(if (originalKind == LinkKind.FILE) original.removePrefix(filePrefix) else "") }
     var fileProblem by remember { mutableStateOf<String?>(null) }
     var pickedNote by remember { mutableStateOf<LinkTarget?>(null) }
@@ -215,4 +215,6 @@ internal fun withScheme(address: String): String {
     return if (OrgSyntax.linkScheme.containsMatchIn(a) || '.' !in a.substringBefore('/')) a else "https://$a"
 }
 
-private val FILE_SCHEME = Regex("^file(?:\\+sys|\\+emacs)?:", RegexOption.IGNORE_CASE)
+/** The `file:`, or `file+sys:`, that [target] is written with, in the case it is written in; else nothing. */
+private fun filePrefixOf(target: String): String =
+    OrgSyntax.linkScheme.find(target)?.takeIf { it.groupValues[1].lowercase() in OrgSyntax.fileLinkSchemes }?.value.orEmpty()

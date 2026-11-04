@@ -3,6 +3,7 @@ package com.korgnote.app.viewmodel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.link.OrgBacklink
 import com.korgnote.common.org.link.OrgLinkIndex
 import com.korgnote.common.org.link.OrgLinkResolution
@@ -150,10 +151,10 @@ class LinkNavigator(
 
     /** Why [target], a link to something other than a note, leads nowhere here. */
     private suspend fun whyNotANote(target: String): String =
-        when (val scheme = SCHEME.find(target.trim())?.groupValues?.get(1)?.lowercase()) {
+        when (val scheme = OrgSyntax.linkSchemeOf(target.trim())) {
             // A file elsewhere on the machine is opened through File links, before it gets here;
             // one kept beside the notes never reaches this device.
-            null, "file", "file+sys", "file+emacs" -> getString(Res.string.vm_link_file_beside_notes, target)
+            null, in OrgSyntax.fileLinkSchemes -> getString(Res.string.vm_link_file_beside_notes, target)
             // Its keys are usually in the description, `[[kbd:][C-c C-c]]`, leaving nothing to quote.
             "kbd" -> getString(Res.string.vm_link_kbd)
             else -> getString(Res.string.vm_link_emacs_only, target, scheme)
@@ -182,10 +183,5 @@ class LinkNavigator(
     private fun rememberHere(from: String) {
         history.addLast(from to note.startOfElement(readingElementIndex))
         canGoBack = true
-    }
-
-    private companion object {
-        /** A link's type, read as [OrgLinkIndex] reads it. */
-        val SCHEME = Regex("^([A-Za-z][A-Za-z0-9+-]*):(?!\\s)")
     }
 }

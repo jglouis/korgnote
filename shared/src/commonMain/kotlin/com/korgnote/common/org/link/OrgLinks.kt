@@ -94,7 +94,7 @@ class OrgLinkIndex(
         // An abbreviation the linking note declares, `#+LINK: gh https://github.com/%s`, stands for
         // the link it expands to. Expanded once: what it gives is resolved as written.
         val target = abbreviations[from]?.let { expandAbbreviation(written, it) } ?: written
-        val scheme = SCHEME.find(target)?.groupValues?.get(1)?.lowercase()
+        val scheme = OrgSyntax.linkSchemeOf(target)
         return when {
             // Org's own `doi:` link, which it opens at the DOI resolver.
             scheme == "doi" -> OrgLinkResolution.External(DOI_RESOLVER + target.substringAfter(':').trim())
@@ -105,7 +105,7 @@ class OrgLinkIndex(
                 if (search == null) declared else searchIn(declared.path, search, link)
             }
 
-            scheme in FILE_SCHEMES -> {
+            scheme in OrgSyntax.fileLinkSchemes -> {
                 val (path, search) = splitSearch(target.substringAfter(':'))
                 if (!path.endsWith(".org")) return OrgLinkResolution.NotANote(link)
                 val note = notePathFor(path, from) ?: return OrgLinkResolution.NotFound(link)
@@ -162,9 +162,9 @@ class OrgLinkIndex(
      */
     private fun targetPathOf(link: String, from: String): String? {
         val target = link.trim()
-        return when (SCHEME.find(target)?.groupValues?.get(1)?.lowercase()) {
+        return when (OrgSyntax.linkSchemeOf(target)) {
             "id" -> ids[splitSearch(target.substringAfter(':')).first.trim()]?.path
-            in FILE_SCHEMES -> splitSearch(target.substringAfter(':')).first
+            in OrgSyntax.fileLinkSchemes -> splitSearch(target.substringAfter(':')).first
                 .takeIf { it.endsWith(".org") }?.let { notePathFor(it, from) }
             null -> if (target.isBarePath()) {
                 target.takeIf { it.endsWith(".org") }?.let { notePathFor(it, from) }
@@ -292,10 +292,6 @@ class OrgLinkIndex(
 
         const val HEX = "0123456789ABCDEF"
 
-        // Any case: `Mu4e:msgid:…` is a link type too. A space after the colon makes it prose —
-        // `[[Note: see below]]` is a fuzzy link, not a link of type `Note`.
-        val SCHEME = Regex("^([A-Za-z][A-Za-z0-9+-]*):(?!\\s)")
-        val FILE_SCHEMES = setOf("file", "file+sys", "file+emacs")
         val EXTERNAL_SCHEMES = setOf("http", "https", "mailto", "ftp")
         val CUSTOM_ID = Regex("(?im)^[ \\t]*:CUSTOM_ID:[ \\t]+(\\S+)[ \\t]*$")
         val COOKIE = Regex("\\[\\d*/\\d*]|\\[\\d*%]")
@@ -337,10 +333,9 @@ class OrgLinkIndex(
  */
 fun isNoteLink(target: String): Boolean {
     val t = target.trim()
-    val scheme = Regex("^([A-Za-z][A-Za-z0-9+-]*):(?!\\s)").find(t)?.groupValues?.get(1)?.lowercase()
-    return when (scheme) {
+    return when (OrgSyntax.linkSchemeOf(t)) {
         "id" -> true
-        "file", "file+sys", "file+emacs" -> t.substringAfter(':').substringBefore("::").endsWith(".org")
+        in OrgSyntax.fileLinkSchemes -> t.substringAfter(':').substringBefore("::").endsWith(".org")
         null -> if (t.startsWith("/") || t.startsWith("~") || t.startsWith("./") || t.startsWith("../")) {
             t.substringBefore("::").endsWith(".org")
         } else {
@@ -359,9 +354,8 @@ fun isNoteLink(target: String): Boolean {
 fun fileLinkPath(target: String): String? {
     if (isNoteLink(target)) return null
     val t = target.trim()
-    val scheme = Regex("^([A-Za-z][A-Za-z0-9+-]*):(?!\\s)").find(t)?.groupValues?.get(1)?.lowercase()
-    val path = when (scheme) {
-        "file", "file+sys", "file+emacs" -> t.substringAfter(':')
+    val path = when (OrgSyntax.linkSchemeOf(t)) {
+        in OrgSyntax.fileLinkSchemes -> t.substringAfter(':')
         null -> t
         else -> return null
     }.substringBefore("::").trim()

@@ -82,6 +82,12 @@ object OrgSyntax {
      */
     val linkScheme = Regex("^([A-Za-z][A-Za-z0-9+-]*):(?!\\s)")
 
+    /** [target]'s link type, lowercased, or null when it has none. */
+    fun linkSchemeOf(target: String): String? = linkScheme.find(target)?.groupValues?.get(1)?.lowercase()
+
+    /** The link types that name a file, as [linkSchemeOf] reads them. */
+    val fileLinkSchemes = setOf("file", "file+sys", "file+emacs")
+
     val url = Regex("(?:https?|ftp|mailto):[^\\s<>\\[\\]()\"']+")
     val timestamp = Regex("[<\\[]\\d{4}-\\d{2}-\\d{2}(?: [^\\]>\\n]*)?[>\\]]")
     val footnoteReference = Regex("\\[fn:[^\\]]+\\]")
