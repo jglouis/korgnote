@@ -4,6 +4,7 @@ import com.korgnote.app.viewmodel.ReadingSpot
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -81,6 +82,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import androidx.compose.runtime.CompositionLocalProvider
 import com.korgnote.common.org.orgHeadingOf
 import com.korgnote.common.org.prioritiesOf
+import com.korgnote.common.org.OrgPriorities
 import com.korgnote.common.org.OrgPriority
 
 /**
@@ -133,7 +135,6 @@ class ElementActions(
  * every rendered element knows the exact character range it came from, so editing one is a text
  * replacement over that range and can never disturb its neighbours.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OrgDocumentView(
     text: String,
@@ -231,176 +232,28 @@ fun OrgDocumentView(
                 enter = DisclosureEnter,
                 exit = DisclosureExit,
             ) {
-            val slice = remember(text, element) { element.sliceOf(text) }
-            // Not while an element is being edited: the form rewrites the top of the note.
-            val editDetails = onEditDetails?.takeIf { index == 0 && editingElementIndex == null }
-            if (element.isPreamble && slice.isBlank()) {
-                if (editDetails != null) {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { NoteDetailsButton(editDetails) }
-                }
-                return@AnimatedVisibility
-            }
-
-            Column(
-                modifier = Modifier.fillMaxWidth().then(
-                    if (landing?.index == index) {
-                        // Read while drawing, so the fade redraws the element without recomposing it.
-                        Modifier.drawBehind {
-                            drawRoundRect(
-                                landingColor.copy(alpha = landingColor.alpha * landingGlow.value),
-                                cornerRadius = CornerRadius(8.dp.toPx()),
-                            )
-                        }
-                    } else {
-                        Modifier
-                    }
-                ).nestingGuides(depths[index], guideColor),
-                horizontalAlignment = Alignment.Start,
-            ) {
-                if (editDetails != null && !element.isPreamble) {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { NoteDetailsButton(editDetails) }
-                }
-                if (index == editingElementIndex) {
-                    OrgElementEditor(
-                        elementKey = index,
-                        value = elementDraft(),
-                        onValueChange = onElementDraftChange,
-                        onCompletionKey = onCompletionKey,
-                        todoKeywords = todoKeywords,
-                    )
-                } else {
-                    val folded = index in foldedElements
-                    val foldable = !element.isPreamble && (
-                        elements.subtreeEnd(index) > index + 1 ||
-                            slice.substringAfter('\n', "").isNotBlank()
-                        )
-                    // The heading this item holds now, whatever its keyword, priority or body. An item is
-                    // its index, so a heading added above hands the item to a neighbour, and what was open
-                    // on the last one closes rather than landing on this one. The title is all there is to
-                    // tell them by: a neighbour of the same name is taken for the same heading.
-                    val heading = remember(slice, todoKeywords) {
-                        if (element.isPreamble) null else orgHeadingOf(slice.substringBefore('\n'), todoKeywords).title
-                    }
-                    var menuOpen by remember(heading) { mutableStateOf(false) }
-                    var choosingPriority by remember(heading) { mutableStateOf(false) }
-                    var choosingEffort by remember(heading) { mutableStateOf(false) }
-                    val clocks = remember(text, elements, index) { elementClocks(text, elements, index) }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .combinedClickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                // Inner targets — a checkbox, a link, a drawer's toggle — are
-                                // clickables of their own and take their tap first; anything
-                                // else in the element edits it. A scroll never becomes a tap.
-                                onClickLabel = stringResource(Res.string.editor_edit),
-                                onClick = { actions.onEditElement?.invoke(index) },
-                                onLongClickLabel = stringResource(Res.string.editor_more_actions),
-                                onLongClick = { menuOpen = true },
-                            )
-                            // After the clickable, so it sees the press once the inner targets
-                            // have had it but before the element's own long-press does.
-                            .longPressThroughInnerTargets { menuOpen = true },
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        // Sized as it changes, so a heading's own body unfolds with its subtree.
-                        Box(modifier = Modifier.weight(1f).animateContentSize(tween(DISCLOSURE_MILLIS))) {
-                            // Folded, only the heading line shows, as `org-cycle` leaves it.
-                            val shown = if (folded) slice.substringBefore('\n') else slice
-                            val document = remember(shown, todoKeywords) { shown.toOrgDocument(todoKeywords) }
-                            val priorityEditing = remember(actions.onSetPriority, priorities, element.start) {
-                                actions.onSetPriority?.let { set ->
-                                    PriorityEditing(priorities) { heading, priority -> set(element.start + heading.range.first, priority) }
-                                }
-                            }
-                            CompositionLocalProvider(LocalPriorityEditing provides priorityEditing) {
-                            key(heading) {
-                            OrgText(
-                                content = document,
-                                todoKeywords = todoKeywords,
-                                // The element was parsed from its own slice, so its nodes carry
-                                // slice-relative ranges; shifting by the element's start makes them
-                                // offsets into the whole document.
-                                onToggleCheckbox = actions.onToggleCheckbox?.let { toggle ->
-                                    { item -> toggle(element.start + item.range.first) }
-                                },
-                                onSetTodo = actions.onSetTodo?.let { set ->
-                                    { heading, keyword -> set(element.start + heading.range.first, keyword) }
-                                },
-                                onEditTable = actions.onEditTable?.let { edit ->
-                                    { table -> edit(element.start + table.range.first) }
-                                },
-                            )
-                            }
-                            }
-                            // Only what is shown: a folded heading's body is not there to be changed.
-                            val stamps = remember(shown) { shown.toggleableTimestamps().take(MAX_MENU_STAMPS) }
-                            ElementMenu(
-                                expanded = menuOpen,
-                                onDismiss = { menuOpen = false },
-                                isPreamble = element.isPreamble,
-                                stamps = actions.onToggleTimestamp?.let { toggle ->
-                                    stamps.map { stamp ->
-                                        MenuStamp(shown.substring(stamp.range), stamp.active) { toggle(element.start + stamp.range.first) }
-                                    }
-                                }.orEmpty(),
-                                onAddHeadingBelow = actions.onAddHeadingBelow?.let { add -> { add(index) } },
-                                onAddSubheading = actions.onAddSubheading?.let { add -> { add(index) } },
-                                onDelete = actions.onDeleteSection?.let { { confirmingDelete = index to element.title } },
-                                onMoveUp = actions.onMoveSection?.takeIf { elements.previousSibling(index) != null }
-                                    ?.let { move -> { move(index, true) } },
-                                onMoveDown = actions.onMoveSection?.takeIf { elements.nextSibling(index) != null }
-                                    ?.let { move -> { move(index, false) } },
-                                onPromote = actions.onShiftSection?.takeIf { element.level > 1 }
-                                    ?.let { shift -> { shift(index, -1) } },
-                                onDemote = actions.onShiftSection?.let { shift -> { shift(index, 1) } },
-                                onRefile = actions.onRefileSection?.let { refile -> { refile(index) } },
-                                onPriority = actions.onSetPriority?.let { { choosingPriority = true } },
-                                onClockIn = actions.onClockIn?.takeIf { clocks?.running != true }?.let { clock -> { clock(element.start) } },
-                                onClockOut = actions.onClockOut?.takeIf { clocks?.running == true }?.let { clock -> { clock(element.start) } },
-                                onCancelClock = actions.onCancelClock?.takeIf { clocks?.running == true }?.let { cancel -> { cancel(element.start) } },
-                                onEffort = actions.onSetEffort?.let { { choosingEffort = true } },
-                            )
-                            if (choosingEffort && actions.onSetEffort != null) {
-                                EffortDialog(
-                                    current = remember(slice) { effortIn(slice) },
-                                    onPick = { minutes -> choosingEffort = false; actions.onSetEffort(element.start, minutes) },
-                                    onDismiss = { choosingEffort = false },
-                                )
-                            }
-                            // From the long-press menu: the same choices as a tap on the cookie, for
-                            // a heading that has none yet to tap.
-                            if (choosingPriority && actions.onSetPriority != null) {
-                                PriorityMenu(
-                                    expanded = true,
-                                    current = orgHeadingOf(slice.substringBefore('\n'), todoKeywords).priority,
-                                    priorities = priorities,
-                                    onPick = { priority -> choosingPriority = false; actions.onSetPriority(element.start, priority) },
-                                    onDismiss = { choosingPriority = false },
-                                )
-                            }
-                        }
-                        if (editDetails != null && element.isPreamble) NoteDetailsButton(editDetails)
-                        if (clocks != null && clocks.subtree.isNotEmpty()) ClockedTotal(clocks, clockTime)
-                        if (foldable && actions.onToggleFold != null) {
-                            val foldDescription = stringResource(if (folded) Res.string.editor_expand_heading else Res.string.editor_collapse_heading, element.title)
-                            IconButton(
-                                onClick = { actions.onToggleFold(index) },
-                                modifier = Modifier.size(32.dp)
-                                    .semantics { contentDescription = foldDescription },
-                            ) {
-                                DisclosureChevron(
-                                    expanded = !folded,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.outline,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+                ElementRow(
+                    index = index,
+                    element = element,
+                    text = text,
+                    elements = elements,
+                    folded = index in foldedElements,
+                    depth = depths[index],
+                    guideColor = guideColor,
+                    lit = landing?.index == index,
+                    glow = landingGlow,
+                    glowColor = landingColor,
+                    editingElementIndex = editingElementIndex,
+                    elementDraft = elementDraft,
+                    onElementDraftChange = onElementDraftChange,
+                    onCompletionKey = onCompletionKey,
+                    todoKeywords = todoKeywords,
+                    priorities = priorities,
+                    clockTime = clockTime,
+                    actions = actions,
+                    onEditDetails = onEditDetails,
+                    onConfirmDelete = { confirmingDelete = index to element.title },
+                )
             }
         }
 
@@ -469,6 +322,205 @@ fun OrgDocumentView(
             listState.layoutInfo.visibleItemsInfo.none { it.index == index }
         ) {
             listState.scrollToItem(index)
+        }
+    }
+}
+
+/**
+ * One element of the note: as it reads, with its long-press menu and its fold, or the editor when it
+ * is the one being edited, lit while a jump has just landed on it.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ElementRow(
+    index: Int,
+    element: OrgElement,
+    text: String,
+    elements: List<OrgElement>,
+    folded: Boolean,
+    depth: Int,
+    guideColor: Color,
+    lit: Boolean,
+    glow: Animatable<Float, AnimationVector1D>,
+    glowColor: Color,
+    editingElementIndex: Int?,
+    elementDraft: () -> TextFieldValue,
+    onElementDraftChange: (TextFieldValue) -> Unit,
+    onCompletionKey: (CompletionKey) -> Boolean,
+    todoKeywords: OrgTodoConfig,
+    priorities: OrgPriorities,
+    clockTime: LocalDateTime?,
+    actions: ElementActions,
+    onEditDetails: (() -> Unit)?,
+    onConfirmDelete: () -> Unit,
+) {
+    val slice = remember(text, element) { element.sliceOf(text) }
+    // Not while an element is being edited: the form rewrites the top of the note.
+    val editDetails = onEditDetails?.takeIf { index == 0 && editingElementIndex == null }
+    if (element.isPreamble && slice.isBlank()) {
+        if (editDetails != null) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { NoteDetailsButton(editDetails) }
+        }
+        return
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth().then(
+            if (lit) {
+                // Read while drawing, so the fade redraws the element without recomposing it.
+                Modifier.drawBehind {
+                    drawRoundRect(
+                        glowColor.copy(alpha = glowColor.alpha * glow.value),
+                        cornerRadius = CornerRadius(8.dp.toPx()),
+                    )
+                }
+            } else {
+                Modifier
+            }
+        ).nestingGuides(depth, guideColor),
+        horizontalAlignment = Alignment.Start,
+    ) {
+        if (editDetails != null && !element.isPreamble) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { NoteDetailsButton(editDetails) }
+        }
+        if (index == editingElementIndex) {
+            OrgElementEditor(
+                elementKey = index,
+                value = elementDraft(),
+                onValueChange = onElementDraftChange,
+                onCompletionKey = onCompletionKey,
+                todoKeywords = todoKeywords,
+            )
+        } else {
+            val foldable = !element.isPreamble && (
+                elements.subtreeEnd(index) > index + 1 ||
+                    slice.substringAfter('\n', "").isNotBlank()
+                )
+            // The heading this item holds now, whatever its keyword, priority or body. An item is
+            // its index, so a heading added above hands the item to a neighbour, and what was open
+            // on the last one closes rather than landing on this one. The title is all there is to
+            // tell them by: a neighbour of the same name is taken for the same heading.
+            val heading = remember(slice, todoKeywords) {
+                if (element.isPreamble) null else orgHeadingOf(slice.substringBefore('\n'), todoKeywords).title
+            }
+            var menuOpen by remember(heading) { mutableStateOf(false) }
+            var choosingPriority by remember(heading) { mutableStateOf(false) }
+            var choosingEffort by remember(heading) { mutableStateOf(false) }
+            val clocks = remember(text, elements, index) { elementClocks(text, elements, index) }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        // Inner targets — a checkbox, a link, a drawer's toggle — are
+                        // clickables of their own and take their tap first; anything
+                        // else in the element edits it. A scroll never becomes a tap.
+                        onClickLabel = stringResource(Res.string.editor_edit),
+                        onClick = { actions.onEditElement?.invoke(index) },
+                        onLongClickLabel = stringResource(Res.string.editor_more_actions),
+                        onLongClick = { menuOpen = true },
+                    )
+                    // After the clickable, so it sees the press once the inner targets
+                    // have had it but before the element's own long-press does.
+                    .longPressThroughInnerTargets { menuOpen = true },
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                // Sized as it changes, so a heading's own body unfolds with its subtree.
+                Box(modifier = Modifier.weight(1f).animateContentSize(tween(DISCLOSURE_MILLIS))) {
+                    // Folded, only the heading line shows, as `org-cycle` leaves it.
+                    val shown = if (folded) slice.substringBefore('\n') else slice
+                    val document = remember(shown, todoKeywords) { shown.toOrgDocument(todoKeywords) }
+                    val priorityEditing = remember(actions.onSetPriority, priorities, element.start) {
+                        actions.onSetPriority?.let { set ->
+                            PriorityEditing(priorities) { heading, priority -> set(element.start + heading.range.first, priority) }
+                        }
+                    }
+                    CompositionLocalProvider(LocalPriorityEditing provides priorityEditing) {
+                    key(heading) {
+                    OrgText(
+                        content = document,
+                        todoKeywords = todoKeywords,
+                        // The element was parsed from its own slice, so its nodes carry
+                        // slice-relative ranges; shifting by the element's start makes them
+                        // offsets into the whole document.
+                        onToggleCheckbox = actions.onToggleCheckbox?.let { toggle ->
+                            { item -> toggle(element.start + item.range.first) }
+                        },
+                        onSetTodo = actions.onSetTodo?.let { set ->
+                            { heading, keyword -> set(element.start + heading.range.first, keyword) }
+                        },
+                        onEditTable = actions.onEditTable?.let { edit ->
+                            { table -> edit(element.start + table.range.first) }
+                        },
+                    )
+                    }
+                    }
+                    // Only what is shown: a folded heading's body is not there to be changed.
+                    val stamps = remember(shown) { shown.toggleableTimestamps().take(MAX_MENU_STAMPS) }
+                    ElementMenu(
+                        expanded = menuOpen,
+                        onDismiss = { menuOpen = false },
+                        isPreamble = element.isPreamble,
+                        stamps = actions.onToggleTimestamp?.let { toggle ->
+                            stamps.map { stamp ->
+                                MenuStamp(shown.substring(stamp.range), stamp.active) { toggle(element.start + stamp.range.first) }
+                            }
+                        }.orEmpty(),
+                        onAddHeadingBelow = actions.onAddHeadingBelow?.let { add -> { add(index) } },
+                        onAddSubheading = actions.onAddSubheading?.let { add -> { add(index) } },
+                        onDelete = actions.onDeleteSection?.let { onConfirmDelete },
+                        onMoveUp = actions.onMoveSection?.takeIf { elements.previousSibling(index) != null }
+                            ?.let { move -> { move(index, true) } },
+                        onMoveDown = actions.onMoveSection?.takeIf { elements.nextSibling(index) != null }
+                            ?.let { move -> { move(index, false) } },
+                        onPromote = actions.onShiftSection?.takeIf { element.level > 1 }
+                            ?.let { shift -> { shift(index, -1) } },
+                        onDemote = actions.onShiftSection?.let { shift -> { shift(index, 1) } },
+                        onRefile = actions.onRefileSection?.let { refile -> { refile(index) } },
+                        onPriority = actions.onSetPriority?.let { { choosingPriority = true } },
+                        onClockIn = actions.onClockIn?.takeIf { clocks?.running != true }?.let { clock -> { clock(element.start) } },
+                        onClockOut = actions.onClockOut?.takeIf { clocks?.running == true }?.let { clock -> { clock(element.start) } },
+                        onCancelClock = actions.onCancelClock?.takeIf { clocks?.running == true }?.let { cancel -> { cancel(element.start) } },
+                        onEffort = actions.onSetEffort?.let { { choosingEffort = true } },
+                    )
+                    if (choosingEffort && actions.onSetEffort != null) {
+                        EffortDialog(
+                            current = remember(slice) { effortIn(slice) },
+                            onPick = { minutes -> choosingEffort = false; actions.onSetEffort(element.start, minutes) },
+                            onDismiss = { choosingEffort = false },
+                        )
+                    }
+                    // From the long-press menu: the same choices as a tap on the cookie, for
+                    // a heading that has none yet to tap.
+                    if (choosingPriority && actions.onSetPriority != null) {
+                        PriorityMenu(
+                            expanded = true,
+                            current = orgHeadingOf(slice.substringBefore('\n'), todoKeywords).priority,
+                            priorities = priorities,
+                            onPick = { priority -> choosingPriority = false; actions.onSetPriority(element.start, priority) },
+                            onDismiss = { choosingPriority = false },
+                        )
+                    }
+                }
+                if (editDetails != null && element.isPreamble) NoteDetailsButton(editDetails)
+                if (clocks != null && clocks.subtree.isNotEmpty()) ClockedTotal(clocks, clockTime)
+                if (foldable && actions.onToggleFold != null) {
+                    val foldDescription = stringResource(if (folded) Res.string.editor_expand_heading else Res.string.editor_collapse_heading, element.title)
+                    IconButton(
+                        onClick = { actions.onToggleFold(index) },
+                        modifier = Modifier.size(32.dp)
+                            .semantics { contentDescription = foldDescription },
+                    ) {
+                        DisclosureChevron(
+                            expanded = !folded,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.outline,
+                        )
+                    }
+                }
+            }
         }
     }
 }
