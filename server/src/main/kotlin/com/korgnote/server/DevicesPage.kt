@@ -168,7 +168,7 @@ private fun devicesBody(
 internal fun notesFolderSection(status: WatcherStatus?, now: Long = System.currentTimeMillis()): String = buildString {
     append("<h2>Notes folder</h2>")
     if (status == null) {
-        append("<p class=muted>Edits made outside the server are not watched: it is serving read-only samples.</p>")
+        append("<p class=muted>Edits made outside the server are not watched: the notes folder was not found when it started.</p>")
         return@buildString
     }
     fun warn(text: String) = append("<p class=warning role=alert>").append(text).append("</p>")

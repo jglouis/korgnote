@@ -63,7 +63,7 @@ internal fun isLibraryPath(relativePath: String): Boolean =
 class FileStore(
     /** The notes directory being served; the watcher needs it too. */
     val root: Path,
-    /** True when the store is serving bundled sample files, which must not be written to. */
+    /** True when the notes directory was not there at startup, so there is nowhere to write to. */
     val readOnly: Boolean = false,
 ) {
     private data class HashEntry(val size: Long, val mtimeMillis: Long, val etag: String)

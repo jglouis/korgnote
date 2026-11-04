@@ -18,26 +18,58 @@ class ApplicationTest {
         assertEquals(HttpStatusCode.OK, response.status)
     }
 
-    @Test
-    fun testOrgTree() = testApplication {
-        application {
-            module()
+    /** The sample notes, which are test resources and do not ship. */
+    private fun withSamples(block: () -> Unit) {
+        System.setProperty("notes.dir", File(javaClass.classLoader.getResource("org/")!!.toURI()).path)
+        try {
+            block()
+        } finally {
+            System.clearProperty("notes.dir")
         }
-        val response = client.get("/api/v1/manifest")
-        assertEquals(HttpStatusCode.OK, response.status)
-        val body = response.bodyAsText()
-        // Should contain some of our resource files in the tree
-        assertTrue(body.contains("notes.org"))
-        assertTrue(body.contains("inbox.org"))
     }
 
     @Test
-    fun testContent() = testApplication {
-        application {
-            module()
+    fun testOrgTree() = withSamples {
+        testApplication {
+            application {
+                module()
+            }
+            val response = client.get("/api/v1/manifest")
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = response.bodyAsText()
+            // Should contain some of our resource files in the tree
+            assertTrue(body.contains("notes.org"))
+            assertTrue(body.contains("inbox.org"))
         }
-        val response = client.get("/api/v1/files/notes.org")
-        assertEquals(HttpStatusCode.OK, response.status)
+    }
+
+    @Test
+    fun testContent() = withSamples {
+        testApplication {
+            application {
+                module()
+            }
+            val response = client.get("/api/v1/files/notes.org")
+            assertEquals(HttpStatusCode.OK, response.status)
+        }
+    }
+
+    /** Nothing to fall back on: an empty library, which a phone's edits are not written into. */
+    @Test
+    fun aMissingNotesDirectoryIsAnEmptyLibrary() {
+        System.setProperty("notes.dir", "temp_notes_does_not_exist")
+        try {
+            testApplication {
+                application { module() }
+                val manifest = client.get("/api/v1/manifest")
+                assertEquals(HttpStatusCode.OK, manifest.status)
+                assertTrue(manifest.bodyAsText().contains("\"entries\":[]"), manifest.bodyAsText())
+                assertEquals(HttpStatusCode.Forbidden, client.put("/api/v1/files/a.org") { setBody("* a\n") }.status)
+                assertFalse(File("temp_notes_does_not_exist").exists())
+            }
+        } finally {
+            System.clearProperty("notes.dir")
+        }
     }
 
     @Test
@@ -161,7 +193,7 @@ class ApplicationTest {
 
     // --- KORGNOTE_REQUIRE_NOTES_DIR (T23) ---
 
-    /** A mistyped volume path must stop the server, not quietly serve the samples. */
+    /** A mistyped volume path must stop the server, not quietly serve an empty library. */
     @Test
     fun aRequiredNotesDirectoryThatIsMissingFailsStartup() {
         System.setProperty("notes.dir", "temp_notes_does_not_exist")

@@ -31,7 +31,7 @@ COPY --from=build /src/server/build/install/server /opt/korgnote
 # serves the API only.
 COPY --from=build /src/composeApp/build/dist/wasmJs/productionExecutable /opt/korgnote/web
 
-# A missing or unwritable /notes is fatal instead of falling back to the samples. The plain port
+# A missing or unwritable /notes is fatal, not an empty library that looks healthy. The plain port
 # listens on every interface inside, which is the only way a published port reaches it: the
 # compose file publishes it on the host's loopback only, since it serves this computer without a
 # token. The secure port is for paired devices; /state keeps the certificate and the device list.

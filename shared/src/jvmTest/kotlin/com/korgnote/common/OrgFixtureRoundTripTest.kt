@@ -10,7 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The source-mapping invariants, run over the bundled sample documents rather than over cases
+ * The source-mapping invariants, run over the server tests' sample documents rather than over cases
  * written to suit the parser.
  *
  * [OrgSourceRangeTests] covers the awkward edges and runs on every platform; this covers realistic
@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
 class OrgFixtureRoundTripTest {
 
     private val fixtures: List<File> =
-        File("../server/src/main/resources/org").listFiles()
+        File("../server/src/test/resources/org").listFiles()
             ?.filter { it.isFile && it.extension == "org" }
             ?.sortedBy { it.name }
             .orEmpty()

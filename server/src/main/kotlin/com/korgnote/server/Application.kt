@@ -60,9 +60,9 @@ fun main() {
 const val DISABLE_WEB_VARIABLE = "KORGNOTE_DISABLE_WEB"
 
 /**
- * Set by the container image: a missing or unwritable notes directory stops the server instead of
- * falling back to the bundled samples. In a container that fallback would hide a typo in the volume
- * path, or a UID that cannot write to the mount, behind a server that looks healthy.
+ * Set by the container image: a missing or unwritable notes directory stops the server. In a
+ * container, serving an empty library instead would hide a typo in the volume path, or a UID that
+ * cannot write to the mount, behind a server that looks healthy.
  */
 const val REQUIRE_NOTES_DIR_VARIABLE = "KORGNOTE_REQUIRE_NOTES_DIR"
 
@@ -81,7 +81,7 @@ fun Application.module(
      * themselves. `main` turns it on.
      */
     watchFiles: Boolean = false,
-    /** Fail instead of falling back to the samples; see [REQUIRE_NOTES_DIR_VARIABLE]. */
+    /** Fail when the notes directory is missing or unwritable; see [REQUIRE_NOTES_DIR_VARIABLE]. */
     requireNotesDir: Boolean = false,
     /** Serve the wasm client at `/` when a build of it is found; see [DISABLE_WEB_VARIABLE]. */
     serveWebClient: Boolean = true,
@@ -111,7 +111,6 @@ fun Application.module(
         )
     }
 
-    // Load .org files from a directory on the file system or resources
     fun resolvePath(path: String): File {
         var expanded = when {
             path.startsWith("~/") -> {
@@ -141,7 +140,7 @@ fun Application.module(
         ?: "notes" // Default to a 'notes' directory in the current working directory
 
     /**
-     * The notes directory, or the bundled samples when it does not exist.
+     * The notes directory; an empty, read-only library when it does not exist.
      *
      * Built once, but it reads the disk on every request rather than caching contents — see
      * [FileStore].
@@ -167,14 +166,10 @@ fun Application.module(
             log.info("Serving .org files from ${notesDir.absolutePath}")
             return FileStore(notesDir.toPath())
         }
-        val samples = this::class.java.classLoader.getResource("org/")
-            ?.let { runCatching { File(it.toURI()) }.getOrNull() }
-            ?.takeIf { it.exists() && it.isDirectory }
-        if (samples != null) {
-            log.info("Directory '${notesDir.absolutePath}' not found, serving bundled samples read-only")
-            return FileStore(samples.toPath(), readOnly = true)
-        }
-        log.warn("Directory '${notesDir.absolutePath}' not found and no bundled samples; serving nothing")
+        log.warn(
+            "Notes directory '${notesDir.absolutePath}' not found: serving an empty library, read-only and unwatched. " +
+                "Create it, or set NOTES_DIR, and restart the server.",
+        )
         return FileStore(notesDir.toPath(), readOnly = true)
     }
 
@@ -183,7 +178,7 @@ fun Application.module(
     // The generation counter the sync API hands out, and the watcher that keeps it honest about
     // edits the server did not make itself.
     val journal = ChangeJournal()
-    // Bundled samples are read-only and never change, so there is nothing to watch.
+    // A library that is read-only has no folder to watch.
     val watcher = if (watchFiles && !store.readOnly) NotesWatcher(store.root, store, journal) else null
     watcher?.start(this)
     monitor.subscribe(ApplicationStopping) { watcher?.stop() }
