@@ -3,11 +3,10 @@
 Addresses G2, G3 and defect D6. Depends on the source-mapped model from
 [04-org-core.md](04-org-core.md).
 
-> **Status.** The performance work is done and the findings below are measurements, not plans.
-> Per-element editing ([09](09-element-editing.md)) has since become the only editing surface and
-> removed document size as a concern: the whole-file editor this document was written for was
-> retired by T22, and with it viewport highlighting. The metrics constraint and the per-line cache
-> still apply to the element editor. Search (T14) and completion (T13) are both built.
+Per-element editing ([09](09-element-editing.md)) is the only editing surface, which removed document
+size as a concern: the whole-file editor this work began with was retired by T22, and with it viewport
+highlighting. The metrics constraint and the per-line cache apply to the element editor. Search and
+completion are below.
 
 ## Where it hurt
 
@@ -21,99 +20,25 @@ Addresses G2, G3 and defect D6. Depends on the source-mapped model from
 
 ## Performance: where the time actually goes
 
-Documents over ~40 KB were noticeably slow to type in, worst on iOS and wasm. Two independent costs
-were in play, needing completely different fixes, so the rule was **measure which one dominates
-before choosing**. Measured results are in
-[notes/editor-perf.md](notes/editor-perf.md); the answer was Cost A.
-
-### Cost A — highlighting the whole document on every keystroke
-
-`OrgSyntaxHighlightTransformation.filter` runs `buildOrgHighlightedString` over the entire
-text each time the field recomposes (`OrgSyntaxHighlighting.kt:481`). For a 40 KB file
-(~1,300 lines) that is on the order of 1,300 line splits × ~20 regexes ≈ tens of thousands
-of regex executions, producing an `AnnotatedString` with thousands of style spans — all
-synchronously, on the main thread, because the text field needs the result to lay out.
-Rough order of magnitude: tens to hundreds of milliseconds per keystroke on wasm.
-
-There is also a smaller, related cost: the `String`-valued `OutlinedTextField` sends the
-whole document back through `onValueChange` → `mutableStateOf` on every keystroke
-(`App.kt`, `FileTreeViewModel.kt:83`), copying 40 KB and invalidating the whole field.
-
-### Cost B — text layout of the whole document
-
-Compose text fields do not virtualise. A `BasicTextField`/`OutlinedTextField` holding 40 KB
-measures and lays out *every* line, including the ~95 % that are off screen. Skia-backed
-targets (iOS, wasm) pay the most for text shaping, which matches the platforms where you
-feel it first.
-
-Cost B is architectural: no amount of tuning the highlighter removes it.
-
-### The diagnostic (do this first)
-
-Temporarily pass `visualTransformation = VisualTransformation.None` and type in the same
-40 KB file on iOS and wasm.
-
-| Result | Conclusion | Fix |
-|---|---|---|
-| Typing becomes fast | Cost A dominates | Viewport highlighting + `TextFieldState` — no architectural change ([below](#editor-surface)) |
-| Still slow | Cost B dominates | Editor virtualisation is required ([below](#if-layout-is-the-wall-block-virtualisation)) |
-
-This is a one-line experiment that decides whether T12b is a day or a fortnight. Record the
-answer in `docs/notes/editor-perf.md`.
+Documents over ~40 KB were noticeably slow to type in, worst on iOS and wasm. Highlighting the whole
+document on every keystroke (Cost A) and laying out all of its text (Cost B) needed completely different
+fixes, so the rule was to measure which dominated before choosing. It was Cost A, and the numbers and
+what they did not show are in [notes/editor-perf.md](notes/editor-perf.md).
 
 ### Do coroutines help?
 
-Not with throughput, and it is worth being exact about why:
+Not with throughput. **Kotlin/Wasm has no threads**: `Dispatchers.Default` there is the same single event
+loop as the main dispatcher, so moving parsing or highlighting into a coroutine changes *when* the work
+runs, not how long it takes or who is blocked by it. Highlighting cannot be made asynchronous anyway
+while it goes through `VisualTransformation`: the field needs styled text during layout.
 
-- **Kotlin/Wasm has no threads.** `Dispatchers.Default` resolves to the same single event
-  loop as the main dispatcher, so moving parsing or highlighting into a coroutine there
-  changes *when* the work runs, not how long it takes or who is blocked by it.
-- **Highlighting cannot be made asynchronous anyway** while it goes through
-  `VisualTransformation`: the field needs styled text during layout. You can only make it
-  *smaller* (viewport scope), not *later*.
-
-What coroutines genuinely buy, on every target:
-
-1. **Debounce + cancel.** Re-parsing on each keystroke while typing at 10 cps queues ten
-   jobs, nine of which are already obsolete. A `MutableStateFlow` of the text, plus
-   `debounce(50)` and `collectLatest`, collapses that to one run per typing pause and
-   cancels superseded work. This is usually the single biggest *perceived* win and costs a
-   few lines.
-2. **Chunk + `yield()`.** For work that is genuinely long — the initial parse of the whole
-   corpus, search, agenda expansion — process in chunks with `yield()` between them. On
-   wasm this lets frames render during the work, turning a 400 ms freeze into a progressive
-   update. Same total time, very different feel.
-3. **Real parallelism where it exists.** On JVM, Android and iOS (Kotlin/Native's current
-   memory model supports multithreaded coroutines), `Dispatchers.Default` is a real thread
-   pool, so corpus-wide work — indexing, search, agenda — does run off the main thread.
-   Write that code coroutine-shaped with `yield()` and it degrades gracefully to
-   cooperative interleaving on wasm instead of breaking.
-
-So: coroutines are the right tool for *scheduling* the work, and irrelevant to the cost of
-the work. The wins below come from doing less.
-
-### If layout is the wall: block virtualisation
-
-**Not needed, and superseded.** The diagnostic came back as Cost A, and per-element editing
-([09](09-element-editing.md)) later removed the problem entirely by making the edited text small.
-Kept here because the reasoning explains why element editing was the better answer.
-
-Had the diagnostic shown Cost B, the document would have had to stop being one text field:
-
-- Split the document into blocks at top-level headings — natural once nodes carry source
-  ranges ([04](04-org-core.md)).
-- Render blocks in a `LazyColumn`. Only the block containing the caret is a real editable
-  text field; the rest are static, pre-styled `Text`.
-- On focus change, splice the edited block's text back into the document by its range.
-
-This is how a large file becomes instant, and it is what editors built on Compose end up
-doing. Budget for the UX consequences, which are the real cost: selection across block
-boundaries, find-and-replace spanning blocks, caret movement over edges, and undo across
-splices. Prototype those four before committing.
-
-Those four UX costs are exactly what per-element editing avoids: they all come from wanting the
-split to be *invisible*. Making it an explicit "edit this item" removes the requirement rather than
-solving it.
+What coroutines do buy is scheduling. **Debounce and cancel**: a run of keystrokes collapses to one run
+per typing pause, cancelling what it supersedes, as the search box does with a cancelled `delay`.
+**Chunk and `yield()`**: work that is genuinely long can yield between chunks so that frames render on wasm,
+turning a 400 ms freeze into a progressive update; nothing has needed it yet. **Real parallelism where it
+exists**: on the JVM, Android and iOS `Dispatchers.Default` is a real thread pool, so corpus-wide work runs
+off the main thread (`NotesViewModel.rebuildDerived`, `NoteLibrary.reload`), and the same code degrades to
+cooperative interleaving on wasm instead of breaking. The wins themselves came from doing less.
 
 ## Editor surface
 
@@ -161,9 +86,6 @@ Consequences to keep in mind:
 
 - Heading levels in the editor can only be distinguished by colour or background, not size or weight.
 - Any future editor decoration must pass the same test. `OrgEditorMetricsTest` enforces it.
-- Viewport scoping got *simpler* because of this: with nothing varying metrics, off-screen lines could
-  be left entirely unstyled without the document shifting as the window moved. (Retired with the
-  whole-file editor in T22.)
 
 The only way to lift the constraint is to stop using a text field for display — render styled text
 and overlay a transparent field for input — which means owning caret placement, selection handles
@@ -176,28 +98,9 @@ invalidates the field. At 45 KB this is measurable but not dominant — the ~27 
 layout, not the copy. Per-element editing ([09](09-element-editing.md)) removes it as a concern by
 making the edited text small.
 
-### Viewport highlighting
-
-**Retired by T22** along with the whole-file editor, the only surface large enough to need it; kept
-here as the record of how it worked. The element editor highlights all of its text, through the same
-per-line cache.
-
-Highlight what is on screen, not the whole document:
-
-1. From the layout, get the visible character range.
-2. Expand to whole lines, and to enclosing block/drawer boundaries so multi-line
-   constructs colour correctly at the edges.
-3. Ask `shared/` for `doc.spans(visibleRange)` ([04](04-org-core.md#one-grammar-two-consumers)).
-4. Map `OrgSpanKind` → `OrgColors` and apply.
-
-Re-parsing the whole document on each keystroke is acceptable to begin with — a single-pass
-line scanner is much cheaper than styling every line — provided it is debounced and
-cancellable (`debounce(50)` + `collectLatest`). Consider incremental parsing only if
-profiling on a real device says so; on wasm, chunk it with `yield()` so frames still render.
-
 ### Reading mode at scale
 
-**Done.** Read mode is a single `LazyColumn` keyed by element, so only what is on screen composes: first
+Read mode is a single `LazyColumn` keyed by element, so only what is on screen composes: first
 composition of the largest real file went from 234 ms to 38 ms ([09](09-element-editing.md#known-gaps)).
 
 The constraint that shaped it is worth keeping in mind for any screen like it: **a `LazyColumn`
@@ -209,46 +112,43 @@ renderings.
 
 ### Structural editing from reading mode
 
-The plan was the same operations from both modes: long-press a heading to cycle TODO, swipe to
-reschedule, keyboard shortcuts in the editor. With one surface left, what shipped is taps and menus
-in reading mode ([09](09-element-editing.md#the-surface)), each a range replacement that reformats
-nothing else:
+With one surface there are taps and menus in reading mode ([09](09-element-editing.md#the-surface)),
+each a range replacement that reformats nothing else:
 
-- **Tap a checkbox**: `toggleCheckboxAt` finds the node at the tapped offset and ticks it with
+- **Tap a checkbox**: `changes.toggleCheckboxAt` finds the node at the tapped offset and ticks it with
   `tickAsOrgDoes`, which also settles the boxes above and below it as Org does.
 - **Tap a TODO keyword**: a menu of the file's keywords; picking one goes through `changeTodoState`,
-  which logs the change under the heading and repeats a repeating entry. It replaced a tap that
+  which logs the change as the file asks and repeats a repeating entry. It replaced a tap that
   cycled to the next keyword.
-- **Long-press a heading**: the menu adds, moves, promotes, demotes and deletes. These work on
-  element ranges (`withOrgSubtreesSwapped`, `withOrgSubtreeShifted`) rather than through `org.edit`.
-  It also offers to make each of the element's stamps active or inactive — up to five, those of
-  its heading and text, not of planning lines, drawers or blocks (`toggleableTimestamps`) — which
-  swaps only the brackets, both halves of a range together, as `org-toggle-timestamp-type` does.
+- **Long-press a heading**: the menu in [09](09-element-editing.md#the-surface). Moving, promoting,
+  demoting and deleting work on element ranges (`withOrgSubtreesSwapped`, `withOrgSubtreeShifted`) rather
+  than through `org.edit`. It also offers to make each of the element's stamps active or inactive — up to
+  five, those of its heading and text, not of planning lines, drawers or blocks (`toggleableTimestamps`) —
+  which swaps only the brackets, both halves of a range together, as `org-toggle-timestamp-type` does.
 - **Tap a date**: any timestamp with a real date opens its day in the calendar, active or inactive —
   an inactive date is not in the calendar, but what else happened that day is.
 - **Tap a table**: the grid editor ([09](09-element-editing.md#tables)).
 
-Rescheduling is done in the editor rather than by a swipe: with the caret on a `SCHEDULED:` or
-`DEADLINE:` stamp, completion offers a date and time picker opened on it (see the trigger table
-below). There are no structural keyboard shortcuts. A tick and a keyword change both update the
-statistics cookies over what they changed, as a save does.
+Rescheduling is done in the editor, or from the calendar's long press
+([07](07-calendar-agenda.md#views)): with the caret on a `SCHEDULED:` or `DEADLINE:` stamp, completion
+offers a date and time picker opened on it (see the trigger table below). There are no structural keyboard
+shortcuts. A tick and a keyword change both update the statistics cookies over what they changed, as a
+save does.
 
-`org.edit` also has `setTodo`, `cycleTodo`, `setTags`, `setPlanning`, `promote` and `demote` from T7.
-The app does not call them, apart from what `changeTodoState` uses; they are tested and ready for a
-caller.
+The app calls `changeTodoState`, with what that uses (`setTodo`, `setProperty`), `setPriority`, and
+`setPlanning` and `setProperty` through `captureInto`.
 
 ## Completion (G3)
 
-**Done (T13).** Keep the engine pure and multiplatform; keep the popup dumb. The shapes below are
-what shipped, with two additions: `CompletionItem.Kind` includes `DATE_PICKER` for the one
-suggestion that has to ask before it can answer, and `applyTo` performs an item — the splice plus
-the caret — so the editor and the tests do it the same way.
+The engine is pure and multiplatform, and what shows it is dumb. `CompletionItem.Kind` includes
+`DATE_PICKER` for the one suggestion that has to ask before it can answer, and `applyTo` performs an item,
+the splice plus the caret, so the editor and the tests do it the same way.
 
 ```kotlin
 package com.korgnote.common.org.complete
 
 data class CompletionContext(
-    val todoKeywords: OrgTodoConfig,   // from this document's #+TODO:, else the global default
+    val todoKeywords: OrgTodoConfig,   // from this document's #+TODO:, else Org's TODO and DONE
     val knownTags: List<String>,       // harvested from the whole replica, most-used first
     val filePaths: List<String>,       // for [[file:…]]
     val currentPath: String,           // the note being edited; file: links are relative to it
@@ -268,11 +168,12 @@ data class CompletionItem(
     val caretOffset: Int = insert.length,  // e.g. land inside <…> for a timestamp
 )
 
-fun complete(doc: OrgDocument, cursor: Int, ctx: CompletionContext): List<CompletionItem>
+fun complete(text: String, cursor: Int, ctx: CompletionContext): List<CompletionItem>
 ```
 
 Triggers, all derived from the current line — and the one above, for a planning line — with
-`doc.nodeAt<OrgBlock>(cursor)` to tell when the caret is in a block's body:
+`nodeAt<OrgBlock>(cursor)`, parsed only once a rule has something to offer, to tell when the caret is in
+a block's body:
 
 | Typing | Suggestions |
 |---|---|
@@ -291,9 +192,9 @@ Triggers, all derived from the current line — and the one above, for a plannin
 | caret on a stamp in the text (not a planning line) | the picker, opened on that stamp, then **Make inactive** / **Make active** (`STAMP_TOGGLE`, labelled by the strip in the reader's language); a range toggles whole |
 | `<s`, `<q`, `<e` at line start | structure templates (src/quote/example blocks), Org's `org-tempo` convention |
 
-Being pure functions of `(document, cursor, context)`, every row above is a unit test with
-no UI involved — 47 of them in `OrgCompleteTests`, plus `CompletionContextTest` (6) for how the
-context is built and `CompletionEditingTest` (17) for accepting, the keyboard, the picker and the
+Being pure functions of `(text, cursor, context)`, every row above is a unit test with
+no UI involved, in `OrgCompleteTests`, with `CompletionContextTest` for how the
+context is built and `CompletionEditingTest` for accepting, the keyboard, the picker and the
 insert buttons. The rules are tried in a fixed order, which is what keeps `[[` a link rather than a
 bracket and `<s` a template rather than a timestamp; inside a block's body nothing is offered at all,
 because there the text is not Org and the parser already knows it.
@@ -319,7 +220,7 @@ So the strip is pinned to the bottom of the screen, as the `Scaffold`'s `bottomB
 an element is being edited. Three consequences, all deliberate:
 
 - **The caret lives in the view model.** The strip is nowhere near the field, so the text *and* the
-  caret are hoisted: `elementDraftValue` is a `TextFieldValue` the field is fully controlled by, and
+  caret are hoisted: `ElementEditor.draftValue` is a `TextFieldValue` the field is fully controlled by, and
   the suggestions are computed from it there. Accepting one becomes an ordinary state change rather
   than a message pushed down into a composable — and testable, which the caret handling was not.
 - **The navigation bar is hidden while editing.** It occupied that space, and switching tabs in the
@@ -357,29 +258,32 @@ taking its labels from the caller, as it already takes the date.
 
 ## Search (G2)
 
-**Done (T14).** Because the client holds the whole corpus locally, search is a local problem.
+Because the client holds the whole corpus locally, search is a local problem.
 `shared/org/search` holds all of it; the screen only lists what it returns.
 
-- **A linear scan**, as planned. Body text, heading titles and file names in one pass,
+- **A linear scan.** Body text, heading titles and file names in one pass,
   case-insensitive throughout. A ~4 MB corpus — larger than the real notes directory — matches in
   well under a second, so there is no index to keep correct on every save (G7). If that ever stops
   being true, an in-memory inverted index rebuilt on load comes before SQLite/FTS.
 - **Results carry location**: file, heading breadcrumb, line, and the character offset. The offset
   is what makes a result openable: the element containing it is the one to show, which is the same
   lookup the calendar jump uses.
-- **The query language is words and tags.** Every term must match, so adding one narrows; a quoted
-  phrase is one term. `tag:work` — or `:work:`, as a heading spells it — keeps only headings
-  carrying the tag, **inherited** from parent headings and `#+FILETAGS:` the way Org inherits it.
-  A tag term on its own lists the tagged headings; with words, it says where to look for them.
-- **Structured queries later**, mirroring the org-agenda habits worth keeping:
-  `todo:NEXT deadline:<=7d`. The parser already splits prefixed terms from words, so another
-  prefix is a case in `SearchQuery.parse` and a predicate in `searchOrgFile`; the same evaluator
-  should then power saved searches and agenda filters (T16).
+- **The query language is words, tags, `todo:` and `priority:`** (`OrgSearch.kt`). Every term must match,
+  so adding one narrows; a quoted phrase is one term. `tag:work` — or `:work:`, as a heading spells it —
+  keeps only headings carrying the tag, **inherited** from parent headings and `#+FILETAGS:` the way Org
+  inherits it; a tag a file's `#+TAGS:` line declares as a group also finds the headings carrying one of
+  its members. `todo:NEXT` keeps headings whose own keyword is `NEXT` and `priority:A` those whose own cookie
+  is `[#A]`, neither inherited, as in Org. A term of these on its own lists the headings; with words, it
+  says where to look for them.
+- **Structured queries later**, mirroring the org-agenda habits worth keeping, such as `deadline:<=7d`. The
+  parser already splits prefixed terms from words, so another prefix is a case in `SearchQuery.parse` and a
+  predicate in `searchOrgFile`; the same evaluator should then power agenda filters.
 
-`filterQuery` became the degenerate case, as intended: the drawer parses the same query, matches
-file names with it, and understands `tag:` by asking whether a file has any hit at all.
+**The drawer's filter is not search.** It keeps the files whose names hold every word, narrowing the tree
+at once, as matching names is a walk over the tree and not a scan of the notes. Finding what is inside the
+notes is what search is for.
 
-**Both boxes search once the typing stops**, after a 200 ms pause, rather than on every keystroke.
+**The search box scans once the typing stops**, after a 200 ms pause, rather than on every keystroke.
 The query updates on the keystroke, so the field never lags; only the scan waits. Measured on the
 real corpus, a scan is 10–20 ms on a laptop and several times that on a phone, and typing
 `groceries` per character spends nine scans to answer prefixes nobody asked about. Clearing the box
@@ -388,7 +292,7 @@ next scan is pending, since they answer what was asked a moment ago and a blank 
 on every letter.
 
 The debounce made the search screen feel right and left the drawer sluggish, which located the
-real cost there: **it was rendering, not searching.** `FileTree` was a `LazyColumn` holding a single
+real cost there: **it was rendering, not filtering.** `FileTree` was a `LazyColumn` holding a single
 item with the whole recursive tree inside it, so laziness bought nothing and all 366 rows composed
 on every rebuild — and its expansion state was keyed by folder *object identity*, which a rebuilt
 tree invalidates, so each keystroke also re-opened every folder and restarted every animation. The
@@ -400,5 +304,4 @@ keyed by path. Paths survive a rebuild; object identities do not.
 One more cost was measured and is now gone: `searchOrgFile` used to split a file into elements before
 it knew whether the file contained the words at all. It now checks the raw text first and passes over
 a file missing any term, word or tag, unparsed. It is the same case-insensitive test applied per
-line, so it never drops a real hit. The estimate beforehand was a scan cut from 12 ms to 4 ms
-(search) and 10 ms to 4 ms (drawer filter).
+line, so it never drops a real hit. What it measured is in [08](08-roadmap.md#t19--continuous-integration).
