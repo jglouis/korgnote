@@ -51,6 +51,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.OrgElement
+import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.edit.OrgClock
 import com.korgnote.common.org.edit.clocksInText
@@ -399,9 +400,14 @@ private fun ElementRow(
             // The heading this item holds now, whatever its keyword, priority or body. An item is
             // its index, so a heading added above hands the item to a neighbour, and what was open
             // on the last one closes rather than landing on this one. The title is all there is to
-            // tell them by: a neighbour of the same name is taken for the same heading.
+            // tell them by, less its `[1/2]`, which a tick moves: a neighbour of the same name is
+            // taken for the same heading.
             val heading = remember(slice, todoKeywords) {
-                if (element.isPreamble) null else orgHeadingOf(slice.substringBefore('\n'), todoKeywords).title
+                if (element.isPreamble) {
+                    null
+                } else {
+                    orgHeadingOf(slice.substringBefore('\n'), todoKeywords).title.replace(OrgSyntax.statistics, "")
+                }
             }
             var menuOpen by remember(heading) { mutableStateOf(false) }
             var choosingPriority by remember(heading) { mutableStateOf(false) }

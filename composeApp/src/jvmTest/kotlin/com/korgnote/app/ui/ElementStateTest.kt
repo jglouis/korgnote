@@ -84,6 +84,46 @@ class ElementStateTest {
         onNodeWithText("beta secret", substring = true).assertExists()
     }
 
+    /** A tick moves the heading's `[0/1]`: the same heading, whatever its title now reads. */
+    @Test
+    fun aDrawerStaysOpenWhenItsHeadingsCookieMoves() = runComposeUiTest {
+        shown = "* Beta [0/1]\n:NOTES:\nbeta secret\n:END:\n- [ ] Tick me\n"
+        setContent { OrgDocumentView(text = shown) }
+        onNodeWithText("NOTES", substring = true).performClick()
+        waitForIdle()
+
+        shown = "* Beta [1/1]\n:NOTES:\nbeta secret\n:END:\n- [X] Tick me\n"
+        waitForIdle()
+
+        onNodeWithText("beta secret", substring = true).assertExists()
+    }
+
+    @Test
+    fun theLongPressMenuStaysOpenWhenItsHeadingsCookieMoves() = runComposeUiTest {
+        shown = "* Beta [40%]\n- [ ] Tick me\n"
+        showDocument()
+        onNodeWithText("Beta", substring = true).performTouchInput { longClick() }
+        onNodeWithText("Set effort…").assertExists()
+
+        shown = "* Beta [50%]\n- [ ] Tick me\n"
+        waitForIdle()
+
+        onNodeWithText("Set effort…").assertExists()
+    }
+
+    @Test
+    fun aDrawerClosesWhenTheTitleBesideItsCookieChanges() = runComposeUiTest {
+        shown = "* Beta [0/1]\n:NOTES:\nbeta secret\n:END:\n"
+        setContent { OrgDocumentView(text = shown) }
+        onNodeWithText("NOTES", substring = true).performClick()
+        waitForIdle()
+
+        shown = "* Alpha [0/1]\n:NOTES:\nalpha secret\n:END:\n"
+        waitForIdle()
+
+        onNodeWithText("alpha secret", substring = true).assertDoesNotExist()
+    }
+
     @Test
     fun theLongPressMenuDoesNotLandOnTheNeighbourWhenAHeadingIsAddedAbove() = runComposeUiTest {
         showDocument()
