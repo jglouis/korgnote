@@ -53,6 +53,7 @@ import com.korgnote.app.data.PairingLinks
 import com.korgnote.app.viewmodel.LinkEdit
 import org.koin.mp.KoinPlatform
 import com.korgnote.app.viewmodel.NotesSourceChoice
+import com.korgnote.app.viewmodel.NoteFileResult
 import com.korgnote.app.viewmodel.NotesViewModel
 import org.koin.core.parameter.parametersOf
 import com.korgnote.app.viewmodel.OpenNote
@@ -329,14 +330,15 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
             onDismiss = { creatingNote = false; noteDialogError = null },
             onCreate = { title, tags ->
                 scope.launch {
-                    // Stays open when refused, with the reason shown behind it.
-                    if (vm.noteFiles.createNote(title, tags) == null) {
-                        noteDialogError = vm.lastErrorMessage.also { vm.clearError() }
-                    } else {
-                        creatingNote = false
-                        noteDialogError = null
-                        selectedScreen = BottomItem.FILE
-                        drawerState.close()
+                    when (val result = vm.noteFiles.createNote(title, tags)) {
+                        // Stays open when refused, saying why.
+                        is NoteFileResult.Refused -> noteDialogError = result.reason
+                        is NoteFileResult.Done -> {
+                            creatingNote = false
+                            noteDialogError = null
+                            selectedScreen = BottomItem.FILE
+                            drawerState.close()
+                        }
                     }
                 }
             },
@@ -382,11 +384,12 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
             onDismiss = { renamingNote = null; noteDialogError = null },
             onRename = { target ->
                 scope.launch {
-                    if (vm.noteFiles.renameNote(path, target)) {
-                        renamingNote = null
-                        noteDialogError = null
-                    } else {
-                        noteDialogError = vm.lastErrorMessage.also { vm.clearError() }
+                    when (val result = vm.noteFiles.renameNote(path, target)) {
+                        is NoteFileResult.Refused -> noteDialogError = result.reason
+                        is NoteFileResult.Done -> {
+                            renamingNote = null
+                            noteDialogError = null
+                        }
                     }
                 }
             },

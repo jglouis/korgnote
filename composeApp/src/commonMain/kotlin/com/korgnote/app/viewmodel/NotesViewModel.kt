@@ -198,7 +198,6 @@ class NotesViewModel(
         refreshSoon = ::refreshDerivedViewsSoon,
         // Read when something is pushed, by which time [server] is there.
         server = { server },
-        showMessage = ::showMessage,
     )
 
     /** Starting and stopping clocks, and setting efforts. */

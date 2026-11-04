@@ -52,8 +52,6 @@ class NoteFiles(
     private val refreshSoon: () -> Unit,
     /** Where a change goes next. Read when it is needed, by which time it is there. */
     private val server: () -> NotesSync,
-    /** Shows a message to the user. */
-    private val showMessage: (String) -> Unit,
 ) {
     /** Where a note titled [title] would be created, or null when the title makes no file name. */
     fun newNotePathFor(title: String): String? =
@@ -64,21 +62,16 @@ class NoteFiles(
      * its first heading: a capture, so what was worth writing down gets written before anything else
      * is asked. It is headed as org-roam heads a note — its own `:ID:`, title, author and date.
      *
-     * Returns the new path, or null — with the message line saying why — when the title makes no
-     * file name or a note already has it. Works offline; the next sync pushes it.
+     * Refused, saying why, when the title makes no file name or a note already has it. Works offline;
+     * the next sync pushes it.
      */
-    suspend fun createNote(title: String, tags: List<String> = emptyList()): String? {
-        val path = newNotePathFor(title)
-        if (path == null) {
-            showMessage(getString(Res.string.vm_note_title_needed))
-            return null
-        }
+    suspend fun createNote(title: String, tags: List<String> = emptyList()): NoteFileResult {
+        val path = newNotePathFor(title) ?: return NoteFileResult.Refused(getString(Res.string.vm_note_title_needed))
         if (!store.create(path, headOfNewNote(title, tags))) {
-            showMessage(getString(Res.string.vm_note_exists, path))
-            return null
+            return NoteFileResult.Refused(getString(Res.string.vm_note_exists, path))
         }
         openNewNote(path)
-        return path
+        return NoteFileResult.Done(path)
     }
 
     /** Where today's daily is, in the daily folder Settings names. */
@@ -136,27 +129,20 @@ class NoteFiles(
 
     /**
      * Renames [from] to [to], a path as typed. Content, unsynced edits and folds go with it.
-     * Returns false, with the message line saying why, when [to] is not a valid path or is taken.
+     * Refused, saying why, when [to] is not a valid path or is taken.
      */
-    suspend fun renameNote(from: String, to: String): Boolean {
-        val target = NotePaths.normalize(to)
-        if (target == null) {
-            showMessage(getString(Res.string.vm_not_a_note_path, to))
-            return false
-        }
-        if (target == from) return true
+    suspend fun renameNote(from: String, to: String): NoteFileResult {
+        val target = NotePaths.normalize(to) ?: return NoteFileResult.Refused(getString(Res.string.vm_not_a_note_path, to))
+        if (target == from) return NoteFileResult.Done(target)
         val wasOpen = note.path == from
         // The element editor holds offsets into the note being moved; finish nothing half-way.
         if (wasOpen) editor.cancel()
-        if (!store.rename(from, target)) {
-            showMessage(getString(Res.string.vm_note_exists, target))
-            return false
-        }
+        if (!store.rename(from, target)) return NoteFileResult.Refused(getString(Res.string.vm_note_exists, target))
         folds.move(from, target)
         pins.move(from, target)
         places.move(from, target)
         showAndPush(target, wasOpen)
-        return true
+        return NoteFileResult.Done(target)
     }
 
     /** True when [path] holds edits the server has not seen, which a delete would take with it. */
@@ -269,6 +255,15 @@ class NoteFiles(
         if (wasOpen) openAndWait(path)
         server().pushQuietly()
     }
+}
+
+/** What became of creating or renaming a note. */
+sealed interface NoteFileResult {
+    /** It is done, and the note is at [path]. */
+    data class Done(val path: String) : NoteFileResult
+
+    /** Nothing was changed, for [reason], which is for the person to read. */
+    data class Refused(val reason: String) : NoteFileResult
 }
 
 /** A note in conflict and one of its copies, as they were when compared: see [NoteFiles.conflictComparison]. */

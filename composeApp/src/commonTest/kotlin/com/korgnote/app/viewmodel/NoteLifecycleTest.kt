@@ -66,7 +66,7 @@ class NoteLifecycleTest {
     fun aNewNoteIsCreatedInTheInboxOpenedAtItsFirstHeadingAndPushed() = runTest {
         viewModel.server.load()
 
-        val path = viewModel.noteFiles.createNote("Call the plumber", tags = listOf("home", "urgent"))
+        val path = assertIs<NoteFileResult.Done>(viewModel.noteFiles.createNote("Call the plumber", tags = listOf("home", "urgent"))).path
 
         assertEquals("inbox/call_the_plumber.org", path)
         assertEquals("Selected: inbox/call_the_plumber.org", viewModel.note.label)
@@ -88,7 +88,7 @@ class NoteLifecycleTest {
         val slow = CompletableDeferred<Unit>()
         server.answerManifest = slow
 
-        val path = viewModel.noteFiles.createNote("Slow server")
+        val path = assertIs<NoteFileResult.Done>(viewModel.noteFiles.createNote("Slow server")).path
 
         assertEquals("Selected: $path", viewModel.note.label, "open while the push is still out")
         assertEquals(1, viewModel.editor.editingIndex)
@@ -103,8 +103,7 @@ class NoteLifecycleTest {
         viewModel.server.load()
         server.online = false
 
-        val path = viewModel.noteFiles.createNote("Offline idea")
-        assertNotNull(path)
+        val path = assertIs<NoteFileResult.Done>(viewModel.noteFiles.createNote("Offline idea")).path
         assertTrue(path in viewModel.library.tree.paths(), "it exists here at once")
         assertNull(server.files[path])
 
@@ -149,17 +148,17 @@ class NoteLifecycleTest {
         inbox = ""
         viewModel.server.load()
 
-        assertNull(viewModel.noteFiles.createNote("Notes"))
+        val refused = assertIs<NoteFileResult.Refused>(viewModel.noteFiles.createNote("Notes"))
 
         assertEquals(existingText, server.files[existing])
-        assertTrue(viewModel.lastErrorMessage.contains("already"), viewModel.lastErrorMessage)
+        assertTrue(refused.reason.contains("already"), refused.reason)
     }
 
     @Test
     fun aTitleWithNothingInItIsRefused() = runTest {
         viewModel.server.load()
 
-        assertNull(viewModel.noteFiles.createNote("  ?! "))
+        assertIs<NoteFileResult.Refused>(viewModel.noteFiles.createNote("  ?! "))
         assertNull(viewModel.noteFiles.newNotePathFor(""))
     }
 
@@ -169,7 +168,7 @@ class NoteLifecycleTest {
         viewModel.onFileSelected(existing)
         viewModel.folds.toggle(1)
 
-        assertTrue(viewModel.noteFiles.renameNote(existing, "archive/old notes"))
+        assertIs<NoteFileResult.Done>(viewModel.noteFiles.renameNote(existing, "archive/old notes"))
 
         val target = "archive/old notes.org"
         assertEquals(existingText, server.files[target])
@@ -186,7 +185,7 @@ class NoteLifecycleTest {
         server.online = false
         store.save(existing, "#+TITLE: Notes\n\n* TODO Edited offline\n")
 
-        assertTrue(viewModel.noteFiles.renameNote(existing, "renamed.org"))
+        assertIs<NoteFileResult.Done>(viewModel.noteFiles.renameNote(existing, "renamed.org"))
         server.online = true
         viewModel.server.load()
 
@@ -199,8 +198,8 @@ class NoteLifecycleTest {
         server.files["other.org"] = "* Other\n"
         viewModel.server.load()
 
-        assertFalse(viewModel.noteFiles.renameNote(existing, "other.org"))
-        assertFalse(viewModel.noteFiles.renameNote(existing, "../outside.org"))
+        assertIs<NoteFileResult.Refused>(viewModel.noteFiles.renameNote(existing, "other.org"))
+        assertIs<NoteFileResult.Refused>(viewModel.noteFiles.renameNote(existing, "../outside.org"))
 
         assertEquals(existingText, server.files[existing])
         assertEquals("* Other\n", server.files["other.org"])

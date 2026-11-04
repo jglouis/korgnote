@@ -84,7 +84,7 @@ class PinnedNotesTest {
         val vm = viewModel()
         vm.server.load()
 
-        assertTrue(vm.noteFiles.renameNote(agenda, "plans/agenda"))
+        assertIs<NoteFileResult.Done>(vm.noteFiles.renameNote(agenda, "plans/agenda"))
 
         assertEquals(listOf("plans/agenda.org", todo), saved)
         assertEquals(listOf("plans/agenda.org", todo), vm.pins.shown)

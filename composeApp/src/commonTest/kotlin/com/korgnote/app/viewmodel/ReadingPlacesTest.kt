@@ -159,7 +159,7 @@ class ReadingPlacesTest {
         val vm = viewModel()
         vm.server.load()
 
-        assertTrue(vm.noteFiles.renameNote(long, "renamed.org"))
+        assertIs<NoteFileResult.Done>(vm.noteFiles.renameNote(long, "renamed.org"))
         assertEquals(ReadingSpot(2, 5), vm.note.restoreTo)
         assertEquals(ReadingPlace("renamed.org", startOf(2), 5), saved.first())
 
