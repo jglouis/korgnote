@@ -1,6 +1,7 @@
 package com.korgnote.app.data
 
 import com.korgnote.common.replica.DeleteResult
+import com.korgnote.common.replica.FetchResult
 import com.korgnote.common.replica.PushResult
 import com.korgnote.common.replica.RemoteEntry
 import com.korgnote.common.replica.RemoteFile
@@ -125,11 +126,16 @@ class KtorSyncApi(
         )
     }
 
-    override suspend fun fetch(path: String): RemoteFile? {
+    override suspend fun fetch(path: String): FetchResult {
         val response = reach { api, token -> client.get(api + filePath(path)) { authorize(token) }.unlessRefused() }
-        if (response.status != HttpStatusCode.OK) return null
-        val etag = response.headers[HttpHeaders.ETag]?.trim('"') ?: return null
-        return RemoteFile(path, etag, response.bodyAsText())
+        return when (response.status) {
+            HttpStatusCode.OK ->
+                response.headers[HttpHeaders.ETag]?.trim('"')
+                    ?.let { FetchResult.Fetched(RemoteFile(path, it, response.bodyAsText())) }
+                    ?: FetchResult.Failed("no etag in response")
+            HttpStatusCode.NotFound -> FetchResult.Gone
+            else -> FetchResult.Failed("${response.status}")
+        }
     }
 
     /**

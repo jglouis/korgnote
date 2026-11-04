@@ -13,6 +13,14 @@ data class RemoteManifest(
 
 data class RemoteFile(val path: String, val etag: String, val text: String)
 
+sealed interface FetchResult {
+    data class Fetched(val file: RemoteFile) : FetchResult
+    /** Nothing at that path: it was deleted since it was listed, or never there. */
+    data object Gone : FetchResult
+    /** The server is there and would not serve it. The file may well exist, and nothing can be said of it. */
+    data class Failed(val reason: String) : FetchResult
+}
+
 sealed interface PushResult {
     data class Pushed(val etag: String) : PushResult
     /** The server moved on; [currentEtag] is what it holds now. */
@@ -37,7 +45,7 @@ sealed interface DeleteResult {
  */
 interface SyncApi {
     suspend fun manifest(since: Long? = null): RemoteManifest
-    suspend fun fetch(path: String): RemoteFile?
+    suspend fun fetch(path: String): FetchResult
 
     /**
      * Many files in one request: every file the server holds, or what changed since [since]. It may

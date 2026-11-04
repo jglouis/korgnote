@@ -2,6 +2,7 @@ package com.korgnote.common
 
 import com.korgnote.common.replica.DeleteResult
 import com.korgnote.common.replica.DocumentStore
+import com.korgnote.common.replica.FetchResult
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.PushResult
 import com.korgnote.common.replica.RemoteEntry
@@ -58,6 +59,9 @@ class SyncEngineTests {
             files[path] = etag to text
         }
 
+        /** Deleted on the server just after the next manifest lists them. */
+        val goneAfterManifest = mutableSetOf<String>()
+
         override suspend fun manifest(since: Long?): RemoteManifest {
             manifestRequests++
             return RemoteManifest(
@@ -67,17 +71,24 @@ class SyncEngineTests {
                     .filterKeys { completeManifests || deltaEntries?.contains(it) != false }
                     .map { (path, value) -> RemoteEntry(path, value.first) },
                 deleted = deletedPaths.toList(),
-            )
+            ).also {
+                goneAfterManifest.forEach(files::remove)
+                goneAfterManifest.clear()
+            }
         }
 
         /** Runs once, once the next fetch has read the file: what happens while its answer travels. */
         var whileNextFetchAnswers: (suspend () -> Unit)? = null
 
-        override suspend fun fetch(path: String): RemoteFile? {
+        /** Paths the server lists, and will not serve: a file it cannot read, say. */
+        val refuses = mutableSetOf<String>()
+
+        override suspend fun fetch(path: String): FetchResult {
             fetched.add(path)
-            val (etag, text) = files[path] ?: return null
+            if (path in refuses) return FetchResult.Failed("500 Internal Server Error")
+            val (etag, text) = files[path] ?: return FetchResult.Gone
             whileNextFetchAnswers?.also { whileNextFetchAnswers = null }?.invoke()
-            return RemoteFile(path, etag, text)
+            return FetchResult.Fetched(RemoteFile(path, etag, text))
         }
 
         /** Whether this server bundles, and how many files a bundle stops at, as the real one caps it. */
@@ -702,6 +713,95 @@ class SyncEngineTests {
         assertEquals("* A, edited here\nline\nfrom elsewhere\n", store.base("a.org"))
         assertEquals(server.files["a.org"]?.first, store.meta("a.org")?.etag)
         assertFalse(store.isDirty("a.org"))
+    }
+
+    /**
+     * The next delta lists only what moved after the generation kept, so a generation moved past a
+     * file that could not be fetched would leave it stale until a complete manifest.
+     */
+    @Test
+    fun aFileThatCouldNotBeFetchedIsReportedAndAskedForAgain() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* A\n")
+        engine.sync()
+        val before = store.generation()
+
+        server.put("a.org", "* A, changed\n")
+        server.generation = before + 1
+        server.refuses += "a.org"
+        val report = engine.sync()
+
+        assertEquals(listOf("a.org"), report.failed)
+        assertEquals(emptyList(), report.pulled)
+        assertEquals("* A\n", store.read("a.org"))
+        assertEquals(before, store.generation(), "the delta must still list it")
+
+        server.refuses.clear()
+        assertEquals(listOf("a.org"), engine.sync().pulled)
+        assertEquals("* A, changed\n", store.read("a.org"))
+        assertEquals(before + 1, store.generation())
+    }
+
+    /** One file the server will never serve holds up nothing but itself, however many cycles run. */
+    @Test
+    fun aFileThatCanNeverBeFetchedDoesNotHoldUpTheRest() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("bad.org", "* Bad\n")
+        server.put("good.org", "* Good\n")
+        server.put("mine.org", "* Mine\n")
+        server.refuses += "bad.org"
+        engine.sync()
+
+        repeat(3) { round ->
+            server.put("good.org", "* Good $round\n")
+            store.save("mine.org", "* Mine $round\n")
+            server.put("gone-$round.org", "* Gone\n")
+            engine.sync()
+            server.files.remove("gone-$round.org")
+
+            val report = engine.sync()
+            assertEquals(listOf("bad.org"), report.failed)
+            assertEquals("* Good $round\n", store.read("good.org"))
+            assertEquals("* Mine $round\n", server.files["mine.org"]?.second)
+            assertNull(store.read("gone-$round.org"), "a deletion still arrives")
+        }
+    }
+
+    /** Deleted on the server after it was listed: no failure, and nothing to ask for again. */
+    @Test
+    fun aFileDeletedBetweenTheManifestAndItsFetchIsNoFailure() = runTest {
+        val (server, store, engine) = setUp()
+        server.generation = 7
+        server.put("a.org", "* A\n")
+        server.goneAfterManifest += "a.org"
+
+        val report = engine.sync()
+
+        assertEquals(emptyList(), report.failed)
+        assertEquals(emptyList(), report.pulled)
+        assertNull(store.read("a.org"))
+        assertEquals(7, store.generation(), "the next delta reports the deletion")
+    }
+
+    /** The tombstone is forgotten first, so without the generation nothing would bring the note back. */
+    @Test
+    fun aNoteWonBackFromADeletionIsAskedForAgainWhenItCouldNotBeFetched() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* A\n")
+        engine.sync()
+        val before = store.generation()
+
+        store.delete("a.org")
+        server.put("a.org", "* A, edited on the laptop\n")
+        server.generation = before + 1
+        server.refuses += "a.org"
+
+        assertEquals(listOf("a.org"), engine.sync().failed)
+        assertEquals(before, store.generation())
+
+        server.refuses.clear()
+        engine.sync()
+        assertEquals("* A, edited on the laptop\n", store.read("a.org"))
     }
 
     // --- File lifecycle (T20) ---

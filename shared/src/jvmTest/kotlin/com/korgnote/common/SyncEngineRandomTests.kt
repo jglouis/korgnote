@@ -2,6 +2,7 @@ package com.korgnote.common
 
 import com.korgnote.common.replica.DeleteResult
 import com.korgnote.common.replica.DocumentStore
+import com.korgnote.common.replica.FetchResult
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.PushResult
 import com.korgnote.common.replica.RemoteEntry
@@ -17,7 +18,8 @@ import kotlin.test.fail
 
 /**
  * Two devices and a server, doing random things to the same few notes, with requests failing on the
- * way — some after the server acted on them, as when a response is lost. Then everything syncs until
+ * way — some after the server acted on them, as when a response is lost, and files the server will
+ * not serve. Then everything syncs until
  * it is quiet, and three things must hold:
  *
  * - **Converged**: both replicas hold exactly what the server holds, with nothing left to send.
@@ -263,9 +265,11 @@ class SyncEngineRandomTests {
             )
         }
 
-        override suspend fun fetch(path: String): RemoteFile? {
+        override suspend fun fetch(path: String): FetchResult {
             beforeActing()
-            return files[path]?.let { RemoteFile(path, it.first, it.second) }
+            if (faults && random.nextInt(100) < 5) return FetchResult.Failed("500 Internal Server Error")
+            val (etag, text) = files[path] ?: return FetchResult.Gone
+            return FetchResult.Fetched(RemoteFile(path, etag, text))
         }
 
         override suspend fun bundle(since: Long?): List<RemoteFile>? {

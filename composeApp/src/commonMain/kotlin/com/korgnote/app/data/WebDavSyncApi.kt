@@ -1,6 +1,7 @@
 package com.korgnote.app.data
 
 import com.korgnote.common.replica.DeleteResult
+import com.korgnote.common.replica.FetchResult
 import com.korgnote.common.replica.PushResult
 import com.korgnote.common.replica.RemoteEntry
 import com.korgnote.common.replica.RemoteFile
@@ -193,21 +194,26 @@ class WebDavSyncApi(
      * [path] with a strong etag, which is the only kind `If-Match` can match. Apache gives a weak
      * one for the second after a file changed, so a weak one is waited out and read again.
      */
-    override suspend fun fetch(path: String): RemoteFile? {
+    override suspend fun fetch(path: String): FetchResult {
         repeat(WEAK_ETAG_RETRIES) {
-            val file = fetchOnce(path) ?: return null
-            if (!isWeak(file.etag)) return file
+            val answer = fetchOnce(path)
+            if (answer !is FetchResult.Fetched || !isWeak(answer.file.etag)) return answer
             delay(WEAK_ETAG_WAIT)
         }
         return fetchOnce(path)
     }
 
-    private suspend fun fetchOnce(path: String): RemoteFile? {
+    private suspend fun fetchOnce(path: String): FetchResult {
         val response = send(HttpMethod.Get, path)
-        if (response.status != HttpStatusCode.OK) return null
-        val etag = response.headers[HttpHeaders.ETag]?.let(::canonicalEtag)
-            ?: throw WebDavException(getString(Res.string.data_webdav_sent_without_etag, path))
-        return RemoteFile(path, etag, response.bodyAsText(Charsets.UTF_8))
+        return when (response.status) {
+            HttpStatusCode.OK -> {
+                val etag = response.headers[HttpHeaders.ETag]?.let(::canonicalEtag)
+                    ?: throw WebDavException(getString(Res.string.data_webdav_sent_without_etag, path))
+                FetchResult.Fetched(RemoteFile(path, etag, response.bodyAsText(Charsets.UTF_8)))
+            }
+            HttpStatusCode.NotFound -> FetchResult.Gone
+            else -> FetchResult.Failed("${response.status}")
+        }
     }
 
     private suspend fun put(path: String, content: String, ifMatch: String?, mustNotExist: Boolean) =
@@ -253,7 +259,7 @@ class WebDavSyncApi(
      */
     private suspend fun etagAfterPut(path: String, content: String, response: HttpResponse): String {
         response.headers[HttpHeaders.ETag]?.let(::canonicalEtag)?.takeUnless(::isWeak)?.let { return it }
-        val written = fetch(path)
+        val written = (fetch(path) as? FetchResult.Fetched)?.file
         return if (written?.text == content) written.etag else UNKNOWN_ETAG
     }
 
@@ -324,7 +330,7 @@ class WebDavSyncApi(
             if (put(PROBE, "3", ifMatch = "korgnote-no-such-version", mustNotExist = false).status != HttpStatusCode.PreconditionFailed) {
                 return getString(Res.string.data_webdav_ignores_if_match, unsafe)
             }
-            val fetched = fetch(PROBE) ?: return getString(Res.string.data_webdav_lost_file)
+            val fetched = (fetch(PROBE) as? FetchResult.Fetched)?.file ?: return getString(Res.string.data_webdav_lost_file)
             val listed = propfind(PROBE, depth = "0", folder = false).firstOrNull()?.etag
             if (listed != fetched.etag) {
                 return getString(Res.string.data_webdav_etag_mismatch, listed.toString(), fetched.etag, unsafe)

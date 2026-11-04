@@ -217,6 +217,9 @@ class WebDavServersTest {
         }
     }
 
+    private suspend fun WebDavSyncApi.fileAt(path: String) =
+        (fetch(path) as com.korgnote.common.replica.FetchResult.Fetched).file
+
     @Test
     fun aCreationNeverReplacesANoteMadeElsewhere() = eachSafeServer { account ->
         // What the engine relies on when its manifest is out of date: If-None-Match: *.
@@ -225,7 +228,7 @@ class WebDavServersTest {
         a.store.create("race.org", "* From A\n")
         a.engine.sync()
         assertTrue(b.api.push("race.org", "* From B\n", ifMatch = null, mustNotExist = true) is com.korgnote.common.replica.PushResult.Conflict)
-        assertEquals("* From A\n", b.api.fetch("race.org")?.text)
+        assertEquals("* From A\n", b.api.fileAt("race.org").text)
     }
 
     @Test
@@ -233,14 +236,14 @@ class WebDavServersTest {
         val a = Device(account, client)
         a.store.create("versions.org", "* One\n")
         a.engine.sync()
-        val old = a.api.fetch("versions.org")!!.etag
+        val old = a.api.fileAt("versions.org").etag
         a.store.save("versions.org", "* Two\n")
         a.engine.sync()
         val stale = a.api.push("versions.org", "* Stale\n", ifMatch = old)
         assertTrue(stale is com.korgnote.common.replica.PushResult.Conflict, "a write over $old: $stale")
         val gone = a.api.delete("versions.org", ifMatch = old)
         assertTrue(gone is com.korgnote.common.replica.DeleteResult.Conflict, "a delete over $old: $gone")
-        assertEquals("* Two\n", a.api.fetch("versions.org")?.text)
+        assertEquals("* Two\n", a.api.fileAt("versions.org").text)
     }
 
     @Test

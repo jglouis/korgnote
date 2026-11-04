@@ -1,5 +1,6 @@
 package com.korgnote.app.data
 
+import com.korgnote.common.replica.FetchResult
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -57,6 +58,19 @@ class KtorSyncApiAuthTest {
         api.push("notes.org", "* hi\n", ifMatch = null)
 
         assertEquals(List<String?>(3) { "Bearer s3cret" }, sent.toList())
+    }
+
+    /** Only a 404 says the file is gone: anything else leaves it unknown, and asked for again. */
+    @Test
+    fun aFetchTellsAFileThatIsGoneFromOneItWasNotGiven() = runTest {
+        suspend fun answering(status: HttpStatusCode): FetchResult {
+            val client = HttpClient(MockEngine { respond("", status) })
+            return KtorSyncApi(client) { listOf(Endpoint("http://localhost:8080", null)) }.fetch("a.org")
+        }
+
+        assertEquals(FetchResult.Gone, answering(HttpStatusCode.NotFound))
+        assertEquals(FetchResult.Failed("${HttpStatusCode.InternalServerError}"), answering(HttpStatusCode.InternalServerError))
+        assertEquals(FetchResult.Failed("no etag in response"), answering(HttpStatusCode.OK))
     }
 
     @Test

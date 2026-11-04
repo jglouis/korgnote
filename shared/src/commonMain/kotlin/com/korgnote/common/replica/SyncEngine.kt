@@ -82,9 +82,19 @@ class SyncEngine(
         val bundled = bundleFor(manifest, since, localPaths, tombstones.keys)
 
         // Takes the server's copy of [path], from the bundle when it holds it.
-        suspend fun pullOne(path: String): Boolean {
-            val file = bundled[path] ?: return pull(path)
-            return store.acceptIfUntouched(path, file.text, file.etag, knownEtag = store.meta(path)?.etag)
+        suspend fun pullOne(path: String): PullOutcome {
+            val file = bundled[path] ?: return fetchAndAccept(path)
+            val accepted = store.acceptIfUntouched(path, file.text, file.etag, knownEtag = store.meta(path)?.etag)
+            return if (accepted) PullOutcome.TAKEN else PullOutcome.LEFT
+        }
+        var pullFailed = false
+
+        fun record(outcome: PullOutcome, path: String) {
+            when (outcome) {
+                PullOutcome.TAKEN -> pulled.add(path)
+                PullOutcome.FAILED -> { failed.add(path); pullFailed = true }
+                PullOutcome.LEFT -> Unit
+            }
         }
         // Deletions wait until everything else is pushed: a rename is a new note and a tombstone,
         // and another device must never catch the old one gone before the new one exists.
@@ -107,7 +117,7 @@ class SyncEngine(
                     // Edited elsewhere after the version deleted here: the edit wins, and the note
                     // comes back rather than taking someone's work with it.
                     store.forgetTombstone(entry.path)
-                    if (pullOne(entry.path)) pulled.add(entry.path)
+                    record(pullOne(entry.path), entry.path)
                 }
                 continue
             }
@@ -117,7 +127,7 @@ class SyncEngine(
 
             when {
                 // Never seen it, or the copy went missing: take the server's.
-                !haveLocally -> if (pullOne(entry.path)) pulled.add(entry.path)
+                !haveLocally -> record(pullOne(entry.path), entry.path)
 
                 // Here, but with no record of what was synced — a corrupt meta.json is read as
                 // empty — so it may hold edits never pushed. Theirs takes the path, and ours is kept
@@ -128,7 +138,7 @@ class SyncEngine(
                 !dirty && meta.etag == entry.etag -> Unit
 
                 // Untouched locally, moved remotely: take theirs.
-                !dirty -> if (pullOne(entry.path)) pulled.add(entry.path)
+                !dirty -> record(pullOne(entry.path), entry.path)
 
                 // Edited locally, server unchanged since we synced: push.
                 meta.etag == entry.etag -> record(pushLocal(entry.path, meta.etag), entry.path)
@@ -192,14 +202,18 @@ class SyncEngine(
                 // Edited elsewhere in the meantime: as above, the edit wins.
                 is DeleteResult.Conflict -> {
                     store.forgetTombstone(tombstone.path)
-                    if (pull(tombstone.path)) pulled.add(tombstone.path)
+                    record(fetchAndAccept(tombstone.path), tombstone.path)
                 }
                 DeleteResult.Gone -> store.forgetTombstone(tombstone.path)
                 is DeleteResult.Failed -> failed.add(tombstone.path)
             }
         }
 
-        store.setGeneration(manifest.generation)
+        // A file that could not be fetched keeps the generation where it was, or the next delta would
+        // not list it and it would stay stale until a complete manifest. Nothing else waits for it:
+        // every other file went through above, and does in the cycles after, so one the server never
+        // serves costs longer deltas, at worst a complete manifest each time, and nothing more.
+        if (!pullFailed) store.setGeneration(manifest.generation)
         return SyncReport(
             pulled = pulled,
             pushed = pushed,
@@ -237,12 +251,21 @@ class SyncEngine(
      *
      * A local edit wins: the event is a hint, and the next full cycle will decide properly.
      */
-    suspend fun pull(path: String): Boolean {
+    suspend fun pull(path: String): Boolean = fetchAndAccept(path) == PullOutcome.TAKEN
+
+    private suspend fun fetchAndAccept(path: String): PullOutcome {
         val known = store.meta(path)
         // A local deletion is local work too: the next full cycle decides, not a hint.
-        if (known?.let { it.dirty || it.deleted } == true) return false
-        val file = api.fetch(path) ?: return false
-        return store.acceptIfUntouched(path, file.text, file.etag, known?.etag)
+        if (known?.let { it.dirty || it.deleted } == true) return PullOutcome.LEFT
+        return when (val answer = api.fetch(path)) {
+            is FetchResult.Fetched -> {
+                val file = answer.file
+                if (store.acceptIfUntouched(path, file.text, file.etag, known?.etag)) PullOutcome.TAKEN else PullOutcome.LEFT
+            }
+            // Deleted on the server since it was listed, and the next manifest will say so.
+            FetchResult.Gone -> PullOutcome.LEFT
+            is FetchResult.Failed -> PullOutcome.FAILED
+        }
     }
 
     /**
@@ -280,7 +303,7 @@ class SyncEngine(
     private suspend fun reconcile(path: String): PushOutcome {
         val local = store.read(path) ?: return PushOutcome.SKIPPED
         val base = store.base(path) ?: return keepTheirs(path)
-        val remote = api.fetch(path) ?: return PushOutcome.FAILED
+        val remote = (api.fetch(path) as? FetchResult.Fetched)?.file ?: return PushOutcome.FAILED
 
         return when (val result = merge(base, local, remote.text)) {
             is MergeResult.Merged -> {
@@ -306,6 +329,8 @@ class SyncEngine(
     }
 
     private enum class PushOutcome { PUSHED, MERGED, CONFLICT, FAILED, SKIPPED }
+
+    private enum class PullOutcome { TAKEN, LEFT, FAILED }
 
     private suspend fun pushLocal(path: String, ifMatch: String?): PushOutcome {
         val content = store.read(path) ?: return PushOutcome.SKIPPED
@@ -343,7 +368,7 @@ class SyncEngine(
 
     /** The server's [path] takes the path; what is here, if it differs, is kept as a conflict copy. */
     private suspend fun keepTheirs(path: String): PushOutcome {
-        val theirs = api.fetch(path) ?: return PushOutcome.FAILED
+        val theirs = (api.fetch(path) as? FetchResult.Fetched)?.file ?: return PushOutcome.FAILED
         return if (store.keepServerVersion(path, theirs.text, theirs.etag, timestamp()) != null) {
             PushOutcome.CONFLICT
         } else {

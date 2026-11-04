@@ -1,6 +1,7 @@
 package com.korgnote.app.viewmodel
 
 import com.korgnote.common.replica.DeleteResult
+import com.korgnote.common.replica.FetchResult
 import com.korgnote.common.replica.PushResult
 import com.korgnote.common.replica.RemoteEntry
 import com.korgnote.common.replica.RemoteFile
@@ -37,10 +38,10 @@ class FakeSyncApi(val files: MutableMap<String, String> = mutableMapOf()) : Sync
         )
     }
 
-    override suspend fun fetch(path: String): RemoteFile? {
+    override suspend fun fetch(path: String): FetchResult {
         requireOnline()
-        val text = files[path] ?: return null
-        return RemoteFile(path, etagOf(path), text)
+        val text = files[path] ?: return FetchResult.Gone
+        return FetchResult.Fetched(RemoteFile(path, etagOf(path), text))
     }
 
     override suspend fun push(path: String, content: String, ifMatch: String?, mustNotExist: Boolean): PushResult {

@@ -1,5 +1,6 @@
 package com.korgnote.app.data
 
+import com.korgnote.common.replica.FetchResult
 import com.korgnote.common.replica.PushResult
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -170,6 +171,16 @@ class WebDavSyncApiTest {
         val api = apiWith { respond("* Note\n", HttpStatusCode.OK, headersOf(HttpHeaders.ETag, "\"e1\"")) }
         api.fetch("note.org")
         assertEquals("identity", requests.single().headers[HttpHeaders.AcceptEncoding])
+    }
+
+    /** Only a 404 says the file is gone: anything else leaves it unknown, and asked for again. */
+    @Test
+    fun aFetchTellsAFileThatIsGoneFromOneItWasNotGiven() = runTest {
+        assertEquals(FetchResult.Gone, apiWith { respond("", HttpStatusCode.NotFound) }.fetch("a.org"))
+        assertEquals(
+            FetchResult.Failed("${HttpStatusCode.InternalServerError}"),
+            apiWith { respond("", HttpStatusCode.InternalServerError) }.fetch("a.org"),
+        )
     }
 
     @Test
