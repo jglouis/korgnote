@@ -121,49 +121,14 @@ class FileStore(
     }
 
     /**
-     * Replaces [path]'s contents.
-     *
-     * When [expectedEtag] is given and the file on disk no longer matches it, nothing is written and
-     * [WriteResult.Conflict] is returned: the file changed underneath the writer, and overwriting it
-     * would discard an edit made elsewhere.
-     *
-     * The write goes to a temporary file in the same directory and is then moved into place, so a
-     * crash or a dying connection cannot leave a half-written note.
-     */
-    fun write(path: String, content: String, expectedEtag: String?): WriteResult {
-        if (readOnly) return WriteResult.ReadOnly
-        val file = resolve(path) ?: return WriteResult.Invalid
-        if (!file.isRegularFile()) return WriteResult.NotFound
-
-        val bytes = content.encodeToByteArray()
-        if (bytes.size > MAX_BYTES) return WriteResult.TooLarge
-
-        val current = metaOf(path, file)
-        if (expectedEtag != null && current.etag != expectedEtag) return WriteResult.Conflict(current)
-
-        val temporary = Files.createTempFile(file.parent, ".korgnote", ".tmp")
-        return try {
-            Files.write(temporary, bytes)
-            Files.move(
-                temporary,
-                file,
-                StandardCopyOption.REPLACE_EXISTING,
-                StandardCopyOption.ATOMIC_MOVE,
-            )
-            hashes.remove(path)
-            WriteResult.Written(metaOf(path, file))
-        } catch (failure: Exception) {
-            Files.deleteIfExists(temporary)
-            WriteResult.Failed(failure)
-        }
-    }
-
-    /**
      * The sync API's write: creates or replaces [path] according to the conditional headers.
      *
      * [ifMatch] is "I edited the version with this hash" — a mismatch is a [WriteResult.Conflict],
      * not an error, because the two versions can still be merged. [mustNotExist] is `If-None-Match:
      * *`, the capture case: create it, or tell me it is already there.
+     *
+     * The write goes to a temporary file in the same directory and is then moved into place, so a
+     * crash or a dying connection cannot leave a half-written note.
      */
     fun put(
         path: String,

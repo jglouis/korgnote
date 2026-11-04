@@ -81,7 +81,7 @@ class FileStoreTest {
         writeFile("inbox.org", "* TODO before\n")
         val original = store.meta("inbox.org")!!
 
-        val result = store.write("inbox.org", "* TODO after\n", original.etag)
+        val result = store.put("inbox.org", "* TODO after\n", ifMatch = original.etag)
 
         val written = assertIs<WriteResult.Written>(result)
         assertEquals("* TODO after\n", root.resolve("inbox.org").readText())
@@ -96,7 +96,7 @@ class FileStoreTest {
         // Someone edits it in Emacs, or Syncthing delivers a new version.
         writeFile("inbox.org", "* TODO edited elsewhere\n")
 
-        val result = store.write("inbox.org", "* TODO from the app\n", staleEtag)
+        val result = store.put("inbox.org", "* TODO from the app\n", ifMatch = staleEtag)
 
         assertIs<WriteResult.Conflict>(result)
         assertEquals(
@@ -109,7 +109,7 @@ class FileStoreTest {
     @Test
     fun writingWithoutABaselineIsAllowed() {
         writeFile("inbox.org", "* TODO before\n")
-        assertIs<WriteResult.Written>(store.write("inbox.org", "* TODO after\n", expectedEtag = null))
+        assertIs<WriteResult.Written>(store.put("inbox.org", "* TODO after\n", ifMatch = null))
     }
 
     @Test
@@ -119,7 +119,7 @@ class FileStoreTest {
         outside.writeText("private\n")
 
         for (attempt in listOf("../secret.org", "../../secret.org", "a/../../secret.org", outside.toString())) {
-            val result = store.write(attempt, "clobbered\n", null)
+            val result = store.put(attempt, "clobbered\n")
             assertTrue(
                 result is WriteResult.Invalid || result is WriteResult.NotFound,
                 "traversal attempt should not be accepted: $attempt (was $result)",
@@ -143,20 +143,20 @@ class FileStoreTest {
     @Test
     fun onlyOrgFilesCanBeWritten() {
         writeFile("notes.txt", "plain\n")
-        assertIs<WriteResult.Invalid>(store.write("notes.txt", "changed\n", null))
+        assertIs<WriteResult.Invalid>(store.put("notes.txt", "changed\n"))
         assertEquals("plain\n", root.resolve("notes.txt").readText())
     }
 
     @Test
     fun writingAMissingFileReportsNotFound() {
-        assertIs<WriteResult.NotFound>(store.write("nothing-here.org", "x\n", null))
+        assertIs<WriteResult.NotFound>(store.put("nothing-here.org", "x\n", ifMatch = "any"))
     }
 
     @Test
     fun aReadOnlyStoreRefusesWrites() {
         writeFile("inbox.org", "* TODO one\n")
         val readOnly = FileStore(root, readOnly = true)
-        assertIs<WriteResult.ReadOnly>(readOnly.write("inbox.org", "changed\n", null))
+        assertIs<WriteResult.ReadOnly>(readOnly.put("inbox.org", "changed\n"))
         assertEquals("* TODO one\n", root.resolve("inbox.org").readText())
     }
 
@@ -177,7 +177,7 @@ class FileStoreTest {
     @Test
     fun aFailedWriteLeavesNoTemporaryFilesBehind() {
         writeFile("inbox.org", "* TODO one\n")
-        store.write("inbox.org", "* TODO two\n", null)
+        store.put("inbox.org", "* TODO two\n")
         val strays = root.toFile().listFiles()?.filter { it.name.startsWith(".korgnote") }.orEmpty()
         assertTrue(strays.isEmpty(), "temporary files should be moved into place, not left: $strays")
     }
