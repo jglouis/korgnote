@@ -3,8 +3,8 @@
 package com.korgnote.app.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -229,8 +229,7 @@ class KeywordColors(keywords: Collection<String>) {
     fun of(entry: AgendaEntry): Color? {
         val keyword = entry.todo ?: return null
         if (entry.done) return OrgColors.done
-        val swatch = swatches.of(keyword, done = false) ?: return null
-        return Color(0xFF000000.toInt() or if (OrgColors.dark) swatch.dark else swatch.light)
+        return swatches.of(keyword, done = false)?.color()
     }
 }
 

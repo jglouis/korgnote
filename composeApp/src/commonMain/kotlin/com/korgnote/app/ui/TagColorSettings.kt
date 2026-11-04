@@ -75,7 +75,7 @@ fun TagColorSettings(knownTags: List<String>, chosen: Map<String, Int>, onChange
                                     picking = null
                                 },
                                 shape = CircleShape,
-                                color = swatchColor(swatch),
+                                color = swatch.color(),
                                 modifier = Modifier.size(36.dp).then(
                                     if (selected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier
                                 ),
@@ -99,10 +99,7 @@ fun TagColorSettings(knownTags: List<String>, chosen: Map<String, Int>, onChange
 private fun colorFor(tag: String, chosen: Map<String, Int>): Color {
     val rgb = chosen[tag]
     val swatch = rgb?.let { value -> TagColors.palette.firstOrNull { it.light == value } } ?: TagColors.automatic(tag)
-    return swatchColor(swatch)
+    return swatch.color()
 }
-
-private fun swatchColor(swatch: TagColors.Swatch) =
-    Color(0xFF000000.toInt() or if (OrgColors.dark) swatch.dark else swatch.light)
 
 private const val SHOWN_AT_FIRST = 24

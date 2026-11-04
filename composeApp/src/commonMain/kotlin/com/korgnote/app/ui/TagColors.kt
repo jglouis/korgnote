@@ -13,7 +13,13 @@ import androidx.compose.ui.graphics.Color
  */
 object TagColors {
     /** One colour of the palette, with its light and dark values, after [OrgColors]. */
-    data class Swatch(val light: Int, val dark: Int)
+    data class Swatch(val light: Int, val dark: Int) {
+        /** This colour for the theme in use. */
+        fun color(): Color = opaque(if (OrgColors.dark) dark else light)
+    }
+
+    /** The colour written as `RRGGBB`. */
+    private fun opaque(rgb: Int) = Color(0xFF000000.toInt() or rgb)
 
     /** Distinct enough to tell apart next to each other, and readable on both themes. */
     val palette: List<Swatch> = listOf(
@@ -42,11 +48,7 @@ object TagColors {
     fun of(tag: String): Color {
         val rgb = chosen[tag]
         val swatch = if (rgb != null) palette.firstOrNull { it.light == rgb } else automatic(tag)
-        val value = when {
-            swatch != null -> if (OrgColors.dark) swatch.dark else swatch.light
-            else -> rgb!!
-        }
-        return Color(0xFF000000.toInt() or value)
+        return swatch?.color() ?: opaque(rgb!!)
     }
 
     /**
