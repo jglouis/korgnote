@@ -296,7 +296,7 @@ class OrgLinkIndex(
         val EXTERNAL_SCHEMES = setOf("http", "https", "mailto", "ftp")
         val CUSTOM_ID = Regex("(?im)^[ \\t]*:CUSTOM_ID:[ \\t]+(\\S+)[ \\t]*$")
         val NAME_KEYWORD = Regex("(?im)^[ \\t]*#\\+NAME:[ \\t]*(.+)$")
-        val COOKIE = Regex("\\[\\d*/\\d*]|\\[\\d*%]")
+        val WHITESPACE = Regex("\\s+")
 
         fun splitSearch(target: String): Pair<String, String?> {
             val at = target.indexOf("::")
@@ -318,7 +318,7 @@ class OrgLinkIndex(
 
         /** Titles compare without statistics cookies, case or runs of whitespace. */
         fun String.normalised(): String =
-            replace(COOKIE, " ").trim().split(Regex("\\s+")).joinToString(" ").lowercase()
+            replace(OrgSyntax.statistics, " ").trim().split(WHITESPACE).joinToString(" ").lowercase()
 
         fun String.isBarePath(): Boolean =
             startsWith("/") || startsWith("~") || startsWith("./") || startsWith("../")

@@ -100,12 +100,12 @@ fun OrgDocument.tickAsOrgDoes(item: OrgCheckboxItem): OrgDocument {
     val wanted = mutableMapOf<Int, Char>() // a box's line start → the mark it should have
     fun setAll(box: OrgCheckboxItem) {
         wanted[box.range.first] = if (ticked) 'X' else ' '
-        box.childBoxes().forEach(::setAll)
+        box.childCheckboxes().forEach(::setAll)
     }
     setAll(target)
     // Bottom-up: a box with boxes under it takes its mark from theirs, once theirs are settled.
     fun settle(box: OrgCheckboxItem): Char {
-        val children = box.childBoxes().map(::settle)
+        val children = box.childCheckboxes().map(::settle)
         val mark = when {
             children.isEmpty() -> wanted[box.range.first] ?: box.mark()
             children.all { it == 'X' } -> 'X'
@@ -129,10 +129,6 @@ fun OrgDocument.tickAsOrgDoes(item: OrgCheckboxItem): OrgDocument {
 }
 
 private fun OrgCheckboxItem.mark(): Char = if (checked) 'X' else if (partial) '-' else ' '
-
-/** The boxes of the lists directly under this item. */
-private fun OrgNode.childBoxes(): List<OrgCheckboxItem> =
-    children.filterIsInstance<OrgList>().flatMap { it.children }.filterIsInstance<OrgCheckboxItem>()
 
 /** A list's own boxes, not those of the lists nested in it. */
 private fun OrgList.topBoxes(): List<OrgCheckboxItem> = children.filterIsInstance<OrgCheckboxItem>()

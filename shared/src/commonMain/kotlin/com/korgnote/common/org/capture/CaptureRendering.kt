@@ -108,7 +108,10 @@ private const val CARET = '\uE000'
 /** `%:description` and the like, `%^{Prompt|default}`, or a one-letter escape. */
 private val ESCAPE = Regex("%(?::[a-z]+|\\^\\{[^}]*\\}|[a-zA-Z?%])")
 
-private fun oneLine(text: String) = text.replace(Regex("\\s*\\n\\s*"), " ").trim()
+/** [text] on one line, its line breaks read as spaces: what a heading's title or a property can hold. */
+internal fun oneLine(text: String) = text.replace(LINE_BREAK, " ").trim()
+
+private val LINE_BREAK = Regex("\\s*\\n\\s*")
 
 /**
  * [text] for `%i`: each line after the first given [indent], and a line that would start a heading

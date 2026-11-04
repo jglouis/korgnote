@@ -1,6 +1,5 @@
 package com.korgnote.common.org.capture
 
-import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgSyntax
@@ -11,7 +10,6 @@ import com.korgnote.common.org.edit.setProperty
 import com.korgnote.common.org.link.LinkTarget
 import com.korgnote.common.org.link.descriptionOf
 import com.korgnote.common.org.ownId
-import com.korgnote.common.org.todoKeywordsOf
 import com.korgnote.common.org.toOrgDocument
 import kotlinx.serialization.Serializable
 
@@ -96,7 +94,7 @@ fun captureInto(file: String, heading: HeadingRef, captured: Captured, additions
     if (additions.location) {
         val place = captured.location ?: captured.title
         if (place.isNotBlank()) {
-            text = document(text).setProperty(section.section, "LOCATION", oneLineOf(place)).text
+            text = document(text).setProperty(section.section, "LOCATION", oneLine(place)).text
             section = findHeading(text, heading) ?: return null
         }
     }
@@ -120,7 +118,7 @@ fun captureInto(file: String, heading: HeadingRef, captured: Captured, additions
 /** [heading] in [text], with where its own content ends: before its first sub-heading. */
 private class Found(val section: OrgSection, val ownEnd: Int)
 
-private fun document(text: String): OrgDocument = text.toOrgDocument(todoKeywordsOf(text, DEFAULT_TODO_KEYWORDS))
+private fun document(text: String): OrgDocument = text.toOrgDocument()
 
 /** The heading [ref] names in [text]: the one with its `:ID:`, or else the first with its outline and title. */
 private fun findHeading(text: String, ref: HeadingRef): Found? {
@@ -193,8 +191,6 @@ private fun insertBeforeChildren(text: String, found: Found, lines: String): Str
     }
     return text.substring(0, at) + lines + text.substring(at)
 }
-
-private fun oneLineOf(text: String) = text.replace(Regex("\\s*\\n\\s*"), " ").trim()
 
 /** Whether [link] is a map's: a place shared from Google or Apple Maps, or `geo:`. */
 internal fun isMapLink(link: String?): Boolean {

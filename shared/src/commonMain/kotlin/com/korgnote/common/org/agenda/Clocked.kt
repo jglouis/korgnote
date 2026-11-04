@@ -6,7 +6,6 @@ import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.edit.allNodes
 import com.korgnote.common.org.edit.clocksOf
 import com.korgnote.common.org.toOrgDocument
-import com.korgnote.common.org.todoKeywordsOf
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -37,7 +36,7 @@ fun clockedSpans(files: Map<String, String>, fallback: OrgTodoConfig = DEFAULT_T
 /** The clocked spans of the note [text] at [path], each on the heading whose entry holds it. */
 fun clockedSpans(path: String, text: String, fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): List<ClockedSpan> {
     if (!text.contains("CLOCK:")) return emptyList()
-    val doc = text.toOrgDocument(todoKeywordsOf(text, fallback))
+    val doc = text.toOrgDocument(fallback)
     return doc.allNodes().filterIsInstance<OrgSection>().flatMap { heading ->
         doc.clocksOf(heading).map { ClockedSpan(path, heading.range.first, heading.title, heading.todo, it.start, it.end) }
     }

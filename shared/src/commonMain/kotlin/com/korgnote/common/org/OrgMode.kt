@@ -259,18 +259,19 @@ data class OrgHeading(
  */
 fun orgHeadingOf(line: String, keywords: OrgTodoConfig): OrgHeading {
     // Trimmed only at the start: the space that makes `** ` a heading may be all that follows it.
-    val m = headingLineRegex.find(line.trimStart())
-    val level = m?.groupValues?.getOrNull(1)?.length?.coerceAtLeast(1) ?: 1
-    var rest = m?.groupValues?.getOrNull(2)?.trimEnd()
+    val unindented = line.trimStart()
+    val stars = OrgSyntax.heading.find(unindented)?.groupValues?.get(1)
+    val level = stars?.length ?: 1
+    var rest = stars?.let { unindented.substring(it.length).trim() }
     val word = rest?.let { headingKeywordRegex.find(it) }
     val todo = word?.groupValues?.get(1)?.takeIf { it in keywords.todo || it in keywords.done }
     if (todo != null) rest = rest!!.substring(word.value.length)
     // A heading that is only its keyword, `* TODO`, or only its stars has an empty title, as in Org.
     var title = rest ?: line.trim()
     // Trailing :tag1:tag2: are stripped from the title and kept separately
-    val tags = headingTagsRegex.find(title)?.let { tm ->
+    val tags = OrgSyntax.tags.find(title)?.let { tm ->
         title = title.substring(0, tm.range.first).trimEnd()
-        tm.groupValues[1].split(':')
+        tm.groupValues[1].trim(':').split(':')
     } ?: emptyList()
     // A leading [#A] cookie is a priority, not part of the title.
     val priority = OrgSyntax.priority.find(title)?.let { pm ->
@@ -280,9 +281,7 @@ fun orgHeadingOf(line: String, keywords: OrgTodoConfig): OrgHeading {
     return OrgHeading(level = level, todo = todo, title = title, tags = tags, priority = priority)
 }
 
-private val headingLineRegex = Regex("^(\\*+) \\s*(.*)")
 private val headingKeywordRegex = Regex("^(${OrgSyntax.TODO_WORD})(?:\\s+|$)")
-private val headingTagsRegex = Regex("\\s+:([\\p{L}\\p{N}_@#%]+(?::[\\p{L}\\p{N}_@#%]+)*):\\s*$")
 
 // True when the line is part of a table (starts with '|' after optional indentation).
 fun String.isOrgTableLine(): Boolean = trimStart().startsWith("|")

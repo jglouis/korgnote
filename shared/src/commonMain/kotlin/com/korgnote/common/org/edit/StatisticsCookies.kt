@@ -144,7 +144,7 @@ private fun OrgNode.nestedItems(): List<OrgNode> =
     children.filterIsInstance<OrgList>().flatMap { it.children }.flatMap { listOf(it) + it.nestedItems() }
 
 /** The checkboxes of the lists directly under a list item. */
-private fun OrgNode.childCheckboxes(): List<OrgCheckboxItem> =
+internal fun OrgNode.childCheckboxes(): List<OrgCheckboxItem> =
     children.filterIsInstance<OrgList>().flatMap { it.children }.filterIsInstance<OrgCheckboxItem>()
 
 /** The range of [node]'s first line in the document's text, or null for a node with no source. */

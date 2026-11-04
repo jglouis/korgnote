@@ -101,7 +101,7 @@ fun pastedLink(before: String, selectionStart: Int, selectionEnd: Int, after: St
 
     val lineStart = prefix.lastIndexOf('\n') + 1
     val lineBefore = prefix.substring(lineStart)
-    if (KEYWORD_LINE.containsMatchIn(lineBefore) || PROPERTY_LINE.containsMatchIn(lineBefore)) return null
+    if (OrgSyntax.keyword.containsMatchIn(lineBefore) || OrgSyntax.property.containsMatchIn(lineBefore)) return null
     if (lineBefore.endsWith("<") || lineBefore.lastIndexOf("[[") > lineBefore.lastIndexOf("]]")) return null
     if (insideBlock(prefix.substring(0, lineStart))) return null
 
@@ -124,5 +124,3 @@ private fun insideBlock(text: String): Boolean {
 }
 
 private val WEB_ADDRESS = Regex("^(?:https?|ftp)://\\S+$|^mailto:\\S+$", RegexOption.IGNORE_CASE)
-private val KEYWORD_LINE = Regex("^\\s*#\\+")
-private val PROPERTY_LINE = Regex("^\\s*:[A-Za-z0-9_+-]+:")
