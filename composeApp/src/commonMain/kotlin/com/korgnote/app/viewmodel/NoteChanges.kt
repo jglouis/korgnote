@@ -78,8 +78,8 @@ class NoteChanges(
     private val todoKeywords: () -> OrgTodoConfig,
     /** Where the change goes next. Read when it is needed, by which time it is there. */
     private val server: () -> NotesSync,
-    /** Rebuilds what is derived from the notes, at once. */
-    private val refresh: () -> Unit,
+    /** Rebuilds what is derived from the notes, now, back when it is shown. */
+    private val refresh: suspend () -> Unit,
     /** Rebuilds what is derived from the notes once changes stop coming. */
     private val refreshSoon: () -> Unit,
     /** Reads the replica again and shows what it holds. */
@@ -223,14 +223,14 @@ class NoteChanges(
      * [edit] made to the open note, on screen and in the library at once; written, then pushed,
      * behind that. Null from [edit], or the same text, is nothing to do.
      *
-     * Nothing is rebuilt from every note now unless [refreshAtOnce] asks: the scans held a tick, the
-     * keyword menu and the note dialog's Save up for a second on a phone. The note shows the change
-     * at once, and the calendar follows a moment later.
+     * Nothing is rebuilt from every note now unless [refreshAtOnce] asks: a run of ticks would pay
+     * for the scans on each one. The note shows the change at once, and the calendar follows a
+     * moment later.
      */
     private fun changeOpenNote(refreshAtOnce: Boolean = false, edit: (OrgDocument) -> OrgDocument?) {
         val path = note.path ?: return
         val change = changeOnScreen(path, edit) ?: return
-        if (refreshAtOnce) refresh() else refreshSoon()
+        if (refreshAtOnce) scope.launch { refresh() } else refreshSoon()
         scope.launch { writeAndPush(change) }
     }
 

@@ -48,9 +48,7 @@ class LinkNavigator(
     var backlinks by mutableStateOf<List<OrgBacklink>>(emptyList())
         private set
 
-    fun refresh() = show(Tables(library.texts()))
-
-    /** [refresh], with the tables already built: away from the main thread, say. */
+    /** Takes [Tables] built from the notes as they now are: away from the main thread, say. */
     fun show(tables: Tables) {
         index = tables.index
         noteIds = tables.noteIds
@@ -59,7 +57,7 @@ class LinkNavigator(
     }
 
     /**
-     * Everything [refresh] reads off the notes. Built from a copy of their text and touching no
+     * Everything [show] takes from the notes. Built from a copy of their text and touching no
      * state, so it can be built on any thread.
      */
     class Tables(texts: Map<String, String>) {

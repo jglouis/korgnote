@@ -32,6 +32,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -100,7 +102,7 @@ class NotesViewModel(
     /** Where linked folders are on this device, read on each tap; and what opens a linked file. */
     fileLinkMappings: () -> List<FileLinkMapping> = { emptyList() },
     fileOpener: FileOpener = NoFileOpener,
-    /** Where scans of every note run when they need not hold up the screen; see [refreshDerivedViewsSoon]. */
+    /** Where scans of every note run when they need not hold up the screen; see [rebuildDerived]. */
     private val background: CoroutineDispatcher = Dispatchers.Default,
     /**
      * The folder [store] keeps the notes in, when they are a folder of the user's rather than the
@@ -169,7 +171,7 @@ class NotesViewModel(
         todoKeywords = { todoKeywords },
         // Read when something is pushed, by which time [server] is there.
         server = { server },
-        refresh = ::refreshDerivedViews,
+        refresh = ::rebuildDerived,
         refreshSoon = ::refreshDerivedViewsSoon,
         showReplica = ::showFromReplica,
         showMessage = ::showMessage,
@@ -360,45 +362,45 @@ class NotesViewModel(
      * Called wherever the library changes — a sync, a save, a checkbox — because all of these go
      * stale together and forgetting one of them is invisible until someone notices results that
      * describe a document as it used to be.
+     *
+     * The scans of every note run away from the main thread: there, they held the screen still for
+     * seconds on a slow phone, and a tick long enough to be felt. One at a time, each from the notes
+     * as they are when its turn comes, so that an older rebuild cannot land after a newer one.
      */
-    private fun refreshDerivedViews() {
+    private suspend fun rebuildDerived() = rebuilding.withLock {
         // This one is up to date; one put off would only redo it.
         pendingRefresh?.cancel()
         pendingRefresh = null
+        // Read here, on the main thread; what is built from them reads nothing else.
+        val texts = library.texts()
+        val keywords = library.fallbackKeywords
+        val linkTables = withContext(background) { LinkNavigator.Tables(texts) }
+        val agendaIndex = withContext(background) { agenda.build(texts, keywords) }
         // Links first: completion offers the ids and titles they collect.
-        links.refresh()
-        agenda.refresh()
+        links.show(linkTables)
+        agenda.show(agendaIndex)
         search.refresh()
         completion.refreshContext()
         clocks.refresh()
     }
 
+    private val rebuilding = Mutex()
+
     /** A refresh put off by [refreshDerivedViewsSoon], until it runs or another replaces it. */
     private var pendingRefresh: Job? = null
 
     /**
-     * [refreshDerivedViews] for a change that barely touches what they show, such as a ticked
-     * checkbox: once changes stop coming, with the scans of every note away from the main thread.
-     *
-     * Run at once, the scans hold the tick up long enough to be felt on a phone, and a run of
-     * ticks pays for them on each one. Meanwhile the links, agenda and search describe the note as
-     * it was a moment ago, which a checkbox cannot make wrong in any way that matters.
+     * [rebuildDerived] for a change that barely touches what is derived, such as a ticked checkbox:
+     * once changes stop coming, since a run of ticks would pay for the scans on each one. Meanwhile
+     * the links, agenda and search describe the note as it was a moment ago, which a checkbox cannot
+     * make wrong in any way that matters.
      */
     private fun refreshDerivedViewsSoon() {
         pendingRefresh?.cancel()
         pendingRefresh = viewModelScope.launch {
             delay(DERIVED_REFRESH_PAUSE)
-            // Read here, on the main thread; what is built from them reads nothing else.
-            val texts = library.texts()
-            val keywords = library.fallbackKeywords
-            val linkTables = withContext(background) { LinkNavigator.Tables(texts) }
-            val agendaIndex = withContext(background) { agenda.build(texts, keywords) }
             pendingRefresh = null
-            links.show(linkTables)
-            agenda.show(agendaIndex)
-            search.refresh()
-            completion.refreshContext()
-            clocks.refresh()
+            rebuildDerived()
         }
     }
 
@@ -408,24 +410,10 @@ class NotesViewModel(
         library.reload(parseOn = background)
     }
 
-    /**
-     * Rebuilds everything the UI shows out of the replica, the scans of every note away from the
-     * main thread: run on each sync, they held the screen still for seconds on a slow phone. Returns
-     * once everything is shown, as [refreshDerivedViews] does.
-     */
+    /** Rebuilds everything the UI shows out of the replica. Returns once everything is shown. */
     private suspend fun showFromReplica() {
         reloadLibrary()
-        pendingRefresh?.cancel()
-        pendingRefresh = null
-        val texts = library.texts()
-        val keywords = withContext(background) { library.fallbackKeywords }
-        val linkTables = withContext(background) { LinkNavigator.Tables(texts) }
-        val agendaIndex = withContext(background) { agenda.build(texts, keywords) }
-        links.show(linkTables)
-        agenda.show(agendaIndex)
-        search.refresh()
-        completion.refreshContext()
-        clocks.refresh()
+        rebuildDerived()
 
         // The open note may be gone: deleted here, or on another device. With nothing open — at
         // launch, say — the note last read opens, where it was left; failing that the first pinned
@@ -436,7 +424,7 @@ class NotesViewModel(
             // elsewhere. It stays open, for its save to bring the note back or its discard to end it.
         } else if (current == null) {
             note.path = null
-            editor.cancel()
+            if (editor.editingIndex != null) editor.cancel()
             val first = places.lastRead { it in library } ?: pins.shown.firstOrNull() ?: library.documents.keys.minOrNull()
             if (first != null) onFileSelected(first) else note.close()
         } else {
