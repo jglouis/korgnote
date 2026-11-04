@@ -92,19 +92,22 @@ class NoteChanges(
      * Writes the open note to the replica, then tries to push.
      *
      * The local write cannot fail on a network problem, so an edit is never lost to one. If the
-     * push fails the file simply stays dirty and the next sync carries it.
+     * push fails the file simply stays dirty and the next sync carries it. False when it could not
+     * be merged with what the replica holds, and is kept beside the note instead.
      */
-    suspend fun saveCurrentFile() {
-        val path = note.path ?: return
+    suspend fun saveCurrentFile(): Boolean {
+        val path = note.path ?: return false
         // Read now, before anything waits: by the time the disk answers, the screen may be showing
         // what a reload read, or another note altogether.
         val text = note.content
         val keywords = todoKeywords()
         val base = began(path, note.replicaText, text)
-        scope.launch { save(path, base, text, keywords) }.join()
+        var landed = false
+        scope.launch { landed = save(path, base, text, keywords) }.join()
+        return landed
     }
 
-    private suspend fun save(path: String, base: String?, text: String, keywords: OrgTodoConfig) {
+    private suspend fun save(path: String, base: String?, text: String, keywords: OrgTodoConfig): Boolean {
         var saved = text
         var broughtBack = false
         val written = try {
@@ -119,7 +122,10 @@ class NoteChanges(
         } finally {
             landed(path)
         }
-        if (written == null) return keepBeside(path, saved)
+        if (written == null) {
+            keepBeside(path, saved)
+            return false
+        }
         showWritten(path, text, written)
         library.put(path, written.toOrgDocument())
         if (broughtBack) {
@@ -130,6 +136,7 @@ class NoteChanges(
             refresh()
         }
         server().push()
+        return true
     }
 
     /**
@@ -307,6 +314,7 @@ class NoteChanges(
             return
         }
         val where = target.title.ifBlank { target.noteTitle }
+        var filedElsewhere = false
         val moved = if (target.path == source) {
             editor.refileSection(index, target.offset)
         } else {
@@ -316,12 +324,13 @@ class NoteChanges(
                         // The heading's `[2/5]` counts what is under it, which now includes this.
                         updateStatisticsCookies(filed, todoKeywordsOf(filed, DEFAULT_TODO_KEYWORDS), before = before)
                     }
-                }
+                }.also { filedElsewhere = it }
             }
         }
         if (moved) {
             showMessage(getString(Res.string.vm_refiled, where))
-        } else if (editor.editingIndex == null) {
+        } else if (!filedElsewhere && editor.editingIndex == null) {
+            // Filed there and stuck here, what stopped it has said so already.
             showMessage(getString(Res.string.vm_refile_target_gone, where))
         }
     }
@@ -356,6 +365,12 @@ class NoteChanges(
      */
     private fun changeOnScreen(path: String, edit: (OrgDocument) -> OrgDocument?): Change? {
         if (note.replicaText == null) return null
+        // A heading being added is on screen and nowhere else: written now, the empty heading would
+        // reach the replica, and discarding it would then take this change back off the screen.
+        if (editor.textBeforeInsertion != null) {
+            scope.launch { showMessage(getString(Res.string.vm_finish_editing_first)) }
+            return null
+        }
         val document = note.content.toOrgDocument()
         val updated = edit(document)?.takeIf { it.text != document.text } ?: return null
         note.content = updated.text
@@ -404,7 +419,13 @@ class NoteChanges(
                         store.save(path, text)
                         return@withLock text
                     }
-                    val merged = if (base == null || current == base) text else (merge(base, text, current) as? MergeResult.Merged)?.text
+                    val merged = when {
+                        current == base || current == text -> text
+                        // Made on nothing that was read, so not on this: a placeholder, or the note
+                        // on screen before this one's text arrived. It must not take this one's place.
+                        base == null -> null
+                        else -> (merge(base, text, current) as? MergeResult.Merged)?.text
+                    }
                     if (merged == null) return@withLock null
                     if (store.saveIfUnchanged(path, current, merged)) return@withLock merged
                 }

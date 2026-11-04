@@ -254,7 +254,7 @@ class NotesViewModel(
             .also { it.refreshContext() }
 
     /** What the link form and the link picker do with the element being edited. */
-    val linkForm: LinkForm = LinkForm(library, note, editor, completion, changes, newId, refreshSoon = ::refreshDerivedViewsSoon, server = { server })
+    val linkForm: LinkForm = LinkForm(library, note, editor, completion, changes, newId, refreshSoon = ::refreshDerivedViewsSoon, server = { server }, showMessage = ::showMessage)
 
     val search: NoteSearch = NoteSearch(viewModelScope, library, open = ::open)
 

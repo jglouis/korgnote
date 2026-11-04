@@ -37,7 +37,7 @@ class ElementEditor(
     /** Shows a message to the user. */
     private val showMessage: (String) -> Unit,
     /** Writes the open note to the replica and pushes it. */
-    private val save: suspend () -> Unit,
+    private val save: suspend () -> Boolean,
     /** Told whenever the draft or its caret moves; completion follows it. */
     private val draftMoved: () -> Unit,
     /** Told when an edit ends, committed or not. */
@@ -335,8 +335,7 @@ class ElementEditor(
             return false
         }
         note.content = rest
-        save()
-        return true
+        return save()
     }
 
     /** Elements keep their order when restarred, so every fold stays on its index. */

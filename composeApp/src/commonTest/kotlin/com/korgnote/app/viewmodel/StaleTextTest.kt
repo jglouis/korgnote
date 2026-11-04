@@ -299,4 +299,81 @@ class StaleTextTest {
         assertEquals(emacs.replace("- [ ] one", "- [X] one"), store.read(open))
         assertEquals(emacs.replace("- [ ] one", "- [X] one"), viewModel.note.content)
     }
+
+    // --- A note whose text has not arrived ---
+
+    /** What stands in for a note until it is read must never take its place, however it was edited. */
+    @Test
+    fun aSaveOfAPlaceholderKeepsTheNoteItStoodInFor() = runTest {
+        // A note the server does not hold, or the sync after the save would put it right by itself.
+        val here = "only-here.org"
+        store.save(here, openText)
+        viewModel.note.beginOpening(here, hasText = false)
+        viewModel.note.content = "* Typed on the placeholder\n"
+
+        viewModel.changes.saveCurrentFile()
+        advanceUntilSaid()
+
+        assertEquals(openText, store.read(here))
+        val copy = store.paths().single { "sync-conflict" in it }
+        assertEquals("* Typed on the placeholder\n", store.read(copy), "what was typed is kept beside it")
+    }
+
+    @Test
+    fun aNoteThatWasNeverWrittenIsWrittenBySavingIt() = runTest {
+        val new = "only-here.org"
+        viewModel.note.beginOpening(new, hasText = false)
+        viewModel.note.content = "* The first words\n"
+
+        viewModel.changes.saveCurrentFile()
+        advanceUntilIdle()
+
+        assertEquals("* The first words\n", store.read(new))
+    }
+
+    // --- A heading added and not yet saved ---
+
+    /** On screen and nowhere else until it is saved: a tick would write it, and its discard undo the tick. */
+    @Test
+    fun aTickWhileAHeadingIsBeingAddedIsRefusedAndLeavesTheNote() = runTest {
+        opened()
+        viewModel.editor.addAtEnd()
+        val onScreen = viewModel.note.content
+
+        viewModel.changes.toggleCheckboxAt(openText.indexOf("- [ ] one"))
+        advanceUntilSaid()
+
+        assertEquals(openText, store.read(open))
+        assertEquals(onScreen, viewModel.note.content)
+        assertTrue(viewModel.lastErrorMessage.contains("editing"), viewModel.lastErrorMessage)
+    }
+
+    // --- Another note that moved on, reached from this one ---
+
+    @Test
+    fun aLinkToAHeadingWhoseNoteChangedElsewhereSaysItWasNotMade() = runTest {
+        opened()
+        viewModel.editor.beginEdit(0)
+        val target = viewModel.linkForm.linkTargets().single { it.title == "Report" }
+        syncedFromEmacs(work, workText.replace("* TODO Report", "* TODO Report, from Emacs"))
+
+        viewModel.linkForm.insertLinkTo(target)
+        advanceUntilSaid()
+
+        assertTrue(viewModel.lastErrorMessage.contains("also changed elsewhere"), viewModel.lastErrorMessage)
+    }
+
+    @Test
+    fun aRefileWhoseSourceWasKeptBesideDoesNotSayItMoved() = runTest {
+        opened()
+        val target = viewModel.changes.refileTargets(0).single { it.title == "Report" }
+        val emacs = openText.replace("* Open", "* Open, from Emacs")
+        syncedFromEmacs(open, emacs)
+
+        viewModel.changes.refile(0, target)
+        advanceUntilSaid()
+
+        assertEquals(emacs, store.read(open))
+        assertTrue(viewModel.lastErrorMessage.contains("beside"), viewModel.lastErrorMessage)
+    }
 }

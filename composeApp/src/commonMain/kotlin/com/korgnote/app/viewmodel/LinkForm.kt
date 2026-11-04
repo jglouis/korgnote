@@ -12,6 +12,9 @@ import com.korgnote.common.org.link.withFileId
 import com.korgnote.common.org.link.withHeadingId
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.toOrgDocument
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.vm_edit_conflict
+import org.jetbrains.compose.resources.getString
 
 /**
  * Writing links into the element being edited, from the link picker and the link form: what they
@@ -29,6 +32,8 @@ class LinkForm(
     private val refreshSoon: () -> Unit,
     /** Where a heading's new id goes next. Read when it is needed, by which time it is there. */
     private val server: () -> NotesSync,
+    /** Shows a message to the user. */
+    private val showMessage: (String) -> Unit,
 ) {
     /**
      * Every note and heading a link can go to, for the heading-link picker: the open note as it
@@ -83,7 +88,10 @@ class LinkForm(
             val written = changes.writeOtherNote(path) { before ->
                 target.offset?.let { withHeadingId(before, it, id) } ?: withFileId(before, id)
             }
-            if (!written) return
+            if (!written) {
+                showMessage(getString(Res.string.vm_edit_conflict))
+                return
+            }
             refreshSoon()
             server().pushQuietly()
         }
