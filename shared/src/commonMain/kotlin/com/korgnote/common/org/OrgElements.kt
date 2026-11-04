@@ -54,12 +54,7 @@ fun String.orgElements(): List<OrgElement> {
     for (line in splitToSequence('\n')) {
         val isHeading = when {
             blockType != null -> {
-                val end = OrgSyntax.blockEnd.find(line)
-                if (end != null && (end.groupValues[1].isEmpty() ||
-                        end.groupValues[1].equals(blockType, ignoreCase = true))
-                ) {
-                    blockType = null
-                }
+                if (OrgSyntax.closesBlock(line, blockType)) blockType = null
                 false
             }
 

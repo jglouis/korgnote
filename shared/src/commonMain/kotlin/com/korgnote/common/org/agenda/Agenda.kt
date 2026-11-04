@@ -218,12 +218,7 @@ internal inline fun forEachStampedLine(
         val line = element.substring(lineStart, lineEnd)
         when {
             first && startsWithHeading -> action(lineStart, line, true)
-            blockType != null -> {
-                val end = OrgSyntax.blockEnd.find(line)
-                if (end != null && (end.groupValues[1].isEmpty() || end.groupValues[1].equals(blockType, ignoreCase = true))) {
-                    blockType = null
-                }
-            }
+            blockType != null -> if (OrgSyntax.closesBlock(line, blockType)) blockType = null
 
             inDrawer -> if (OrgSyntax.drawerEnd.matches(line)) inDrawer = false
             else -> {

@@ -367,9 +367,7 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
         val body = StringBuilder()
         var terminated = false
         while (idx < lines.size) {
-            val end = OrgSyntax.blockEnd.find(lines[idx])
-            // An empty `#+END_` closes any block; a named one has to match.
-            if (end != null && (end.groupValues[1].isEmpty() || end.groupValues[1].equals(type, ignoreCase = true))) {
+            if (OrgSyntax.closesBlock(lines[idx], type)) {
                 terminated = true
                 idx++
                 break

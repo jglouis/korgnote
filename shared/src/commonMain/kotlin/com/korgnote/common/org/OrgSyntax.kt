@@ -17,6 +17,16 @@ object OrgSyntax {
     val heading = Regex("^(\\*+)\\s")
     val blockBegin = Regex("^\\s*#\\+BEGIN_(\\S+)(.*)$", RegexOption.IGNORE_CASE)
     val blockEnd = Regex("^\\s*#\\+END_(\\S*)\\s*$", RegexOption.IGNORE_CASE)
+
+    /**
+     * Whether [line] closes a block of [type] that is open: a named `#+END_x` has to name it, and an
+     * empty `#+END_` closes any block.
+     */
+    fun closesBlock(line: String, type: String): Boolean {
+        val name = blockEnd.find(line)?.groupValues?.get(1) ?: return false
+        return name.isEmpty() || name.equals(type, ignoreCase = true)
+    }
+
     val keyword = Regex("^\\s*#\\+")
     val comment = Regex("^\\s*#(\\s|$)")
     val drawerBegin = Regex("^\\s*:[A-Za-z0-9_-]+:\\s*$")
