@@ -1,11 +1,16 @@
 package com.korgnote.server
 
 import com.korgnote.common.pairing.sha256Hex
+import java.io.IOException
 import java.nio.file.FileAlreadyExistsException
+import java.nio.file.FileVisitResult
 import java.nio.file.Files
+import java.nio.file.NoSuchFileException
 import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
 import java.time.LocalDate
 import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.PosixFilePermissions
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.path.exists
@@ -86,18 +91,38 @@ class FileStore(
      */
     private val writing = Any()
 
-    /** Every note currently on disk, in path order. */
+    /**
+     * Every note currently on disk, in path order.
+     *
+     * What has gone by the time the walk reaches it is simply not there, and this store's own writes
+     * leave temporary files that do so. Anything else that stops a read fails the whole list: left out
+     * of a complete manifest, a note is taken for deleted and goes from every phone.
+     */
     fun list(): List<FileMeta> {
         if (!root.exists() || !root.isDirectory()) return emptyList()
-        return Files.walk(root).use { paths ->
-            paths.filter { it.isRegularFile() }
-                .map { relativePathOf(it) to it }
-                // Through [resolve], so that what is listed can also be fetched: a link to a file
-                // outside the root cannot, and a phone would keep trying.
-                .filter { (path, _) -> resolve(path) != null }
-                .map { (path, file) -> metaOf(path, file) }
-                .toList()
-        }.sortedBy { it.path }
+        val found = mutableListOf<FileMeta>()
+        Files.walkFileTree(root, object : SimpleFileVisitor<Path>() {
+            override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                try {
+                    if (file.isRegularFile()) {
+                        val path = relativePathOf(file)
+                        // Through [resolve], so that what is listed can also be fetched: a link to a
+                        // file outside the root cannot, and a phone would keep trying.
+                        if (resolve(path) != null) found += metaOf(path, file)
+                    }
+                } catch (_: NoSuchFileException) {
+                    // Gone since the folder was read.
+                }
+                return FileVisitResult.CONTINUE
+            }
+
+            override fun visitFileFailed(file: Path, exc: IOException): FileVisitResult =
+                if (exc is NoSuchFileException) FileVisitResult.CONTINUE else throw exc
+
+            override fun postVisitDirectory(dir: Path, exc: IOException?): FileVisitResult =
+                if (exc == null || exc is NoSuchFileException) FileVisitResult.CONTINUE else throw exc
+        })
+        return found.sortedBy { it.path }
     }
 
     /**

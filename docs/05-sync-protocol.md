@@ -40,7 +40,9 @@ as more copies of the same headings. On top of it, every call rejects absolute p
 segments, and anything that resolves outside `root` after symlink resolution — for a new file, the nearest
 folder that exists, so a note cannot be created through a folder linked in from elsewhere. Files are
 capped at 32 MB. `list` goes through the same check, so a symlink leading outside is not listed: it
-could not be fetched, and a phone would keep trying.
+could not be fetched, and a phone would keep trying. What has gone by the time the walk reaches it is
+left out, as this store's own temporary files do; anything else it cannot read fails the listing with a
+`500`, since a note left out would be taken for deleted.
 
 A path that leaves the manifest this way is, to a phone, a note deleted on the server. A clean copy goes
 at the next complete manifest. A copy with an unsent edit is kept and pushed as a new note, which the

@@ -242,6 +242,23 @@ class SyncApiV1Test {
         }
     }
 
+    /** A manifest without them would have every phone delete those notes. */
+    @Test
+    fun aFolderThatCannotBeReadIsAServerErrorAndNotAShorterManifest() = testApplication {
+        val dir = notesDir("a.org" to "* A\n", "locked/b.org" to "* B\n")
+        val locked = File(dir, "locked")
+        locked.setReadable(false)
+        try {
+            if (locked.canRead()) return@testApplication // As root, nothing is out of reach.
+            serve(dir)
+
+            assertEquals(HttpStatusCode.InternalServerError, client.get("/api/v1/manifest").status)
+            assertEquals(HttpStatusCode.InternalServerError, client.get("/api/v1/bundle").status)
+        } finally {
+            locked.setReadable(true)
+        }
+    }
+
     @Test
     fun whatIsWrongWithARequestIsStillSaid() = testApplication {
         serve(notesDir("a.org" to "* A\n"))

@@ -8,6 +8,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
@@ -327,6 +328,64 @@ class FileStoreTest {
 
         assertEquals(listOf("a.org", "also-a.org"), store.list().map { it.path })
         assertEquals("* a\n", store.readWithMeta("also-a.org")?.text)
+    }
+
+    // --- What a walk meets on the way ---
+
+    /** A write's temporary file goes while the walk is on its way to it: nothing to do with this manifest. */
+    @Test
+    fun aListingIsNotBrokenByAWriteGoingOnBesideIt() {
+        repeat(50) { writeFile("n$it.org", "* note $it\n") }
+        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+        val writers = List(4) { writer ->
+            kotlin.concurrent.thread {
+                var round = 0
+                while (!stop.get()) {
+                    round++
+                    store.put("w$writer.org", "* round $round\n", ifMatch = null)
+                    // A note can go on the way as well as a temporary file.
+                    if (round % 10 == 0) store.delete("w$writer.org", ifMatch = null)
+                }
+            }
+        }
+        try {
+            repeat(1_000) { assertEquals(50, store.list().count { it.path.startsWith("n") }) }
+        } finally {
+            stop.set(true)
+            writers.forEach { it.join() }
+        }
+    }
+
+    /**
+     * Left out of a complete manifest, the note would be taken for deleted, and go from every phone.
+     * So what cannot be read fails the listing, as a server that cannot say.
+     */
+    @Test
+    fun aNoteThatCannotBeReadFailsTheListingRatherThanLeavingIt() {
+        writeFile("a.org", "* a\n")
+        writeFile("locked.org", "* locked\n")
+        val locked = root.resolve("locked.org")
+        locked.toFile().setReadable(false)
+        try {
+            if (java.nio.file.Files.isReadable(locked)) return // As root, nothing is out of reach.
+            assertFailsWith<java.io.IOException> { store.list() }
+        } finally {
+            locked.toFile().setReadable(true)
+        }
+    }
+
+    @Test
+    fun aFolderThatCannotBeReadFailsTheListingRatherThanLeavingItsNotes() {
+        writeFile("a.org", "* a\n")
+        writeFile("locked/b.org", "* b\n")
+        val locked = root.resolve("locked")
+        locked.toFile().setReadable(false)
+        try {
+            if (java.nio.file.Files.isReadable(locked)) return
+            assertFailsWith<java.io.IOException> { store.list() }
+        } finally {
+            locked.toFile().setReadable(true)
+        }
     }
 
     // --- Two writers at once: the check and the move must be one step ---
