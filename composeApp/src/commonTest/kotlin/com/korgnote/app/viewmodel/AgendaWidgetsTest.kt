@@ -52,6 +52,7 @@ class AgendaWidgetsTest {
             store,
             today = { LocalDate(2026, 9, 23) },
             widgets = widgets,
+            background = UnconfinedTestDispatcher(),
         )
     }
 
@@ -109,7 +110,7 @@ class AgendaWidgetsTest {
     @Test
     fun aNoteThatDidNotChangeIsNotScannedAgain() = runTest {
         val store = DocumentStore(InMemoryReplicaStorage())
-        val viewModel = NotesViewModel(SyncEngine(store, FakeSyncApi()), store)
+        val viewModel = NotesViewModel(SyncEngine(store, FakeSyncApi()), store, background = UnconfinedTestDispatcher())
         val first = viewModel.agenda.build(mapOf("a.org" to "* One\n<2026-11-01 Sun>\n", "b.org" to "* Two\n<2026-11-02 Mon>\n"))
 
         val second = viewModel.agenda.build(mapOf("a.org" to "* One\n<2026-11-01 Sun>\n", "b.org" to "* Three\n<2026-11-02 Mon>\n"))

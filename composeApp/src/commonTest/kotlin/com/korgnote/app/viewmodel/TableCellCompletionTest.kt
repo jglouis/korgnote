@@ -37,7 +37,7 @@ class TableCellCompletionTest {
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val store = DocumentStore(InMemoryReplicaStorage())
-        viewModel = NotesViewModel(SyncEngine(store, FakeSyncApi(mutableMapOf(path to initialText))), store, today = { LocalDate(2026, 9, 23) })
+        viewModel = NotesViewModel(SyncEngine(store, FakeSyncApi(mutableMapOf(path to initialText))), store, today = { LocalDate(2026, 9, 23) }, background = UnconfinedTestDispatcher())
     }
 
     @AfterTest

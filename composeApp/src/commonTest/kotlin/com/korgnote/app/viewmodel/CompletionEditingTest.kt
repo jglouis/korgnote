@@ -50,7 +50,7 @@ class CompletionEditingTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val store = DocumentStore(InMemoryReplicaStorage())
         val api = FakeSyncApi(mutableMapOf(path to initialText))
-        viewModel = NotesViewModel(SyncEngine(store, api), store, today = { LocalDate(2026, 9, 23) })
+        viewModel = NotesViewModel(SyncEngine(store, api), store, today = { LocalDate(2026, 9, 23) }, background = UnconfinedTestDispatcher())
     }
 
     @AfterTest

@@ -41,7 +41,7 @@ class OfflineReplicaTest {
 
     private fun viewModel(): NotesViewModel {
         val store = DocumentStore(storage)
-        return NotesViewModel(SyncEngine(store, repository), store)
+        return NotesViewModel(SyncEngine(store, repository), store, background = UnconfinedTestDispatcher())
     }
 
     @Test

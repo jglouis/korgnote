@@ -48,7 +48,7 @@ class LinkNavigationTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val server = FakeSyncApi(mutableMapOf("project.org" to project, "daily/today.org" to daily))
         val store = DocumentStore(InMemoryReplicaStorage())
-        viewModel = NotesViewModel(SyncEngine(store, server), store)
+        viewModel = NotesViewModel(SyncEngine(store, server), store, background = UnconfinedTestDispatcher())
     }
 
     @AfterTest

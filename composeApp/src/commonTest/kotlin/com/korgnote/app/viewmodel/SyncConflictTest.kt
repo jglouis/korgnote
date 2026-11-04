@@ -34,7 +34,7 @@ class SyncConflictTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         api = FakeSyncApi(mutableMapOf(path to original))
         store = DocumentStore(InMemoryReplicaStorage())
-        vm = NotesViewModel(SyncEngine(store, api) { "20260921-101500" }, store)
+        vm = NotesViewModel(SyncEngine(store, api) { "20260921-101500" }, store, background = UnconfinedTestDispatcher())
     }
 
     @AfterTest

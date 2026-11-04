@@ -52,6 +52,7 @@ class ReadingPlacesTest {
         pinnedNotes = { pinned },
         readingPlaces = { saved },
         saveReadingPlaces = { saved = it },
+        background = UnconfinedTestDispatcher(),
     )
 
     private fun startOf(index: Int) = longText.orgElements()[index].start

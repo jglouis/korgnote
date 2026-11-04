@@ -48,10 +48,11 @@ import kotlin.uuid.Uuid
 /**
  * The app's notes, and everything shown about them.
  *
- * Each concern is its own state holder — [library], [note], [folds], [pins], [editor],
- * [completion], [search], [savedSearches], [links], [files], [agenda], [server], [changes], [noteFiles] — and the UI talks to them directly. What stays here is what
- * crosses them: opening a note, which every one of them follows; rebuilding what is derived from the
- * notes when they change.
+ * Each concern is its own state holder — [library], [note], [folds], [pins], [places], [editor],
+ * [completion], [search], [savedSearches], [links], [files], [agenda], [server], [changes],
+ * [noteFiles], [clockActions], [tables], [stateNotes], [linkForm] — and the UI talks to them directly.
+ * What stays here is what crosses them: opening a note, which every one of them follows, and rebuilding
+ * what is derived from the notes when they change.
  */
 class NotesViewModel(
     sync: SyncEngine,

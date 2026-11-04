@@ -37,7 +37,7 @@ class EditRebaseTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         api = FakeSyncApi(mutableMapOf(path to original))
         val store = DocumentStore(InMemoryReplicaStorage())
-        vm = NotesViewModel(SyncEngine(store, api) { "20261029-120000" }, store)
+        vm = NotesViewModel(SyncEngine(store, api) { "20261029-120000" }, store, background = UnconfinedTestDispatcher())
     }
 
     @AfterTest

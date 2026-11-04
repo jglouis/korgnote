@@ -52,6 +52,7 @@ class ReminderSchedulingTest {
             notifications = scheduler,
             reminderSettings = { settings },
             now = { LocalDateTime(2026, 9, 23, 8, 0) },
+            background = UnconfinedTestDispatcher(),
         )
     }
 

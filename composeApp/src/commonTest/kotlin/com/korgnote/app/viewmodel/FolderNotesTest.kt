@@ -55,7 +55,7 @@ class FolderNotesTest {
         val storage = FolderNoteStorage(folder) { "20261029-120000" }
         // The sync engine is there only because the view model takes one: it is never used.
         val replica = DocumentStore(InMemoryReplicaStorage())
-        vm = NotesViewModel(SyncEngine(replica, FakeSyncApi(mutableMapOf("server.org" to "* Server\n"))), DocumentStore(storage), folder = storage)
+        vm = NotesViewModel(SyncEngine(replica, FakeSyncApi(mutableMapOf("server.org" to "* Server\n"))), DocumentStore(storage), folder = storage, background = UnconfinedTestDispatcher())
     }
 
     @AfterTest

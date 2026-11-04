@@ -30,7 +30,7 @@ class PriorityTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         repository = FakeSyncApi(mutableMapOf(path to text))
         val store = DocumentStore(InMemoryReplicaStorage())
-        viewModel = NotesViewModel(SyncEngine(store, repository), store)
+        viewModel = NotesViewModel(SyncEngine(store, repository), store, background = UnconfinedTestDispatcher())
     }
 
     @AfterTest

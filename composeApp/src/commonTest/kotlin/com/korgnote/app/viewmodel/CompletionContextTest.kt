@@ -64,7 +64,7 @@ class CompletionContextTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val store = DocumentStore(InMemoryReplicaStorage())
         val api = FakeSyncApi(mutableMapOf(work to workText, home to homeText))
-        viewModel = NotesViewModel(SyncEngine(store, api), store, today = { LocalDate(2026, 9, 23) })
+        viewModel = NotesViewModel(SyncEngine(store, api), store, today = { LocalDate(2026, 9, 23) }, background = UnconfinedTestDispatcher())
     }
 
     @AfterTest
@@ -145,6 +145,7 @@ class CompletionContextTest {
         val viewModel = NotesViewModel(
             SyncEngine(store, FakeSyncApi(mutableMapOf("a.org" to "#+TODO: NEXT | GONE\n* NEXT First :work:\n", "b.org" to "* Second :home:\n"))),
             store,
+            background = UnconfinedTestDispatcher(),
         )
         viewModel.server.load()
         viewModel.onFileSelected("a.org")

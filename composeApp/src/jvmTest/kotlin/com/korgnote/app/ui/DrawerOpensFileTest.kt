@@ -42,7 +42,7 @@ class DrawerOpensFileTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val store = DocumentStore(InMemoryReplicaStorage())
         val api = FakeSyncApi(mutableMapOf(inbox to inboxText, journal to journalText))
-        viewModel = NotesViewModel(SyncEngine(store, api), store)
+        viewModel = NotesViewModel(SyncEngine(store, api), store, background = UnconfinedTestDispatcher())
         runBlocking { viewModel.server.load() }
     }
 

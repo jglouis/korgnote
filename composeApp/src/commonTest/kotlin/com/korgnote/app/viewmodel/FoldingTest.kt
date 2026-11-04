@@ -39,7 +39,7 @@ class FoldingTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         repository = FakeSyncApi(mutableMapOf(path to text, "other.org" to "* Elsewhere\n"))
         val store = DocumentStore(InMemoryReplicaStorage())
-        viewModel = NotesViewModel(SyncEngine(store, repository), store)
+        viewModel = NotesViewModel(SyncEngine(store, repository), store, background = UnconfinedTestDispatcher())
     }
 
     @AfterTest

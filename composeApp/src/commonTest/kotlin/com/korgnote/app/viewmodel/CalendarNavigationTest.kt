@@ -57,7 +57,7 @@ class CalendarNavigationTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val store = DocumentStore(InMemoryReplicaStorage())
         val api = FakeSyncApi(mutableMapOf(agenda to agendaText, other to otherText))
-        viewModel = NotesViewModel(SyncEngine(store, api), store, today = { today })
+        viewModel = NotesViewModel(SyncEngine(store, api), store, today = { today }, background = UnconfinedTestDispatcher())
     }
 
     @AfterTest

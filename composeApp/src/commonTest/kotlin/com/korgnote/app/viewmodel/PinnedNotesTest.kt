@@ -41,6 +41,7 @@ class PinnedNotesTest {
         store,
         pinnedNotes = { saved },
         savePinnedNotes = { saved = it },
+        background = UnconfinedTestDispatcher(),
     )
 
     @Test

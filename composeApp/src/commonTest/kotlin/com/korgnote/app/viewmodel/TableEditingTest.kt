@@ -31,7 +31,7 @@ class TableEditingTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         server = FakeSyncApi(mutableMapOf(path to text))
         val store = DocumentStore(InMemoryReplicaStorage())
-        viewModel = NotesViewModel(SyncEngine(store, server), store)
+        viewModel = NotesViewModel(SyncEngine(store, server), store, background = UnconfinedTestDispatcher())
     }
 
     @AfterTest

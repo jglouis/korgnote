@@ -32,7 +32,7 @@ class RefileTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         repository = FakeSyncApi(mutableMapOf(inbox to inboxText, projects to projectsText))
         val store = DocumentStore(InMemoryReplicaStorage())
-        viewModel = NotesViewModel(SyncEngine(store, repository), store)
+        viewModel = NotesViewModel(SyncEngine(store, repository), store, background = UnconfinedTestDispatcher())
     }
 
     @AfterTest

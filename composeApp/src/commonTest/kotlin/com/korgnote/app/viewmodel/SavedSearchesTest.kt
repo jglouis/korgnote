@@ -48,6 +48,7 @@ class SavedSearchesTest {
         store,
         savedSearches = { saved },
         saveSavedSearches = { saved = it },
+        background = UnconfinedTestDispatcher(),
     )
 
     @Test

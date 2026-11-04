@@ -45,6 +45,7 @@ class OfferedHeadingsTest {
             SyncEngine(store, FakeSyncApi(mutableMapOf("a.org" to "* Heading\n"))),
             store,
             captures = CaptureFiler(CaptureQueue(folder), { "" }, { NoteTemplateSettings() }),
+            background = UnconfinedTestDispatcher(),
         )
     }
 

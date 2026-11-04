@@ -62,7 +62,7 @@ class SearchTest {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         val store = DocumentStore(InMemoryReplicaStorage())
         val api = FakeSyncApi(mutableMapOf(work to workText, home to homeText))
-        viewModel = NotesViewModel(SyncEngine(store, api), store)
+        viewModel = NotesViewModel(SyncEngine(store, api), store, background = UnconfinedTestDispatcher())
     }
 
     @AfterTest
