@@ -498,4 +498,14 @@ class OrgEditTests {
         assertTrue(result.contains("** Head"))
         assertTrue(result.contains("\n* not a heading\n"), "a star inside a block is code: $result")
     }
+
+    /** With nothing after the keyword, the space it would take is the end of the line, which stays. */
+    @Test
+    fun removingTheKeywordOfAKeywordOnlyHeadingKeepsTheLineBreak() {
+        val body = "* TODO\nbody\n".toOrgDocument()
+        assertEquals("* \nbody\n", body.setTodo(body.children.filterIsInstance<OrgSection>().single(), null).text)
+
+        val last = "* TODO".toOrgDocument()
+        assertEquals("* ", last.setTodo(last.children.filterIsInstance<OrgSection>().single(), null).text)
+    }
 }

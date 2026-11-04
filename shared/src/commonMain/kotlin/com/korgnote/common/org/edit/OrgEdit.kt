@@ -163,7 +163,10 @@ fun OrgDocument.setTodo(heading: OrgSection, keyword: String?): OrgDocument {
     return when {
         existing != null && keyword != null -> replace(existing, keyword)
         // Take the space after it too, so removing a keyword does not leave a double space.
-        existing != null -> replace(existing.first..(existing.last + 1), "")
+        existing != null -> {
+            val end = if (existing.last + 1 < parts.lineEnd && text[existing.last + 1] == ' ') existing.last + 1 else existing.last
+            replace(existing.first..end, "")
+        }
         keyword != null -> replace(parts.afterStars until parts.afterStars, "$keyword ")
         else -> this
     }
