@@ -106,7 +106,7 @@ class SyncEngineTests {
         val log = mutableListOf<String>()
 
         /** Runs once, just before the next push is decided: an edit landing after the manifest. */
-        var beforeNextPush: (() -> Unit)? = null
+        var beforeNextPush: (suspend () -> Unit)? = null
 
         override suspend fun push(path: String, content: String, ifMatch: String?, mustNotExist: Boolean): PushResult {
             beforeNextPush?.also { beforeNextPush = null }?.invoke()
@@ -935,6 +935,44 @@ class SyncEngineTests {
         assertEquals("* A, edited elsewhere\n", server.files["a.org"]?.second)
         val copy = store.paths().single { it.startsWith("a.sync-conflict-") }
         assertEquals("* A, saved after the delete\n", store.read(copy))
+    }
+
+    /** The push went through, so the server has it now: it must be told, or the note comes back. */
+    @Test
+    fun aNewNoteDeletedDuringItsFirstPushStaysDeleted() = runTest {
+        val (server, store, engine) = setUp()
+        store.create("draft.org", "* Draft\n")
+        server.beforeNextPush = { store.delete("draft.org") }
+
+        assertEquals(listOf("draft.org"), engine.sync().pushed)
+
+        assertNull(store.read("draft.org"))
+        assertEquals(listOf("draft.org"), store.tombstones().map { it.path })
+        assertEquals(server.files["draft.org"]?.first, store.tombstones().single().etag)
+
+        engine.sync()
+
+        assertNull(store.read("draft.org"), "it does not come back")
+        assertNull(server.files["draft.org"])
+        assertEquals(emptyList(), store.tombstones())
+        assertFalse(engine.sync().changedAnything)
+    }
+
+    /** The base would outlive the note, and be merged with whatever is next made under its name. */
+    @Test
+    fun aNoteDeletedDuringAPushLeavesNoBaseBehind() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* A\n")
+        engine.sync()
+        store.save("a.org", "* A, edited\n")
+        server.beforeNextPush = { store.delete("a.org") }
+
+        engine.sync()
+
+        assertNull(store.base("a.org"))
+        assertEquals(server.files["a.org"]?.first, store.tombstones().single().etag, "the version pushed is the one to delete")
+        engine.sync()
+        assertNull(server.files["a.org"])
     }
 
     @Test

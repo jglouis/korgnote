@@ -294,6 +294,14 @@ class DocumentStore(private val storage: ReplicaStorage) {
             val current = storage.read(path)
             val meta = storage.readMeta()
             val existing = meta.files[path] ?: FileMeta(path)
+            if (current == null) {
+                // Deleted mid-flight, and the push still reached the server: a tombstone at the
+                // version it now holds. A note that had none left no record to find, and with clean
+                // meta and an etag the next cycle would pull it straight back.
+                val tombstone = existing.copy(etag = etag, dirty = false, deleted = true)
+                storage.writeMeta(meta.copy(files = meta.files + (path to tombstone)))
+                return@withLock
+            }
             if (current != pushedContent) {
                 // Edited again mid-flight: keep it dirty, but the base did move.
                 storage.writeBase(path, pushedContent)
