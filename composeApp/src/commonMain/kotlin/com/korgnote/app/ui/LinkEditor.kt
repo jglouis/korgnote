@@ -27,6 +27,7 @@ import com.korgnote.app.files.FileLinkMapping
 import com.korgnote.app.files.PickedFile
 import com.korgnote.app.files.rememberFilePicker
 import com.korgnote.app.viewmodel.LinkEdit
+import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.edit.LinkKind
 import com.korgnote.common.org.edit.linkKindOf
 import com.korgnote.common.org.link.LinkTarget
@@ -211,8 +212,7 @@ fun LinkEditorDialog(
 /** An address typed as `example.com/page` is a web one; anything with a scheme of its own keeps it. */
 internal fun withScheme(address: String): String {
     val a = address.trim()
-    return if (HAS_SCHEME.containsMatchIn(a) || '.' !in a.substringBefore('/')) a else "https://$a"
+    return if (OrgSyntax.linkScheme.containsMatchIn(a) || '.' !in a.substringBefore('/')) a else "https://$a"
 }
 
 private val FILE_SCHEME = Regex("^file(?:\\+sys|\\+emacs)?:", RegexOption.IGNORE_CASE)
-private val HAS_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*:")

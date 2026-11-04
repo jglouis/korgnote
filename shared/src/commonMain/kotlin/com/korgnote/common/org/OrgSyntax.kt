@@ -74,6 +74,13 @@ object OrgSyntax {
     // --- Inline (intra-line) constructs ---
 
     val link = Regex("\\[\\[([^\\[\\]]+)\\](?:\\[([^\\[\\]]*)\\])?\\]")
+
+    /**
+     * A link's type, in any case: `Mu4e:msgid:…` is a link type too. A space after the colon makes it
+     * prose — `[[Note: see below]]` is a fuzzy link, not a link of type `Note`.
+     */
+    val linkScheme = Regex("^([A-Za-z][A-Za-z0-9+-]*):(?!\\s)")
+
     val url = Regex("(?:https?|ftp|mailto):[^\\s<>\\[\\]()\"']+")
     val timestamp = Regex("[<\\[]\\d{4}-\\d{2}-\\d{2}(?: [^\\]>\\n]*)?[>\\]]")
     val footnoteReference = Regex("\\[fn:[^\\]]+\\]")
