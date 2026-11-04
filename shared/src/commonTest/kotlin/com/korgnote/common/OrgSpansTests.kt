@@ -207,4 +207,28 @@ class OrgSpansTests {
         }
         assertTrue(OrgSpanKind.Todo in spansOf("* NEXT2 plans").kindsAt("* NEXT2 plans", "NEXT2"))
     }
+
+    /** As for the parser: another block's `#+END_` is a line of this one, and only its own closes it. */
+    @Test
+    fun onlyABlocksOwnEndClosesIt() {
+        val text = "#+BEGIN_SRC org\n#+END_QUOTE\n* code\n#+END_SRC\n* heading\n"
+        val spans = spansOf(text)
+        assertTrue(OrgSpanKind.Heading !in spans.kindsAt(text, "* code"))
+        assertTrue(OrgSpanKind.BlockBodyMonospace in spans.kindsAt(text, "#+END_QUOTE"))
+        assertTrue(OrgSpanKind.Heading in spans.kindsAt(text, "* heading"))
+
+        val anyEnd = "#+BEGIN_SRC org\n#+END_\n* heading\n"
+        assertTrue(OrgSpanKind.Heading in spansOf(anyEnd).kindsAt(anyEnd, "* heading"), "an empty end closes any block")
+    }
+
+    /** A heading ends a drawer that was never closed, as it does for the parser and the splitter. */
+    @Test
+    fun aHeadingEndsAnUnterminatedDrawer() {
+        val text = "* One\n:foo:\nwords\n* Two\nmore\n"
+        val spans = spansOf(text)
+        assertTrue(OrgSpanKind.Drawer in spans.kindsAt(text, "words"))
+        assertTrue(OrgSpanKind.Heading in spans.kindsAt(text, "* Two"))
+        assertTrue(OrgSpanKind.Drawer !in spans.kindsAt(text, "* Two"))
+        assertTrue(OrgSpanKind.Drawer !in spans.kindsAt(text, "more"))
+    }
 }

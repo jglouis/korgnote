@@ -140,8 +140,9 @@ private fun scanLine(
     }
     fun lineRange() = offset until (offset + line.length)
 
-    if (state.blockType != null) {
-        if (OrgSyntax.blockEnd.containsMatchIn(line)) {
+    val openBlock = state.blockType
+    if (openBlock != null) {
+        if (OrgSyntax.closesBlock(line, openBlock)) {
             add(lineRange(), OrgSpanKind.BlockDelimiter)
             state.blockType = null
             state.srcLanguage = null
@@ -164,11 +165,13 @@ private fun scanLine(
         return
     }
 
-    if (state.inDrawer) {
+    // A heading closes a drawer that was never terminated, and is read as the heading it is.
+    if (state.inDrawer && !OrgSyntax.heading.containsMatchIn(line)) {
         state.inDrawer = !OrgSyntax.drawerEnd.containsMatchIn(line)
         addDrawerLine(line, offset, ::add)
         return
     }
+    state.inDrawer = false
 
     when {
         OrgSyntax.heading.containsMatchIn(line) -> addHeading(line, offset, ::add)
