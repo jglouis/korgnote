@@ -1,7 +1,6 @@
 package com.korgnote.app.viewmodel
 
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.TextRange
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -22,26 +21,13 @@ import com.korgnote.app.data.ReadingPlace
 import com.korgnote.common.fs.NotePaths
 import com.korgnote.common.org.OrgTable
 import com.korgnote.common.org.OrgTodoConfig
-import com.korgnote.common.org.edit.DraftLink
-import com.korgnote.common.org.edit.FileKeywords
 import com.korgnote.common.org.edit.TableGrid
 import com.korgnote.common.org.edit.replaceOrgTable
 import com.korgnote.common.org.edit.tableFormulaLine
-import com.korgnote.common.org.edit.linkAt
-import com.korgnote.common.org.edit.orgLinkOf
-import com.korgnote.common.org.edit.withLink
-import com.korgnote.common.org.edit.fileKeywordsOf
-import com.korgnote.common.org.edit.withFileKeywords
 import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.link.LinkTarget
 import com.korgnote.common.org.link.linkTargetsOf
-import com.korgnote.common.org.link.withFileId
-import com.korgnote.common.org.link.withHeadingId
-import com.korgnote.common.org.cutOrgSubtree
 import com.korgnote.common.org.orgElements
-import com.korgnote.common.org.todoKeywordsOf
-import com.korgnote.common.org.withOrgSubtreeFiled
-import com.korgnote.common.org.edit.updateStatisticsCookies
 import com.korgnote.common.org.template.dailyFileName
 import com.korgnote.common.org.template.dailyTitle
 import com.korgnote.common.org.template.newNoteText
@@ -57,8 +43,6 @@ import com.korgnote.common.sync.conflictCopyOriginal
 import com.korgnote.common.sync.resolveConflict
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.vm_finish_editing_first
-import korgnote.composeapp.generated.resources.vm_refile_target_gone
-import korgnote.composeapp.generated.resources.vm_refiled
 import korgnote.composeapp.generated.resources.vm_not_a_note_path
 import korgnote.composeapp.generated.resources.vm_note_exists
 import korgnote.composeapp.generated.resources.vm_note_title_needed
@@ -260,6 +244,9 @@ class NotesViewModel(
     fun completionFor(draft: () -> TextFieldValue?, replaceDraft: (TextFieldValue) -> Unit): CompletionController =
         CompletionController(library, note, links, today, draft, replaceDraft, author = { noteTemplate().author })
             .also { it.refreshContext() }
+
+    /** What the link form and the link picker do with the element being edited. */
+    val linkForm: LinkForm = LinkForm(library, note, editor, completion, changes, newId, refreshSoon = ::refreshDerivedViewsSoon, server = { server })
 
     val search: NoteSearch = NoteSearch(viewModelScope, library, open = ::open)
 
@@ -501,185 +488,6 @@ class NotesViewModel(
             }
         }
         agenda.onNotesShown()
-    }
-
-    /**
-     * Every note and heading a link can go to, for the heading-link picker: the open note as it
-     * stands on screen, so that its offsets are the ones the editor holds. The open note itself is
-     * left out as a whole, and so is a heading with no title yet, such as the one just added.
-     */
-    fun linkTargets(): List<LinkTarget> {
-        val documents = library.documents.toMutableMap()
-        note.path?.let { documents[it] = note.content.toOrgDocument(library.fallbackKeywords) }
-        return linkTargetsOf(documents).filter { target ->
-            !(target.isNote && target.path == note.path) && target.title.isNotBlank()
-        }
-    }
-
-    /**
-     * Where the heading at element [index] of the open note can be refiled to: every note, as a
-     * place for a top-level heading, and every heading with a title — except the heading itself and
-     * those under it. The open note as it stands on screen, so that its offsets are the editor's.
-     */
-    fun refileTargets(index: Int): List<LinkTarget> {
-        val path = note.path
-        val documents = library.documents.toMutableMap()
-        path?.let { documents[it] = note.content.toOrgDocument(library.fallbackKeywords) }
-        val cut = note.content.cutOrgSubtree(index)
-        return linkTargetsOf(documents).filter { target ->
-            val offset = target.offset
-            val inside = cut != null && target.path == path && offset != null && offset in cut.start until cut.end
-            !inside && (target.isNote || target.title.isNotBlank())
-        }
-    }
-
-    /**
-     * Refiles the heading at element [index] of the open note, with its subtree, under [target] —
-     * after what is already there, one level below it — or to the end of [target] when it is a note,
-     * as `org-refile` (`C-c C-w`) does. Into another note, that note is written first.
-     */
-    suspend fun refile(index: Int, target: LinkTarget) {
-        val source = note.path ?: return
-        if (editor.editingIndex != null) {
-            showMessage(getString(Res.string.vm_finish_editing_first))
-            return
-        }
-        val where = target.title.ifBlank { target.noteTitle }
-        val moved = if (target.path == source) {
-            editor.refileSection(index, target.offset)
-        } else {
-            editor.moveSectionOut(index) { subtree ->
-                changes.writeOtherNote(target.path) { before ->
-                    before.withOrgSubtreeFiled(subtree, target.offset)?.let { filed ->
-                        // The heading's `[2/5]` counts what is under it, which now includes this.
-                        updateStatisticsCookies(filed, todoKeywordsOf(filed, library.fallbackKeywords), before = before)
-                    }
-                }
-            }
-        }
-        if (moved) {
-            showMessage(getString(Res.string.vm_refiled, where))
-        } else if (editor.editingIndex == null) {
-            showMessage(getString(Res.string.vm_refile_target_gone, where))
-        }
-    }
-
-    /**
-     * Writes a link to [target] at the caret of the element being edited, as org-roam's
-     * `org-roam-node-insert` does: by its `:ID:`, which a heading without one is given first.
-     *
-     * The id goes where the heading is. In another note it is saved and pushed at once, as Emacs
-     * would; harmless if the link is then discarded. In the open note it waits for the element's
-     * save, which is the save that writes the link — and the heading being edited gets it in its
-     * draft.
-     */
-    suspend fun insertLinkTo(target: LinkTarget) = writeLinkTo(target, description = null, replacing = null)
-
-    /**
-     * [insertLinkTo], showing [description] where that is not null, and in place of [replacing] —
-     * a link being changed — rather than of the selection.
-     */
-    private suspend fun writeLinkTo(target: LinkTarget, description: String?, replacing: TextRange?) {
-        val index = editor.editingIndex ?: return
-        val draft = editor.activeDraft ?: return
-        val id = target.id ?: newId()
-        val link = if (description == null) target.linkWith(id) else orgLinkOf("id:$id", description)
-        val range = replacing ?: draft.selection
-        val from = range.min
-        var text = draft.text.replaceRange(from, range.max.coerceAtMost(draft.text.length), link)
-        var caret = from + link.length
-        val path = target.path
-        if (target.id != null) {
-            // Already has one: nothing to write but the link.
-        } else if (path == note.path) {
-            val element = note.content.orgElements().getOrNull(index)
-            if (element != null && target.offset == element.start) {
-                val withId = withHeadingId(text, 0, id)
-                if (text.firstDifferenceWith(withId) < caret) caret += withId.length - text.length
-                text = withId
-            } else {
-                note.content = withHeadingId(note.content, target.offset ?: return, id)
-            }
-        } else {
-            val written = changes.writeOtherNote(path) { before ->
-                target.offset?.let { withHeadingId(before, it, id) } ?: withFileId(before, id)
-            }
-            if (!written) return
-            refreshDerivedViewsSoon()
-            server.pushQuietly()
-        }
-        // The edit may have ended while the other note was written; the link then has nowhere to go.
-        if (editor.editingIndex != index) return
-        editor.replaceDraft(TextFieldValue(text, TextRange(caret)))
-        completion.onDraftChanged()
-    }
-
-    /**
-     * The link the link form opens on: the one the caret is in, or a new one in place of the
-     * selection, showing the words selected.
-     */
-    fun linkToEdit(): LinkEdit? {
-        val draft = editor.activeDraft ?: return null
-        if (draft.selection.collapsed) {
-            linkAt(draft.text, draft.selection.start)?.let { return LinkEdit(it, isNew = false) }
-        }
-        val selected = draft.text.substring(draft.selection.min, draft.selection.max)
-        return LinkEdit(
-            DraftLink(draft.selection.min, draft.selection.max, "", if ('\n' in selected) "" else selected),
-            isNew = true,
-        )
-    }
-
-    /** Writes what the link form says in place of [edit]'s link; to a note by its id, given one first. */
-    suspend fun saveLink(edit: LinkEdit, target: String, description: String, note: LinkTarget? = null) {
-        val range = TextRange(edit.link.start, edit.link.end)
-        if (note != null) return writeLinkTo(note, description, range)
-        val draft = editor.activeDraft ?: return
-        if (edit.link.end > draft.text.length) return
-        val result = withLink(draft.text, edit.link.start, edit.link.end, target, description)
-        editor.replaceDraft(TextFieldValue(result.text, TextRange(result.caret)))
-        completion.onDraftChanged()
-    }
-
-    /** [edit]'s link turned back into the words it shows, or its target when it shows nothing else. */
-    fun removeLink(edit: LinkEdit) {
-        val draft = editor.activeDraft ?: return
-        if (edit.link.end > draft.text.length) return
-        val words = edit.link.description.ifBlank { edit.link.target }
-        val text = draft.text.replaceRange(edit.link.start, edit.link.end, words)
-        editor.replaceDraft(TextFieldValue(text, TextRange(edit.link.start + words.length)))
-        completion.onDraftChanged()
-    }
-
-    /** What the link form says a note link leads to: the note's or heading's title, or the link as written. */
-    fun noteLinkTitle(target: String): String {
-        val id = target.trim().takeIf { it.startsWith("id:", ignoreCase = true) }?.substring(3)?.trim()
-        val found = id?.let { wanted -> linkTargets().firstOrNull { it.id == wanted } }
-        return found?.title ?: target
-    }
-
-    /** Where this text and [other] first differ. */
-    private fun String.firstDifferenceWith(other: String): Int =
-        indices.firstOrNull { it >= other.length || this[it] != other[it] } ?: length
-
-    /** What the open note says about itself — title, author, date, tags — for the details form. */
-    fun openNoteKeywords(): FileKeywords = fileKeywordsOf(note.content)
-
-    /**
-     * Rewrites the open note's `#+TITLE:`, `#+AUTHOR:`, `#+DATE:` and `#+filetags:` to say
-     * [keywords], then saves. Refused while an element is being edited, as a restructuring is: the
-     * draft's offsets would move under it.
-     */
-    suspend fun setOpenNoteKeywords(keywords: FileKeywords) {
-        if (note.path == null) return
-        if (editor.editingIndex != null) {
-            showMessage(getString(Res.string.vm_finish_editing_first))
-            return
-        }
-        val updated = withFileKeywords(note.content, keywords)
-        if (updated == note.content) return
-        note.content = updated
-        changes.saveCurrentFile()
     }
 
     /**

@@ -137,9 +137,9 @@ class NoteLifecycleTest {
     fun theDetailsFormRewritesTheNotesKeywordsAndSavesIt() = runTest {
         viewModel.server.load()
         viewModel.onFileSelected(existing)
-        assertEquals("Notes", viewModel.openNoteKeywords().title)
+        assertEquals("Notes", viewModel.changes.openNoteKeywords().title)
 
-        viewModel.setOpenNoteKeywords(FileKeywords(title = "Notes", author = "Me", tags = listOf("home")))
+        viewModel.changes.setOpenNoteKeywords(FileKeywords(title = "Notes", author = "Me", tags = listOf("home")))
 
         assertEquals("#+TITLE: Notes\n#+AUTHOR: Me\n#+filetags: :home:\n\n* TODO Something\n", server.files[existing])
     }

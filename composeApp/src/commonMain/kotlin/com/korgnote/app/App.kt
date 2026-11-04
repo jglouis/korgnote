@@ -344,13 +344,13 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     }
     if (editingDetails) {
         NoteDetailsDialog(
-            initial = remember { vm.openNoteKeywords() },
+            initial = remember { vm.changes.openNoteKeywords() },
             knownTags = vm.completion.context.knownTags,
             defaultAuthor = remember { settingsRepo.getNoteTemplate().author },
             today = vm.completion.context.today,
             onSave = { keywords ->
                 editingDetails = false
-                scope.launch { vm.setOpenNoteKeywords(keywords) }
+                scope.launch { vm.changes.setOpenNoteKeywords(keywords) }
             },
             onDismiss = { editingDetails = false },
         )
@@ -735,8 +735,8 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                 inserts = vm.completion.inserts,
                                 onInsert = { vm.completion.insert(it) },
                                 onPickDate = { vm.completion.pickDate() },
-                                onPickLink = { pickingLink = vm.linkTargets() },
-                                onEditLink = vm.linkToEdit()?.takeUnless { it.isNew }?.let { edit -> { editingLink = edit } },
+                                onPickLink = { pickingLink = vm.linkForm.linkTargets() },
+                                onEditLink = vm.linkForm.linkToEdit()?.takeUnless { it.isNew }?.let { edit -> { editingLink = edit } },
                                 onInsertTable = { insertingTable = true },
                             ) {
                                 // Saving an element is explicit: edits stay local until this is pressed.
@@ -795,11 +795,11 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                             currentPath = vm.note.path.orEmpty(),
                             onPick = { target ->
                                 pickingLink = null
-                                scope.launch { vm.insertLinkTo(target) }
+                                scope.launch { vm.linkForm.insertLinkTo(target) }
                             },
                             onTypeLink = {
                                 pickingLink = null
-                                editingLink = vm.linkToEdit()
+                                editingLink = vm.linkForm.linkToEdit()
                             },
                             onDismiss = { pickingLink = null },
                         )
@@ -810,7 +810,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                             currentPath = vm.note.path.orEmpty(),
                             onPick = { target ->
                                 refiling = null
-                                scope.launch { vm.refile(index, target) }
+                                scope.launch { vm.changes.refile(index, target) }
                             },
                             onTypeLink = null,
                             onDismiss = { refiling = null },
@@ -820,17 +820,17 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                     editingLink?.let { edit ->
                         LinkEditorDialog(
                             edit = edit,
-                            noteTitle = vm::noteLinkTitle,
-                            linkTargets = vm::linkTargets,
+                            noteTitle = vm.linkForm::noteLinkTitle,
+                            linkTargets = vm.linkForm::linkTargets,
                             currentPath = vm.note.path.orEmpty(),
                             fileLinkMappings = vm.files.mappings(),
                             onSave = { target, description, note ->
                                 editingLink = null
-                                scope.launch { vm.saveLink(edit, target, description, note) }
+                                scope.launch { vm.linkForm.saveLink(edit, target, description, note) }
                             },
                             onRemove = {
                                 editingLink = null
-                                vm.removeLink(edit)
+                                vm.linkForm.removeLink(edit)
                             },
                             onDismiss = { editingLink = null },
                         )
@@ -936,7 +936,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                                 if (delta < 0) vm.editor.promoteSection(index) else vm.editor.demoteSection(index)
                                             }
                                         },
-                                        onRefileSection = { index -> refiling = index to vm.refileTargets(index) },
+                                        onRefileSection = { index -> refiling = index to vm.changes.refileTargets(index) },
                                         onSetPriority = { offset, priority -> vm.changes.setPriorityAt(offset, priority) },
                                         onClockIn = { vm.clockActions.clockInAt(it) },
                                         onClockOut = { vm.clockActions.clockOutAt(it) },

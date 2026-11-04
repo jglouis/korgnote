@@ -68,7 +68,7 @@ class LinkEditTest {
         val (viewModel, _) = editing()
         viewModel.caretAt(viewModel.editor.draft.indexOf("old.example"))
 
-        val edit = viewModel.linkToEdit()!!
+        val edit = viewModel.linkForm.linkToEdit()!!
 
         assertFalse(edit.isNew)
         assertEquals("https://old.example", edit.link.target)
@@ -81,7 +81,7 @@ class LinkEditTest {
         val start = viewModel.editor.draft.indexOf("Read")
         viewModel.caretAt(start, start + 4)
 
-        val edit = viewModel.linkToEdit()!!
+        val edit = viewModel.linkForm.linkToEdit()!!
 
         assertTrue(edit.isNew)
         assertEquals("Read", edit.link.description)
@@ -91,9 +91,9 @@ class LinkEditTest {
     fun changingTheLabelKeepsWhereItGoes() = runTest {
         val (viewModel, _) = editing()
         viewModel.caretAt(viewModel.editor.draft.indexOf("old.example"))
-        val edit = viewModel.linkToEdit()!!
+        val edit = viewModel.linkForm.linkToEdit()!!
 
-        viewModel.saveLink(edit, edit.link.target, "the manual")
+        viewModel.linkForm.saveLink(edit, edit.link.target, "the manual")
 
         assertEquals("* Today\nRead [[https://old.example][the manual]] and [[id:done-id][Done]].\n", viewModel.editor.draft)
     }
@@ -103,9 +103,9 @@ class LinkEditTest {
         val (viewModel, _) = editing()
         val start = viewModel.editor.draft.indexOf("Read")
         viewModel.caretAt(start, start + 4)
-        val edit = viewModel.linkToEdit()!!
+        val edit = viewModel.linkForm.linkToEdit()!!
 
-        viewModel.saveLink(edit, "file:~/Sync/invoice.pdf", edit.link.description)
+        viewModel.linkForm.saveLink(edit, "file:~/Sync/invoice.pdf", edit.link.description)
 
         assertTrue(viewModel.editor.draft.startsWith("* Today\n[[file:~/Sync/invoice.pdf][Read]] [[https://old"))
         assertEquals("* Today\n[[file:~/Sync/invoice.pdf][Read]]".length, viewModel.editor.draftCaret)
@@ -115,10 +115,10 @@ class LinkEditTest {
     fun aNotePickedInTheFormIsLinkedByItsIdGivenOneFirst() = runTest {
         val (viewModel, server) = editing()
         viewModel.caretAt(viewModel.editor.draft.indexOf("done-id"))
-        val edit = viewModel.linkToEdit()!!
-        assertEquals("Done", viewModel.noteLinkTitle(edit.link.target))
+        val edit = viewModel.linkForm.linkToEdit()!!
+        assertEquals("Done", viewModel.linkForm.noteLinkTitle(edit.link.target))
 
-        viewModel.saveLink(edit, "", "Planning", note = viewModel.linkTargets().single { it.title == "Plan" })
+        viewModel.linkForm.saveLink(edit, "", "Planning", note = viewModel.linkForm.linkTargets().single { it.title == "Plan" })
         advanceUntilIdle()
 
         assertTrue(viewModel.editor.draft.contains("and [[id:new-1][Planning]]."))
@@ -130,7 +130,7 @@ class LinkEditTest {
         val (viewModel, _) = editing()
         viewModel.caretAt(viewModel.editor.draft.indexOf("old.example"))
 
-        viewModel.removeLink(viewModel.linkToEdit()!!)
+        viewModel.linkForm.removeLink(viewModel.linkForm.linkToEdit()!!)
 
         assertEquals("* Today\nRead the docs and [[id:done-id][Done]].\n", viewModel.editor.draft)
     }

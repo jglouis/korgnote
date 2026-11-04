@@ -142,7 +142,7 @@ class StaleTextTest {
         syncedFromEmacs(work, emacs)
         val target = LinkTarget(path = work, noteTitle = "work", outline = emptyList(), title = "Report", offset = 0, id = null)
 
-        viewModel.refile(0, target)
+        viewModel.changes.refile(0, target)
         advanceUntilIdle()
 
         val saved = store.read(work)!!
@@ -157,7 +157,7 @@ class StaleTextTest {
         syncedFromEmacs(work, emacs)
         viewModel.editor.beginEdit(0)
 
-        viewModel.insertLinkTo(LinkTarget(path = work, noteTitle = "work", outline = emptyList(), title = "Report", offset = 0, id = null))
+        viewModel.linkForm.insertLinkTo(LinkTarget(path = work, noteTitle = "work", outline = emptyList(), title = "Report", offset = 0, id = null))
         advanceUntilIdle()
 
         val saved = store.read(work)!!

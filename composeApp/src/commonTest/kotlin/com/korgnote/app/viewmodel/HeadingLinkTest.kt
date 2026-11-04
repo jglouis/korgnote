@@ -58,13 +58,13 @@ class HeadingLinkTest {
         return viewModel to server
     }
 
-    private fun NotesViewModel.target(title: String) = linkTargets().single { it.title == title }
+    private fun NotesViewModel.target(title: String) = linkForm.linkTargets().single { it.title == title }
 
     @Test
     fun theTargetsAreEveryHeadingAndEveryOtherNote() {
         runTest {
             val (viewModel, _) = editing()
-            val listed = viewModel.linkTargets().map { "${it.where} / ${it.title}" }
+            val listed = viewModel.linkForm.linkTargets().map { "${it.where} / ${it.title}" }
             assertEquals(
                 listOf("journal / Today", "journal / Later", "project.org / Project", "Project / Plan", "Project › Plan / Step one", "Project / Done"),
                 listed,
@@ -76,7 +76,7 @@ class HeadingLinkTest {
     fun aHeadingWithAnIdIsLinkedByIt() = runTest {
         val (viewModel, server) = editing()
 
-        viewModel.insertLinkTo(viewModel.target("Done"))
+        viewModel.linkForm.insertLinkTo(viewModel.target("Done"))
 
         assertEquals("* Today\nMet Bob.\n[[id:done-id][Done]]", viewModel.editor.draft)
         assertEquals(project, server.files.getValue(other), "nothing to give it")
@@ -86,7 +86,7 @@ class HeadingLinkTest {
     fun aHeadingInAnotherNoteIsGivenAnIdThereAtOnce() = runTest {
         val (viewModel, server) = editing()
 
-        viewModel.insertLinkTo(viewModel.target("Step one"))
+        viewModel.linkForm.insertLinkTo(viewModel.target("Step one"))
         advanceUntilIdle()
 
         assertTrue(viewModel.editor.draft.endsWith("[[id:new-1][Step one]]"))
@@ -99,7 +99,7 @@ class HeadingLinkTest {
     fun aHeadingInTheOpenNoteGetsItsIdWithTheSave() = runTest {
         val (viewModel, server) = editing()
 
-        viewModel.insertLinkTo(viewModel.target("Later"))
+        viewModel.linkForm.insertLinkTo(viewModel.target("Later"))
         assertFalse(server.files.getValue(open).contains("new-1"), "not before the save")
         viewModel.editor.commit()
         advanceUntilIdle()
@@ -114,7 +114,7 @@ class HeadingLinkTest {
     fun theHeadingBeingEditedGetsItsIdInTheDraft() = runTest {
         val (viewModel, _) = editing()
 
-        viewModel.insertLinkTo(viewModel.target("Today"))
+        viewModel.linkForm.insertLinkTo(viewModel.target("Today"))
 
         assertEquals("* Today\n:PROPERTIES:\n:ID:       new-1\n:END:\nMet Bob.\n[[id:new-1][Today]]", viewModel.editor.draft)
         assertEquals(viewModel.editor.draft.length, viewModel.editor.draftCaret, "the caret is after the link")

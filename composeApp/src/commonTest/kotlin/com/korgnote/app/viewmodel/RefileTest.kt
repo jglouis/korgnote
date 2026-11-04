@@ -48,9 +48,9 @@ class RefileTest {
     @Test
     fun aHeadingRefiledIntoAnotherNoteLeavesThisOneAndIsSavedThere() = runTest {
         openInbox()
-        val website = viewModel.refileTargets(0).single { it.title == "Website" }
+        val website = viewModel.changes.refileTargets(0).single { it.title == "Website" }
 
-        viewModel.refile(0, website)
+        viewModel.changes.refile(0, website)
 
         assertEquals("* Read the paper\n", viewModel.note.content)
         assertEquals("* Read the paper\n", repository.files[inbox])
@@ -64,9 +64,9 @@ class RefileTest {
     @Test
     fun aHeadingRefiledToANoteGoesAtItsEndAsATopLevelHeading() = runTest {
         openInbox()
-        val note = viewModel.refileTargets(2).single { it.isNote && it.path == projects }
+        val note = viewModel.changes.refileTargets(2).single { it.isNote && it.path == projects }
 
-        viewModel.refile(2, note)
+        viewModel.changes.refile(2, note)
 
         assertEquals(projectsText + "* Read the paper\n", repository.files[projects])
         assertEquals("* TODO Call Sam\nRing before noon.\n** Number\n", repository.files[inbox])
@@ -75,9 +75,9 @@ class RefileTest {
     @Test
     fun aHeadingRefiledWithinItsNoteMovesThere() = runTest {
         openInbox()
-        val paper = viewModel.refileTargets(0).single { it.title == "Read the paper" }
+        val paper = viewModel.changes.refileTargets(0).single { it.title == "Read the paper" }
 
-        viewModel.refile(0, paper)
+        viewModel.changes.refile(0, paper)
 
         assertEquals("* Read the paper\n** TODO Call Sam\nRing before noon.\n*** Number\n", repository.files[inbox])
     }
@@ -85,17 +85,17 @@ class RefileTest {
     @Test
     fun aHeadingIsNotOfferedAsAPlaceForItselfOrWhatIsUnderIt() = runTest {
         openInbox()
-        val titles = viewModel.refileTargets(0).filter { it.path == inbox && !it.isNote }.map { it.title }
+        val titles = viewModel.changes.refileTargets(0).filter { it.path == inbox && !it.isNote }.map { it.title }
         assertEquals(listOf("Read the paper"), titles)
     }
 
     @Test
     fun refilingIsRefusedWhileAnElementIsBeingEdited() = runTest {
         openInbox()
-        val website = viewModel.refileTargets(0).single { it.title == "Website" }
+        val website = viewModel.changes.refileTargets(0).single { it.title == "Website" }
         viewModel.editor.beginEdit(2)
 
-        viewModel.refile(0, website)
+        viewModel.changes.refile(0, website)
 
         assertEquals(inboxText, viewModel.note.content)
         assertEquals(projectsText, repository.files[projects])

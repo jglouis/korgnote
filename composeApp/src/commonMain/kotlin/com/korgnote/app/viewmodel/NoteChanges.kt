@@ -14,10 +14,18 @@ import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.edit.replace
 import com.korgnote.common.org.edit.setPriority
 import com.korgnote.common.org.edit.tickAsOrgDoes
+import com.korgnote.common.org.cutOrgSubtree
+import com.korgnote.common.org.edit.FileKeywords
+import com.korgnote.common.org.edit.fileKeywordsOf
 import com.korgnote.common.org.edit.updateClockDurations
 import com.korgnote.common.org.edit.updateStatisticsCookies
+import com.korgnote.common.org.edit.withFileKeywords
 import com.korgnote.common.org.edit.withTimestampToggledAt
+import com.korgnote.common.org.link.LinkTarget
+import com.korgnote.common.org.link.linkTargetsOf
 import com.korgnote.common.org.toOrgDocument
+import com.korgnote.common.org.todoKeywordsOf
+import com.korgnote.common.org.withOrgSubtreeFiled
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.sync.MergeResult
 import com.korgnote.common.sync.conflictCopyName
@@ -27,6 +35,8 @@ import korgnote.composeapp.generated.resources.vm_edit_conflict
 import korgnote.composeapp.generated.resources.vm_finish_editing_first
 import korgnote.composeapp.generated.resources.vm_kept_beside
 import korgnote.composeapp.generated.resources.vm_note_brought_back
+import korgnote.composeapp.generated.resources.vm_refile_target_gone
+import korgnote.composeapp.generated.resources.vm_refiled
 import korgnote.composeapp.generated.resources.vm_reschedule_moved
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
@@ -265,6 +275,74 @@ class NoteChanges(
         }
         showWritten(path, updated, written)
         return true
+    }
+
+    /**
+     * Where the heading at element [index] of the open note can be refiled to: every note, as a
+     * place for a top-level heading, and every heading with a title — except the heading itself and
+     * those under it. The open note as it stands on screen, so that its offsets are the editor's.
+     */
+    fun refileTargets(index: Int): List<LinkTarget> {
+        val path = note.path
+        val documents = library.documents.toMutableMap()
+        path?.let { documents[it] = note.content.toOrgDocument(library.fallbackKeywords) }
+        val cut = note.content.cutOrgSubtree(index)
+        return linkTargetsOf(documents).filter { target ->
+            val offset = target.offset
+            val inside = cut != null && target.path == path && offset != null && offset in cut.start until cut.end
+            !inside && (target.isNote || target.title.isNotBlank())
+        }
+    }
+
+    /**
+     * Refiles the heading at element [index] of the open note, with its subtree, under [target] —
+     * after what is already there, one level below it — or to the end of [target] when it is a note,
+     * as `org-refile` (`C-c C-w`) does. Into another note, that note is written first.
+     */
+    suspend fun refile(index: Int, target: LinkTarget) {
+        val source = note.path ?: return
+        if (editor.editingIndex != null) {
+            showMessage(getString(Res.string.vm_finish_editing_first))
+            return
+        }
+        val where = target.title.ifBlank { target.noteTitle }
+        val moved = if (target.path == source) {
+            editor.refileSection(index, target.offset)
+        } else {
+            editor.moveSectionOut(index) { subtree ->
+                writeOtherNote(target.path) { before ->
+                    before.withOrgSubtreeFiled(subtree, target.offset)?.let { filed ->
+                        // The heading's `[2/5]` counts what is under it, which now includes this.
+                        updateStatisticsCookies(filed, todoKeywordsOf(filed, library.fallbackKeywords), before = before)
+                    }
+                }
+            }
+        }
+        if (moved) {
+            showMessage(getString(Res.string.vm_refiled, where))
+        } else if (editor.editingIndex == null) {
+            showMessage(getString(Res.string.vm_refile_target_gone, where))
+        }
+    }
+
+    /** What the open note says about itself — title, author, date, tags — for the details form. */
+    fun openNoteKeywords(): FileKeywords = fileKeywordsOf(note.content)
+
+    /**
+     * Rewrites the open note's `#+TITLE:`, `#+AUTHOR:`, `#+DATE:` and `#+filetags:` to say
+     * [keywords], then saves. Refused while an element is being edited, as a restructuring is: the
+     * draft's offsets would move under it.
+     */
+    suspend fun setOpenNoteKeywords(keywords: FileKeywords) {
+        if (note.path == null) return
+        if (editor.editingIndex != null) {
+            showMessage(getString(Res.string.vm_finish_editing_first))
+            return
+        }
+        val updated = withFileKeywords(note.content, keywords)
+        if (updated == note.content) return
+        note.content = updated
+        saveCurrentFile()
     }
 
     /** A change shown and on its way to the replica: its [text], made on [base]. */
