@@ -210,6 +210,27 @@ class DocumentStore(private val storage: ReplicaStorage) {
         _changes.emit(ReplicaChange.PulledFromServer(path))
     }
 
+    /**
+     * [acceptFromServer] for text fetched across a network round trip: only while [path] is as it
+     * was when the server was asked, which is at [knownEtag] with nothing done to it here. False,
+     * writing nothing, when it moved, and what was fetched is dropped.
+     *
+     * The check and the write share the lock, so a save cannot land between them and be overwritten
+     * and marked as synced. An edit left dirty is not lost track of: the next cycle finds it meeting
+     * the server's change, and merges them.
+     */
+    suspend fun acceptIfUntouched(path: String, content: String, etag: String, knownEtag: String?): Boolean {
+        requireSafeReplicaPath(path)
+        val accepted = mutex.withLock {
+            val now = storage.readMeta().files[path]
+            if (now?.dirty == true || now?.deleted == true || now?.etag != knownEtag) return@withLock false
+            acceptLocked(path, content, etag)
+            true
+        }
+        if (accepted) _changes.emit(ReplicaChange.PulledFromServer(path))
+        return accepted
+    }
+
     private suspend fun acceptLocked(path: String, content: String, etag: String?, generation: Long = 0) {
         storage.write(path, content)
         storage.writeBase(path, content)

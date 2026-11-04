@@ -70,9 +70,13 @@ class SyncEngineTests {
             )
         }
 
+        /** Runs once, once the next fetch has read the file: what happens while its answer travels. */
+        var whileNextFetchAnswers: (suspend () -> Unit)? = null
+
         override suspend fun fetch(path: String): RemoteFile? {
             fetched.add(path)
             val (etag, text) = files[path] ?: return null
+            whileNextFetchAnswers?.also { whileNextFetchAnswers = null }?.invoke()
             return RemoteFile(path, etag, text)
         }
 
@@ -582,6 +586,122 @@ class SyncEngineTests {
 
         assertTrue(store.isDirty("a.org"), "the newer edit is still unsynced")
         assertEquals("* First edit\n", store.read("a.org"))
+    }
+
+    /** A save made while a pull waits on the server is neither overwritten nor marked as synced. */
+    @Test
+    fun anEditSavedWhileAPullIsFetchingIsKeptAndMerged() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* A\nline\n")
+        engine.sync()
+
+        server.put("a.org", "* A\nline\nfrom elsewhere\n")
+        server.whileNextFetchAnswers = { store.save("a.org", "* A, edited here\nline\n") }
+
+        assertFalse(engine.pull("a.org"))
+        assertEquals("* A, edited here\nline\n", store.read("a.org"))
+        assertTrue(store.isDirty("a.org"))
+
+        engine.sync()
+        assertEquals("* A, edited here\nline\nfrom elsewhere\n", store.read("a.org"))
+        assertEquals("* A, edited here\nline\nfrom elsewhere\n", server.files["a.org"]?.second)
+    }
+
+    /**
+     * The cycle that lost the race has moved the generation on, so the next delta does not list the
+     * file. It is pushed against the etag it still holds, and the refusal is what merges it.
+     */
+    @Test
+    fun anEditSavedWhileACycleIsFetchingIsMergedThroughARefusedPush() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* A\nline\n")
+        engine.sync()
+
+        server.put("a.org", "* A\nline\nfrom elsewhere\n")
+        server.whileNextFetchAnswers = { store.save("a.org", "* A, edited here\nline\n") }
+        assertEquals(emptyList(), engine.sync().pulled)
+        assertEquals("* A, edited here\nline\n", store.read("a.org"))
+
+        server.completeManifests = false
+        server.deltaEntries = emptySet()
+        val report = engine.sync()
+
+        assertEquals(listOf("a.org"), report.merged)
+        assertEquals("* A, edited here\nline\nfrom elsewhere\n", server.files["a.org"]?.second)
+    }
+
+    @Test
+    fun aConflictingEditSavedWhileACycleIsFetchingEndsInAConflictCopy() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* TODO Task\n")
+        engine.sync()
+
+        server.put("a.org", "* NEXT Task\n")
+        server.whileNextFetchAnswers = { store.save("a.org", "* DONE Task\n") }
+        engine.sync()
+        engine.sync()
+
+        assertEquals("* NEXT Task\n", store.read("a.org"))
+        val copy = store.paths().single { it.startsWith("a.sync-conflict-") }
+        assertEquals("* DONE Task\n", store.read(copy), "the edit is kept beside it")
+    }
+
+    /** A note first seen by this pull, made here under the same name meanwhile: two notes, not one. */
+    @Test
+    fun aNoteCreatedWhileItsNameIsBeingFetchedIsKeptBesideTheServers() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* Theirs\n")
+        server.whileNextFetchAnswers = { store.create("a.org", "* Mine\n") }
+
+        assertFalse(engine.pull("a.org"))
+        assertEquals("* Mine\n", store.read("a.org"))
+
+        engine.sync()
+        assertEquals("* Theirs\n", store.read("a.org"))
+        val copy = store.paths().single { it.startsWith("a.sync-conflict-") }
+        assertEquals("* Mine\n", store.read(copy))
+    }
+
+    /** Deleted while the server was asked: the deletion is decided by the next cycle, as any other. */
+    @Test
+    fun aNoteDeletedWhileAPullIsFetchingIsNotBroughtBackByIt() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* A\n")
+        engine.sync()
+
+        server.put("a.org", "* A, edited elsewhere\n")
+        server.whileNextFetchAnswers = { store.delete("a.org") }
+
+        assertFalse(engine.pull("a.org"))
+        assertNull(store.read("a.org"))
+        assertEquals(listOf("a.org"), store.tombstones().map { it.path })
+
+        engine.sync()
+        assertEquals("* A, edited elsewhere\n", store.read("a.org"), "the edit elsewhere still wins")
+    }
+
+    /**
+     * A save runs a cycle at once, which can finish while a hint's fetch is still on its way. What
+     * that fetch read is older than what the cycle left here, even though the note is clean again.
+     */
+    @Test
+    fun aPullAnsweredAfterTheEditItRacedWasPushedLeavesThatEditInPlace() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* A\nline\n")
+        engine.sync()
+
+        server.put("a.org", "* A\nline\nfrom elsewhere\n")
+        server.whileNextFetchAnswers = {
+            store.save("a.org", "* A, edited here\nline\n")
+            engine.sync()
+        }
+
+        assertFalse(engine.pull("a.org"))
+
+        assertEquals("* A, edited here\nline\nfrom elsewhere\n", store.read("a.org"))
+        assertEquals("* A, edited here\nline\nfrom elsewhere\n", store.base("a.org"))
+        assertEquals(server.files["a.org"]?.first, store.meta("a.org")?.etag)
+        assertFalse(store.isDirty("a.org"))
     }
 
     // --- File lifecycle (T20) ---

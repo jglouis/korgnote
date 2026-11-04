@@ -84,9 +84,7 @@ class SyncEngine(
         // Takes the server's copy of [path], from the bundle when it holds it.
         suspend fun pullOne(path: String): Boolean {
             val file = bundled[path] ?: return pull(path)
-            if (store.meta(path)?.let { it.dirty || it.deleted } == true) return false
-            store.acceptFromServer(path, file.text, file.etag)
-            return true
+            return store.acceptIfUntouched(path, file.text, file.etag, knownEtag = store.meta(path)?.etag)
         }
         // Deletions wait until everything else is pushed: a rename is a new note and a tombstone,
         // and another device must never catch the old one gone before the new one exists.
@@ -240,11 +238,11 @@ class SyncEngine(
      * A local edit wins: the event is a hint, and the next full cycle will decide properly.
      */
     suspend fun pull(path: String): Boolean {
+        val known = store.meta(path)
         // A local deletion is local work too: the next full cycle decides, not a hint.
-        if (store.meta(path)?.let { it.dirty || it.deleted } == true) return false
+        if (known?.let { it.dirty || it.deleted } == true) return false
         val file = api.fetch(path) ?: return false
-        store.acceptFromServer(path, file.text, file.etag)
-        return true
+        return store.acceptIfUntouched(path, file.text, file.etag, known?.etag)
     }
 
     /**
