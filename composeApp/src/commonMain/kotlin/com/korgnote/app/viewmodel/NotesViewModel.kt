@@ -20,22 +20,16 @@ import com.korgnote.app.capture.CaptureFiler
 import com.korgnote.app.data.SavedSearch
 import com.korgnote.app.data.ReadingPlace
 import com.korgnote.common.fs.NotePaths
-import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTable
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.edit.DraftLink
 import com.korgnote.common.org.edit.FileKeywords
 import com.korgnote.common.org.edit.TableGrid
 import com.korgnote.common.org.edit.replaceOrgTable
-import com.korgnote.common.org.edit.replace
-import com.korgnote.common.org.agenda.AgendaEntry
-import com.korgnote.common.org.agenda.parseOrgTimestamp
-import com.korgnote.common.org.complete.restampRange
 import com.korgnote.common.org.edit.tableFormulaLine
 import com.korgnote.common.org.edit.linkAt
 import com.korgnote.common.org.edit.orgLinkOf
 import com.korgnote.common.org.edit.withLink
-import com.korgnote.common.org.edit.changeTodoState
 import com.korgnote.common.org.edit.fileKeywordsOf
 import com.korgnote.common.org.edit.withFileKeywords
 import com.korgnote.common.org.edit.nodeAt
@@ -77,7 +71,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
-import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.getString
@@ -85,11 +78,6 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
-import com.korgnote.common.org.LogKind
-import com.korgnote.common.org.edit.stateChangeLog
-import com.korgnote.common.org.todoLoggingOf
-import korgnote.composeapp.generated.resources.vm_edit_conflict
-import korgnote.composeapp.generated.resources.vm_reschedule_moved
 
 /**
  * The app's notes, and everything shown about them.
@@ -206,11 +194,6 @@ class NotesViewModel(
         },
     )
 
-    /** Starting and stopping clocks, and setting efforts. */
-    val clockActions: ClockActions by lazy {
-        ClockActions(viewModelScope, note, clocks, changes, now, refuseWhileEditing = ::refuseWhileEditing)
-    }
-
     /** What changes a note's text. */
     val changes: NoteChanges = NoteChanges(
         viewModelScope,
@@ -228,6 +211,9 @@ class NotesViewModel(
         showReplica = ::showFromReplica,
         showMessage = ::showMessage,
     )
+
+    /** Starting and stopping clocks, and setting efforts. */
+    val clockActions: ClockActions = ClockActions(viewModelScope, note, clocks, changes, now)
 
     val links: LinkNavigator = LinkNavigator(
         viewModelScope,
@@ -250,28 +236,19 @@ class NotesViewModel(
         author = { noteTemplate().author },
     )
 
-    /**
-     * A keyword change waiting on the note its keyword's `@` asks for: which heading, by where it
-     * starts and the line it was, and the keyword. Null when none is.
-     */
-    data class PendingStateNote(val offset: Int, val headingLine: String, val title: String, val keyword: String, val closing: Boolean)
-
-    var pendingStateNote by mutableStateOf<PendingStateNote?>(null)
-        private set
-
-    /** The note being written for [pendingStateNote], and its caret. */
-    var stateNoteDraft by mutableStateOf(TextFieldValue(""))
-        private set
-
-    /** Completion in the note, as in the element editor: the same suggestions, over the note's own text. */
-    val stateNoteCompletion: CompletionController = CompletionController(
+    /** Keywords, and the notes a keyword's `@` asks for. */
+    val stateNotes: StateNotes = StateNotes(
+        viewModelScope,
         library,
         note,
         links,
+        changes,
         today,
-        draft = { stateNoteDraft.takeIf { pendingStateNote != null } },
-        replaceDraft = { onStateNoteChanged(it) },
+        now,
         author = { noteTemplate().author },
+        todoKeywords = { todoKeywords },
+        openAndWait = ::openAndWait,
+        showMessage = ::showMessage,
     )
 
     /**
@@ -283,11 +260,6 @@ class NotesViewModel(
     fun completionFor(draft: () -> TextFieldValue?, replaceDraft: (TextFieldValue) -> Unit): CompletionController =
         CompletionController(library, note, links, today, draft, replaceDraft, author = { noteTemplate().author })
             .also { it.refreshContext() }
-
-    fun onStateNoteChanged(value: TextFieldValue) {
-        stateNoteDraft = value
-        stateNoteCompletion.onDraftChanged()
-    }
 
     val search: NoteSearch = NoteSearch(viewModelScope, library, open = ::open)
 
@@ -529,123 +501,6 @@ class NotesViewModel(
             }
         }
         agenda.onNotesShown()
-    }
-
-    // --- Changing the notes ---
-
-    /**
-     * Sets the keyword of the heading at [offsetInDocument], or clears it when [keyword] is null, as
-     * [toggleCheckboxAt] ticks a checkbox: the file is saved and pushed the same way.
-     *
-     * The change is logged under the heading with the time it was made, as Org logs a state change.
-     * Marking a repeating entry done repeats it, as Org does: it goes back to its first keyword and
-     * its dates move on to the next occurrence.
-     */
-    fun setTodoAt(offsetInDocument: Int, keyword: String?) {
-        val document = note.content.toOrgDocument(library.fallbackKeywords)
-        val heading = document.nodeAt<OrgSection>(offsetInDocument) ?: return
-        // A keyword with `@` wants a note: the change waits for it, as Org's note buffer does.
-        if (keyword != null && document.stateChangeLog(heading, keyword, todoKeywords) == LogKind.Note) {
-            val line = document.text.substring(heading.range.first).substringBefore('\n')
-            val closing = todoLoggingOf(document.text).forChange(heading.todo, keyword) == null
-            pendingStateNote = PendingStateNote(heading.range.first, line, heading.title, keyword, closing)
-            stateNoteDraft = TextFieldValue("")
-            stateNoteCompletion.refreshContext()
-            stateNoteCompletion.reset()
-            return
-        }
-        changes.changeTodoStateAt(heading.range.first, keyword)
-    }
-
-    /** The keywords of the note at [path]: its own `#+TODO:`, or what the notes declare. */
-    fun todoKeywordsOf(path: String): OrgTodoConfig =
-        if (path == note.path) todoKeywords else library[path]?.todoKeywords ?: library.fallbackKeywords
-
-    /**
-     * [setTodoAt] for the heading at [headingOffset] of the note at [path], open or not: from the
-     * calendar, say. A keyword that asks for a note (`@`) opens the note first, so that the note
-     * is asked for over the heading it goes under, as it is from the note itself; any other change
-     * is made in the note where it is, logged and repeated as Org does.
-     */
-    fun setTodo(path: String, headingOffset: Int, keyword: String?) {
-        if (path == note.path) {
-            if (refuseWhileEditing()) return
-            setTodoAt(headingOffset, keyword)
-            return
-        }
-        val document = library[path] ?: return
-        val heading = document.nodeAt<OrgSection>(headingOffset) ?: return
-        val keywords = document.todoKeywords
-        if (keyword != null && document.stateChangeLog(heading, keyword, keywords) == LogKind.Note) {
-            if (refuseWhileEditing()) return
-            viewModelScope.launch {
-                openAndWait(path)
-                if (note.path == path) setTodoAt(headingOffset, keyword)
-            }
-            return
-        }
-        val at = now()
-        viewModelScope.launch {
-            changes.changeNote(path) { doc ->
-                val target = doc.nodeAt<OrgSection>(headingOffset) ?: return@changeNote doc
-                with(changes) { doc.changeTodoState(target, keyword, at, keywords).withStatistics(since = doc) }
-            }
-        }
-    }
-
-    /**
-     * Moves the date of the calendar's [entry] — its `SCHEDULED:`, its `DEADLINE:`, or the stamp in
-     * its body — to [date] at [time], or with no time when that is null, as Org's `C-c C-s` and
-     * `C-c C-d` do from the agenda: in its note, open or not, saved and pushed. What the picker does
-     * not ask about stays: the brackets, a repeater, a warning, the length of a range over days.
-     *
-     * The stamp is replaced where the agenda found it, once it is checked to be still there and
-     * still the same: the note may have changed since, here, on another device or in Emacs.
-     */
-    fun reschedule(entry: AgendaEntry, date: LocalDate, time: LocalTime?, endTime: LocalTime?) {
-        val path = entry.file
-        if (path == note.path && refuseWhileEditing()) return
-        val range = entry.stamp.range
-        viewModelScope.launch {
-            var moved = false
-            changes.changeNote(path) { doc ->
-                val written = doc.text.takeIf { !range.isEmpty() && range.last < it.length }?.substring(range)
-                val stamp = written?.let(::parseOrgTimestamp)
-                if (stamp == null || stamp.copy(range = IntRange.EMPTY) != entry.stamp.copy(range = IntRange.EMPTY)) {
-                    moved = true
-                    return@changeNote doc
-                }
-                doc.replace(range, restampRange(written, date, time, endTime))
-            }
-            if (moved) showMessage(getString(Res.string.vm_reschedule_moved))
-        }
-    }
-
-    /** Changes the keyword [pendingStateNote] waits on, logging what was written. */
-    fun saveStateNote() {
-        val pending = pendingStateNote ?: return
-        pendingStateNote = null
-        stateNoteCompletion.reset()
-        // The note may have taken a while: the heading must still be where, and what, it was.
-        val line = note.content.drop(pending.offset).substringBefore('\n')
-        if (line != pending.headingLine) {
-            viewModelScope.launch { showMessage(getString(Res.string.vm_edit_conflict)) }
-            return
-        }
-        changes.changeTodoStateAt(pending.offset, pending.keyword, stateNoteDraft.text)
-    }
-
-    /** Drops the change [pendingStateNote] waits on: the keyword stays as it was. */
-    fun cancelStateNote() {
-        pendingStateNote = null
-        stateNoteCompletion.reset()
-    }
-
-    /** An element of the open note being edited would have the note change under it. */
-    private fun refuseWhileEditing(): Boolean {
-        if (editor.editingIndex == null) return false
-        viewModelScope.launch { showMessage(getString(Res.string.vm_finish_editing_first)) }
-        return true
     }
 
     /**

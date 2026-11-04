@@ -62,17 +62,17 @@ class StateNoteTest {
     @Test
     fun aNoteIsAskedForAndLoggedUnderTheStateLine() = runTest {
         open()
-        viewModel.setTodoAt(heading, "WAIT")
+        viewModel.stateNotes.setTodoAt(heading, "WAIT")
 
-        val pending = assertNotNull(viewModel.pendingStateNote, "the change waits for its note")
+        val pending = assertNotNull(viewModel.stateNotes.pending, "the change waits for its note")
         assertEquals("WAIT", pending.keyword)
         assertEquals(text, viewModel.note.content, "nothing changed yet")
 
-        viewModel.onStateNoteChanged(TextFieldValue("Waiting for his quote."))
-        viewModel.saveStateNote()
+        viewModel.stateNotes.onDraftChanged(TextFieldValue("Waiting for his quote."))
+        viewModel.stateNotes.save()
         advanceUntilIdle()
 
-        assertNull(viewModel.pendingStateNote)
+        assertNull(viewModel.stateNotes.pending)
         val expected = header + "* WAIT Call the plumber\n" +
             "- State \"WAIT\"       from \"TODO\"       [2026-11-01 Sun 10:30] \\\\\n" +
             "  Waiting for his quote.\n"
@@ -83,21 +83,21 @@ class StateNoteTest {
     @Test
     fun cancellingLeavesTheKeywordAsItWas() = runTest {
         open()
-        viewModel.setTodoAt(heading, "CANCELED")
-        viewModel.onStateNoteChanged(TextFieldValue("Not needed."))
-        viewModel.cancelStateNote()
+        viewModel.stateNotes.setTodoAt(heading, "CANCELED")
+        viewModel.stateNotes.onDraftChanged(TextFieldValue("Not needed."))
+        viewModel.stateNotes.cancel()
         advanceUntilIdle()
 
-        assertNull(viewModel.pendingStateNote)
+        assertNull(viewModel.stateNotes.pending)
         assertEquals(text, viewModel.note.content)
     }
 
     @Test
     fun aTimeStampNeedsNoNote() = runTest {
         open()
-        viewModel.setTodoAt(heading, "DOING")
+        viewModel.stateNotes.setTodoAt(heading, "DOING")
 
-        assertNull(viewModel.pendingStateNote)
+        assertNull(viewModel.stateNotes.pending)
         assertEquals(
             header + "* DOING Call the plumber\n- State \"DOING\"      from \"TODO\"       [2026-11-01 Sun 10:30]\n",
             viewModel.note.content,

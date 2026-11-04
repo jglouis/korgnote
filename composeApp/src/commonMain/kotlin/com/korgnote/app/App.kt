@@ -835,25 +835,25 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                             onDismiss = { editingLink = null },
                         )
                     }
-                    vm.pendingStateNote?.let { pending ->
+                    vm.stateNotes.pending?.let { pending ->
                         StateNoteDialog(
                             keyword = pending.keyword.takeUnless { pending.closing },
                             headingTitle = pending.title,
-                            value = vm.stateNoteDraft,
-                            onValueChange = { vm.onStateNoteChanged(it) },
-                            completion = vm.stateNoteCompletion,
+                            value = vm.stateNotes.draft,
+                            onValueChange = { vm.stateNotes.onDraftChanged(it) },
+                            completion = vm.stateNotes.completion,
                             todoKeywords = vm.todoKeywords,
-                            onSave = { vm.saveStateNote() },
-                            onCancel = { vm.cancelStateNote() },
+                            onSave = { vm.stateNotes.save() },
+                            onCancel = { vm.stateNotes.cancel() },
                         )
-                        vm.stateNoteCompletion.pendingDatePicker?.let {
-                            val stamp = vm.stateNoteCompletion.pickerStamp
+                        vm.stateNotes.completion.pendingDatePicker?.let {
+                            val stamp = vm.stateNotes.completion.pickerStamp
                             OrgDatePickerDialog(
-                                initialDate = stamp?.start ?: vm.stateNoteCompletion.context.today,
+                                initialDate = stamp?.start ?: vm.stateNotes.completion.context.today,
                                 initialTime = stamp?.startTime,
                                 initialEndTime = stamp?.endTime,
-                                onPick = { date, time, end -> vm.stateNoteCompletion.onDatePicked(date, time, end) },
-                                onDismiss = { vm.stateNoteCompletion.dismissDatePicker() },
+                                onPick = { date, time, end -> vm.stateNotes.completion.onDatePicked(date, time, end) },
+                                onDismiss = { vm.stateNotes.completion.dismissDatePicker() },
                             )
                         }
                     }
@@ -953,7 +953,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                         onRevealed = { vm.note.onRevealed() },
                                         onToggleCheckbox = { offset -> vm.changes.toggleCheckboxAt(offset) },
                                         onToggleTimestamp = { offset -> vm.changes.toggleTimestampAt(offset) },
-                                        onSetTodo = { offset, keyword -> vm.setTodoAt(offset, keyword) },
+                                        onSetTodo = { offset, keyword -> vm.stateNotes.setTodoAt(offset, keyword) },
                                         onEditTable = { vm.beginTableEdit(it) },
                                         backlinks = vm.links.backlinks,
                                         onOpenBacklink = { vm.links.openBacklink(it) },
@@ -1021,9 +1021,9 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                                 vm.onFileSelected(file, scrollToOffset = offset)
                                                 selectedScreen = BottomItem.FILE
                                             },
-                                            keywords = { file -> vm.todoKeywordsOf(file) },
-                                            setTodo = { file, offset, keyword -> vm.setTodo(file, offset, keyword) },
-                                            reschedule = { entry, date, time, end -> vm.reschedule(entry, date, time, end) },
+                                            keywords = { file -> vm.stateNotes.keywordsOf(file) },
+                                            setTodo = { file, offset, keyword -> vm.stateNotes.setTodo(file, offset, keyword) },
+                                            reschedule = { entry, date, time, end -> vm.changes.reschedule(entry, date, time, end) },
                                         )
                                     },
                                 )

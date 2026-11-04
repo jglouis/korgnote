@@ -60,7 +60,7 @@ class RescheduleFromCalendarTest {
         viewModel.server.load()
         viewModel.onFileSelected(open)
 
-        viewModel.reschedule(entry("Report", AgendaKind.Scheduled), LocalDate(2026, 11, 5), LocalTime(14, 0), LocalTime(15, 0))
+        viewModel.changes.reschedule(entry("Report", AgendaKind.Scheduled), LocalDate(2026, 11, 5), LocalTime(14, 0), LocalTime(15, 0))
         advanceUntilIdle()
 
         assertEquals(
@@ -76,9 +76,9 @@ class RescheduleFromCalendarTest {
         viewModel.server.load()
         viewModel.onFileSelected(work)
 
-        viewModel.reschedule(entry("Report", AgendaKind.Deadline), LocalDate(2026, 11, 13), null, null)
+        viewModel.changes.reschedule(entry("Report", AgendaKind.Deadline), LocalDate(2026, 11, 13), null, null)
         advanceUntilIdle()
-        viewModel.reschedule(entry("Trip", AgendaKind.Timestamp), LocalDate(2026, 11, 27), null, null)
+        viewModel.changes.reschedule(entry("Trip", AgendaKind.Timestamp), LocalDate(2026, 11, 27), null, null)
         advanceUntilIdle()
 
         assertEquals(
@@ -94,12 +94,12 @@ class RescheduleFromCalendarTest {
         viewModel.server.load()
         viewModel.onFileSelected(open)
         val stale = entry("Report", AgendaKind.Deadline)
-        viewModel.reschedule(stale, LocalDate(2026, 11, 13), null, null)
+        viewModel.changes.reschedule(stale, LocalDate(2026, 11, 13), null, null)
         advanceUntilIdle()
         val after = repository.files[work]
 
         // The same entry, as the calendar showed it before the first move.
-        viewModel.reschedule(stale, LocalDate(2026, 12, 1), null, null)
+        viewModel.changes.reschedule(stale, LocalDate(2026, 12, 1), null, null)
         advanceUntilIdle()
 
         assertEquals(after, repository.files[work])

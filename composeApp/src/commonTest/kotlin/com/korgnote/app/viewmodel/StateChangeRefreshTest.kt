@@ -53,7 +53,7 @@ class StateChangeRefreshTest {
         advanceUntilIdle()
         assertEquals("TODO", viewModel.agenda.index.on(day).single().entry.todo)
 
-        viewModel.setTodoAt(text.indexOf("* TODO"), "DONE")
+        viewModel.stateNotes.setTodoAt(text.indexOf("* TODO"), "DONE")
 
         assertTrue(viewModel.note.content.contains("* DONE Call the plumber"), "the note at once")
         assertEquals("TODO", viewModel.agenda.index.on(day).single().entry.todo, "the agenda a moment later")

@@ -20,8 +20,6 @@ class ClockActions(
     private val changes: NoteChanges,
     /** The wall-clock time clocks are stamped with. */
     private val now: () -> LocalDateTime,
-    /** True, with a word to say so, when an element of the open note is being edited. */
-    private val refuseWhileEditing: () -> Boolean,
 ) {
     /** The time now, as clocks are stamped with it: for elapsed times and the totals beside headings. */
     fun currentTime(): LocalDateTime = now()
@@ -39,7 +37,7 @@ class ClockActions(
      * calendar, say.
      */
     fun clockIn(path: String, headingOffset: Int) {
-        if (path == note.path && refuseWhileEditing()) return
+        if (path == note.path && changes.refuseWhileEditing()) return
         val at = now()
         scope.launch {
             for (other in clocks.running.filter { it.path != path }) changes.changeNote(other.path) { it.withClock(other) { doc, h -> doc.clockOut(h, at) } }
@@ -72,7 +70,7 @@ class ClockActions(
 
     /** Stops [clock], wherever it runs: now, or at [at] for one left running. */
     fun clockOut(clock: ClockRunning, at: LocalDateTime? = null) {
-        if (clock.path == note.path && refuseWhileEditing()) return
+        if (clock.path == note.path && changes.refuseWhileEditing()) return
         val end = at ?: now()
         scope.launch { changes.changeNote(clock.path) { it.withClock(clock) { doc, h -> doc.clockOut(h, end) } } }
     }
@@ -83,13 +81,13 @@ class ClockActions(
 
     /** Removes [clock], wherever it runs. */
     fun cancelClock(clock: ClockRunning) {
-        if (clock.path == note.path && refuseWhileEditing()) return
+        if (clock.path == note.path && changes.refuseWhileEditing()) return
         scope.launch { changes.changeNote(clock.path) { it.withClock(clock) { doc, h -> doc.cancelClock(h) } } }
     }
 
     private fun changeHeading(offsetInDocument: Int, change: (OrgDocument, OrgSection) -> OrgDocument) {
         val path = note.path ?: return
-        if (refuseWhileEditing()) return
+        if (changes.refuseWhileEditing()) return
         scope.launch {
             changes.changeNote(path) { doc -> doc.nodeAt<OrgSection>(offsetInDocument)?.let { change(doc, it) } ?: doc }
         }

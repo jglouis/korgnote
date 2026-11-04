@@ -53,7 +53,7 @@ class KeywordFromCalendarTest {
         viewModel.onFileSelected(open)
         val text = repository.files[work]!!
 
-        viewModel.setTodo(work, text.indexOf("** TODO Figures"), "DONE")
+        viewModel.stateNotes.setTodo(work, text.indexOf("** TODO Figures"), "DONE")
         advanceUntilIdle()
 
         assertEquals(
@@ -63,7 +63,7 @@ class KeywordFromCalendarTest {
         )
         // The open note stays the one that was open.
         assertEquals(open, viewModel.note.path)
-        assertEquals(setOf("TODO", "WAIT"), viewModel.todoKeywordsOf(work).todo)
+        assertEquals(setOf("TODO", "WAIT"), viewModel.stateNotes.keywordsOf(work).todo)
     }
 
     @Test
@@ -71,10 +71,10 @@ class KeywordFromCalendarTest {
         viewModel.server.load()
         viewModel.onFileSelected(open)
 
-        viewModel.setTodo(work, repository.files[work]!!.indexOf("* TODO Report"), "WAIT")
+        viewModel.stateNotes.setTodo(work, repository.files[work]!!.indexOf("* TODO Report"), "WAIT")
         advanceUntilIdle()
 
         assertEquals(work, viewModel.note.path)
-        assertEquals("WAIT", viewModel.pendingStateNote?.keyword)
+        assertEquals("WAIT", viewModel.stateNotes.pending?.keyword)
     }
 }

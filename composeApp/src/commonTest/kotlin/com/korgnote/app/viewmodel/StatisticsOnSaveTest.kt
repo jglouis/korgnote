@@ -73,7 +73,7 @@ class StatisticsOnSaveTest {
     fun aKeywordChangedFromTheMenuUpdatesTheCookieOverItAndNoOther() = runTest {
         val viewModel = openedNote()
 
-        viewModel.setTodoAt(text.indexOf("** TODO Dig"), "DONE")
+        viewModel.stateNotes.setTodoAt(text.indexOf("** TODO Dig"), "DONE")
 
         val headings = viewModel.note.content.lines().filter { it.startsWith("* ") }
         assertEquals(listOf("* Garden [1/1]", "* Kitchen [5/9]"), headings)

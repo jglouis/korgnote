@@ -63,7 +63,7 @@ class AppStateNoteTest {
         setContent { App() }
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Call the plumber", substring = true).fetchSemanticsNodes().isNotEmpty() }
 
-        viewModel.setTodoAt(viewModel.note.content.indexOf("* TODO"), "WAIT")
+        viewModel.stateNotes.setTodoAt(viewModel.note.content.indexOf("* TODO"), "WAIT")
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Note for WAIT").fetchSemanticsNodes().isNotEmpty() }
         // Above the note, the editor's buttons rather than an empty bar: a link, a date, a checkbox.
         for (button in listOf("Link", "Date", "Checkbox")) {

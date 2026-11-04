@@ -6,8 +6,12 @@ import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgPriority
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTodoConfig
+import com.korgnote.common.org.agenda.AgendaEntry
+import com.korgnote.common.org.agenda.parseOrgTimestamp
+import com.korgnote.common.org.complete.restampRange
 import com.korgnote.common.org.edit.changeTodoState
 import com.korgnote.common.org.edit.nodeAt
+import com.korgnote.common.org.edit.replace
 import com.korgnote.common.org.edit.setPriority
 import com.korgnote.common.org.edit.tickAsOrgDoes
 import com.korgnote.common.org.edit.updateClockDurations
@@ -20,8 +24,10 @@ import com.korgnote.common.sync.conflictCopyName
 import com.korgnote.common.sync.merge
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.vm_edit_conflict
+import korgnote.composeapp.generated.resources.vm_finish_editing_first
 import korgnote.composeapp.generated.resources.vm_kept_beside
 import korgnote.composeapp.generated.resources.vm_note_brought_back
+import korgnote.composeapp.generated.resources.vm_reschedule_moved
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,7 +36,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
 import org.jetbrains.compose.resources.getString
 
 /**
@@ -164,6 +172,41 @@ class NoteChanges(
      */
     fun setPriorityAt(offsetInDocument: Int, priority: OrgPriority?) = changeOpenNote { document ->
         document.nodeAt<OrgSection>(offsetInDocument)?.let { document.setPriority(it, priority) }
+    }
+
+    /**
+     * Moves the date of the calendar's [entry] — its `SCHEDULED:`, its `DEADLINE:`, or the stamp in
+     * its body — to [date] at [time], or with no time when that is null, as Org's `C-c C-s` and
+     * `C-c C-d` do from the agenda: in its note, open or not, saved and pushed. What the picker does
+     * not ask about stays: the brackets, a repeater, a warning, the length of a range over days.
+     *
+     * The stamp is replaced where the agenda found it, once it is checked to be still there and
+     * still the same: the note may have changed since, here, on another device or in Emacs.
+     */
+    fun reschedule(entry: AgendaEntry, date: LocalDate, time: LocalTime?, endTime: LocalTime?) {
+        val path = entry.file
+        if (path == note.path && refuseWhileEditing()) return
+        val range = entry.stamp.range
+        scope.launch {
+            var moved = false
+            changeNote(path) { doc ->
+                val written = doc.text.takeIf { !range.isEmpty() && range.last < it.length }?.substring(range)
+                val stamp = written?.let(::parseOrgTimestamp)
+                if (stamp == null || stamp.copy(range = IntRange.EMPTY) != entry.stamp.copy(range = IntRange.EMPTY)) {
+                    moved = true
+                    return@changeNote doc
+                }
+                doc.replace(range, restampRange(written, date, time, endTime))
+            }
+            if (moved) showMessage(getString(Res.string.vm_reschedule_moved))
+        }
+    }
+
+    /** An element of the open note being edited would have the note change under it: says so, and true. */
+    fun refuseWhileEditing(): Boolean {
+        if (editor.editingIndex == null) return false
+        scope.launch { showMessage(getString(Res.string.vm_finish_editing_first)) }
+        return true
     }
 
     /**

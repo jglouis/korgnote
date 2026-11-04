@@ -353,7 +353,7 @@ class ElementEditingTest {
     fun pickingAKeywordSetsItAndSavesIt() = runTest {
         openFile()
 
-        viewModel.setTodoAt(initialText.indexOf("* TODO Second"), "DONE")
+        viewModel.stateNotes.setTodoAt(initialText.indexOf("* TODO Second"), "DONE")
         testScheduler.advanceUntilIdle()
 
         // No `!` or `@` on the keywords here, Org's TODO and DONE: nothing is logged, as in Org.
@@ -369,7 +369,7 @@ class ElementEditingTest {
         viewModel.server.load()
         viewModel.onFileSelected("habits.org")
 
-        viewModel.setTodoAt(habits.indexOf("* NEXT"), "DONE")
+        viewModel.stateNotes.setTodoAt(habits.indexOf("* NEXT"), "DONE")
         testScheduler.advanceUntilIdle()
 
         assertEquals(
@@ -385,7 +385,7 @@ class ElementEditingTest {
     fun pickingTheCurrentKeywordChangesNothing() = runTest {
         openFile()
 
-        viewModel.setTodoAt(initialText.indexOf("* TODO First"), "TODO")
+        viewModel.stateNotes.setTodoAt(initialText.indexOf("* TODO First"), "TODO")
         testScheduler.advanceUntilIdle()
 
         assertEquals(initialText, viewModel.note.content)

@@ -87,7 +87,7 @@ class StaleTextTest {
         val emacs = workText.replace("other body", "other body, from Emacs")
         syncedFromEmacs(work, emacs)
 
-        viewModel.setTodo(work, 0, "DONE")
+        viewModel.stateNotes.setTodo(work, 0, "DONE")
         advanceUntilIdle()
 
         assertEquals(emacs.replace("* TODO Report", "* DONE Report"), api.files[work])
@@ -101,7 +101,7 @@ class StaleTextTest {
         val emacs = "* TODO From Emacs\n\n$workText"
         syncedFromEmacs(work, emacs)
 
-        viewModel.setTodo(work, workText.indexOf("* TODO Other"), "DONE")
+        viewModel.stateNotes.setTodo(work, workText.indexOf("* TODO Other"), "DONE")
         advanceUntilIdle()
 
         assertEquals(emacs.replace("* TODO Other", "* DONE Other"), api.files[work])
@@ -114,7 +114,7 @@ class StaleTextTest {
         val captured = "$workText* Filed\n"
         store.save(work, captured)
 
-        viewModel.setTodo(work, 0, "DONE")
+        viewModel.stateNotes.setTodo(work, 0, "DONE")
         advanceUntilIdle()
 
         assertEquals(captured.replace("* TODO Report", "* DONE Report"), store.read(work))
@@ -126,7 +126,7 @@ class StaleTextTest {
         val emacs = workText.replace("* TODO Report", "* WAITING Report")
         syncedFromEmacs(work, emacs)
 
-        viewModel.setTodo(work, 0, "DONE")
+        viewModel.stateNotes.setTodo(work, 0, "DONE")
         advanceUntilSaid()
 
         assertEquals(emacs, api.files[work])
