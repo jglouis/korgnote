@@ -140,21 +140,22 @@ fun Route.syncApiV1(
                 }
 
                 // A hint stream: clients reconcile with the manifest, so a missed event is a delay,
-                // never a lost edit.
+                // never a lost edit. It closes at one missed, for the client to do that.
                 send(": connected\n\n")
                 coroutineScope {
                     // A comment line, which SSE clients skip; ending with the stream, as the client
                     // leaving fails the next write.
-                    launch {
+                    val heartbeat = launch {
                         while (true) {
                             delay(heartbeatEvery)
                             send(": ping\n\n")
                         }
                     }
-                    journal.events.collect { entry ->
+                    journal.eventsUntilOneIsMissed().collect { entry ->
                         val name = if (entry.deleted) "deleted" else "changed"
                         send("event: $name\ndata: ${json.encodeToString(entry)}\n\n")
                     }
+                    heartbeat.cancel()
                 }
             }
         }

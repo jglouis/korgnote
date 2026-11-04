@@ -16,6 +16,7 @@ import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import io.ktor.utils.io.readLine
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -393,6 +394,25 @@ class SyncApiV1Test {
 
         assertEquals(": connected", lines.first())
         assertEquals(2, lines.count { it == ": ping" }, lines.toString())
+    }
+
+    /** The stream closes on a reader that lost events, heartbeat and all, for its app to catch up. */
+    @Test
+    fun aChangeStreamThatLostEventsCloses() = testApplication {
+        val dir = notesDir("a.org" to "* A\n")
+        val journal = ChangeJournal()
+        application {
+            routing { route("/api") { syncApiV1(FileStore(dir.toPath()), journal) } }
+        }
+
+        client.prepareGet("/api/v1/events").execute { response ->
+            val body = response.bodyAsChannel()
+            assertEquals(": connected", body.readLine())
+            delay(200)
+            // Long frames, so that they fill what lies between the server and this reader.
+            repeat(5_000) { journal.record("${"n".repeat(200)}$it.org", "e$it") }
+            withTimeout(30.seconds) { while (body.readLine() != null) Unit }
+        }
     }
 
     private fun manifestOf(body: String) = Json.parseToJsonElement(body).jsonObject

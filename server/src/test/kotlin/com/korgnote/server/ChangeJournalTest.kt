@@ -3,11 +3,14 @@ package com.korgnote.server
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -120,6 +123,46 @@ class ChangeJournalTest {
         } finally {
             stalled.cancel()
         }
+    }
+
+    /**
+     * Past what is buffered, a slow reader loses events, and an app pulls only the notes it hears of.
+     * So the stream ends at the first one lost: an app that loses its stream runs a full cycle.
+     */
+    @Test
+    fun aReaderThatFallsBehindSeesItsEventsEndAtTheFirstOneLost() = runBlocking {
+        val journal = ChangeJournal(start = 0)
+        val seen = mutableListOf<Long>()
+        val reader = launch(Dispatchers.Default) {
+            journal.eventsUntilOneIsMissed().collect {
+                delay(1)
+                seen += it.generation
+            }
+        }
+        delay(200)
+        repeat(1_000) { journal.record("f$it.org", "e$it") }
+
+        assertNotNull(withTimeoutOrNull(10.seconds) { reader.join() }, "the events never ended")
+        assertTrue(seen.size < 1_000, "nothing was lost, so this tells nothing")
+        assertEquals(seen.indices.map { it + 1L }, seen)
+    }
+
+    /** Devices and the watcher record at once. None of that may read as an event lost. */
+    @Test
+    fun aReaderThatKeepsUpWithManyWritersSeesEveryEvent() = runBlocking {
+        val journal = ChangeJournal(start = 0)
+        val seen = AtomicInteger()
+        val reader = launch(Dispatchers.Default) { journal.eventsUntilOneIsMissed().collect { seen.incrementAndGet() } }
+        delay(200)
+        withContext(Dispatchers.Default) {
+            repeat(8) { writer ->
+                launch { repeat(25) { journal.record("w$writer-$it.org", "e") } }
+            }
+        }
+
+        assertNotNull(withTimeoutOrNull(5.seconds) { while (seen.get() < 200) delay(5) }, "saw ${seen.get()} of 200")
+        assertTrue(reader.isActive, "the events ended with none lost")
+        reader.cancel()
     }
 
     /** Only where a note ended up matters: deleted and made again, it is there. */

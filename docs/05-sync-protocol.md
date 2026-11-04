@@ -173,7 +173,8 @@ Fed by the file watcher, so changes made in Emacs or delivered by Syncthing reac
 clients within seconds. SSE over WebSocket because it is one-directional, survives proxies,
 reconnects natively, and needs no extra dependency. Clients treat it as a *hint*: correctness always
 comes from the manifest diff. For the same reason a client that stops reading loses the oldest events
-rather than holding up the writer, and catches up from the manifest.
+rather than holding up the writer, and the server closes its stream at the first one lost: a client
+pulls only the notes it hears of, and a stream it lost is what makes it run a full cycle.
 
 A quiet stream sends a `: ping` comment every 30 s. A connection can die without either end
 hearing of it (a phone asleep, or moved to another network), and then looks exactly like one with

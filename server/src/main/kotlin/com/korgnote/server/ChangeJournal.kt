@@ -1,9 +1,13 @@
 package com.korgnote.server
 
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.serialization.Serializable
 import java.util.concurrent.atomic.AtomicLong
 
@@ -42,25 +46,39 @@ class ChangeJournal(
     private val entries = ArrayDeque<ChangeEntry>()
     private val lock = Any()
 
-    // Dropping the oldest, because a client that stopped reading must not hold up the writer: events
-    // are hints, and whoever misses one catches up from the manifest.
+    // Dropping the oldest, because a client that stopped reading must not hold up the writer: see
+    // [eventsUntilOneIsMissed] for how it hears. Emitted under the lock, so in order of generation.
     private val _events = MutableSharedFlow<ChangeEntry>(extraBufferCapacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    /** Changes as they happen, for the SSE stream. */
+    /** Changes as they happen. A slow collector loses the oldest without a word. */
     val events: SharedFlow<ChangeEntry> = _events.asSharedFlow()
 
     val generation: Long get() = counter.get()
 
+    /**
+     * [events], ending at the first one this collector lost, for the SSE stream. An app pulls just the
+     * notes it hears of, so one that missed an event would show that note stale for as long as it
+     * stays open. Its stream ending is what makes it run a full cycle.
+     */
+    fun eventsUntilOneIsMissed(): Flow<ChangeEntry> = flow {
+        var last = generation
+        emitAll(
+            events.takeWhile { entry ->
+                val next = entry.generation == last + 1
+                last = entry.generation
+                next
+            },
+        )
+    }
+
     /** Records a change and returns its generation. */
-    suspend fun record(path: String, etag: String?, deleted: Boolean = false): ChangeEntry {
-        val entry = synchronized(lock) {
-            val next = ChangeEntry(counter.incrementAndGet(), path, etag, deleted)
-            entries.addLast(next)
-            while (entries.size > capacity) entries.removeFirst()
-            next
-        }
-        _events.emit(entry)
-        return entry
+    fun record(path: String, etag: String?, deleted: Boolean = false): ChangeEntry = synchronized(lock) {
+        val next = ChangeEntry(counter.incrementAndGet(), path, etag, deleted)
+        entries.addLast(next)
+        while (entries.size > capacity) entries.removeFirst()
+        // Never refused: the oldest is dropped when the buffer is full.
+        _events.tryEmit(next)
+        next
     }
 
     /**
