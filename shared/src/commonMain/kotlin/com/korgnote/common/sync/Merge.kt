@@ -93,13 +93,31 @@ fun merge(base: String, local: String, remote: String): MergeResult {
  */
 internal fun alignment(from: List<String>, to: List<String>): Array<Int?> {
     val result = arrayOfNulls<Int>(from.size)
-    if (from.isEmpty() || to.isEmpty()) return result
 
-    // Classic LCS table. Notes are thousands of lines at most, so the quadratic table is fine.
-    val lengths = Array(from.size + 1) { IntArray(to.size + 1) }
-    for (i in from.indices.reversed()) {
-        for (j in to.indices.reversed()) {
-            lengths[i][j] = if (from[i] == to[j]) {
+    // The lines both share at either end belong to some longest common subsequence, so they are
+    // matched here and the table covers only what lies between. An edit touches few lines, and the
+    // table is what costs: for 5,000 lines against 5,000 it would be 100 MB, on a phone.
+    var start = 0
+    while (start < from.size && start < to.size && from[start] == to[start]) {
+        result[start] = start
+        start++
+    }
+    var fromEnd = from.size
+    var toEnd = to.size
+    while (fromEnd > start && toEnd > start && from[fromEnd - 1] == to[toEnd - 1]) {
+        fromEnd--
+        toEnd--
+        result[fromEnd] = toEnd
+    }
+
+    // Classic LCS table, of the middle alone. lengths[i][j] is for the lines from start + i and start + j.
+    val rows = fromEnd - start
+    val columns = toEnd - start
+    if (rows == 0 || columns == 0) return result
+    val lengths = Array(rows + 1) { IntArray(columns + 1) }
+    for (i in rows - 1 downTo 0) {
+        for (j in columns - 1 downTo 0) {
+            lengths[i][j] = if (from[start + i] == to[start + j]) {
                 lengths[i + 1][j + 1] + 1
             } else {
                 maxOf(lengths[i + 1][j], lengths[i][j + 1])
@@ -109,9 +127,9 @@ internal fun alignment(from: List<String>, to: List<String>): Array<Int?> {
 
     var i = 0
     var j = 0
-    while (i < from.size && j < to.size) {
+    while (i < rows && j < columns) {
         when {
-            from[i] == to[j] -> { result[i] = j; i++; j++ }
+            from[start + i] == to[start + j] -> { result[start + i] = start + j; i++; j++ }
             lengths[i + 1][j] >= lengths[i][j + 1] -> i++
             else -> j++
         }

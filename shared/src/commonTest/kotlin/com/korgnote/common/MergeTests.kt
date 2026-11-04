@@ -1,8 +1,10 @@
 package com.korgnote.common
 
 import com.korgnote.common.sync.MergeResult
+import com.korgnote.common.sync.alignment
 import com.korgnote.common.sync.conflictCopyName
 import com.korgnote.common.sync.merge
+import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -15,6 +17,50 @@ import kotlin.test.assertTrue
  * the same file. Those are different lines, so they should merge with nobody being asked anything.
  */
 class MergeTests {
+
+    /** A table over the whole file would be 1.6 GB here, and a test heap gives out long before that. */
+    @Test
+    fun aBigNoteWithAFewEditsMergesWithoutATableOfTheWholeFile() {
+        val lines = List(20_000) { "line $it" }
+        val base = lines.joinToString("\n")
+        val local = lines.toMutableList().apply { this[9_990] = "edited here" }.joinToString("\n")
+        val remote = lines.toMutableList().apply { this[10_010] = "edited elsewhere" }.joinToString("\n")
+
+        val expected = lines.toMutableList().apply {
+            this[9_990] = "edited here"
+            this[10_010] = "edited elsewhere"
+        }.joinToString("\n")
+        assertEquals(expected, merged(base, local, remote))
+    }
+
+    /**
+     * However the two ends are trimmed, what is matched must be a common subsequence as long as any:
+     * a shorter one would show unchanged lines as changed, and turn clean merges into conflicts.
+     */
+    @Test
+    fun anAlignmentIsALongestCommonSubsequence() {
+        val random = Random(20261104)
+        repeat(2_000) {
+            val from = List(random.nextInt(12)) { "abc"[random.nextInt(3)].toString() }
+            val to = List(random.nextInt(12)) { "abc"[random.nextInt(3)].toString() }
+
+            val matches = alignment(from, to).withIndex().filter { it.value != null }.map { it.index to it.value!! }
+
+            matches.forEach { (i, j) -> assertEquals(from[i], to[j], "$from against $to") }
+            matches.zipWithNext { a, b -> assertTrue(a.second < b.second, "out of order: $from against $to") }
+            assertEquals(longestCommonSubsequence(from, to), matches.size, "$from against $to")
+        }
+    }
+
+    private fun longestCommonSubsequence(a: List<String>, b: List<String>): Int {
+        val lengths = Array(a.size + 1) { IntArray(b.size + 1) }
+        for (i in a.indices.reversed()) {
+            for (j in b.indices.reversed()) {
+                lengths[i][j] = if (a[i] == b[j]) lengths[i + 1][j + 1] + 1 else maxOf(lengths[i + 1][j], lengths[i][j + 1])
+            }
+        }
+        return lengths[0][0]
+    }
 
     private fun merged(base: String, local: String, remote: String): String {
         val result = merge(base, local, remote)
