@@ -1,1027 +1,428 @@
 # 08 — Roadmap
 
-Tasks are sized for one working session each and ordered so that the app keeps working
-after every one. Dependencies are explicit; anything without a shared dependency can be
-done in any order.
+What is still open, and why the code is the way it is. The subsystem documents (04–07, 09–11) say
+what exists; this one records what was decided on the way, what it cost and what it measured, under
+the task numbers (T1, T2, …) that code comments and tests still cite. The plan those numbers came
+from, with its scopes and acceptance criteria, is in git.
 
-**If you only do three things:** ~~T1~~, ~~T3~~ (the model is lossless) and ~~T8–T10~~
-(local-first sync) — all done. Those three were the architecture; everything still open is
-improvement on top of it.
+Two things nobody planned changed the most. **Per-element editing** ([09](09-element-editing.md))
+came from how the app is used, since most edits add one TODO, and dissolved the performance problem
+instead of solving it, retiring the block-virtualisation branch of T12b and its UX tail. And two of
+the plan's prerequisites turned out wrong: `TextFieldState` cannot carry styling, and editor styling
+cannot change text metrics ([06](06-editor.md#editor-surface)).
 
-Phase 1 (the Org core, T3–T7) is complete: the model is source-mapped and lossless, headings nest,
-the grammar covers the constructs these notes actually use, Org syntax is defined in one place, and
-edits are range replacements. Phase 2 (T8–T11) is complete too: the app holds the whole corpus
-locally, syncs through the v1 API, and merges divergent edits instead of losing them. **Phase 3 is
-complete** as well — the editor work is done bar what was deliberately deferred, and search and
-completion have landed. **Phase 4** (agenda) is complete bar one check: the parser, engine and views
-(T15–T17) are in, and notifications (T18) work on Android but have not been seen on an iPhone. T19
-(CI), which had to come first, is done: every push now runs the suite.
+## Open, and known gaps
 
-**Phase 5 (T19–T29) came from using the thing.** Nothing in it was foreseen when the plan was
-written: it is what a day of real use and three regressions exposed, and then (T25–T29) what
-further use asked for. All of it is done, T23 (the server container) included. T22 settled the
-editor question: there is one editing surface now.
+This is the only status list; the rules for keeping it are in the [docs README](README.md).
 
-**After T29 the work stopped following the plan.** Pairing, notes kept in a folder or on WebDAV,
-home-screen widgets, a table editor, French, a dark theme, a release pipeline and a run of sync
-fixes shipped without a task written first. **Phase 6** (T30–T40) records them after the fact, so
-the status table stays the one place to look. What is still open is listed under
-[Open, and known gaps](#open-and-known-gaps).
+**Not built, or not seen working**
 
-## Status
+- **Sync triggers.** Not built: iOS's `BGAppRefreshTask` (after T18 is seen on an iPhone) and a
+  debounce on saves. A periodic poll while open is not wanted: the change stream's watchdog covers it.
+- **T10b leftovers.** Debounced autosave, a web replica that survives a reload, SSE confirmed on the
+  JS engine; and the web client works only on the server's machine.
+- **T18 on an iPhone.** Reminders are built and have never been seen on a device.
+- **Capture on an iPhone.** Seen on a simulator only; the rest of the iOS app is little tested on a
+  real one.
 
-Updated 2026-10-30, as of 1.4.1.
+**Behaviour that falls short**
 
-| | Task | State |
-|---|---|---|
-| ✅ | T12a Editor performance diagnostic | Done — Cost A, recorded in [06](06-editor.md#performance-where-the-time-actually-goes); the `notes/editor-perf.md` it names was never committed |
-| ✅ | T12b Editor surface | Done — the two deferred items went with the whole-file editor (T22) |
-| 🟡 | T0 / T0b Text-editing spikes | Answered in practice, findings in [06](06-editor.md#editor-surface); the two spike notes were never written |
-| ✅ | T1 Server reads the disk | Done — `FileStore`, plus conflict refusal and path validation |
-| ✅ | T3 Source-mapped documents | Done — `range` on every node, `text` on the document, raw-text wire |
-| ✅ | T4 Nested headings | Done — sections own their body and sub-headings; subtree = one range |
-| ✅ | T5 Complete the grammar | Done — blocks, drawers, lists, priorities; `OrgSyntax` now shared |
-| ✅ | T6 One grammar | Done — `orgSpans()` in shared. A few Org patterns have since crept back into `composeApp/`; see the task |
-| ✅ | T7 Structural edit API | Done — `org.edit`; ordinals replaced by node identity |
-| ✅ | T2 Transport hygiene | Done, then superseded by pairing (T30): gzip stays; the shared token and the LAN switch are gone |
-| ✅ | T8 Replica store | Done — local replica; the app opens and edits with the server unreachable |
-| ✅ | T9 Sync API v1 | Done — manifest, conditional files, bundle, SSE fed by a file watcher |
-| ✅ | T10 Sync engine and cutover | Done — old API deleted; the client syncs through v1 |
-| ✅ | T11 Conflicts | Done — diff3 merge; divergent edits keep both versions, never markers |
-| ✅ | T13 Completion | Done — pure engine, every trigger row tested; a suggestion strip, not a popup |
-| ✅ | T14 Search | Done — linear scan over the replica, words and `tag:`, results open at the match |
-| 🟡 | T10b Web client | Bundle in; autosave, a replica that survives a reload, and SSE on JS left. Works on the server's own machine only |
-| ✅ | T15 Timestamp parser | Done — every syntax row, ranges, repeaters, delays; malformed stamps are skipped |
-| ✅ | T16 Agenda engine | Done — `AgendaIndex` replaces `scheduledByDate`; the calendar renders from it |
-| ✅ | T17 Day and week views | Done — agenda list, day, week and month, all from `AgendaIndex` |
-| 🟡 | T18 Notifications | Done on Android (checked on an emulator: app closed, network off, on the minute); iOS built, not yet seen on a device. Permission is asked by the welcome screens and Settings |
-| ✅ | T19 CI | Done — [ci.yml](../.github/workflows/ci.yml): Linux and 30 random sync sessions on every push; iOS and a 10,000-session sweep nightly when master moved |
-| ✅ | T20 File lifecycle | Done — create into an inbox folder, rename/move, delete; offline-safe through tombstones |
-| ✅ | T21 Link navigation | Done — `id:`, `file:`, `*Heading`, `#id` and fuzzy links open their target; backlinks; Back, and the system's back since |
-| ✅ | T22 Whole-file editing | Done — retired; the long-press menu moves, promotes and demotes instead |
-| ✅ | T23 Server container | Done — distroless image, published to GHCR with each release; refuses a missing or unwritable `/notes`; TLS built in since T30 |
-| ✅ | T24 Reading-mode affordances | Done — tap to edit, long-press menu, one fold chevron per heading; [09](09-element-editing.md#the-surface) |
-| ✅ | T25 Pinned notes | Done — pin from a note's long-press menu; pins sit above the file tree and the first opens at launch |
-| ✅ | T26 Linked files | Done — `[[file:~/Sync/x.pdf]]` opens in the device's app for it; Settings maps `~/Sync` to where it is on a phone |
-| ✅ | T27 Highlighting src blocks | Done — hand-written lexers for shell, Lisp, C-like, config and XML; light and dark colours |
-| ✅ | T28 Links without syntax | Done — a pasted address becomes a link; a form edits a link's label and target, a file chosen through File links in reverse |
-| ✅ | T29 Saved searches | Done — the search field's bookmark names and keeps a query; the Search tab's drawer runs it again |
-| ✅ | T30 Pairing by QR code, and TLS | Done — per-device tokens, a pinned self-signed certificate on 8443; plain 8080 for this computer only |
-| ✅ | T31 Notes as a folder on the phone | Done — any folder another app syncs, or none; chosen on the welcome screens |
-| ✅ | T32 WebDAV source (experimental) | Done — the same sync engine against Nextcloud or Apache; servers that break conditional writes are refused |
-| ✅ | T33 Android home-screen widgets | Done — agenda and month, sync button, picker previews; [07](07-calendar-agenda.md#home-screen-widgets-android) |
-| ✅ | T34 Grid table editor and formulas | Done — a table opens as a grid; `#+TBLFM:` computed and aligned as Emacs does |
-| ✅ | T35 Translation | Done — French beside English; completion labels are still English only |
-| ✅ | T36 Dark theme | Done — follows the system; the Org palette and src blocks have dark values |
-| ✅ | T37 Release pipeline | Done — signed APK, GitHub release and server image in one script; Obtainium for updates; GPL |
-| ✅ | T38 Randomized two-device sync tests | Done — 30 seeded sessions per push, 10,000 nightly |
-| ✅ | T39 Secrets sealed, notes out of backups | Done — Keystore and Keychain; notes, widget state and reminder plan left out of backups |
-| ✅ | T40 Sync robustness | Done — first sync in one bundle, one cycle at a time, conflict copies instead of blind merges, restarts survived |
-| ✅ | T41 Clocking | Done — clock in/out from a heading's menu, the calendar or the bar's recent tasks, totals against `:Effort:`, clocked time in the day and week, the agenda's clock report, Android's ongoing notification; seen on a phone; [11](11-clocking.md) |
+- **A note in a dot-file.** `.plan.org` is in no dot-folder, so the server lists and serves it and it
+  reaches a phone, while the folder and WebDAV sources leave dot-files out (`isListedNotePath`). The
+  same file is a note through one source and not through another.
+- **`todoKeywordsOf` still reads `#+TODO:` inside blocks**, where `todoLoggingOf` and `orgNoteTitle`
+  know a block's text is not the note's.
+- **`* Foo [x] bar` completes to a dead link.** A `[[*…]]` link keeps the title's brackets
+  (`headingLinkTarget`), and a link cannot hold them.
+- **A list whose first line is a bare `- ` parses as a paragraph.** The parser's main loop trims the
+  line before it tries the list pattern, which wants a space after the bullet.
+- **The morning digest** leaves out overdue items and deadline warnings
+  ([07](07-calendar-agenda.md#notifications)).
+- **Two kinds of range show on their first day only**: a done entry with a repeater and a
+  `DEADLINE: <a>--<b>` ([07](07-calendar-agenda.md#agenda-engine)).
+- **Completion labels** are English only ([06](06-editor.md#known-gap-suggestions-are-in-english)).
+- **`L == R` is pushed again.** Two devices that converged write the same text once more, which bumps
+  the generation ([05](05-sync-protocol.md#sync-algorithm)).
+- **No `fsync` before a rename**, on the server or in the replica: a power cut can lose a save the
+  filesystem had not flushed.
+- **`ClockOutWorker` reads, then saves** with `save`, not `saveIfUnchanged`, so a pull landing between
+  the two is written over.
+- **The plain port** has no authentication: any process on the computer can use it. Another
+  container on the Docker network cannot: it is refused by its address.
 
-**Delivered but never planned: per-element editing** ([09](09-element-editing.md)). It came from
-how the app is actually used — most edits add one TODO — and dissolved the performance problem
-instead of solving it, retiring the block-virtualisation branch of T12b along with its UX tail. It
-also establishes the range-based text-edit principle that T7 was meant to introduce.
+**Costs and code**
 
-Two prerequisites turned out to be wrong and have been corrected in [06](06-editor.md):
-`TextFieldState` cannot carry styling, and editor styling cannot change text metrics.
+- **Two different 5,000-line files still build the full LCS table.** `alignment` matches what they
+  share at either end, which covers an edit, and not two files with little in common: about 100 MB.
+- **`search.refresh` and `completion.refreshContext` still scan on the main thread** during
+  `rebuildDerived`; the links and the agenda went to the background.
+- **`ElementRow` still has 20 parameters.**
+- **`syncLocked` and `toOrgDocument` are long** (about 170 and 490 lines). Splitting them was declined
+  for now: each reads as one table or one loop, and the tests hold them.
+- **Tests.** I2 is not checked below the top level, no test runs over a real notes directory, and
+  nothing tests CRLF or a 1 MB file ([04](04-org-core.md#testing)).
+
+## The defects the plan began from
+
+The first snapshot of the app, at `2cc66f7` (2026-09-20), listed these. They are cited as D1–D12 in
+code comments and tests, so the numbers stay; every one is fixed. *Where* gives the place at that
+commit.
+
+| # | Issue | Where | What became of it |
+|---|-------|-------|-------------------|
+| D1 | Server caches files at startup and never re-reads disk | `Application.kt:81,112` | `FileStore` reads on demand and refuses a write whose baseline is stale |
+| D2 | Whole corpus is parsed and shipped as JSON on every cold start | `Application.kt:169` | T9/T10: the endpoint is deleted, and the client syncs text through the manifest, fetching only stale files, in one bundle when eight or more are stale |
+| D3 | No local persistence of documents on the client | `composeApp/…/data/` | T8: a local replica; the app opens and edits with no network |
+| D4 | AST cannot round-trip to its own source text | `OrgMode.kt:329` | T3: every node carries its source range and the document its text, so the model is lossless; edits are range replacements (T7) |
+| D5 | Two independent Org grammars | `OrgMode.kt` vs `OrgSyntaxHighlighting.kt:85` | T5/T6: `OrgSyntax` and `orgSpans()` in `shared/` are the one grammar, and `OrgElements.kt` uses them too. What crept back later was folded in again; what stays apart is in [04](04-org-core.md#one-grammar-two-consumers) |
+| D6 | Full-document re-highlight per keystroke; whole document composed eagerly | `OrgSyntaxHighlighting.kt`, `OrgDocumentView.kt` | Highlighting by cache and per-element editing; reading mode is a `LazyColumn` keyed by element (T12b) |
+| D7 | Calendar only understands `SCHEDULED` with a plain date | `FileTreeViewModel.kt:230` | T15–T17: a timestamp parser, an agenda engine (`AgendaIndex`) and agenda, day, week and month views |
+| D8 | No authentication, no TLS, binds `0.0.0.0` | `Application.kt:36` | T2 added a token; pairing replaced it (T30): devices sync over TLS on 8443 with a pinned certificate and a token each, and plain 8080 answers this computer only |
+| D9 | No conflict detection on save | `Application.kt` | T11: a diff3 merge, and a conflict copy when both sides changed the same lines; neither version is lost |
+| D10 | No compression on server responses | `Application.kt` | T2: gzip on |
+| D11 | Cannot create, rename or delete files from the app | `Application.kt:189` | T20: the drawer creates, renames and deletes notes, offline too, synced through tombstones ([05](05-sync-protocol.md#creating-renaming-and-deleting-t20)) |
+| D12 | Flat document model (sections are not nested) | `OrgMode.kt:19,93` | T4: headings nest, and a heading's range covers its subtree |
 
 ---
 
-## Phase 0 — Urgent and de-risking
+## Phase 0 — The server
 
-### T0 · iOS text-editing spike
-**Goal** Find out whether Compose Multiplatform's iOS text field can carry this product
-before investing in editor features.
-**Scope** Throwaway branch. A `BasicTextField` with `TextFieldState` holding a 200 KB Org
-file on a real device: scrolling, caret placement, selection handles, autocorrect,
-external keyboard, a popup anchored at the caret.
-**Done when** A written verdict in `docs/notes/ios-text-spike.md`: usable as-is / usable
-with workarounds / not viable. If not viable, stop and re-plan before T12b–T13.
-**Why first** It is the only finding that could change the stack, and it is cheap now.
+### T1 · Server reads the disk, not a boot snapshot
+`FileStore` answers from disk on every request, hashing content for ETags with a `(size, mtime)` cache
+so unchanged files are not re-read. The old server answered from a map built at startup, and could
+overwrite an edit made in Emacs. The file watcher and the SSE stream came with T9.
 
-### T0b · Web text-editing spike
-**Goal** Same question as T0, for the browser: is Compose/wasm's canvas-rendered text
-field good enough to keep the web build as a *full editing* client?
-**Scope** Throwaway. Open a large Org file in the current web build (or a `BasicTextField`
-harness) and exercise: caret placement, selection and drag-select, clipboard, IME/dead
-keys, browser shortcuts, scrolling a long document, and behaviour on a mobile browser.
-**Done when** A verdict in `docs/notes/web-text-spike.md`. The architecture work (T8–T10)
-does not depend on the answer — only the decision to keep editing on web does.
-
-### T1 · Server reads the disk, not a boot snapshot — ✅ **done**
-**Landed** `FileStore` answers from disk on every request, hashing content for ETags with an
-`(size, mtime)` cache so unchanged files are not re-read. Writes are atomic (temp file + move) and
-refuse when the file changed underneath — checked against `If-Match` when the client sends one, and
-otherwise against the version this server last handed out, which is what catches an edit made in
-Emacs. Path validation rejects traversal, absolute paths and non-`.org` extensions. `/api/org-content`
-caches parsed documents by content hash. API shape unchanged.
-**Not included** The file watcher and SSE stream belong to T9. Two *app* clients racing on one file
-is D9, and waits for T11.
-**Goal** Fix D1 — the server currently answers from a map built at startup and can
-overwrite edits made in Emacs or delivered by Syncthing.
-**Scope** Introduce `FileStore` ([05](05-sync-protocol.md#server-a-file-store-that-tells-the-truth)):
-on-demand directory walk, content hash with an `(path,size,mtime)` cache, atomic
-write-and-rename, path validation. Rewire the existing endpoints to it.
-Keep the current API shape — this is a behaviour fix, not the protocol change.
-**Done when** Editing a file with an external editor while the server runs is reflected in
-the next request; a save never clobbers a newer on-disk version silently; tests cover
-external modification and path-traversal attempts.
-
-### T2 · Transport hygiene — ✅ **done, then superseded by T30**
-**Superseded** Pairing (T30, 1.0.0) replaced the token and both switches; what follows is the
-history. Gzip stays. The plain port, 8080, listens on loopback and answers only a loopback `Host`:
-the web client, the desktop app and the Devices page. Paired devices reach the server over TLS on
-8443, trusting its self-signed certificate by the fingerprint the QR code carries, each with a token
-of its own that the Devices page can revoke. `KORGNOTE_TOKEN` is ignored, with a line in the log if
-it is set; `KORGNOTE_ALLOW_LAN` and `KORGNOTE_REQUIRE_TOKEN` are gone. The shared token was one
-secret on every device, sent over plain HTTP, and the LAN switch meant no authentication at all;
-pairing removed the need for either.
-**Landed** Ktor `Compression` (gzip/deflate), bearer-token auth on `/api` from `KORGNOTE_TOKEN`, and
-a bind host chosen by configuration: loopback by default, all interfaces once a token is set. The
-token is a field in the app's settings and rides on every request. README documents the variables
-and TLS via a reverse proxy.
-**The testing escape hatch** `KORGNOTE_ALLOW_LAN=1` serves the LAN with **no** token. Without it the
-safe default — loopback only — would break testing against a phone, which is how this app is actually
-developed; requiring a token there means re-entering it on every device after every reinstall. It is
-opt-in, and the server logs one line on startup naming which of the three modes it is in, including
-the words "NO authentication" when that is what is happening.
-**Verified** 11 `TransportSecurityTest` cases: where it binds in each configuration, that an
-unauthenticated or wrongly-authenticated `/api` request is refused while the right one is accepted,
-that writes are protected as well as reads, and that responses are gzipped when asked for and not
-when they are not. 4 `KtorOrgRepositoryAuthTest` cases prove the client actually puts the token on
-the wire — on every call — and sends no header at all when the token is blank, using a mock engine
-rather than trusting the code by reading. Removing the loopback default fails 2 tests.
-**Not verified by socket** The bind address is covered by unit tests and one line of wiring in
-`main`; I did not start a second server to watch it bind, because port 8080 was in use by the
-running instance.
-**Goal** D8, D10.
-**Scope** Install Ktor `Compression`. Add bearer-token auth (`KORGNOTE_TOKEN`), add the
-token to client settings. Bind `127.0.0.1` unless a token is configured. README section on
-TLS via reverse proxy.
-**Done when** Responses are gzipped, an unauthenticated request to a non-loopback listener
-is refused, and the desktop/mobile clients still work.
+### T2 · Transport hygiene
+**Superseded by T30.** Pairing (1.0.0) replaced the token and both switches; gzip stays. The plain
+port, 8080, listens on loopback and answers only a loopback `Host`: the web client, the desktop app
+and the Devices page. Paired devices reach the server over TLS on 8443, trusting its self-signed
+certificate by the fingerprint the QR code carries, each with a token of its own that the Devices
+page can revoke. `KORGNOTE_TOKEN` is ignored, with a line in the log if it is set;
+`KORGNOTE_ALLOW_LAN` and `KORGNOTE_REQUIRE_TOKEN` are gone. The shared token was one secret on every
+device, sent over plain HTTP, and the LAN switch meant no authentication at all; pairing removed the
+need for either.
 
 ---
 
 ## Phase 1 — Org core ([04](04-org-core.md))
 
-### T3 · Source-mapped documents — ✅ **done**
-**Landed** `OrgNode` became a `sealed class` carrying `range`, and `OrgDocument` carries `text`.
-Both are body properties rather than constructor parameters, deliberately: these are data classes,
-so a constructor property would join `equals` and every expected node in every parser test would
-have to spell out exact offsets. Parsing fills them in; a node built by hand keeps an empty range.
-The parser threads a `lineStarts` array and a `span(first, lastExclusive)` helper through every
-construct. `/api/org-content` now returns raw text instead of a serialised tree, so the wire format
-no longer pins the model — which is what lets T4–T7 reshape it freely. `@Serializable` is gone from
-the node types.
-**Not included** Table *cells* keep an empty range; locating them needs intra-line offsets, which
-waits for the real table grammar in T5.
-**Verified** `OrgSourceRangeTests` covers I1 and I2 over a corpus of edge cases (empty input, no
-trailing newline, bare newlines, trailing whitespace, tags, tables, src blocks). The tests were
-checked against two deliberate parser mutations — dropping the source, and an off-by-one in `span`
-— and caught both. The 12 existing parser test files pass unchanged, and test sources compile for
-JVM, wasm and iOS.
-**Depends** —
-**Scope** `OrgDocument` gains `text`; every node gains `range`. Parser records offsets.
-No shape changes beyond that.
-**Done when** Invariants I1/I2 hold as tests, the 12 existing parser test files still pass,
-and a round-trip property test runs over the fixtures plus nasty whitespace cases.
+### T3 · Source-mapped documents
+`range` and `text` are body properties rather than constructor parameters, deliberately: these are
+data classes, so a constructor property would join `equals`, and every expected node in every parser
+test would have to spell out exact offsets. `@Serializable` went from the node types once the wire
+carried raw text, which is what let T4–T7 reshape the model freely. Table *cells* keep an empty
+range; locating them needs intra-line offsets, and nothing has needed them yet.
 
-### T4 · Nested headings — ✅ **done**
-**Landed** `OrgSection` lost `content: String` and gained `children`, and headings nest by level, so
-a section owns its body *and* its sub-headings. A heading's `range` therefore covers its whole
-subtree: deleting or moving a heading with everything under it is one text replacement, which
-`OrgNestingTests` demonstrates directly. `OrgNode` gained an open `children`, overridden by the
-nodes that hold others (including a table's rows and a row's cells), so walking the tree no longer
-needs a `when` over every type. Planning lines are now children of the heading they were written
-under, which is what lets the agenda read a task's dates off the task itself instead of inferring
-them from document order — `buildScheduledIndex` walks the tree and attributes a `SCHEDULED:` under a
-sub-heading to that sub-heading, not to its parent. A table under a heading is a real node now
-instead of being swallowed into the section's raw content string.
-**Not included** I3 does not hold in its literal "every line belongs to exactly one leaf" form. A
-heading line is owned by its section, which stops being a leaf once it has children, and blank lines
-are owned by nothing. Both need nodes the grammar does not have — a heading-line node and whitespace
-nodes — which is T5. What is tested is the strongest form that is true now and the one a renderer
-needs: every non-blank line has exactly one *deepest* owner, and the nodes claiming it form a single
-ancestor chain.
-**Verified** All 58 shared tests pass, plus `OrgNestingTests`. The tests were checked against a
-deliberate regression — making every heading close every open one, i.e. the old flat behaviour — and
-5 of them failed, so they are load-bearing. Re-run over the real notes directory: 366 files, 0
-round-trip failures, 0 range violations, 0 nesting violations, deepest tree 7 levels. Compiles for
-JVM, wasm, iOS and Android.
-**Depends** T3
-**Scope** Sections own their bodies and sub-sections (D12); section `content: String`
-becomes child nodes. Update `OrgText` to render the tree.
-**Done when** Invariant I3 holds; rendering is unchanged visually; subtree operations are
-expressible.
+### T4 · Nested headings
+`OrgSection` lost `content: String` and gained `children`, so a section owns its body *and* its
+sub-headings, and its `range` covers the whole subtree: deleting or moving a heading with everything
+under it is one text replacement. Planning lines became children of the heading they were written
+under, so the agenda reads a task's dates off the task instead of inferring them from document order.
+**I3 does not hold in its literal "every line belongs to exactly one leaf" form.** A heading line is
+owned by its section, which stops being a leaf once it has children, and blank lines are owned by
+nothing. Both would need nodes the grammar does not have. What is tested is the strongest form that
+is true and the one a renderer needs: every non-blank line has exactly one *deepest* owner, and the
+nodes claiming it form a single ancestor chain.
+**Measured** Run over the real notes directory: 366 files, 0 round-trip failures, 0 range violations,
+0 nesting violations, deepest tree 7 levels.
 
-### T5 · Complete the grammar — ✅ **done**
-**Landed** `OrgSyntax` moved from `composeApp/` into `shared/`, so the parser and the highlighter
-recognise Org from one set of patterns instead of two — the first half of T6's "one grammar". The
-parser gained blocks, drawers, comments, horizontal rules, footnote definitions, description items,
-ordered lists, nested lists and heading priorities. Blocks and drawers are **opaque**: their contents
-are kept as text and never parsed, because a `* heading` inside a source block is code. `OrgSection`
-gained `priority`; list items became `OrgListItem`/`OrgCheckboxItem` that can own a nested list.
-Unknown constructs still fall through to `OrgRaw`, never to an error.
-**Not included** Inline constructs — emphasis, links, inline timestamps, footnote *references* — are
-span-level, not block-level, and belong with `spans()` in T6. Only footnote *definitions* (a line
-starting `[fn:x]`) are nodes here. Blank lines still belong to no node, so I3 keeps the weaker form
-T4 recorded.
-**Verified** 80 shared tests, including `OrgGrammarTests` covering each construct plus a round-trip
-corpus. Over the real notes directory: 366 files, 0 round-trip failures, 0 range violations, 0
-nesting violations, 0 parser/splitter disagreements. Compiles for JVM, wasm, iOS and Android.
+### T5 · Complete the grammar
+`OrgSyntax` moved from `composeApp/` into `shared/`, so the parser and the highlighter recognise Org
+from one set of patterns. Blocks and drawers are **opaque**: their contents are kept as text and never
+parsed, because a `* heading` inside a source block is code. Unknown constructs fall through to
+`OrgRaw`, never to an error.
 **Found by the real corpus, not by the tests** The list grammar matches `*` as a bullet, so a plain
-list swallowed every heading that followed it — 272 headings across the real notes, and 23 files where
+list swallowed every heading that followed it: 272 headings across the real notes, and 23 files where
 the element splitter and the parser then disagreed about where a heading started, which is the
 condition for an edit to splice over the wrong range. A hand-written corpus missed it because the two
 constructs have to be adjacent to trigger it. `aListStopsAtTheNextHeading` and
-`theSplitterAgreesWithTheParserOnTheNewConstructs` now pin it down.
-**Depends** T4
-**Scope** Drawers, blocks, ordered and nested lists, priorities, inactive timestamps,
-description lists, footnotes — porting regexes from `OrgSyntax` rather than inventing new
-ones. Unknown constructs must parse as preserved raw text, never as errors.
-**Done when** A corpus round-trips losslessly and the new constructs appear in the tree.
+`theSplitterAgreesWithTheParserOnTheNewConstructs` pin it down. After the fix, over the real notes: 366
+files, 0 round-trip failures, 0 range violations, 0 nesting violations, 0 parser/splitter
+disagreements.
 
-### T6 · One grammar — ✅ **done**
-**Landed** `orgSpans(text)` and `orgSpansForLine(line, state)` in `shared/` say what a stretch of Org
-text *is*, as `OrgSpan(range, kind, nesting)`; `composeApp/` only maps a kind to a colour. The
-editor's `OrgSyntaxHighlightTransformation` now paints from those spans, and **no Org pattern remains
-anywhere in `composeApp/`** — the last two, `#+TITLE:` and the timestamp date, moved to `OrgSyntax`
-with the rest. That is D5 closed. `OrgLineState` is public so a client keeping a per-line cache can
-thread the state itself, which is what let the editor's incremental cache survive the change
-untouched.
-**Since** Later features brought a few Org patterns back into `composeApp/`: `OrgText.kt` (`:ID:`,
-`#+TODO:` lines), `NoteByline.kt` (`#+AUTHOR:`, `#+DATE:`), `LinkNavigator.kt` (`#+TITLE:`, a link's
-scheme), `OrgSyntaxHighlighting.kt` (a tag name, a date) and `TableFormulas.kt` (formula targets).
-Each is small, but each is a second definition of something, which is what D5 was closed to stop.
-Most belong in `OrgSyntax`. The task stays done; the drift is listed under open gaps.
-**Not included** Reading mode still walks the line itself. It does not just style text, it *rewrites*
-it — hiding emphasis markers and link targets, turning a `LOCATION` property into a Google Maps link
-— and a list of spans over the original text cannot express a text substitution. Spans could grow a
-"replace this range with this text" facet; until then the reading renderer consumes the same shared
-patterns but keeps its own walk. The *grammar* is unified; the second *renderer* is not.
-**Verified** All 23 `OrgSyntaxHighlightingTest` cases pass unchanged — they were the contract — plus
-the 8 cache, 8 viewport, 4 whitespace and 5 metrics tests, so the editor's incremental path and the
-zero-width-whitespace-run invariant both still hold. 14 new `OrgSpansTests` cover the span layer
-directly. Breaking it (emphasis spanning its markers instead of its content) fails 2 highlighting
-tests, so the new layer is load-bearing rather than decorative.
-**Depends** T5
-**Scope** Add `OrgDocument.spans(range)`; rewrite `OrgSyntaxHighlightTransformation` to use
-it; delete the duplicate grammar in `OrgSyntaxHighlighting.kt`, keeping `OrgColors` and the
-existing highlighting tests as the contract.
-**Done when** Highlighting output is unchanged for the existing test cases and Org syntax
-is defined in exactly one place (D5).
+### T6 · One grammar
+`orgSpans` and `orgSpansForLine` in `shared/` say what a stretch of Org text *is*; `composeApp/` only
+maps a kind to a colour. `OrgLineState` is public so a client keeping a per-line cache can thread the
+state itself, which is what let the editor's incremental cache survive the change untouched.
+**Reading mode still walks the line itself.** It does not just style text, it *rewrites* it, hiding
+emphasis markers and link targets and turning a `LOCATION` property into a Google Maps link, and a
+list of spans over the original text cannot express a text substitution. Spans could grow a "replace
+this range with this text" facet; until then the reading renderer consumes the same shared patterns
+but keeps its own walk. The *grammar* is unified; the second *renderer* is not.
+**Since** Later features brought Org patterns back into `composeApp/` and `shared/…/edit`. The
+refactor of 2026-11 folded them into `OrgSyntax` again, or into what they copied; what is left, and
+why, is the table in [04](04-org-core.md#one-grammar-two-consumers).
 
-### T7 · Structural edit API — ✅ **done**
-**Landed** `com.korgnote.common.org.edit` with one primitive — `replace(range, replacement)`, which
-is invariant I4 — and every operation built on it: `toggleCheckbox`, `setCheckbox`, `setTodo`,
-`cycleTodo`, `setTags`, `setPlanning`, `promote`, `demote`. Because they all reduce to a range
-replacement, the rest of the file is untouched *by construction* rather than by care: the bug that
-started this whole line of work, where saving rewrote blank lines nobody had edited, is now
-unrepresentable. `promote`/`demote` are subtree-aware — T4 made a heading's range cover its subtree,
-so moving a heading takes its children with it in a single replacement — and they leave stars inside
-a source block alone, because those are code.
-**The ordinal path is gone.** `String.toggleNthCheckbox`, `orgCheckboxesBefore` and
-`toggleCheckboxByOrdinal` are deleted. Reading mode now hands back the `OrgCheckboxItem` it rendered
-and the view model edits the node at that offset. This also removed the O(n²) checkbox counting the
-reading view did per element (12 ms on the biggest real file), since nothing counts boxes any more.
-**Verified** 24 `OrgEditTests`, each of the before/after shape the roadmap asked for, most asserting
-that *exactly one line* changed and the line count did not. Two cases were ported from the deleted
-ordinal tests rather than dropped. Exercised across the real notes directory: 366 files, 127
-checkboxes and 2397 headings, every toggle changing exactly one line, every `setTodo` and `cycleTodo`
-preserving the line count, and every demote/promote round-tripping to the original bytes. Breaking
-block-awareness in `demote` fails a test, so the guard is load-bearing.
-**Note** The one apparent failure in that sweep was the verification script's own fault: it located
-the demoted heading by title and level, which is ambiguous when two headings share a title. Locating
-it by range — node identity, the thing T7 exists to provide — there is no failure. A neat illustration
-of why ordinals and titles were the wrong handle.
-**Depends** T4
-**Note** Partly anticipated: `OrgElements.replaceOrgElement` already applies the "mutations are text
-edits over ranges" principle for whole elements ([09](09-element-editing.md)). T7 extends it to
-individual nodes, which needs source-mapped nodes from T3/T4.
-**Scope** `org.edit`: `toggleCheckbox`, `setTodo`, `cycleTodo`, `setPlanning`, `setTags`,
-`promote`, `demote` — all as range replacements. Replace the ordinal-based
-`String.toggleNthCheckbox` and the `toggleCheckboxByOrdinal` path in the ViewModel.
-**Done when** Each operation has a before/after text test proving only the intended line
-changed, and the reader's checkbox tapping goes through it.
+### T7 · Structural edit API
+`org.edit` has one primitive, `replace(range, replacement)`, which is invariant I4, and every
+operation is built on it, so the rest of the file is untouched *by construction* rather than by care:
+the bug that started this whole line of work, where saving rewrote blank lines nobody had edited, is
+unrepresentable. The ordinal path went (`toggleNthCheckbox`, `orgCheckboxesBefore`,
+`toggleCheckboxByOrdinal`), and with it the O(n²) checkbox counting the reading view did per element
+(12 ms on the biggest real file). `cycleTodo`, `setTags`, `promote` and `demote` came with this task;
+nothing called them once the long-press menu moved subtrees by element range, and they were deleted
+(4fc206c).
+**Measured** Across the real notes directory: 366 files, 127 checkboxes and 2397 headings, every toggle
+changing exactly one line, every `setTodo` preserving the line count, and every demote/promote
+round-tripping to the original bytes. The one apparent failure in that sweep was the script's own
+fault: it located the demoted heading by title and level, which is ambiguous when two headings share a
+title. A neat illustration of why ordinals and titles were the wrong handle.
 
 ---
 
 ## Phase 2 — Local-first ([05](05-sync-protocol.md))
 
-### T8 · Replica store — ✅ **done**
-**Landed** `ReplicaStorage` with two implementations — `FileSystemReplicaStorage` (written once in a
-`jvmSharedMain` source set that JVM and Android both use, plus a separate iOS one over
-`NSFileManager`) and `InMemoryReplicaStorage` for the web and for tests. `DocumentStore` sits on top
-and is the only writer: documents, dirty flags, change events, and the `base/` copies a three-way
-merge will need in T11. Writes are atomic (temp file then rename on JVM, `writeToFile(atomically)` on
-iOS), and a corrupt `meta.json` is discarded rather than allowed to make the notes unopenable.
-**The app now reads and writes locally.** `FileTreeViewModel` renders from the replica and saves to
-it first; the network only refreshes it. A failed load used to clear the tree "to avoid showing stale
-content", which meant an unreachable server left the app empty — now it costs freshness, not access.
-A failed save leaves the file dirty instead of losing the edit. All four entry points bind their own
-storage: a real directory on desktop, Android and iOS; memory on the web.
-**Verified** One `DocumentStoreContract` runs against both implementations — 9 cases in memory, the
-same 9 plus 4 filesystem-specific ones against a real directory — which is what makes the in-memory
-store a fair stand-in for the web build. `OfflineReplicaTest` covers the acceptance criteria at the
-app level: the app opens its notes with the server unreachable, an edit made offline stays dirty and
-survives a "restart" (a fresh view model over the same replica), and reconnecting does not overwrite
-it. Removing the dirty-file guard fails that last test in **both** implementations.
-**Not done here** Nothing pushes yet: dirty files stay dirty until the sync engine in T10. The
-replica is populated by the existing `/api/org-content` call, as this task specifies.
-**Depends** —
-**Scope** `ReplicaStorage` interface plus two implementations: `FileSystemReplicaStorage`
-(`notes/`, `.korgnote/base/`, `meta.json` under a platform app-data directory via
-`expect/actual`, Okio or `kotlinx-io`) and `InMemoryReplicaStorage` for web and tests.
-`DocumentStore` on top: documents, dirty flags, change events. The app reads and writes
-*locally only* at this point; existing network calls stay in place to populate it.
-**Done when** Native opens, renders and edits documents with the server unreachable and an
-offline edit survives a restart; the same `DocumentStore` tests pass against the in-memory
-implementation with no filesystem involved.
+### T8 · Replica store
+`ReplicaStorage` has three implementations: one over `java.io` for the JVM and Android, one over
+`NSFileManager` for iOS, and `InMemoryReplicaStorage` for the web and for tests. A failed load used to
+clear the tree "to avoid showing stale content", which meant an unreachable server left the app empty;
+now it costs freshness, not access. One `DocumentStoreContract` runs against both the file and the
+memory storage, which is what makes the memory store a fair stand-in for the web build.
 
-### T9 · Sync API v1 (server) — ✅ **done**
-**Landed** `/api/v1/manifest[?since=]`, conditional `GET|PUT|DELETE /api/v1/files/{path…}`, a
-streamed NDJSON `/api/v1/bundle[?since=]` with a size cap, and `/api/v1/events` as SSE. `FileStore`
-gained create (`If-None-Match: *`) and delete-to-trash: a deleted note moves to
-`.korgnote-trash/<date>/` rather than being unlinked, which makes a sync bug recoverable. A
-`ChangeJournal` holds the generation counter and a bounded log; `NotesWatcher` feeds it from a
-`WatchService`, so an edit made in Emacs becomes a generation bump and an SSE event. The old
-endpoints are untouched until the client cuts over in T10.
-**Design note** A stale `If-Match` answers **409**, not 412, and includes the current `ETag`: this is
-a mergeable conflict, not a precondition the client should give up on. The journal is deliberately an
-optimisation — a `since` it cannot cover returns a full manifest — which is what makes it safe to
-hold only in memory across restarts.
-**Found later: it was not safe.** A restarted server counted from zero again, so once it passed the
-generation a phone had kept, it answered that phone with only the later changes, and the ones in
-between were never seen. The journal now starts at the time it is made, in milliseconds, so a
-generation from an earlier run always asks for a full manifest. A delta lists each path once, as its
-latest change, and is read under the same lock as its generation (4d44808). The client keeps a full
-manifest's generation as given, not only when it is higher (094fb3f).
-**Also added** `KORGNOTE_PORT`, so a second server can run beside the real one while testing.
-**Verified** 34 server tests (14 API, 7 journal, 2 watcher, plus the existing suites). The watcher
-test prints its measured latency; an external edit was detected in **110 ms**, comfortably inside the
-"within seconds" the protocol promises. Then every acceptance criterion was checked with `curl`
-against a real server, which is how the task phrased them: manifest listed, `If-None-Match` → **304**,
-stale `If-Match` → **409** with the file untouched on disk, current `If-Match` → 200, bundle as
-NDJSON, `?since` returning only the delta and falling back to a full manifest for an unknown
-generation, and — writing files directly on disk, the Emacs case — two `event: changed` frames
-arriving on the SSE stream.
-**Not covered by an automated test** The SSE stream itself. Driving a never-ending response through
-the Ktor test host deadlocked the test rather than exercising the server, so it is verified by curl
-above and by the journal and watcher tests underneath it, rather than by a flaky test pretending to
-be evidence.
-**Depends** T1
-**Scope** `/api/v1/manifest`, `GET|PUT|DELETE /api/v1/files/{path…}` with ETag semantics,
-`GET /api/v1/bundle` (streamed NDJSON, for clients that start empty), `/api/v1/events` SSE
-fed by a `WatchService`. Old endpoints remain for now.
-**Done when** `curl` can list the manifest, fetch with `If-None-Match` and get a 304, push
-with `If-Match` and get a 409 on a stale write, and receive an SSE event when a file is
-touched by Emacs.
+### T9 · Sync API v1 (server)
+A stale `If-Match` answers **409**, not 412, and includes the current `ETag`: this is a mergeable
+conflict, not a precondition the client should give up on. A deleted note moves to
+`.korgnote-trash/<date>/` rather than being unlinked, which makes a sync bug recoverable.
 
-### T10 · Sync engine (client) and cutover — ✅ **done**
-**Landed** `SyncEngine` in `shared/` implements the reconciliation table over `DocumentStore` and a
-`SyncApi` interface; `KtorSyncApi` in the client is the HTTP half, including the SSE stream. The
-view model now takes the engine instead of a repository, the file tree is built from the replica, and
-the app follows the event stream for the session, so an edit made in Emacs appears without a refresh.
-**The cutover is complete.** `/api/org-content`, `/api/org-tree-paths` and `/api/content/{…}` are
-deleted along with `KtorOrgRepository` and `OrgRepository` — verified by curl against a real server:
-all three now answer **404** while `/api/v1/manifest` serves. Nothing in the client parses a
-server-provided AST; it moves text and etags only (D2, D3).
-**Not included** Merging. A push refused with 409 keeps the local version and flags it
-(`conflictedPaths`), and the UI says so. Three-way merge and conflict copies are T11. Every branch of
-the table is written so that no edit is ever discarded in the meantime — including the awkward row
-where a file was deleted on the server but edited here, which re-pushes it.
-**Verified** 14 `SyncEngineTests`, one per row of the table plus the two event-stream cases, using a
-fake server that counts requests — which is how "a cold start transfers only what it lacks" is
-asserted rather than asserted-about: the second cycle fetches **nothing**. Removing the conflict
-branch fails the test that protects a local edit. The server's own suite was ported to v1 rather than
-deleted, so the notes-directory resolution, tilde and env expansion, and external-edit protection
-keep their coverage — now expressed with explicit `If-Match` instead of the server inferring a
-baseline.
-**Depends** T8, T9
-**Scope** `SyncEngine` implementing the pull/push table
-([05](05-sync-protocol.md#sync-algorithm)) without merge yet (conflicts are deferred to
-T11: on 409, keep local and flag). Wire the triggers. Build the file tree from the replica.
-Delete `/api/org-content`, `/api/org-tree-paths`, `/api/content/{…}` and
-`KtorOrgRepository`.
-**Done when** Cold start transfers a manifest plus only stale files; a change made in Emacs
-appears without restarting anything; nothing in the client parses server-provided ASTs any
-more (D2, D3).
+The journal was meant as a pure optimisation, safe to hold only in memory, since a `since` it cannot
+cover returns a full manifest. **Found later: it was not safe.** A restarted server counted from zero
+again, so once it passed the generation a phone had kept, it answered that phone with only the later
+changes, and the ones in between were never seen. The journal now starts at the time it is made, in
+milliseconds, so a generation from an earlier run always asks for a full manifest. A delta lists each
+path once, as its latest change, and is read under the same lock as its generation (4d44808). The
+client keeps a full manifest's generation as given, not only when it is higher (094fb3f).
+**Measured** An external edit was detected in **110 ms**, against the "within seconds" the protocol
+promises. Every criterion was also checked with `curl` against a real server. The SSE stream itself has
+no automated test: driving a never-ending response through the Ktor test host deadlocked the test, so
+it is covered by curl and by the journal and watcher tests underneath it, rather than by a flaky test
+pretending to be evidence.
 
-### T10b · Web client on the same engine — 🟡 **mostly wired by T10**
-**Already true** The wasm target builds and runs on the shared stack: `InMemoryReplicaStorage`,
-settings in `localStorage` (pins, new-notes folder, file-link folders), the same `SyncEngine` and
-ViewModel as the native clients, and a same-origin base URL from `window.location.origin`, so no
-host or port is configured on web. The no-op `NotificationScheduler` came with T18.
-**Since** `SyncApi.bundle()` exists (`KtorSyncApi`), and a cycle that would pull eight or more files
-asks for the bundle (T40), on the web as everywhere.
-**Still to do** Debounced (~1 s) autosave; a replica that survives a reload — the web still keeps
-`InMemoryReplicaStorage`, so every page load pulls the notes again; and confirming the SSE loop,
-which reads the stream with `prepareGet`, actually delivers on the JS engine.
-**A new limit** Since pairing (T30) the web client is served on the plain port only, which answers
-this computer alone, and a browser cannot pair. So the web client now works only on the server's own
-machine.
-**Depends** T10
-**Scope** Wire the wasm target to `InMemoryReplicaStorage` + `GET /api/v1/bundle` on page
-load, debounced autosave (~1 s) through the same `SyncEngine`, SSE for live updates,
-same-origin base URL (no host/port setting needed on web), no-op
-`NotificationScheduler`. Optional `localStorage` draft per open document.
-**Done when** The browser build edits and saves through the v1 API, reflects a change made
-in Emacs within seconds, and shares 100% of its ViewModel, Org-core and sync code with the
-native clients.
+### T10 · Sync engine (client) and cutover
+`/api/org-content`, `/api/org-tree-paths` and `/api/content/{…}` went along with `KtorOrgRepository`
+and `OrgRepository`. Nothing in the client parses a server-provided AST; it moves text and etags only
+(D2, D3). Every branch of the table was written so that no edit is ever discarded, including the
+awkward row where a file was deleted on the server but edited here, which re-pushes it.
 
-### T11 · Conflicts — ✅ **done**
-**Landed** `shared/sync/merge.kt`: a line-based three-way merge (diff3) over base, local and remote,
-dependency-free and with the timestamp injected so it can be tested without a clock. `SyncEngine`
-now reconciles instead of only flagging — a clean merge is written locally and pushed with the
-*remote's* etag, and a real conflict keeps the local version live while the server's is saved beside
-it as `name.sync-conflict-<timestamp>.org`, mirroring Syncthing's naming. The conflict copy is itself
-a note, so it is pushed and the other device sees it too. The banner names the file and says where
-the other version went.
-**One deliberate departure from diff3** When both sides only *added* lines at the same point, both
+### T10b · Web client on the same engine
+The wasm target runs on the shared stack: `InMemoryReplicaStorage`, settings in `localStorage` (pins,
+new-notes folder, file-link folders), the same `SyncEngine` and view model as the native clients, and
+a same-origin base URL from `window.location.origin`, so no host or port is configured on web. Since
+pairing (T30) the web client is served on the plain port only, which answers this computer alone, and
+a browser cannot pair. What is left is under [open gaps](#open-and-known-gaps).
+
+### T11 · Conflicts
+`shared/…/sync/Merge.kt` is a line-based three-way merge (diff3), dependency-free, with the timestamp
+injected so it can be tested without a clock.
+**One deliberate departure from diff3.** When both sides only *added* lines at the same point, both
 additions are kept rather than declared a conflict. Strict diff3 conflicts there, rightly for source
 code where order can matter. For a list of Org headings it does not, and it is the commonest case
-there is — capturing a TODO on the phone and another on the laptop. Keeping both loses nothing;
+there is: capturing a TODO on the phone and another on the laptop. Keeping both loses nothing;
 conflicting would litter the notes with copies for the most ordinary thing a person does.
 **Never** are conflict markers written into a note. A file full of `<<<<<<<` is a corrupted note, and
 the merge has no code path that can produce one.
-**Verified** 12 `MergeTests` and 18 `SyncEngineTests`, covering both acceptance criteria directly:
-edits to different headings converge with nothing asked of the user, and the same line changed twice
-produces a conflict copy while the local version stays live. Also that the same conflict is not
-re-reported every cycle, and that the copy reaches the server. Replacing the merge with an
-unconditional conflict fails the convergence test.
 **Reversed since** (daf827b, 2026-10-25). When a conflict cannot be merged, the **server's** version
-now keeps the path and this device's is saved beside it as the conflict copy
-(`DocumentStore.keepServerVersion`), as [05](05-sync-protocol.md) describes. The server is the
-source of truth: with the local version at the path, the next cycle pushed it over the file Emacs
-had open, a version nobody merged.
+keeps the path and this device's is saved beside it as the conflict copy
+(`DocumentStore.keepServerVersion`). The server is the source of truth: with the local version at the
+path, the next cycle pushed it over the file Emacs had open, a version nobody merged.
 **Found while testing** The fake server in `SyncEngineTests` derived etags from content *length*, so
 two different edits of equal length looked identical to it and the conflict path was never reached.
 Etags now follow content. A fake that is too forgiving hides exactly the case the tests exist for.
-**Depends** T10
-**Scope** `sync.merge` diff3; clean merges auto-resolve; conflicting ones produce
-`name.sync-conflict-<timestamp>.org` and a UI banner (D9).
-**Done when** Two devices editing different headings of one file converge with no user
-action; editing the same line yields a conflict copy and never loses either version.
 
 ---
 
 ## Phase 3 — Editor ([06](06-editor.md))
 
-### T12a · Editor performance diagnostic — ✅ **done**
-**Depends** —
-**Scope** One-line experiment: run with `visualTransformation = VisualTransformation.None`
-and type in a 40 KB file on iOS and wasm. Record timings with and without, plus span count
-and time spent in `filter`, in `docs/notes/editor-perf.md`.
-**Why separate** It decides whether T12b is a day (highlighting scope) or a fortnight
-(editor virtualisation). Slowness on 40 KB files is already observed, so this is
-measurement, not speculation.
-**Done when** The dominant cost — A (highlighting) or B (layout) — is written down with
-numbers.
+### T12a · Editor performance diagnostic
+Cost A, highlighting; the numbers are in [notes/editor-perf.md](notes/editor-perf.md).
 
-### T12b · Editor surface — ✅ **done**
-**Depends** T12a
+### T12b · Editor surface
+**Dropped as impossible:** the `TextFieldState` migration, since that API has no styling hook
+([06](06-editor.md#the-state-based-api-cannot-be-used)). **Dropped as unnecessary:** block
+virtualisation, since T12a came back as Cost A and per-element editing removed document size as a
+concern. **Closed by T22:** read↔edit scroll mapping and a debounced, cancellable re-parse existed only
+for the whole-file editor, and went with it, as did viewport-scoped styling. The per-line cache and
+metric-neutral styling remain, for the element editor. Lazy reading mode took first composition of the
+largest real file from 234 ms to 38 ms ([09](09-element-editing.md#known-gaps)).
 
-**Landed:** per-line highlight cache with memoisation; viewport-scoped styling driven by
-`onTextLayout`; monospace editor; `BasicTextField` with `OutlinedTextFieldDefaults.DecorationBox`;
-`TextFieldValue` in the element editor for caret control; metric-neutral editor styling.
-
-**Dropped as impossible:** the `TextFieldState` migration — that API has no styling hook
-([06](06-editor.md#the-state-based-api-cannot-be-used)).
-
-**Dropped as unnecessary:** block virtualisation — T12a came back as Cost A, and per-element editing
-([09](09-element-editing.md)) removed document size as a concern.
-
-**Landed since:** lazy reading mode and the single-scroll-owner restructuring. `OrgDocumentView` is
-a `LazyColumn` keyed by element, which took first composition of the largest real file from 234 ms
-to 38 ms, and `App.kt` hands its scroll to whichever component owns it — reading mode, and now the
-search results — while keeping it for the whole-file editor and every other screen. Measurements
-and the reasoning are in [09](09-element-editing.md#known-gaps).
-
-**Closed by T22:** the two items deferred here — read↔edit scroll mapping and a debounced,
-cancellable re-parse — existed only for the whole-file editor, and went with it. Viewport-scoped
-styling went too; the per-line cache and metric-neutral styling remain, for the element editor.
-
-### T13 · Completion — ✅ **done**
-**Landed** `shared/org/complete/OrgComplete.kt`: `complete(doc, cursor, ctx)` returns items that
-each carry the range of typed text they stand in for and where the caret should land, so accepting
-one is a range replacement like every other edit here — `applyTo` performs it and is what both the
-editor and the tests call. All eight trigger rows are implemented, tried in a fixed order so that
-`[[` is a link before it is a bracket and `<s` is a block template before it is a timestamp.
+### T13 · Completion
 **A strip, not a popup.** The design sketched a floating popup for desktop and a strip for phones.
-Both platforms get the strip: the popup fights the IME and the selection handles, phones are where
-these notes are mostly written, and one presentation is one thing to keep working. Desktop loses
-nothing — the field handles Tab to accept, arrows to move and Esc to dismiss, so a hardware
-keyboard never has to reach for a chip. Tab rather than Enter, because Enter is a newline in a
-multi-line element and stealing it would make an ordinary edit depend on whether a chip happened to
-be showing.
-**Pinned to the screen, after a first attempt that was not.** Placed under the field, the strip was
-often invisible on a phone: the app is inset for the keyboard, but both Android's `imePadding` and
-iOS's lifting bring *the field* into view, and anything laid out after it stays in the region the
-keyboard took. It is now the `Scaffold`'s `bottomBar` while an element is being edited, which also
-hoisted the caret into the view model — the strip is nowhere near the field — and that is what made
-accepting a suggestion testable at all. The navigation bar is hidden for the duration; it held that
-space, and mid-edit tab switches were always accidents. The bar keeps its place when there is
-nothing to suggest, because suggestions come and go with nearly every keystroke and a bar that came
-and went with them would reflow the document under the caret. See
-[06](06-editor.md#where-the-strip-goes-and-why-it-matters).
-**Context comes from outside the document** The engine is handed one element while the useful
-material is corpus-wide, so tags (most-used first), file paths, the open file's `#+TODO:` keywords
-and today's date arrive in a `CompletionContext` the view model rebuilds when the replica or the
-open file changes — never per keystroke. Walking all 366 real notes for the tag counts costs 3 ms
-warm, 14 ms cold, so nothing cleverer is warranted.
-**Verified** 26 `OrgCompleteTests` — one or more per trigger row, asserting the text and caret the
-user ends up with rather than the shape of the item — 5 `CompletionContextTest` cases for the
-material the app supplies, and 12 `CompletionEditingTest` cases for accepting, moving, dismissing
-and the date picker, which became reachable once that state left the composable. The acceptance criterion is a test by name: typing `* ` then `TO` offers
-the document's own `#+TODO:` keywords, and a document naming none falls back to Org's.
-**Found while writing it** The editor spliced items with `insert.length` instead of the item's
-`caretOffset`, which would have left the caret after `#+END_SRC` instead of inside the block. That
-is why the splice now lives in the engine as `applyTo`, where a test can reach it.
-**Depends** T12b
-**Scope** `org.complete` engine plus popup (desktop) / suggestion strip (mobile), covering
-the trigger table in [06](06-editor.md#completion-g3).
-**Done when** Each trigger row has a unit test, and typing `* ` then `TO` offers the
-document's own `#+TODO:` keywords (G3).
-**Not included** The whole-file editor, which never had completion — moot since T22 retired it.
+Both get the strip: the popup fights the IME and the selection handles, phones are where these notes
+are mostly written, and one presentation is one thing to keep working. Tab accepts rather than Enter,
+because Enter is a newline in a multi-line element, and stealing it would make an ordinary edit depend
+on whether a chip happened to be showing.
 
-### T14 · Search — ✅ **done**
-**Landed** `shared/org/search/OrgSearch.kt`: `SearchQuery.parse` turns what was typed into words
-and `tag:` terms, and `searchOrg` scans the replica linearly, returning hits that carry the file,
-the heading breadcrumb, the line number and the character offset. A new Search screen lists them
-and opens one at the element holding the match, reusing the offset→element lookup the calendar
-jump already needed. No index, no new dependency.
-**Tags are inherited**, as they are in Org: a tag on a parent heading, or in `#+FILETAGS:`, counts
-for everything beneath it — without that, `tag:work` would miss most of what a person means by it.
-`tag:work` on its own lists the headings carrying the tag; with words, it narrows where they are
-looked for. `:work:` is accepted as typed, since that is how a heading spells it.
-**`filterQuery` really did become a special case**: the drawer's filter now parses the same query,
-so it still matches file names, and `tag:work` there lists the files with work in them. It is
-recomputed when the query or the replica changes rather than on every recomposition, because a tag
-term has to look inside the files while the drawer is redrawn constantly.
-**Verified** 16 `OrgSearchTests` and 7 `SearchTest` cases: offsets that point at the match in the
-file, breadcrumbs, line numbers that survive skipped elements, tag inheritance from both sources,
-words narrowing rather than widening, quoted phrases, a heading inside a `#+BEGIN_SRC` block not
-being treated as a heading, and the scan still finding its one match in a ~4 MB corpus, larger than
-the real notes directory.
+**Pinned to the screen, after a first attempt that was not.** See
+[06](06-editor.md#where-the-strip-goes-and-why-it-matters).
+**Measured** Walking all 366 real notes for the tag counts costs 3 ms warm, 14 ms cold, so nothing
+cleverer is warranted than a context rebuilt when the replica or the open file changes.
+**Found while writing it** The editor spliced items with `insert.length` instead of the item's
+`caretOffset`, which would have left the caret after `#+END_SRC` instead of inside the block. That is
+why the splice lives in the engine as `applyTo`, where a test can reach it.
+
+### T14 · Search
+A linear scan, no index, no new dependency; [06](06-editor.md#search-g2) says what it does.
 **The speed criterion is measured, not asserted.** A `measureTime` assertion went in first and came
-back out: a clock in a test suite asserts about the machine running it, so it fails on a loaded
-laptop while the code is unchanged. The corpus-sized test now prints its time and checks only the
-result; an accidentally quadratic scan would announce itself by never finishing, which is not a
-failure anyone can mistake for a slow machine.
-**Searched once the typing stops** (200 ms), not per keystroke, in both the search box and the
-drawer filter: the query updates on the keystroke so the field never lags, while the scan waits for
-a pause. Clearing is immediate and stale results stay visible while the next scan is pending. That left the drawer still sluggish, which
-showed the cost there was never the scan: its tree composed all 366 rows on every rebuild and lost
-its expansion state to it, so it is now flattened into lazy rows keyed by path. The one cost still
-open — `searchOrgFile` splitting a file into elements before checking whether it contains the words
-— is written up in [06](06-editor.md#search-g2).
-**Measured on the real notes** 366 files, 1.21 MB: a word takes 17–54 ms, a tag query 8–15 ms, and
-a tag narrows a word search as it should (`cuisine` 66 hits, `tag:house cuisine` 61). The synthetic
-4 MB corpus scans in ~200 ms. Which is the whole argument for the linear scan: the index this would
-have needed is a thing to keep correct on every save, and it would save tens of milliseconds.
+back out: a clock in a test suite asserts about the machine running it, so it fails on a loaded laptop
+while the code is unchanged. The corpus-sized test prints its time and checks only the result; an
+accidentally quadratic scan would announce itself by never finishing, which is not a failure anyone can
+mistake for a slow machine.
+**Measured on the real notes** 366 files, 1.21 MB: a word takes 17–54 ms, a tag query 8–15 ms, and a
+tag narrows a word search as it should (`cuisine` 66 hits, `tag:house cuisine` 61). A synthetic 4 MB
+corpus scanned in ~200 ms, before the raw-text check T19 added. Which is the whole argument for the
+linear scan: the index this would have needed is a thing to keep correct on every save, and it would
+save tens of milliseconds.
 **Found while testing** Search results and the agenda index went stale after a local save: both are
 derived from the in-memory documents, and only the agenda one was being rebuilt. They are refreshed
 together now, from one place, since forgetting one of them is invisible until someone reads results
 describing a document as it used to be.
-**Depends** T8
-**Scope** Linear-scan full-text search over the replica with heading breadcrumbs and jump-to-offset;
-`filterQuery` becomes a special case.
-**Done when** Searching the whole corpus returns results in well under a second offline.
-**Not included** The structured query grammar (`todo:NEXT`, `deadline:<=7d`) and saved searches
-(since landed as T29).
-The parser has one prefix today; adding another is a case in `SearchQuery.parse` and a predicate in
-`searchOrgFile`, which is where agenda filters should meet it (T16).
+**Since** The drawer's filter parsed the same query at first, tags included. It looks at file names
+alone now (362bc20); finding what is inside the notes is what search is for.
 
 ---
 
 ## Phase 4 — Agenda ([07](07-calendar-agenda.md))
 
-### T15 · Timestamp parser — ✅ **done**
-**Landed** `shared/…/org/agenda/OrgTimestamp.kt`. Stamps are found with `OrgSyntax.timestamp`,
-the pattern the highlighter already colours, so the agenda never counts something the editor does
-not show as a stamp; the match is then parsed strictly. `OrgTimestamp` follows [07](07-calendar-agenda.md)
-with one rename: `warning` is `delay: OrgDelay(by, firstOnly)`, since the same `-2d` is a warning
-on a `DEADLINE` and a delay on a `SCHEDULED`, and `--2d` means "first repeat only". Units are
-Org's own `OrgTimeUnit` (h/d/w/m/y) rather than `DateTimeUnit`.
-**Malformed input** A stamp whose date does not exist or whose brackets do not pair is not a
-stamp. An unrecognised token inside one — a French day name, `25:00` — is skipped and the date
-kept. A backwards `<b>--<a>` is two stamps, not a range.
-**Verified** `OrgTimestampTests`: one table row per construct, the malformed cases, offsets into a
-whole document, and a round trip through what completion writes.
-**Depends** T3 (`kotlinx-datetime` added to `shared/`)
-**Scope** Full `OrgTimestamp`: times, time ranges, multi-day ranges, repeaters, warnings,
-active/inactive.
-**Done when** A table-driven test covers every row of the syntax table, including
-malformed input degrading gracefully.
+### T15 · Timestamp parser
+Stamps are found with `OrgSyntax.timestamp`, the pattern the highlighter already colours, so the agenda
+never counts something the editor does not show as a stamp; the match is then parsed strictly.
+**Malformed input** A stamp whose date does not exist or whose brackets do not pair is not a stamp. An
+unrecognised token inside one, a French day name or `25:00`, is skipped and the date kept. A backwards
+`<b>--<a>` is two stamps, not a range.
 
-### T16 · Agenda engine — ✅ **done**
-**Landed** `shared/…/org/agenda/Agenda.kt`. Entries are read from raw text (like search), element
-by element, skipping blocks and drawers; one planning line can hold several keywords. Every rule in
-[07](07-calendar-agenda.md#agenda-engine) is a test in `AgendaTests`. Choices the doc left open:
+### T16 · Agenda engine
+Entries are read from raw text (like search), element by element, skipping blocks and drawers. Choices
+the design left open:
+
 - Deadline warnings run from **today**, not from before it, and only for the **next** repeat, or a
   daily deadline would fill each day with a fortnight of copies of itself.
-- An overdue deadline is carried to today like a scheduled item, with a negative
-  `daysUntilDeadline`.
+- An overdue deadline is carried to today like a scheduled item, with a negative `daysUntilDeadline`.
 - An unfinished repeating scheduled item is carried once, from the date it started at.
 - A heading's stamp is shown as the date, so it is stripped from the entry's title.
 
 `AgendaIndex` holds the entries and expands them a month at a time as a view asks, since a daily
-repeater has an occurrence on every month nobody looks at. The view model rebuilds it with
-everything else derived from the notes, and the calendar opens an entry by its heading's offset —
-the same path as a search hit — which retired the title-matching lookup.
-**Calendar, unchanged in behaviour** The month and week grids show occurrences on their own date
-only (`isOnOwnDate`): warnings and carried-over items are dots without meaning until T17 can draw
-them differently. The dialog now shows deadlines and appointments as well as scheduled items,
-with a caption for the time and for "Deadline".
-**Measured** The real notes (366 files, 1.2 MB): 1,874 entries indexed in 89 ms on the JVM; two
-months expanded in 7 ms.
-**Found on the real notes** Five files use `EVENT`/`FINISHED` without a `#+TODO:` line — they rely
-on the Emacs-wide `org-todo-keywords` — so their finished meetings read as undone and are carried
-to today. The app assumes `TODO | DONE` for such files everywhere (highlighting, completion), so
-this wants one app-wide answer: a keyword setting, or the corpus's declared keywords as the default.
+repeater has an occurrence on every month nobody looks at.
+**Measured** The real notes (366 files, 1.2 MB): 1,874 entries indexed in 89 ms on the JVM; two months
+expanded in 7 ms.
+**Found on the real notes** Five files use `EVENT`/`FINISHED` without a `#+TODO:` line, relying on the
+Emacs-wide `org-todo-keywords`, so their finished meetings read as undone and were carried to today.
 The corpus's keywords were the answer until 2026-11-01; since then a file's keywords are its own
 `#+TODO:` lines or Org's `TODO | DONE`, as in Org, so those files need a `#+TODO:` line of their own.
-**Depends** T15, T5
-**Scope** `AgendaEntry`/`AgendaOccurrence`, occurrence expansion including deadline warning
-windows, repeaters, carried-over scheduled items, body timestamps. Replaces
-`scheduledByDate`.
-**Done when** Expansion rules are unit-tested over a fixture corpus, and the existing
-calendar renders from the new index unchanged (D7).
 
-### T17 · Day and week views — ✅ **done**
-**Landed** Four modes on the calendar tab, sharing the existing header, swipe and slide animation:
-- **Agenda** (the default): an Overdue section, then a week of days, each entry with its time or
-  kind icon, status ("Deadline", "Due in 3 d.", "Scheduled 5 d. ago"), keyword, priority and tags.
-- **Day**: an all-day strip above an hour grid; timed entries are blocks, overlapping ones share
-  the width; a line at the current time.
-- **Week**: the same grid in seven columns under a row of dates. A multi-day range is one bar:
-  squared off where it continues and titled only where it starts.
-- **Month**: the existing grid with chips coloured by kind, deadlines before scheduled items before
-  appointments when space runs out, and a count of the rest. Tapping a day opens it in Day.
+### T17 · Day and week views
+**Decisions** A deadline's countdown shows on today only: the engine gives one for every day of the
+warning period, and the agenda list would otherwise repeat it daily, as org-agenda's week view does
+not. Multi-day ranges go in the all-day strip even when they have times, as calendars draw a trip.
+Blocks are drawn at least 30 minutes tall so a stand-up has room for its title. The grid opens an hour
+before now, but never below the first timed entry on screen. A drag horizon and a configurable day
+start are not done: the grid scrolls, and nothing yet needed a setting.
+**First try on a device: empty.** The app shell scrolled every screen but reading mode and search, and
+inside a scroll the calendar's fill-the-rest content area measured zero height; the screen's own tests
+gave it a fixed size and could not see it. The calendar owns its scroll like search, and
+`AppCalendarTest` renders the real shell and opens the tab.
 
-Deadlines, scheduled items, appointments and closed items each have a colour and an icon, the
-same in every view; done entries are dimmed, and hidden until *Show done* is switched on in the header's ⋮ menu (an eye toggle, at first). Every entry opens its
-heading.
-**Decisions** A deadline's countdown shows on today only — the engine gives one for every day of
-the warning period, and the agenda list would otherwise repeat it daily, as org-agenda's week
-view does not. Multi-day ranges go in the all-day strip even when they have times, as calendars
-draw a trip. Blocks are drawn at least 30 minutes tall so a stand-up has room for its title. The
-grid opens an hour before now, but never below the first timed entry on screen. "Drag horizon" and
-a configurable day start are not done: the grid scrolls, and nothing yet needed a setting.
-**Verified** `CalendarLayoutTest` (12, common): overlap layout, what each view shows, list grouping,
-labels. `CalendarScreenTest` (6, JVM): the acceptance day — two timed meetings, an all-day range and
-a deadline — renders in all four views; tapping opens the entry or the day; done entries hide.
-Screenshots of all four were checked on the desktop runtime at phone width.
-**First try on a device: empty.** The app shell scrolls every screen but reading mode and search,
-and inside a scroll the calendar's fill-the-rest content area measured zero height; the screen's
-own tests gave it a fixed size and could not see it. The calendar now owns its scroll like search,
-and `AppCalendarTest` renders the real shell and opens the tab — it fails without the fix.
-**Depends** T16
-**Scope** Day view with an hour grid and "now" line; week view with all-day strip and hour
-grid; month chips distinguishing deadline vs scheduled; agenda list view. Keep the current
-swipe/animation behaviour.
-**Done when** A day with two timed meetings, an all-day range and a deadline renders
-correctly in all four views.
-
-### T18 · Notifications — 🟡 **done on Android, iOS not yet seen on a device**
-**Landed** Local notifications planned from the agenda, no server involved:
-- `planReminders` (common, pure): one reminder the lead time before each timed entry that is not
-  done — appointments, scheduled items and deadlines with a time; a multi-day range once, when it
-  starts — plus an optional morning digest listing each day that has something on it. Only what is
-  still ahead, within 14 days, soonest first, at most 60 (iOS keeps 64 pending and drops the rest).
-  Overdue items and deadline warnings are the agenda list's business, not reminders.
-- `NotificationScheduler.replaceAll` is the whole platform contract. The view model replans after
-  every change to the notes and on returning to the foreground, and hands the plan over only when
-  it changed, so a sync that changes nothing leaves the device's notifications alone. Nothing is
-  planned before the replica has been read, which would otherwise cancel everything at start-up.
-- **Android**: one exact `setExactAndAllowWhileIdle` alarm per reminder, firing a receiver that
-  posts it. The plan is kept in preferences and set again after a reboot, an app update or a
-  clock/time-zone change. `POST_NOTIFICATIONS` was asked for at start on 13+ (see *Since* below).
-- **iOS**: `UNCalendarNotificationTrigger` per reminder; permission was asked on the first plan; a
-  delegate shows banners while the app is open.
-- Tapping a reminder opens its note at the heading — held until the notes are read when the tap
-  is what started the app. Desktop and web schedule nothing.
-- Settings: reminders on/off, minutes before (default 10), digest on/off and its time.
-
-**Verified** `ReminderPlanTest` (14) and `ReminderSchedulingTest` (7). On an Android 14 emulator
-holding the real replica: the permission prompt on first start; alarms set from the notes; with the
-app process killed and Wi-Fi and data off, the digest posted at 21:33:02 for 21:33; tapping it opens
-the app; a reminder's tap opens its note at the heading.
-**Inexact alarms were tried first and dropped.** The design above preferred them. Measured on the
-emulator, Android allowed a reminder three days out to arrive up to an hour late (it delays inexact
-alarms by up to 75% of the time remaining, capped at an hour), and a test digest came four minutes
-late. Exact alarms need `USE_EXACT_ALARM`, which Play reserves for calendar and alarm apps — an
-agenda is one; inexact remains the fallback if exact alarms are refused.
-**Since** (9902878) neither platform asks on its own. "Not now" on the welcome screens was followed
-by the question anyway — on iOS whenever the scheduler planned, on Android at every start. Now the
-welcome screens ask, a scheduler only checks, and Settings shows *Allow notifications* under
-Reminders while they cannot be shown; on Android, once the prompt has been refused for good, it opens
-the app's notification settings. Allowing them there hands the plan over again, since iOS drops what
-it was not allowed to show (`NoteAgenda.onNotificationsAllowed`, e9f1ee0).
-**Still to prove** The same on an iPhone: the iOS scheduler compiles and links, nothing more.
-**Depends** T16
-**Scope** `NotificationScheduler` `expect/actual` for iOS and Android; idempotent
-"cancel all, schedule next N" honouring the iOS 64-pending limit; lead time and daily
-digest settings.
-**Done when** A timed entry produces a phone notification at the configured lead time with
-the app closed and the network off.
+### T18 · Notifications
+Only what is still ahead, within 14 days, soonest first, at most 60, since iOS keeps 64 pending and
+drops the rest. The plan is handed over only when it changed, so a sync that changes nothing leaves the
+device's notifications alone, and nothing is planned before the replica has been read, which would
+otherwise cancel everything at start-up.
+**Verified** On an Android 14 emulator holding the real replica, with the app process killed and Wi-Fi
+and data off: the digest posted at 21:33:02 for 21:33; tapping it opens the app; a reminder's tap opens
+its note at the heading.
+**Inexact alarms were tried first and dropped.** The design preferred them. Measured on the emulator,
+Android allowed a reminder three days out to arrive up to an hour late (it delays inexact alarms by up
+to 75% of the time remaining, capped at an hour), and a test digest came four minutes late. Exact alarms
+need `USE_EXACT_ALARM`, which Play reserves for calendar and alarm apps, and an agenda is one; inexact
+remains the fallback if exact alarms are refused.
+**Since** (9902878) neither platform asks on its own. "Not now" on the welcome screens was followed by
+the question anyway, on iOS whenever the scheduler planned and on Android at every start. Now the
+welcome screens ask, and a scheduler only checks (`NoteAgenda.onNotificationsAllowed`, e9f1ee0;
+[07](07-calendar-agenda.md#notifications)).
 
 ---
 
 ## Phase 5 — What using it exposed
 
-### T19 · Continuous integration — ✅ **done**
-**Landed** `.github/workflows/ci.yml`. On every push to master and every pull request, one Ubuntu job
-runs `:shared:jvmTest`, `:shared:wasmJsTest`, `:composeApp:jvmTest`, `:composeApp:wasmJsTest` and
-`:server:test`, then builds `:composeApp:wasmJsBrowserDistribution` and `:androidApp:assembleDebug`.
-Those two builds are the compile check for wasm and Android. It runs with `--continue`, so one run
-reports every failure, and uploads the HTML test reports when something fails.
-**iOS runs nightly, and only when master changed.** The repository is private, so macOS minutes
-count 10× against the free quota. A nightly run of about 10 minutes would use 3,000 of the 2,000 a
-month, so a cheap Ubuntu job first checks for commits in the last 25 hours. `workflow_dispatch` runs
-it by hand, with the iOS job on by default. The iOS simulator tests are the ones that have most
-likely never run anywhere, so their first run is the one to watch.
-**Since** The repository is public now, so its macOS minutes no longer count against a quota and the
-reason above for keeping iOS nightly no longer holds; it is still nightly. The nightly check asks
-whether master moved since the last scheduled run that passed, by comparing that run's SHA, rather
-than whether it had commits in the last 25 hours, which a run starting later than the one before
-could skip a commit through; a failed night is tried again. Nights start at 01:37 UTC, because
-runs scheduled on the hour started hours late. A third job, `sweep`, plays 10,000 seeded sessions of
-`SyncEngineRandomTests` (T38, d614601) on the same nights, while every push plays 30 inside the JVM
-tests. `workflow_dispatch` has an input for each nightly job.
-**Proven on GitHub** Both jobs have run green. The first red run was a real one:
-`OrgSearchTests.findsOneMatchInACorpusSizedCollection` passed its assertions on wasm but took 3.4 s
-in headless Chrome, past Mocha's 2 s limit. Raising the timeout was rejected as hiding the problem.
-The search itself was slow outside the JVM (2.7 s on the iOS simulator), because it parsed every
-file before looking for the words. `searchOrgFile` now skips any file that does not contain every
-term, which took the corpus test from 189 ms → 15 ms on the JVM, 402 → 95 ms on wasm, and 2.7 s →
-363 ms on iOS. A query term present in nearly every file still parses nearly every file; T21's
-backlink scan is where that case gets measured.
-**Depends** —
-**Scope** A workflow on every push: `:shared:jvmTest`, `:server:test`, `:composeApp:jvmTest`,
-plus a compile of each target that has no tests to run — `compileKotlinWasmJs`,
-`compileAndroidMain`, `compileKotlinIosSimulatorArm64`. Gradle cache, JDK and Android SDK set up
-once. A macOS runner is the only place `iosSimulatorArm64Test` can execute at all, so either that
-job runs there or it runs nightly; either is better than the present arrangement, where those
-tests have most likely never run anywhere.
-**Why first** There are over 900 tests and nothing runs them but a person who remembers to. Three
-regressions reached a device in a single day of work — a keyboard-covered suggestion strip, a
-caret landing outside a block, and a drawer that stopped opening notes — and the suite is not what
-caught any of them. Tests nobody runs are documentation.
-**Done when** A push that breaks any target, or any test, fails the build and names what broke.
-**Not included** Signing, publishing, or distributing builds. This is a gate, not a pipeline.
-Those came later, as T37: `container.yml` and `scripts/publish.sh`.
+Nothing in this phase was foreseen when the plan was written: it is what a day of real use and three
+regressions exposed, and then (T25–T29) what further use asked for.
 
-### T20 · Creating, renaming and deleting notes — ✅ **done**
-**Landed** In the drawer, a *New note* button asks for a title, shows the file it will make (lower
-case, `_`-joined, like the existing notes) in the folder set under Settings → *New notes*, creates
-it with a `#+TITLE:` and opens straight into its first heading. A long-press on a note offers
-*Rename or move* (the whole path is editable) and *Delete*, which warns when the note holds edits
-the server has not seen. All three work offline.
-**How the hard parts were answered** ([05](05-sync-protocol.md#creating-renaming-and-deleting-t20))
-- A deletion is a tombstone carrying the etag it was made at; the server deletes only that version,
-  and an edit made elsewhere in the meantime brings the note back instead of being lost.
-- A new note is pushed with `If-None-Match: *`, so it can never replace a same-named note from
-  another device — which the engine used to do, with an unconditional `PUT`.
-- A rename is a create and a tombstone under one lock; deletions are sent after every push, so the
-  other device may see both names for a moment, never neither.
-- File URLs are now percent-encoded, so a note named with a space or `#` is addressable.
-**Verified** `SyncEngineTests` (10 new cases), `NotePathsTest`, `NoteLifecycleTest` (view model to
-fake server), `NoteLifecycleUiTest` (drawer menu, dialogs), and two new `SyncApiV1Test` cases
-(encoded path, stale delete refused). Not yet tried against the real server from a phone.
-**Not included** Templates beyond `#+TITLE:`, and creating or deleting folders — an empty folder
-does not exist in this model, and one appears when a note is moved into it. Templates came later
-(0970366, `template/NoteTemplates.kt`): a new note starts as org-roam starts one, with its own `:ID:`,
-title, author, date and the tags typed in the dialog, then the header lines Settings holds; a
-*Today* button opens today's daily, creating it in the daily folder first.
+### T19 · Continuous integration
+`.github/workflows/ci.yml`: every push to master and every pull request runs the JVM and wasm tests of
+`shared/` and `composeApp/`, the server's, and the wasm and Android builds, which are the compile check
+for those two.
+**iOS runs nightly, and only when master changed.** The repository was private then, so macOS minutes
+counted 10× against the free quota: a nightly run of about 10 minutes would use 3,000 of the 2,000 a
+month. It is public now and that reason no longer holds; iOS is still nightly. The check asks whether
+master moved since the last scheduled run that passed, by comparing that run's SHA, rather than whether
+it had commits in the last 25 hours, which a run starting later than the one before could skip a commit
+through; a failed night is tried again. Nights start at 01:37 UTC, because runs scheduled on the hour
+started hours late. A third job, `sweep`, plays 10,000 seeded sessions of `SyncEngineRandomTests` (T38,
+d614601) on the same nights, while every push plays 30 inside the JVM tests.
+**The first red run was a real one.** `OrgSearchTests.findsOneMatchInACorpusSizedCollection` passed its
+assertions on wasm but took 3.4 s in headless Chrome, past Mocha's 2 s limit. Raising the timeout was
+rejected as hiding the problem. The search itself was slow outside the JVM (2.7 s on the iOS simulator),
+because it parsed every file before looking for the words. `searchOrgFile` now skips any file that does
+not contain every term, which took the corpus test from 189 ms → 15 ms on the JVM, 402 → 95 ms on wasm,
+and 2.7 s → 363 ms on iOS. A query term present in nearly every file still parses nearly every file.
 
-**Depends** T10
-**Scope** The app side of D11. The server can already take a file it has never seen — `put` with
-`If-None-Match` — and `delete` exists, so what is missing is above it: view-model operations for
-create, rename and delete; the affordances in the drawer; replica bookkeeping so a new note is
-dirty-then-pushed like any edit; and a capture flow worth having on a phone, which is a new note
-from a template into a designated inbox.
-**The hard parts are not the happy paths.** A rename is a move, so it is a create and a delete that
-must not be observed half-done by the other device. A delete has to refuse, or warn, when the file
-holds edits that have not reached the server. And a note deleted on one device while being edited
-on another is the same question T11 answered for content, asked again for existence.
-**Done when** A note created on the phone appears on the laptop's disk without restarting
-anything; deleting one removes it from both; renaming keeps its content and its sync state; and
-none of the three can lose an unsynced edit.
+### T20 · Creating, renaming and deleting notes
+How the hard parts were answered is in
+[05](05-sync-protocol.md#creating-renaming-and-deleting-t20). A delete warns when the note holds edits
+the server has not seen. An empty folder does not exist in this model: one appears when a note is moved
+into it. Templates came later (0970366, `template/NoteTemplates.kt`): a new note starts as org-roam
+starts one, with its own `:ID:`, title, author, date and the tags typed in the dialog, then the header
+lines Settings holds; a *Today* button opens today's daily, creating it in the daily folder first.
 
-### T21 · Following links between notes — ✅ **done**
-**Landed** In reading mode — and in the calendar and search, which draw the same inline text — a
-tap on a link into the notes opens its target at the right element; web links still go to the
-browser, and `kbd:`, PDFs and other files stay plain text. A back arrow in the top bar returns to
-where the link was tapped. Every note ends with *Linked from (N)*, each entry opening its source
-at the link. Rules, in `shared/…/org/link/OrgLinks.kt`:
-- `id:` → the heading or file whose drawer declares that `:ID:` (the notes are org-roam's: 344
-  files carry one, and 104 links use them — more than any other note link).
-- `file:` → relative to the linking note, as Org reads it; failing that, the longest tail of the
-  path that names a note, so Emacs paths like `~/org-roam/daily/x.org` work. `::*Heading`,
-  `::#custom-id`, `::line` and fuzzy searches land inside; a search that no longer matches still
-  opens the note and says so, as Org does.
-- `*Heading`, `#custom-id` and plain `[[text]]` (`<<target>>`, `#+NAME:`, then a heading) resolve
-  within the note. Headings compare without keyword, priority, cookies, tags or case.
-**Completion now agrees with it** It used to write `[[file:notes/x.org]]` from the notes' root,
-which Org reads from the linking note's folder and so broke in every subfolder. It now writes the
-path relative to the note being edited, or `[[id:…][Title]]` when the target has its own `:ID:`,
-as org-roam does — which also survives a rename. A test completes every note and resolves it.
-**Verified** `OrgLinksTest` (15), `LinkNavigationTest`, UI tests for a real link tap (an inner
-target: it follows, never edits) and the backlinks list. Against the real notes: 103/104 `id:`
-links, every `file:` link to a note inside them, and 111 fuzzy links resolve; the misses are links
-that are broken in Emacs too. One backlink pass over all 367 notes takes ~33 ms on desktop, and is
-done once per change to the notes, not per note opened.
-**Not included** Following links from inside the editor. The system back gesture came later
-(5310dcd): Back closes an open drawer first, and otherwise returns from a followed link, as the
-top bar's arrow does.
+### T21 · Following links between notes
+[09](09-element-editing.md#links-between-notes) has the rules. Completion agrees with them: it used to
+write `[[file:notes/x.org]]` from the notes' root, which Org reads from the linking note's folder and so
+broke in every subfolder. A test completes every note and resolves it. There is no `org-roam` database
+or index: the corpus is small enough to scan, and an index is a thing to keep correct on every save (G7).
+**Measured** The notes are org-roam's: 344 files carry an `:ID:`, and 104 links use one, more than any
+other note link. Against them: 103/104 `id:` links, every `file:` link to a note inside them, and 111
+fuzzy links resolve; the misses are links that are broken in Emacs too. One backlink pass over all 367
+notes takes ~33 ms on desktop, and is done once per change to the notes, not per note opened.
+**Not included** Following links from inside the editor. The system back gesture came later (5310dcd):
+Back closes an open drawer first, and otherwise returns from a followed link, as the top bar's arrow
+does.
 
-**Depends** T14
-**Scope** `[[file:…]]`, `[[*Heading]]` and `[[id:…]]` become navigation: tapping one in reading
-mode opens the target at the right element, which is the offset-to-element lookup the calendar and
-search already share. Plus the half that makes a corpus a web rather than a pile — **backlinks**:
-"what links here", computed by the same linear scan as search, since finding every `[[…]]` that
-names this note is the same problem as finding every line that contains a word.
-**Keep the resolver in `shared`**, next to the search it is built on, so the rules for what a link
-points at are written once. Completion already *writes* these links (T13); the two must agree on
-their shape, and the fastest way to guarantee that is a test that completes a link and then
-resolves it.
-**Done when** Tapping a link opens its target at the right heading; a note shows every note that
-links to it; both work offline, and the backlink scan of the real corpus stays well under a second.
-**Not included** An `ID:` property scheme of its own, or `org-roam`'s database. The corpus is
-small enough to scan, and an index is a thing to keep correct on every save (G7).
+### T22 · Whole-file editing, reconsidered
+**Retired.** Per-element editing was already the path every edit took; the whole-file editor was kept
+only for restructuring, and that is in the long-press menu now. Two editing surfaces meant every editor
+decision was taken twice or forgotten once, and the second one was where the untested code lived. The
+preamble needed nothing new: it is element 0, and a tap edits it like any other. Removed: the top bar's
+Edit/Save buttons, the whole-file `BasicTextField`, `EditorViewport`, viewport-scoped styling with
+`OrgViewportHighlightTest`, and `OpenNote.onContentChanged`. Refile, which this task left out, came in
+1.6.0 ([09](09-element-editing.md#refile)); keyboard shortcuts for any of it did not.
 
-### T22 · Whole-file editing, reconsidered — ✅ **done: retired**
-**Decision** Retire it. Per-element editing was already the path every edit took; the whole-file
-editor was kept only for restructuring, and that is now in the long-press menu. The preamble needed
-nothing new: it is element 0, and a tap edits it like any other.
-**Landed**
-- `withOrgSubtreesSwapped`, `withOrgSubtreeShifted`, `previousSibling` and `nextSibling` in
-  `OrgElements.kt`, next to `withoutOrgSubtree`: pure text edits over element ranges, so the rest
-  of the file is byte-identical, and a `*` line inside a block is left alone exactly when the
-  splitter leaves it alone.
-- *Move up*, *Move down*, *Promote* and *Demote* in the long-press menu, each acting on the whole
-  subtree as Org's `org-move-subtree-*` and `org-promote/demote-subtree` do. Unavailable ones are
-  shown disabled. Like delete, they are refused while an element is being edited. Folds follow the
-  headings by index, and a moved heading that leaves the screen is scrolled back to.
-- Removed: the top bar's Edit/Save buttons, the whole-file `BasicTextField`, `EditorViewport`,
-  viewport-scoped styling in `OrgSyntaxHighlightTransformation` with `OrgViewportHighlightTest`, and
-  `OpenNote.onContentChanged`.
-**Verified** `OrgElementsTests` (sibling, swap and shift cases), `ElementEditingTest` (moves, shifts,
-folds, refusal while editing) and `ReadingModeInteractionTest` (the menu offers only the moves that
-apply).
-**Not included** Moving a heading out of its parent or to another file (refile), and keyboard
-shortcuts for any of it.
-
-The task as it was written:
-
-**Depends** T12b, T13
-**Scope** A decision, then the work it implies. Per-element editing ([09](09-element-editing.md))
-became the main path and the whole-file editor stayed behind as an escape hatch — holding a plain
-`String` where the element editor holds a `TextFieldValue`, with no completion, and carrying the
-viewport-highlighting machinery that only it needs. Either:
-
-- **retire it**, which first requires per-element editing to cover what it is still used for —
-  moving, promoting and demoting a heading, and editing the preamble; or
-- **bring it up to par**, hoisting its value into the view model as the element editor's is, wiring
-  completion through the same path, and keeping viewport highlighting for the large-file case.
-
-**Why it matters more than it looks** Two editing surfaces mean every editor decision is taken
-twice or forgotten once, and the second one is where the untested code lives. It also settles
-whether T12b's remaining items — read↔edit scroll mapping, debounced re-parse — are ever worth
-doing: they exist only for this surface.
-**Done when** There is one editing surface, or the second one has the same affordances as the
-first, and whichever it is, the reason is written down.
-
-
-### T23 · Server container — ✅ **done**
-**Since** The run stage is `gcr.io/distroless/java25-debian13:nonroot` rather than a JRE image
-(e4ebc1e): the same JRE with no shell or package manager, so far fewer packages for CVEs to land
-in. The image is published to GHCR for amd64 and arm64 on each `v*` tag by `container.yml`
-(e094b3e). It no longer refuses to start without a token: pairing (T30) removed
-`KORGNOTE_REQUIRE_TOKEN` along with the token. What it refuses is a missing or unwritable `/notes`
-(`KORGNOTE_REQUIRE_NOTES_DIR`). TLS is built in on 8443, and a `/state` volume keeps the certificate
-and the paired devices. The history follows.
-**Landed** A multi-stage [`Dockerfile`](../Dockerfile) (`:server:installDist` on a JDK 25 image, then
-a JRE image) and a [`docker-compose.yml`](../docker-compose.yml). Two new switches, both set by the
-image: `KORGNOTE_REQUIRE_TOKEN` refuses to start without a token (`KORGNOTE_ALLOW_LAN` does not
-satisfy it), and `KORGNOTE_REQUIRE_NOTES_DIR` makes a missing or unwritable notes directory fatal.
-Writability is checked by writing a probe file, because through Docker Desktop's file sharing a
-`chmod 555` directory reports `canWrite()` as true and then refuses the write. The container runs as a
-non-root user, and compose sets it to `KORGNOTE_UID:KORGNOTE_GID`. `UID` itself cannot be used
-because it is read-only in bash and zsh.
+### T23 · Server container
+A multi-stage [`Dockerfile`](../Dockerfile) (`:server:installDist` on a JDK 25 image, then
+`gcr.io/distroless/java25-debian13:nonroot`, the same JRE with no shell or package manager, so far fewer
+packages for CVEs to land in, e4ebc1e) and a [`docker-compose.yml`](../docker-compose.yml). The image is
+published to GHCR for amd64 and arm64 on each `v*` tag by `container.yml` (e094b3e).
+**A missing or unwritable `/notes` is fatal** (`KORGNOTE_REQUIRE_NOTES_DIR`), since in a container an
+empty library would hide a typo in the volume path. Writability is checked by writing a probe file,
+because through Docker Desktop's file sharing a `chmod 555` directory reports `canWrite()` as true and
+then refuses the write. The container runs as a non-root user, and compose sets it to
+`KORGNOTE_UID:KORGNOTE_GID`. `UID` itself cannot be used because it is read-only in bash and zsh.
 **Build context** Not a problem: with `local.properties` excluded and no SDK in the image, Gradle
-configures the Android modules and builds `:server` without complaint, so the build stays inside
-the image.
-**Verified** On Docker Desktop for macOS: `401` without the token; a host edit arrived as an SSE
-`changed` event within seconds through the bind mount; a `PUT` from a client created the file on the
-host owned by the host UID; each refusal (no token, `ALLOW_LAN` without a token, no mount, `:ro`
-mount, unwritable directory) exits with a message. Not yet run on a Linux host.
-**Optional, half done** The image builds the wasm client alongside the server and serves it at `/`
-(`WASM_DIR=/opt/korgnote/web`); `KORGNOTE_DISABLE_WEB=1` turns that off at run time. The build stage
-needs `libatomic1`, which the Node that the Kotlin plugin downloads links against. Pushing the image
-to GHCR from CI is not done (since done, as above).
+configures the Android modules and builds `:server` without complaint. The build stage needs
+`libatomic1`, which the Node that the Kotlin plugin downloads links against.
+**Verified** On Docker Desktop for macOS: a host edit arrived as an SSE `changed` event within seconds
+through the bind mount; a `PUT` from a client created the file on the host owned by the host UID; each
+refusal (no mount, `:ro` mount, unwritable directory) exits with a message. Not yet run on a Linux host.
 
-**Depends** T2
-**Scope** A `Dockerfile` for the Ktor server and a `docker-compose.yml` example: the notes
-directory mounted from the host at `/notes` with `NOTES_DIR=/notes`, the token and the port. A
-multi-stage build: `:server:installDist` on a JDK image, then a slim JRE image to run it.
-**What to get right**
-- **Binding.** The server listens on loopback unless `KORGNOTE_TOKEN` or `KORGNOTE_ALLOW_LAN` is
-  set, and loopback inside a container cannot be reached from outside. The image should *require* a
-  token and refuse to start without one, because a container is exactly where a port gets exposed
-  by accident.
-- **File ownership.** The server writes into the mounted directory. Run as a non-root user whose
-  UID/GID can be set (`--user`, or a build argument), so files created on the host are not owned by
-  root.
-- **A missing mount must be fatal.** Today a missing notes directory falls back to the bundled
-  samples, and inside a jar to serving nothing, with only a log line. In a container that hides a
-  typo in the volume path, so fail at startup instead.
-- **The file watcher.** Edits made outside the app reach the server through a file watcher. This
-  works on Linux; bind mounts under Docker Desktop on macOS do not always pass host changes into the
-  container. Verify on the machine that will actually run it.
-- **The build context.** Gradle configures every module, and the Android ones may refuse to
-  configure without an SDK even when only `:server` is built. Check that first; if it fails, build
-  the distribution outside the image (locally or in CI) and `COPY` it in.
-**Optional** Also serve the web client from the same container (`WASM_DIR`), and have CI build the
-image and push it to GHCR on master. Both are extensions of T19 rather than part of this task.
-**Done when** `docker compose up` with a host notes directory and a token serves the app, an edit
-made on the host reaches a connected client, and a note saved from the app appears on the host
-owned by the host user.
-**Not included** TLS. The README's reverse-proxy recipe still applies in front of the container.
-(Since T30 the server serves TLS itself, and the README has no reverse-proxy recipe.)
-
-### T24 · Tap to edit, fold instead of pencil and + — ✅ **done**
-**Landed** A tap edits; inner targets (checkbox, link, drawer, chevron) keep their own taps. The
-pencil and per-element **+** are gone: a long-press menu offers *Add heading below* (after the
-whole subtree, so it never adopts the element's children) and *Add sub-heading* (first child), and
-the editor has a **+** FAB that saves and opens the next heading. One chevron per heading folds its
-subtree; jumps and edits unfold what they need. [09](09-element-editing.md#the-surface) describes it.
-**One deviation** Folds are keyed by heading line plus occurrence rather than tree position, which
-also moves when a sibling is added above; see [09](09-element-editing.md#folding).
-**Verified** `ElementEditingTest` (every way of adding a heading), `FoldingTest`,
-`ReadingModeInteractionTest` (tap, checkbox, long-press menu, fold) on desktop JVM. Not yet tried on
-a phone — the long-press menu placement in particular should be looked at there.
+### T24 · Tap to edit, fold instead of pencil and +
+[09](09-element-editing.md#the-surface) describes it. Why: with a few hundred elements in a file, a
+pencil and a **+** on each were a few hundred pairs of identical icons, taking width from the text and
+making the note look like a form.
+**One deviation** Folds are keyed by heading line plus occurrence rather than tree position, which also
+moves when a sibling is added above; see [09](09-element-editing.md#folding).
 **Since** The editor's floating Discard, save-and-add and Save buttons moved onto the editing strip,
-since they covered the last element of a file (149b5f9). Save-and-add then left the strip
-(dcec372): the long-press menu and the button at the foot of the note still add a heading. It has
-been used on a phone since, and the strip fitted to one (ace6cc7).
+since they covered the last element of a file (149b5f9). Save-and-add then left the strip (dcec372): the
+long-press menu and the button at the foot of the note still add a heading. The strip was fitted to a
+phone once it was used on one (ace6cc7).
 
-**Depends** T4
-**Why** Every element in reading mode has two icons on its right, a pencil and a **+**. With a few
-hundred elements in a file, that is a few hundred pairs of identical icons. They take width from the
-text, and they make the note look like a form. Neither needs to be there all the time. Editing
-already has a gesture (long-press), and adding a heading after one particular element is rare
-compared with how often a heading is read.
-**Scope**
-- **Tap an element to edit it.** A plain tap opens the inline editor, just as long-press and the
-  pencil do today. The pencil goes. Inner tap targets still win: a checkbox toggles, a
-  `:LOCATION:` link opens, and so will the links T21 adds. A tap on anything else in the element
-  edits it. This reverses a choice recorded in [09](09-element-editing.md#the-surface) ("plain taps
-  are deliberately left alone"). That choice protected the inner targets, and letting the inner
-  target consume the tap first protects them just as well. A scroll or fling must never open an
-  editor.
-- **Remove the per-element +.** Its job moves to places that are not on screen all the time. The
-  recommendation, which this task should confirm on a device:
-  - **Long-press** opens a small menu instead of the editor: *Add heading below*, *Add sub-heading*.
-    It also leaves room for later actions on one element, such as delete or move (see T22).
-  - **In the inline editor**, an *Add heading below* action saves the draft and opens a new sibling.
-    Most additions happen right after editing the element above, so this is the common path.
-  - The reading-mode **+** FAB stays: it appends at the end of the file.
-  - Typing a new `* ` line inside a draft already creates a heading when the draft is saved, because
-    the splice is plain text. That path needs no UI, but it should be tested.
-- **One fold toggle per heading.** A chevron at the heading line, where the icons were. It
-  collapses the heading's **subtree**: its body and all its descendants, like `org-cycle` between
-  folded and expanded. The toggle appears only when there is something to hide.
-**What to get right**
-- **Elements are flat, and folds are not.** An element runs to the next heading of *any* level
-  ([09](09-element-editing.md#the-model)). Folding therefore needs the subtree range that T4 gave
-  sections, so that hiding a heading hides every element inside it. Keep the rule *an item's index
-  is its element's index*, because scroll targets depend on it. A folded element still has an item.
-  It just renders nothing, like an element that is already empty.
-- **Jumps unfold.** When the calendar, search or (later) a link scrolls to an element inside a
-  collapsed subtree, its ancestors expand first. The target must never be hidden.
-- **Editing unfolds.** An element that is opened for editing, or inserted, is visible. Discarding an
-  insertion does not re-fold anything.
-- **Where fold state lives.** Per open file in the view model, keyed by the heading's position in
-  the tree rather than by list index, so that an edit above a fold does not move it to the wrong
-  heading. Everything starts expanded. It is not persisted and never written into the note. Honouring
-  `#+STARTUP: overview` and the `VISIBILITY` property is a possible follow-up, not part of this task.
-- **Accessibility.** The toggle announces "Collapse" or "Expand" with the heading title. Because the
-  pencil is gone, the element needs a click label ("Edit") so screen readers still offer editing.
-**Done when** Reading mode shows no per-element pencil or **+**. Tapping text edits it, while
-tapping a checkbox or link does what it did before, and scrolling opens nothing. Every way of adding
-a heading that existed before still exists, and each is covered by a test in `ElementEditingTest`.
-Collapsing a heading hides its whole subtree, and a calendar or search jump into a collapsed
-subtree lands on a visible element. [09](09-element-editing.md) is updated to describe the new
-interactions.
-**Not included** Fold-all or unfold-all commands, persisting folds between sessions, and
-`#+STARTUP` visibility. Add them if using the app shows that they are needed.
-
-### T25 · Pinned notes — ✅ **done**
+### T25 · Pinned notes
 **Why** A few notes — an agenda, a todo list — are opened far more than the rest, and finding them
 in a tree of hundreds is a scroll every time. Which notes they are is the reader's, so nothing is
 named in the code.
@@ -1037,7 +438,7 @@ or not yet synced — is hidden rather than dropped, and returns with the note.
 labels) and two cases in `NoteLifecycleUiTest` (the menu item, the pinned rows).
 **Not included** Reordering pins, and pinning a heading rather than a note.
 
-### T26 · Linked files — ✅ **done**
+### T26 · Linked files
 **Why** The notes link to files kept beside them in a synced folder — `[[file:~/Sync/invoice.pdf]]`
 — which Emacs opens in the system's viewer. Reading mode drew them as dead text. The folder is
 synced to the phone too, but somewhere else, so the path as written means nothing there.
@@ -1056,7 +457,7 @@ The Android picker and viewer hand-off have no automated test.
 **Not included** Links relative to the note (`./photo.jpeg`), which name files beside the notes
 where only notes are synced; `.org` files outside the notes; iOS.
 
-### T27 · Highlighting src blocks — ✅ **done**
+### T27 · Highlighting src blocks
 **Why** Code blocks are a large part of the notes — mostly shell and Emacs Lisp, then Java — and
 were drawn as one grey monospace run.
 **Landed** `OrgSrcLexer.kt` in `shared/` lexes the body of a `#+BEGIN_SRC` block by the language it
@@ -1080,7 +481,7 @@ variables inside unquoted heredocs, YAML block scalars, nested languages (`<scri
 Colours were for the light theme, then the only one; since the dark theme (T36) src blocks take
 GitHub's dark colours there.
 
-### T28 · Links without syntax — ✅ **done**
+### T28 · Links without syntax
 **Why** On a phone keyboard `[[target][label]]` is the hardest thing in the notes to type, and the
 only ways in were the note finder and typing it. Changing a link's label meant editing inside its
 brackets; a file link meant typing a path the phone does not even use.
@@ -1106,7 +507,7 @@ from the text menu, the form on note and web links, a PDF chosen in `Sync/board_
 **Not included** Fetching a page's title for the label (it would mean a request to the site from
 the phone); editing a link from reading mode without opening the element; iOS's picker.
 
-### T29 · Saved searches — ✅ **done**
+### T29 · Saved searches
 **Why** Asked for by a prospective user. The same few searches — `tag:work TODO`, a project's name
 — get typed again and again; what is worth keeping is the query, not its results, which are
 whatever the notes hold when it is run.
@@ -1128,10 +529,10 @@ is worth considering if they are wanted on every device), and the structured que
 
 ## Phase 6 — Shipped without a plan
 
-Written after the fact, from the commits, so that the status table covers everything that shipped.
-Each commit message says why; these say what.
+Written after the fact, from the commits, so that every task number is on record. Each commit message
+says why; these say what.
 
-### T30 · Pairing by QR code, and TLS — ✅ **done** (1.0.0)
+### T30 · Pairing by QR code, and TLS (1.0.0)
 **Landed** The server has two ports. 8080, plain, answers this computer only: the web client, the
 desktop app, and a Devices page that lists paired devices, revokes them and shows a pairing QR code
 (`scripts/pair.sh` prints it in a terminal). 8443 serves the sync API over TLS, with a self-signed
@@ -1143,9 +544,8 @@ link names — the iOS simulator showed a wrong fingerprint still pairing over t
 connection — and `korgnote://pair` links open the app (0e8704f). Phones have no plain-HTTP server
 fields, and Android refuses cleartext traffic (65ee042). A revoked device is told to pair again
 rather than that the server cannot be reached (beb8f9b).
-**Not included** The desktop keeps its pairing in plain `java.util.prefs`; T39 sealed it on phones only.
 
-### T31 · Notes as a folder on the phone — ✅ **done** (1.2.0)
+### T31 · Notes as a folder on the phone (1.2.0)
 **Landed** A phone can keep its notes in a folder of the user's instead of syncing with the server:
 one Syncthing, Dropbox or iCloud Drive keeps in step, or nothing does. Nothing of KorgNote's is
 written into it. `FolderNoteStorage` reads it through a `NoteFolder` per platform (the Storage Access
@@ -1156,7 +556,7 @@ Reads go eight at a time, which took a first load of 400 notes over SAF from 44 
 pairing links open from a folder setup too (007f952). After a conflict the note shows the folder's
 version at once, and the banner names the folder rather than the server (3373483).
 
-### T32 · WebDAV source, experimental — ✅ **done** (1.3.0)
+### T32 · WebDAV source, experimental (1.3.0)
 **Landed** A WebDAV server, such as Nextcloud, as a third place for the notes on Android and iOS. It
 reuses the sync engine unchanged through `WebDavSyncApi`, with a replica, an engine and an HTTP
 client of its own. Before a server is used the app checks that it refuses a write or delete over a
@@ -1169,15 +569,15 @@ A 401 says which way to sign in the server asked for (215278e). `WebDavServersTe
 devices through Apache, rclone and Nextcloud in Docker.
 **Not included** Any sign-in but Basic.
 
-### T33 · Android home-screen widgets — ✅ **done** (1.3.0)
+### T33 · Android home-screen widgets (1.3.0)
 **Landed** Two Glance widgets, the agenda and the month, drawn from the agenda's entries, with a
 sync button that runs a one-off `WorkManager` job (8c298f0). The app's strings are packed into the
 APK, without which it closed on start; the agenda widget's TODO keyword moved onto its status line,
 and the picker previews use only views a widget may hold (7952a77). [07](07-calendar-agenda.md#home-screen-widgets-android)
 describes them.
-**Not included** Ticking off a TODO from a widget, iOS, and re-planning reminders after a widget sync.
+**Not included** Ticking off a TODO from a widget, and iOS.
 
-### T34 · Grid table editor and formulas — ✅ **done** (1.0.0)
+### T34 · Grid table editor and formulas (1.0.0)
 **Landed** A tap on a table opens it as a grid, a field per cell, with menus to insert, move and
 remove rows and columns; Save writes it back aligned (fecf931). `#+TBLFM:` formulas are read,
 recalculated with Calc's arithmetic and printing, and renumbered when rows and columns move, with a
@@ -1187,7 +587,7 @@ recalculates on demand (210991e). Columns align by what their cells show, as Ema
 grid (a12b071). Back asks before throwing a changed table away (86a403e).
 **Not included** Trigonometry: Calc answers it in degrees with exact special cases.
 
-### T35 · Translation — ✅ **done** (1.4.0)
+### T35 · Translation (1.4.0)
 **Landed** The app's text moved into Compose resources, one strings file per area, with a French set
 beside the English (82a7bf3); months and weekdays are named in the app's language (29cb50a). The
 widgets take theirs from Android's resources, and Android 13 and later offers the language per app
@@ -1195,12 +595,12 @@ widgets take theirs from Android's resources, and Android 13 and later offers th
 **Not included** Completion's labels: they are made in `shared/`, which has no resources, so `today`,
 `tomorrow` and the weekday names it offers are English only.
 
-### T36 · Dark theme — ✅ **done** (1.0.0)
+### T36 · Dark theme (1.0.0)
 **Landed** The app follows the system's dark setting. The Org palette has a dark value for each
 colour and src blocks take GitHub's dark theme; on Android the window theme follows too, so the app
 no longer flashes white as it opens in the dark (b42d920).
 
-### T37 · Release pipeline — ✅ **done**
+### T37 · Release pipeline
 **Landed** `scripts/release.sh` signs release builds with the key kept in KeePassXC, and debug builds
 became an app of their own (a152c33). `scripts/publish.sh` raises the version, runs the tests, builds
 and checks the signed APK, tags, pushes and makes the GitHub release (68f35bc). A version tag builds
@@ -1209,7 +609,7 @@ the server image for amd64 and arm64 and pushes it to GHCR, and the release wait
 (4d9d456). The README offers Obtainium for updates; F-Droid and IzzyOnDroid were dropped
 (fd5c437). KorgNote is licensed under the GPL (9dccb97).
 
-### T38 · Randomized two-device sync tests — ✅ **done**
+### T38 · Randomized two-device sync tests
 **Landed** `SyncEngineRandomTests`: two devices doing seeded random edits, creates, deletes, renames
 and conflict resolutions to a few shared names over a network that drops requests before and after
 the server acts. Then everything syncs until quiet, and the replicas must match the server, no
@@ -1217,7 +617,7 @@ line anyone wrote may be missing unless a device removed it, and no note may hol
 headers. A failure names its seed and its steps (6e76835). Every push plays 30 sessions; a nightly
 job plays 10,000, on the JVM only, since the engine is common code (d614601).
 
-### T39 · Secrets sealed, notes kept out of backups — ✅ **done**
+### T39 · Secrets sealed, notes kept out of backups
 **Landed** The pairing token and the WebDAV password are sealed with an Android Keystore key, which
 no backup holds, and kept in the Keychain on iOS; a value saved in the clear is sealed the first time
 it is read (9072fd5). The app's copies of the notes, the widgets' agenda and the reminder plan are
@@ -1225,7 +625,7 @@ left out of Android's backups and device transfer, and out of iCloud and compute
 the next sync rebuilds them (c5ec213).
 **Not included** The desktop, whose pairing stayed in plain preferences until it was sealed with a key in the system's keyring (`KeyringCipher.kt`).
 
-### T40 · Sync robustness — ✅ **done**
+### T40 · Sync robustness
 **Landed** A run of fixes, most found on a phone or by T38:
 - A first sync of 371 notes took about 80 s file by file; a cycle that pulls eight or more files now
   asks for the bundle, about 15 s. Cycles run one at a time, which stopped a conflict copy's DELETE
@@ -1245,7 +645,7 @@ the next sync rebuilds them (c5ec213).
 - A new note cannot be created through a symlink that leads out of the notes directory, as reading
   and editing one already could not (4d44808).
 
-### T41 · Clocking — ✅ **done**
+### T41 · Clocking (1.6.0)
 **Landed** Org's clocking, written byte for byte as Emacs writes it: *Clock in*, *Clock out* and
 *Cancel clock* in a heading's long-press menu, clocking in stopping any other clock; totals beside
 headings, against `:Effort:`; a running-clock bar on every tab, with a warning and *Clock out at…*
@@ -1266,13 +666,8 @@ the notification down; a clock started on the server picked up within seconds, b
 notification; switching to a recent task; the day view's blocks and total, the agenda's report;
 a keyword set from the calendar; an effort set from the menu.
 
-### T42 · Resume where the app was left — ✅ **done** (not released)
-**Landed** The app opens on the tab it was left on, and on the note last read, where it was left in
-it. Every note opened again with no place asked for — from the drawer, a pin, a rename — goes back
-to where it was left, not to its top; a jump (a link, a search hit, an agenda entry, Back) still
-goes where it was asked and lights it. The calendar's tab opens on the view and period it was left
-in, and does so after a relaunch the same day; a later day opens on today, in that view. A note's
-scroll is no longer reset when another tab is looked at.
+### T42 · Resume where the app was left (1.6.2)
+**Landed** [09](09-element-editing.md#resuming) says what it does.
 **How** `ReadingPlaces` keeps, per device, the 50 notes last read, each by the offset of the element
 at the top of the screen and the pixels scrolled into it. The reading view reports every frame;
 the view model stores the place once scrolling stops for half a second, before another note
@@ -1280,37 +675,3 @@ replaces it, and when the app pauses. `OpenNote.settled` keeps a position from b
 new note while the view still shows the previous one. The tab and calendar view are `LastScreen`,
 kept by the shell. Folds are still session only.
 Covered by `ReadingPlacesTest` and `AppResumeTest`.
-
----
-
-## Open, and known gaps
-
-- **Sync triggers.** The app syncs on start, on coming back, after a save and on the change stream;
-  on Android also hourly with the app closed, and once the network is back after a failed push.
-  Not built: iOS's `BGAppRefreshTask` (after T18 is seen on an iPhone) and a debounce on saves. A
-  periodic poll while open is not wanted: the change stream's watchdog covers it.
-- **T10b leftovers.** Debounced autosave, a web replica that survives a reload, SSE on the JS
-  engine; and the web client works only on the server's machine.
-- **T0/T0b.** The two spike notes were never written.
-- **T18 on an iPhone.** Built, never seen on a device.
-- **T6 drift.** Org regexes back in `OrgText.kt`, `NoteByline.kt`, `LinkNavigator.kt`,
-  `OrgSyntaxHighlighting.kt` and `TableFormulas.kt`.
-- **The morning digest** leaves out overdue items and deadline warnings ([07](07-calendar-agenda.md#notifications)).
-- **The plain port** has no authentication: any process on the computer can use it. Another
-  container on the Docker network no longer can: it is refused by its address.
-- **Completion labels** are English only.
-
-## Sequencing notes
-
-- Phase 1 (core) and T8 (replica store) can proceed in parallel — different modules.
-- T8's storage interface is what keeps the web target cheap; do not let the filesystem
-  implementation leak into `DocumentStore`, or T10b turns from ~120 lines into a fork.
-- T10 is the cutover point: after it, the server no longer serves ASTs and the client is
-  genuinely offline-capable. Everything downstream gets easier.
-- T23 is independent of everything but T2 and can be done whenever a machine to run it on is ready.
-- T20 before T21: a corpus you cannot add to is a corpus whose links you cannot finish writing.
-- ~~T22 is independent and can wait, but it should be settled before the editor is touched again,
-  not after~~ — settled: one surface.
-- T24 needs only T4 and can be done at any time. It changes the reading surface, not either
-  editing surface, so it does not have to wait for T22. It should land before T21, though, so that
-  link taps are designed as inner targets from the start rather than fitted around tap-to-edit.
