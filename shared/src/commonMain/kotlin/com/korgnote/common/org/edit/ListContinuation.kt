@@ -30,8 +30,6 @@ fun continueList(before: String, caret: Int, after: String): CompletionResult? {
     val bullet = item.groupValues[2]
     val box = item.groupValues[4]
     val content = line.substring(item.value.length)
-    // At the start of a line, a star is a heading's.
-    if (bullet == "*" && indent.isEmpty()) return null
 
     if (content.isBlank() && rest.isBlank()) {
         // An empty item: Enter ends the list, leaving the line empty and the caret on it.

@@ -1,13 +1,16 @@
 package com.korgnote.common
 
 import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
+import com.korgnote.common.org.OrgRaw
 import com.korgnote.common.org.OrgSection
+import com.korgnote.common.org.OrgSpanKind
 import com.korgnote.common.org.ancestorsOf
 import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.edit.setTodo
 import com.korgnote.common.org.nextSibling
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.orgHeadingOf
+import com.korgnote.common.org.orgSpans
 import com.korgnote.common.org.previousSibling
 import com.korgnote.common.org.replaceOrgElement
 import com.korgnote.common.org.sliceOf
@@ -19,6 +22,7 @@ import com.korgnote.common.org.withoutOrgSubtree
 import com.korgnote.common.org.toOrgDocument
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -353,5 +357,17 @@ class OrgElementsTests {
         assertEquals("", added.title)
         assertEquals(1, added.level)
         assertEquals("* First\n* TODO \n* Last\n", doc.setTodo(added, "TODO").text)
+    }
+
+    /**
+     * `org-outline-regexp` is stars and a space, so a tab does not make a heading. Nor does it make a
+     * list item: a star bullet has to be indented, which is what keeps the two apart.
+     */
+    @Test
+    fun starsThenATabAreText() {
+        val text = "*\tTitle\n"
+        assertIs<OrgRaw>(text.toOrgDocument().children.single())
+        assertTrue(text.orgElements().none { !it.isPreamble })
+        assertTrue(orgSpans(text).none { it.kind == OrgSpanKind.Heading || it.kind == OrgSpanKind.Bullet })
     }
 }

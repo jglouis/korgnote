@@ -280,7 +280,7 @@ fun orgHeadingOf(line: String, keywords: OrgTodoConfig): OrgHeading {
     return OrgHeading(level = level, todo = todo, title = title, tags = tags, priority = priority)
 }
 
-private val headingLineRegex = Regex("^(\\*+)\\s+(.*)")
+private val headingLineRegex = Regex("^(\\*+) \\s*(.*)")
 private val headingKeywordRegex = Regex("^(${OrgSyntax.TODO_WORD})(?:\\s+|$)")
 private val headingTagsRegex = Regex("\\s+:([\\p{L}\\p{N}_@#%]+(?::[\\p{L}\\p{N}_@#%]+)*):\\s*$")
 
@@ -776,8 +776,8 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
                 continue@mainLoop
             }
         }
-        // Lists come from the shared grammar now, which also covers `1.`/`1)` and nesting. A `* `
-        // marker at column 0 never reaches here: the heading rule above claims it first.
+        // Lists come from the shared grammar now, which also covers `1.`/`1)` and nesting. A `*` at
+        // column 0 is no bullet: stars and a space are a heading, above, and anything else is text.
         if (OrgSyntax.listItem.containsMatchIn(line)) {
             flushParagraph()
             val (listNode, next) = parseList(i)

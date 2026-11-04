@@ -1,5 +1,7 @@
 package com.korgnote.common.sync
 
+import com.korgnote.common.org.OrgSyntax
+
 /** One line of a [lineDiff]: in both versions, only the first, or only the second. */
 data class DiffLine(val kind: Kind, val text: String) {
     enum class Kind { SAME, REMOVED, ADDED }
@@ -27,7 +29,4 @@ fun lineDiff(first: String, second: String): List<DiffLine> {
     return out
 }
 
-internal fun String.isOrgHeading(): Boolean {
-    val stars = takeWhile { it == '*' }.length
-    return stars > 0 && getOrNull(stars) == ' '
-}
+internal fun String.isOrgHeading(): Boolean = OrgSyntax.heading.containsMatchIn(this)

@@ -14,7 +14,8 @@ package com.korgnote.common.org
  */
 @Suppress("RegExpRedundantEscape")
 object OrgSyntax {
-    val heading = Regex("^(\\*+)\\s")
+    /** Stars and a space, as `org-outline-regexp` has it: a tab does not make a heading. */
+    val heading = Regex("^(\\*+) ")
     val blockBegin = Regex("^\\s*#\\+BEGIN_(\\S+)(.*)$", RegexOption.IGNORE_CASE)
     val blockEnd = Regex("^\\s*#\\+END_(\\S*)\\s*$", RegexOption.IGNORE_CASE)
 
@@ -47,9 +48,9 @@ object OrgSyntax {
      * A list item's start: indent, bullet, the space after it, then an optional `[@3]` counter and an
      * optional checkbox. The counter is matched (so it is not item text) but not captured, which keeps
      * the checkbox group 4 and last for everything that measures it from the end of the match; read
-     * the counter with [listCounter].
+     * the counter with [listCounter]. A star bullet has to be indented, as in Org, or it is a heading.
      */
-    val listItem = Regex("^(\\s*)([-+*]|\\d+[.)])(\\s+)(?:\\[@\\d+\\](?:\\s+|$))?(?:(\\[[ xX-]\\])(?=\\s|$))?")
+    val listItem = Regex("^(?!\\*)(\\s*)([-+*]|\\d+[.)])(\\s+)(?:\\[@\\d+\\](?:\\s+|$))?(?:(\\[[ xX-]\\])(?=\\s|$))?")
 
     /** The `[@3]` that sets an item's number, capturing the number. */
     val listCounter = Regex("\\[@(\\d+)\\]")
