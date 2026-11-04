@@ -39,7 +39,6 @@ import androidx.compose.ui.unit.dp
 import com.korgnote.app.viewmodel.ClockRecent
 import com.korgnote.app.viewmodel.ClockRunning
 import korgnote.composeapp.generated.resources.Res
-import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.clock_back_in
 import korgnote.composeapp.generated.resources.clock_cancel
 import korgnote.composeapp.generated.resources.clock_recent
@@ -49,7 +48,6 @@ import korgnote.composeapp.generated.resources.clock_hours
 import korgnote.composeapp.generated.resources.clock_hours_minutes
 import korgnote.composeapp.generated.resources.clock_left_running
 import korgnote.composeapp.generated.resources.clock_minutes
-import korgnote.composeapp.generated.resources.clock_open
 import korgnote.composeapp.generated.resources.clock_out
 import korgnote.composeapp.generated.resources.clock_out_at
 import korgnote.composeapp.generated.resources.clock_out_now
@@ -283,7 +281,7 @@ private fun ClockEndDialog(clock: ClockRunning, now: LocalDateTime, onPick: (Loc
         confirmButton = {
             TextButton(onClick = { onPick(clockEndAt(clock.start, now, LocalTime(state.hour, state.minute))) }) { Text(stringResource(Res.string.ok)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        dismissButton = { CancelButton(onDismiss) },
     )
 }
 

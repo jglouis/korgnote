@@ -24,7 +24,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
@@ -47,7 +46,6 @@ import com.korgnote.common.org.table.formulaSyntaxProblem
 import com.korgnote.common.org.table.recalculate
 import com.korgnote.common.org.table.rowsAboveTotal
 import korgnote.composeapp.generated.resources.Res
-import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.close
 import korgnote.composeapp.generated.resources.delete
 import korgnote.composeapp.generated.resources.editor_add_formula
@@ -284,7 +282,7 @@ internal fun FormulaEditorDialog(
                 Text(stringResource(Res.string.editor_done))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        dismissButton = { CancelButton(onDismiss) },
     )
 }
 

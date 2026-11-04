@@ -31,7 +31,6 @@ import com.korgnote.app.data.SettingsRepository
 import com.korgnote.common.pairing.PairingLink
 import com.korgnote.common.pairing.PairingLinkCheck
 import korgnote.composeapp.generated.resources.Res
-import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.settings_forget
 import korgnote.composeapp.generated.resources.settings_forget_text
 import korgnote.composeapp.generated.resources.settings_forget_title
@@ -156,7 +155,7 @@ fun PairingSettings(
                     onChanged()
                 }) { Text(stringResource(Res.string.settings_forget)) }
             },
-            dismissButton = { TextButton(onClick = { forgetting = false }) { Text(stringResource(Res.string.cancel)) } },
+            dismissButton = { CancelButton(onClick = { forgetting = false }) },
         )
     }
 

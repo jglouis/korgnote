@@ -38,7 +38,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.SavedSearch
 import korgnote.composeapp.generated.resources.Res
-import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.notes_name
 import korgnote.composeapp.generated.resources.notes_rename_or_remove
 import korgnote.composeapp.generated.resources.notes_rename_saved_search
@@ -168,6 +167,6 @@ fun SaveSearchDialog(
         confirmButton = {
             TextButton(onClick = { onSave(value.text) }) { Text(stringResource(if (renaming) Res.string.rename else Res.string.save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        dismissButton = { CancelButton(onDismiss) },
     )
 }

@@ -33,7 +33,6 @@ import com.korgnote.app.capture.DeviceEvent
 import com.korgnote.common.org.capture.CalendarEvent
 import com.korgnote.common.org.capture.EventTime
 import korgnote.composeapp.generated.resources.Res
-import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.capture_all_day
 import korgnote.composeapp.generated.resources.capture_calendar_allow
 import korgnote.composeapp.generated.resources.capture_calendar_allow_text
@@ -169,7 +168,7 @@ fun CalendarEventPicker(
                 TextButton(onClick = { accountAccess.request { picked++ } }) { Text(stringResource(Res.string.capture_calendar_fetch)) }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        dismissButton = { CancelButton(onDismiss) },
     )
 }
 

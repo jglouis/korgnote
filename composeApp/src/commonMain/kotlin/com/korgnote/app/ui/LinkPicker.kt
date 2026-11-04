@@ -39,7 +39,6 @@ import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.link.LinkTarget
 import com.korgnote.common.org.link.matching
 import korgnote.composeapp.generated.resources.Res
-import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.notes_heading
 import korgnote.composeapp.generated.resources.notes_link_nothing_matches
 import korgnote.composeapp.generated.resources.notes_link_query_placeholder
@@ -118,7 +117,7 @@ fun LinkPickerDialog(
         confirmButton = {
             if (onTypeLink != null) TextButton(onClick = onTypeLink) { Text(stringResource(Res.string.notes_link_web_or_file)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        dismissButton = { CancelButton(onDismiss) },
     )
 }
 

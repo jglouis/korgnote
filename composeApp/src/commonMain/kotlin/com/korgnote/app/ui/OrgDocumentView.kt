@@ -67,7 +67,6 @@ import com.korgnote.common.org.edit.OrgClock
 import com.korgnote.common.org.edit.clocksInText
 import com.korgnote.common.org.edit.effortIn
 import com.korgnote.common.org.edit.effortMinutes
-import com.korgnote.common.org.edit.effortMinutes
 import com.korgnote.common.org.edit.toggleableTimestamps
 import com.korgnote.common.org.link.OrgBacklink
 import com.korgnote.common.org.nextSibling
@@ -674,7 +673,7 @@ private fun EffortDialog(current: String?, onPick: (minutes: Int?) -> Unit, onDi
         confirmButton = {
             TextButton(onClick = { typedMinutes?.let(onPick) }, enabled = typedMinutes != null) { Text(stringResource(Res.string.ok)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        dismissButton = { CancelButton(onDismiss) },
     )
 }
 
@@ -844,7 +843,7 @@ private fun DeleteSectionDialog(
         confirmButton = {
             TextButton(onClick = onDelete) { Text(stringResource(Res.string.delete), color = MaterialTheme.colorScheme.error) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        dismissButton = { CancelButton(onDismiss) },
     )
 }
 

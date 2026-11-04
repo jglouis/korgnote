@@ -19,7 +19,6 @@ import com.korgnote.app.viewmodel.CompletionController
 import com.korgnote.common.org.complete.shiftedEnd
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.back
-import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.editor_add_end
 import korgnote.composeapp.generated.resources.editor_add_time
 import korgnote.composeapp.generated.resources.editor_at_time
@@ -85,7 +84,7 @@ fun OrgDatePickerDialog(
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) }
+                    CancelButton(onDismiss)
                     TextButton(onClick = { step = PickerStep.TIME }) {
                         Text(initialTime?.let { stringResource(Res.string.editor_at_time, timeRangeLabel(it, initialEndTime)) } ?: stringResource(Res.string.editor_add_time))
                     }

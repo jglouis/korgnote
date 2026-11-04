@@ -67,7 +67,6 @@ import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.common.fs.NotePaths
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.author
-import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.ok
 import korgnote.composeapp.generated.resources.save
 import korgnote.composeapp.generated.resources.saved
@@ -198,7 +197,7 @@ fun SettingsScreen(
                     pickingDigestTime = false
                 }) { Text(stringResource(Res.string.ok)) }
             },
-            dismissButton = { TextButton(onClick = { pickingDigestTime = false }) { Text(stringResource(Res.string.cancel)) } },
+            dismissButton = { CancelButton(onClick = { pickingDigestTime = false }) },
         )
     }
 

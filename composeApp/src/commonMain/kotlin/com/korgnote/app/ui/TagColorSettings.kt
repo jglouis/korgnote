@@ -5,8 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
@@ -23,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import korgnote.composeapp.generated.resources.Res
-import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.settings_colour_from_name
 import korgnote.composeapp.generated.resources.settings_no_tags
 import korgnote.composeapp.generated.resources.settings_show_all_tags
@@ -93,7 +90,7 @@ fun TagColorSettings(knownTags: List<String>, chosen: Map<String, Int>, onChange
                     picking = null
                 }) { Text(stringResource(Res.string.settings_colour_from_name)) }
             },
-            dismissButton = { TextButton(onClick = { picking = null }) { Text(stringResource(Res.string.cancel)) } },
+            dismissButton = { CancelButton(onClick = { picking = null }) },
         )
     }
 }

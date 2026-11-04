@@ -40,7 +40,6 @@ import com.korgnote.common.org.edit.FileKeywords
 import com.korgnote.common.org.template.parseTypedTags
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.author
-import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.delete
 import korgnote.composeapp.generated.resources.notes_create
 import korgnote.composeapp.generated.resources.notes_date
@@ -113,7 +112,7 @@ fun NewNoteDialog(
                 Text(stringResource(Res.string.notes_create))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        dismissButton = { CancelButton(onDismiss) },
     )
 }
 
@@ -240,7 +239,7 @@ fun NoteDetailsDialog(
                 onSave(FileKeywords(title, author, date, parseTypedTags(tagsText.text)))
             }) { Text(stringResource(Res.string.save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        dismissButton = { CancelButton(onDismiss) },
     )
 }
 
@@ -291,7 +290,7 @@ fun RenameNoteDialog(
                 Text(stringResource(Res.string.rename))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        dismissButton = { CancelButton(onDismiss) },
     )
 }
 
@@ -332,7 +331,7 @@ fun DeleteNoteDialog(
                 )
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        dismissButton = { CancelButton(onDismiss) },
     )
 }
 

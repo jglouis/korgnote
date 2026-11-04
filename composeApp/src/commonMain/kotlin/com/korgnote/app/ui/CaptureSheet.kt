@@ -65,7 +65,6 @@ import com.korgnote.common.org.link.LinkTarget
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.replica.DocumentStore
 import korgnote.composeapp.generated.resources.Res
-import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.capture_add_link
 import korgnote.composeapp.generated.resources.capture_add_location
 import korgnote.composeapp.generated.resources.capture_add_text
@@ -163,7 +162,7 @@ fun CaptureSheet(
                 onDismissRequest = { picking = false },
                 text = { Text(stringResource(Res.string.capture_reading_notes)) },
                 confirmButton = {},
-                dismissButton = { TextButton(onClick = { picking = false }) { Text(stringResource(Res.string.cancel)) } },
+                dismissButton = { CancelButton(onClick = { picking = false }) },
             )
         } else {
             LinkPickerDialog(
@@ -318,7 +317,7 @@ fun CaptureSheet(
                 },
             ) { Text(stringResource(Res.string.capture_save_to, shortWhere(destination, path))) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        dismissButton = { CancelButton(onDismiss) },
     )
 }
 

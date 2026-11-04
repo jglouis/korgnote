@@ -15,7 +15,6 @@ import com.korgnote.app.viewmodel.CompletionController
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.edit.DraftInsert
 import korgnote.composeapp.generated.resources.Res
-import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.editor_state_note_closing
 import korgnote.composeapp.generated.resources.editor_state_note_field
 import korgnote.composeapp.generated.resources.editor_state_note_save
@@ -73,6 +72,6 @@ fun StateNoteDialog(
             }
         },
         confirmButton = { TextButton(onClick = onSave) { Text(stringResource(Res.string.editor_state_note_save)) } },
-        dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(Res.string.cancel)) } },
+        dismissButton = { CancelButton(onCancel) },
     )
 }

@@ -32,7 +32,6 @@ import com.korgnote.common.org.edit.LinkKind
 import com.korgnote.common.org.edit.linkKindOf
 import com.korgnote.common.org.link.LinkTarget
 import korgnote.composeapp.generated.resources.Res
-import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.notes_link_add
 import korgnote.composeapp.generated.resources.notes_link_address
 import korgnote.composeapp.generated.resources.notes_link_change
@@ -203,7 +202,7 @@ fun LinkEditorDialog(
         dismissButton = {
             Row {
                 if (!edit.isNew) TextButton(onClick = onRemove) { Text(stringResource(Res.string.notes_link_remove)) }
-                TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) }
+                CancelButton(onDismiss)
             }
         },
     )

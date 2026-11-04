@@ -70,7 +70,6 @@ import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.cal_go
 import korgnote.composeapp.generated.resources.cal_go_to_date
 import korgnote.composeapp.generated.resources.cal_options
-import korgnote.composeapp.generated.resources.cancel
 import korgnote.composeapp.generated.resources.cal_mode_agenda
 import korgnote.composeapp.generated.resources.cal_mode_day
 import korgnote.composeapp.generated.resources.cal_mode_month
@@ -385,7 +384,7 @@ private fun GoToDateDialog(initial: LocalDate, onPick: (LocalDate) -> Unit, onDi
                 Text(stringResource(Res.string.cal_go))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel)) } },
+        dismissButton = { CancelButton(onDismiss) },
     ) {
         DatePicker(state = state)
     }
