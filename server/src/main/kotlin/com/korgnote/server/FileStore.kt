@@ -13,7 +13,6 @@ import kotlin.io.path.fileSize
 import kotlin.io.path.getLastModifiedTime
 import kotlin.io.path.isDirectory
 import kotlin.io.path.isRegularFile
-import kotlin.io.path.readText
 
 /** A file as it is on disk right now. [etag] is a hash of the content, not of its timestamps. */
 data class FileMeta(
@@ -22,6 +21,9 @@ data class FileMeta(
     val mtimeMillis: Long,
     val etag: String,
 )
+
+/** A file's text and the version it is, from one read. */
+data class FileContent(val meta: FileMeta, val text: String)
 
 sealed interface WriteResult {
     data class Written(val meta: FileMeta) : WriteResult
@@ -98,10 +100,18 @@ class FileStore(
         }.sortedBy { it.path }
     }
 
-    fun read(path: String): String? {
+    /**
+     * [path]'s text and the version that text is, from a single read: read apart, an edit landing in
+     * between pairs the old etag with the new text, and the client's next push is a false conflict.
+     */
+    fun readWithMeta(path: String): FileContent? {
         val file = resolve(path) ?: return null
         if (!file.isRegularFile()) return null
-        return runCatching { file.readText() }.getOrNull()
+        return runCatching {
+            val mtime = file.getLastModifiedTime().toMillis()
+            val bytes = Files.readAllBytes(file)
+            FileContent(FileMeta(path, bytes.size.toLong(), mtime, hashOf(bytes)), bytes.decodeToString())
+        }.getOrNull()
     }
 
     fun meta(path: String): FileMeta? {
@@ -271,7 +281,7 @@ class FileStore(
         val etag = if (cached != null && cached.size == size && cached.mtimeMillis == mtime) {
             cached.etag
         } else {
-            hashOf(file).also {
+            hashOf(Files.readAllBytes(file)).also {
                 // Where timestamps are coarse, an edit moments from now could keep this size and this
                 // time: TODO to DONE does. So a file only just changed is hashed again next time, as
                 // a stale etag here would pass `If-Match` and let a push overwrite that edit.
@@ -281,8 +291,8 @@ class FileStore(
         return FileMeta(path, size, mtime, etag)
     }
 
-    private fun hashOf(file: Path): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file))
+    private fun hashOf(content: ByteArray): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(content)
         return digest.take(ETAG_BYTES).joinToString("") { byte -> "%02x".format(byte) }
     }
 

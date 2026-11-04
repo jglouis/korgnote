@@ -119,15 +119,15 @@ fun Route.syncApiV1(
                 var budget = BUNDLE_BYTE_BUDGET
                 for (path in paths) {
                     // Reading files is blocking; keep it off the thread serving the response.
-                    val meta = withContext(Dispatchers.IO) { store.meta(path) } ?: continue
-                    val text = withContext(Dispatchers.IO) { store.read(path) } ?: continue
+                    val file = withContext(Dispatchers.IO) { store.readWithMeta(path) } ?: continue
+                    val text = file.text
                     if (budget - text.length < 0) {
                         val marker = json.encodeToString(BundleTruncated(generation = journal.generation))
                         withContext(Dispatchers.IO) { write(marker); write("\n") }
                         break
                     }
                     budget -= text.length
-                    val line = json.encodeToString(BundleLine(path, meta.etag, text))
+                    val line = json.encodeToString(BundleLine(path, file.meta.etag, text))
                     withContext(Dispatchers.IO) {
                         write(line)
                         write("\n")
@@ -174,23 +174,20 @@ fun Route.syncApiV1(
         route("/files/{path...}") {
             get {
                 val path = call.pathSegments()
-                val meta = store.meta(path)
-                if (meta == null) {
-                    call.respondText("Not found: $path", status = HttpStatusCode.NotFound)
-                    return@get
-                }
-                if (call.request.header(HttpHeaders.IfNoneMatch)?.trim('"') == meta.etag) {
-                    call.response.header(HttpHeaders.ETag, meta.etag)
+                // A client that has a version is answered from the hash, without reading the file.
+                val known = call.request.header(HttpHeaders.IfNoneMatch)?.trim('"')
+                if (known != null && store.meta(path)?.etag == known) {
+                    call.response.header(HttpHeaders.ETag, known)
                     call.respond(HttpStatusCode.NotModified)
                     return@get
                 }
-                val body = store.read(path)
-                if (body == null) {
+                val file = store.readWithMeta(path)
+                if (file == null) {
                     call.respondText("Not found: $path", status = HttpStatusCode.NotFound)
                     return@get
                 }
-                call.response.header(HttpHeaders.ETag, meta.etag)
-                call.respondText(body, ContentType.Text.Plain)
+                call.response.header(HttpHeaders.ETag, file.meta.etag)
+                call.respondText(file.text, ContentType.Text.Plain)
             }
 
             put {

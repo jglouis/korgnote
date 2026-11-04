@@ -23,6 +23,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import java.io.File
 import java.nio.file.Files
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -315,6 +317,35 @@ class SyncApiV1Test {
         assertEquals(HttpStatusCode.OK, created.status)
         assertEquals("* Kept\n", File(dir, "archive/old notes.org").readText())
         assertEquals("* Kept\n", client.get("/api/v1/files/archive/old%20notes.org").bodyAsText())
+    }
+
+    /**
+     * The etag handed out must be the hash of the text handed out with it. Read apart, an edit landing
+     * in between pairs the old etag with the new text, and the client's next push is a conflict with
+     * itself.
+     */
+    @Test
+    fun aFileAndItsEtagAreTheSameVersionWhileItIsBeingEdited() = testApplication {
+        val dir = notesDir("a.org" to "* A\n")
+        serve(dir)
+        fun etagOf(text: String) = sha256Hex(text.encodeToByteArray()).take(32)
+
+        val editing = AtomicBoolean(true)
+        val editor = thread {
+            var round = 0
+            while (editing.get()) File(dir, "a.org").writeText("* A ${round++}\n".repeat(1 + round % 50))
+        }
+        try {
+            repeat(300) {
+                val file = client.get("/api/v1/files/a.org")
+                assertEquals(etagOf(file.bodyAsText()), file.headers[HttpHeaders.ETag])
+                val line = Json.parseToJsonElement(client.get("/api/v1/bundle").bodyAsText().trim()).jsonObject
+                assertEquals(etagOf(line["text"]!!.jsonPrimitive.content), line["etag"]!!.jsonPrimitive.content)
+            }
+        } finally {
+            editing.set(false)
+            editor.join()
+        }
     }
 
     /** A delete made against an old version must not take a newer edit with it. */

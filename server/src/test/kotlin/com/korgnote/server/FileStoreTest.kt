@@ -58,10 +58,10 @@ class FileStoreTest {
     @Test
     fun seesAnEditMadeOutsideTheServer() {
         writeFile("inbox.org", "* TODO before\n")
-        assertEquals("* TODO before\n", store.read("inbox.org"))
+        assertEquals("* TODO before\n", store.readWithMeta("inbox.org")?.text)
 
         writeFile("inbox.org", "* TODO after\n")
-        assertEquals("* TODO after\n", store.read("inbox.org"))
+        assertEquals("* TODO after\n", store.readWithMeta("inbox.org")?.text)
     }
 
     @Test
@@ -131,7 +131,7 @@ class FileStoreTest {
 
     @Test
     fun readingRejectsPathsOutsideTheRoot() {
-        assertNull(store.read("../secret.org"))
+        assertNull(store.readWithMeta("../secret.org")?.text)
         assertNull(store.meta("../secret.org"))
     }
 
@@ -278,7 +278,7 @@ class FileStoreTest {
 
         assertEquals(listOf("a.org"), store.list().map { it.path })
         assertNull(store.meta(".stversions/a~20260101.org"))
-        assertNull(store.read(".stversions/a~20260101.org"))
+        assertNull(store.readWithMeta(".stversions/a~20260101.org")?.text)
         assertNull(store.meta("sub/.hidden/b.org"))
     }
 
@@ -301,7 +301,7 @@ class FileStoreTest {
         writeFile("sub/.other.org", "* other\n")
 
         assertEquals(listOf(".plan.org", "sub/.other.org"), store.list().map { it.path })
-        assertEquals("* plan\n", store.read(".plan.org"))
+        assertEquals("* plan\n", store.readWithMeta(".plan.org")?.text)
     }
 
     /** Listed, it reached every phone as a note that could not be fetched. */
@@ -326,7 +326,7 @@ class FileStoreTest {
         java.nio.file.Files.createSymbolicLink(root.resolve("also-a.org"), root.resolve("a.org"))
 
         assertEquals(listOf("a.org", "also-a.org"), store.list().map { it.path })
-        assertEquals("* a\n", store.read("also-a.org"))
+        assertEquals("* a\n", store.readWithMeta("also-a.org")?.text)
     }
 
     // --- Two writers at once: the check and the move must be one step ---
