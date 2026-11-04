@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import com.korgnote.common.org.link.OrgBacklink
 import com.korgnote.common.org.link.OrgLinkIndex
 import com.korgnote.common.org.link.OrgLinkResolution
+import com.korgnote.common.org.orgNoteTitle
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.vm_link_emacs_only
 import korgnote.composeapp.generated.resources.vm_link_file_beside_notes
@@ -63,9 +64,7 @@ class LinkNavigator(
     class Tables(texts: Map<String, String>) {
         val index = OrgLinkIndex(texts)
         val noteIds = texts.keys.mapNotNull { path -> index.fileIdOf(path)?.let { path to it } }.toMap()
-        val noteTitles = texts.mapNotNull { (path, text) ->
-            TITLE_LINE.find(text)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }?.let { path to it }
-        }.toMap()
+        val noteTitles = texts.mapNotNull { (path, text) -> orgNoteTitle(text)?.let { path to it } }.toMap()
 
         init {
             // Every note's backlinks are found in one pass, on the first ask. Ask now, so that pass
@@ -186,8 +185,6 @@ class LinkNavigator(
     }
 
     private companion object {
-        val TITLE_LINE = Regex("(?im)^[ \\t]*#\\+TITLE:[ \\t]*(.+)$")
-
         /** A link's type, read as [OrgLinkIndex] reads it. */
         val SCHEME = Regex("^([A-Za-z][A-Za-z0-9+-]*):(?!\\s)")
     }

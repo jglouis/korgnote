@@ -905,6 +905,28 @@ private fun todoLinesOf(text: String): List<String> =
 fun todoKeywordsOf(text: String, fallback: OrgTodoConfig): OrgTodoConfig =
     parseTodoConfigFrom(todoLinesOf(text)).takeUnless { it.todo.isEmpty() && it.done.isEmpty() } ?: fallback
 
+/**
+ * What [text] calls itself: its first `#+TITLE:` with a value, or null. A line inside a block is the
+ * block's text and names nothing.
+ *
+ * The one way a note's title is read, so that the link picker, the links completion writes and
+ * anything else that names a note all name it alike.
+ */
+fun orgNoteTitle(text: String): String? {
+    if (!text.contains("#+TITLE:", ignoreCase = true)) return null
+    var block: String? = null
+    for (line in text.lineSequence()) {
+        val open = block
+        if (open != null) {
+            if (OrgSyntax.closesBlock(line, open)) block = null
+            continue
+        }
+        block = OrgSyntax.blockBegin.find(line)?.groupValues?.get(1)
+        OrgSyntax.titleKeyword.matchEntire(line)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+    }
+    return null
+}
+
 // Flips the checked state of the nth (0-based, document order) checkbox item directly in the raw
 // text, changing only that line's "[ ]"/"[X]" marker and leaving every other character - including
 // blank lines, trailing whitespace, and indentation elsewhere in the file - untouched.

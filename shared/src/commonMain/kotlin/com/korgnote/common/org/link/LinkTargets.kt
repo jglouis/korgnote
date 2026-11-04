@@ -6,6 +6,7 @@ import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.edit.STATISTICS_COOKIE
 import com.korgnote.common.org.orgElements
+import com.korgnote.common.org.orgNoteTitle
 import com.korgnote.common.org.sliceOf
 
 /**
@@ -39,8 +40,7 @@ data class LinkTarget(
  */
 fun linkTargetsOf(notes: Map<String, OrgDocument>): List<LinkTarget> = buildList {
     for ((path, document) in notes.entries.sortedBy { it.key }) {
-        val noteTitle = TITLE.find(document.text)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
-            ?: path.substringAfterLast('/').removeSuffix(".org")
+        val noteTitle = orgNoteTitle(document.text) ?: path.substringAfterLast('/').removeSuffix(".org")
         add(LinkTarget(path, noteTitle, emptyList(), noteTitle, offset = null, id = fileIdIn(document.text)))
         fun walk(sections: List<OrgSection>, outline: List<String>) {
             for (section in sections) {
@@ -142,7 +142,6 @@ private fun lineAt(text: String, start: Int): String =
 private fun nextLine(text: String, start: Int): Int? = text.indexOf('\n', start).takeIf { it >= 0 }?.plus(1)
     ?.takeIf { it < text.length }
 
-private val TITLE = Regex("^#\\+TITLE:\\s*(.*)$", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
 private val PROPERTIES = Regex("^\\s*:PROPERTIES:\\s*$", RegexOption.IGNORE_CASE)
 private val FILE_ID_LINE = Regex("(?im)^[ \\t]*:ID:[ \\t]+(\\S+)[ \\t]*$")
 private val ID_PROPERTY = Regex("^\\s*:ID:", RegexOption.IGNORE_CASE)

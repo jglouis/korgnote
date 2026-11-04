@@ -3,6 +3,7 @@ package com.korgnote.common
 import com.korgnote.common.org.edit.FileKeywords
 import com.korgnote.common.org.edit.fileKeywordsOf
 import com.korgnote.common.org.edit.withFileKeywords
+import com.korgnote.common.org.search.fileTagsOf
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -64,5 +65,29 @@ class FileKeywordsTest {
         )
         assertEquals("#+TITLE: T\n* H\n", withFileKeywords("* H\n", FileKeywords(title = "T")))
         assertEquals("#+TITLE: T\ntext", withFileKeywords("text", FileKeywords(title = "T")))
+    }
+
+    /** Emacs reads an indented keyword, so the form shows it and edits it where it is. */
+    @Test
+    fun anIndentedKeywordIsReadAndEditedInPlace() {
+        val text = "  #+TITLE: Garden\n* H\n"
+        assertEquals("Garden", fileKeywordsOf(text).title)
+        assertEquals("  #+TITLE: Shed\n* H\n", withFileKeywords(text, fileKeywordsOf(text).copy(title = "Shed")))
+        assertEquals(listOf("a"), fileTagsOf("  #+FILETAGS: :a:\n* H\n"))
+    }
+
+    /** A blank `#+TITLE:` is blank: the heading under it is no title. */
+    @Test
+    fun aBlankKeywordIsBlank() {
+        assertEquals("", fileKeywordsOf("#+TITLE:\n* Inbox\n").title)
+    }
+
+    /** A new line goes after the keywords there, indented or not, not above them. */
+    @Test
+    fun aNewKeywordGoesAfterAnIndentedOne() {
+        assertEquals(
+            "  #+STARTUP: logdone\n#+TITLE: Garden\n* H\n",
+            withFileKeywords("  #+STARTUP: logdone\n* H\n", com.korgnote.common.org.edit.FileKeywords(title = "Garden")),
+        )
     }
 }

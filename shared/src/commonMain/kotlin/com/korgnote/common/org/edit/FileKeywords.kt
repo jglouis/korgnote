@@ -17,7 +17,7 @@ data class FileKeywords(
 fun fileKeywordsOf(text: String): FileKeywords {
     val values = mutableMapOf<String, String>()
     for (line in preambleLines(text)) {
-        val match = FILE_KEYWORD.matchEntire(line) ?: continue
+        val match = OrgSyntax.fileKeyword.matchEntire(line) ?: continue
         values.getOrPut(match.groupValues[1].uppercase()) { match.groupValues[2].trim() }
     }
     return FileKeywords(
@@ -59,7 +59,7 @@ private fun withFileKeyword(text: String, key: String, spelling: String, value: 
         val next = if (end < text.length) end + 1 else end
         val line = text.substring(lineStart, end)
         if (OrgSyntax.heading.containsMatchIn(line)) break
-        val match = FILE_KEYWORD.matchEntire(line)
+        val match = OrgSyntax.fileKeyword.matchEntire(line)
         if (match != null && match.groupValues[1].equals(key, ignoreCase = true)) {
             val written = line.substring(0, line.indexOf(':') + 1)
             return when {
@@ -94,5 +94,4 @@ private fun withFileKeyword(text: String, key: String, spelling: String, value: 
 /** The lines above the first heading, where Org reads a file's keywords. */
 private fun preambleLines(text: String): Sequence<String> = text.lineSequence().takeWhile { !OrgSyntax.heading.containsMatchIn(it) }
 
-private val FILE_KEYWORD = Regex("^#\\+(TITLE|AUTHOR|DATE|FILETAGS):(.*)$", RegexOption.IGNORE_CASE)
-private val KEYWORD_LINE = Regex("^#\\+\\w+:")
+private val KEYWORD_LINE = Regex("^[ \\t]*#\\+\\w+:")

@@ -5,6 +5,7 @@ import com.korgnote.common.org.link.linkTargetsOf
 import com.korgnote.common.org.link.matching
 import com.korgnote.common.org.link.withFileId
 import com.korgnote.common.org.link.withHeadingId
+import com.korgnote.common.org.orgNoteTitle
 import com.korgnote.common.org.toOrgDocument
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -90,5 +91,29 @@ class LinkTargetsTest {
         )
         assertEquals(project, withFileId(project, "other"))
         assertNull(targets.first { it.path == "a/inbox.org" }.id)
+    }
+
+    /** A blank `#+TITLE:` names nothing; the line under it is not its value. */
+    @Test
+    fun aBlankTitleFallsBackToTheFileName() {
+        val note = linkTargetsOf(mapOf("notes/a.org" to "#+TITLE:\n* Inbox\n".toOrgDocument())).first()
+        assertEquals("a", note.noteTitle)
+    }
+
+    @Test
+    fun anIndentedTitleIsTheNotesTitle() {
+        val note = linkTargetsOf(mapOf("notes/a.org" to "  #+TITLE: Garden\n".toOrgDocument())).first()
+        assertEquals("Garden", note.noteTitle)
+    }
+
+    @Test
+    fun aNoteTitleIsTheFirstOneWithAValueOutsideABlock() {
+        assertEquals("Garden", orgNoteTitle("#+title:   Garden  \n"))
+        assertEquals("Garden", orgNoteTitle("  #+TITLE: Garden\n"))
+        assertEquals("Garden", orgNoteTitle("* Heading\n#+TITLE: Garden\n"))
+        assertEquals("Garden", orgNoteTitle("#+TITLE:\n#+TITLE: Garden\n"))
+        assertEquals("Garden", orgNoteTitle("#+BEGIN_SRC org\n#+TITLE: Code\n#+END_SRC\n#+TITLE: Garden\n"))
+        assertEquals(null, orgNoteTitle("#+TITLE:\n* Inbox\n"))
+        assertEquals(null, orgNoteTitle("#+TITLES: no\n# #+TITLE: no\n"))
     }
 }

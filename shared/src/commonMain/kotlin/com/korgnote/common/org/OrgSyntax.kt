@@ -106,11 +106,14 @@ object OrgSyntax {
     /** The `#+CAPTION:` that titles the table or figure below it, capturing the caption. */
     val captionKeyword = Regex("^[ \\t]*#\\+CAPTION(?:\\[[^\\]]*\\])?:[ \\t]*(.*)$", RegexOption.IGNORE_CASE)
 
-    /** The `#+TITLE:` keyword, capturing the title. */
-    val titleKeyword = Regex("^#\\+TITLE:\\s*(.*)$", RegexOption.IGNORE_CASE)
+    /** The `#+TITLE:` keyword, capturing the title. One line: see [orgNoteTitle] for a whole note's. */
+    val titleKeyword = Regex("^[ \\t]*#\\+TITLE:[ \\t]*(.*)$", RegexOption.IGNORE_CASE)
 
     /** The `#+FILETAGS:` keyword, capturing the tags every heading in the file inherits. */
-    val filetagsKeyword = Regex("^#\\+FILETAGS:\\s*(.*)$", RegexOption.IGNORE_CASE)
+    val filetagsKeyword = Regex("^[ \\t]*#\\+FILETAGS:[ \\t]*(.*)$", RegexOption.IGNORE_CASE)
+
+    /** A keyword a note says about itself, capturing its name and its value. */
+    val fileKeyword = Regex("^[ \\t]*#\\+(TITLE|AUTHOR|DATE|FILETAGS):[ \\t]*(.*)$", RegexOption.IGNORE_CASE)
 
     /**
      * What a heading's first word must look like to be read as its TODO keyword, and what a
