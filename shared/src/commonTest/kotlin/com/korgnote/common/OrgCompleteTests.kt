@@ -11,7 +11,6 @@ import com.korgnote.common.org.complete.restampRange
 import com.korgnote.common.org.complete.shiftedEnd
 import com.korgnote.common.org.link.OrgLinkIndex
 import com.korgnote.common.org.link.OrgLinkResolution
-import com.korgnote.common.org.toOrgDocument
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlin.test.Test
@@ -50,7 +49,7 @@ class OrgCompleteTests {
         val cursor = fixture.indexOf(caretMarker)
         require(cursor >= 0) { "the fixture must say where the caret is" }
         val text = fixture.removeRange(cursor, cursor + 1)
-        return complete(text.toOrgDocument(), cursor, context)
+        return complete(text, cursor, context)
     }
 
     /**
@@ -444,7 +443,7 @@ class OrgCompleteTests {
 
     @Test
     fun aCursorOutsideTheTextIsNotACrash() {
-        val doc = "* Buy milk\n".toOrgDocument()
+        val doc = "* Buy milk\n"
         assertTrue(complete(doc, -1, ctx).isEmpty())
         assertTrue(complete(doc, 9_999, ctx).isEmpty())
     }

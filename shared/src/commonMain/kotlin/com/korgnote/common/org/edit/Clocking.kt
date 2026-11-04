@@ -240,7 +240,7 @@ private fun OrgDocument.clocksIn(from: Int, to: Int): List<OrgClock> = text.cloc
 /** The clocks between [from] and [to], whatever heading they belong to. */
 private fun String.clocksIn(from: Int, to: Int): List<OrgClock> {
     val text = this
-    if (!text.regionMatchesAnywhere("CLOCK:", from, to)) return emptyList()
+    if (!text.containsBetween("CLOCK:", from, to)) return emptyList()
     val clocks = mutableListOf<OrgClock>()
     var lineStart = from
     while (lineStart < to) {
@@ -259,10 +259,9 @@ private fun String.clocksIn(from: Int, to: Int): List<OrgClock> {
     return clocks
 }
 
-private fun String.regionMatchesAnywhere(word: String, from: Int, to: Int): Boolean {
-    val at = indexOf(word, from)
-    return at in from until to
-}
+/** Whether [word] starts between [from] and [to]; looks no further, as a note may be long. */
+private fun String.containsBetween(word: String, from: Int, to: Int): Boolean =
+    substring(from, minOf(to + word.length - 1, length)).contains(word)
 
 /** [heading]'s own `:LOGBOOK:` drawer, wherever it is in its entry, when it is terminated. */
 private fun OrgDocument.logbookOf(heading: OrgSection): OrgDrawer? =

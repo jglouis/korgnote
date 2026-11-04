@@ -12,7 +12,6 @@ import com.korgnote.common.org.link.isNoteLink
 import com.korgnote.common.org.link.relativeNotePath
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.link.OrgLinkResolution
-import com.korgnote.common.org.toOrgDocument
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -169,7 +168,7 @@ class OrgLinksTest {
             noteIds = mapOf("house.org" to "house-id"),
             today = LocalDate(2026, 9, 24),
         )
-        val items = complete("[[".toOrgDocument(), 2, context).filter { !it.label.startsWith("*") }
+        val items = complete("[[", 2, context).filter { !it.label.startsWith("*") }
         assertEquals(notes.keys.sorted(), items.map { it.label })
         for (item in items) {
             val target = OrgSyntax.link.find(item.insert)!!.groupValues[1]

@@ -13,6 +13,7 @@ import com.korgnote.common.org.edit.orgLinkOf
 import com.korgnote.common.org.edit.toggledTimestamp
 import com.korgnote.common.org.link.descriptionOf
 import com.korgnote.common.org.link.relativeNotePath
+import com.korgnote.common.org.toOrgDocument
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -117,7 +118,7 @@ private fun CompletionItem.spliceInto(text: String, insert: String, caretOffset:
 }
 
 /**
- * Suggestions for the caret at [cursor] in [doc].
+ * Suggestions for the caret at [cursor] in [text].
  *
  * A pure function of its arguments, so every row of the trigger table in `docs/06-editor.md` is a
  * unit test with no UI involved. The rules are tried in order and the first one that recognises
@@ -126,14 +127,11 @@ private fun CompletionItem.spliceInto(text: String, insert: String, caretOffset:
  * anything else.
  *
  * An empty list means "nothing to offer", which is the common case and must stay cheap: every rule
- * looks only at the current line, apart from the one that needs to know a heading is above it.
+ * looks only at the current line, apart from the one that needs to know a heading is above it, and
+ * the text is parsed only when one has something to offer.
  */
-fun complete(doc: OrgDocument, cursor: Int, ctx: CompletionContext): List<CompletionItem> {
-    val text = doc.text
+fun complete(text: String, cursor: Int, ctx: CompletionContext): List<CompletionItem> {
     if (cursor !in 0..text.length) return emptyList()
-    // Inside a source block the text is code, not Org, and the parser already knows where those
-    // are. Offering `[[file:…]]` in the middle of a shell script is noise.
-    if (doc.cursorIsInsideBlockBody(cursor)) return emptyList()
 
     val lineStart = text.lastIndexOf('\n', cursor - 1) + 1
     val prefix = text.substring(lineStart, cursor)
@@ -141,7 +139,7 @@ fun complete(doc: OrgDocument, cursor: Int, ctx: CompletionContext): List<Comple
     val line = text.substring(lineStart, lineEnd)
     val previousLine = previousLineOf(text, lineStart)
 
-    return linkItems(prefix, lineStart, cursor, ctx)
+    val items = linkItems(prefix, lineStart, cursor, ctx)
         ?: templateItems(prefix, lineStart, cursor)
         ?: keywordValueItems(prefix, lineStart, cursor, ctx)
         ?: locationItems(prefix, lineStart, cursor, ctx)
@@ -154,6 +152,10 @@ fun complete(doc: OrgDocument, cursor: Int, ctx: CompletionContext): List<Comple
         ?: todoKeywordItems(prefix, cursor, ctx)
         ?: keywordItems(prefix, lineStart, cursor)
         ?: emptyList()
+    if (items.isEmpty()) return items
+    // Inside a source block the text is code, not Org, and the parser already knows where those
+    // are. Offering `[[file:…]]` in the middle of a shell script is noise.
+    return if (text.toOrgDocument().cursorIsInsideBlockBody(cursor)) emptyList() else items
 }
 
 // --- Rules -------------------------------------------------------------------------------------

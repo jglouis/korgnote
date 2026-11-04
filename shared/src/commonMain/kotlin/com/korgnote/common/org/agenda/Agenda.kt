@@ -242,9 +242,10 @@ internal inline fun forEachStampedLine(
 /** The title as it should read in a list: a stamp in the heading is shown as the date, not as text. */
 private fun String.withoutStamps(): String =
     // A range's two stamps go with the `--` between them, which means nothing left on its own.
-    OrgSyntax.timestamp.replace(replace(STAMP_RANGE, ""), "").replace(Regex("\\s{2,}"), " ").trim()
+    OrgSyntax.timestamp.replace(replace(STAMP_RANGE, ""), "").replace(WHITESPACE_RUN, " ").trim()
 
 private val STAMP_RANGE = Regex("(?:${OrgSyntax.timestamp.pattern})--(?:${OrgSyntax.timestamp.pattern})")
+private val WHITESPACE_RUN = Regex("\\s{2,}")
 
 // --- Expanding entries into days ---------------------------------------------------------------
 
@@ -276,6 +277,9 @@ private fun AgendaEntry.expandInto(into: MutableList<AgendaOccurrence>, from: Lo
     }
     if (!shown) return
     val today = options.today
+    // Only what this entry adds can already be on today; the rest of the list is other entries'.
+    val ownFrom = into.size
+    fun notOnTodayYet() = (ownFrom until into.size).none { into[it].date == today }
 
     // A done entry that repeats is not over: what is left of it is the next time it comes round.
     if (done && stamp.repeater != null) {
@@ -310,9 +314,7 @@ private fun AgendaEntry.expandInto(into: MutableList<AgendaOccurrence>, from: Lo
             // Not yet done and already due: org-agenda keeps it in front of you, on today. A range
             // still running is on today already, and the check below keeps it from showing twice.
             val start = firstShown ?: stamp.start.plus(delay?.by ?: OrgDuration(0, OrgTimeUnit.DAY), 1)
-            if (options.carryOver && !done && start < today && today in from..to &&
-                into.none { it.entry === this && it.date == today }
-            ) {
+            if (options.carryOver && !done && start < today && today in from..to && notOnTodayYet()) {
                 into += AgendaOccurrence(this, today, null, null, isCarriedOver = true)
             }
         }
@@ -339,9 +341,7 @@ private fun AgendaEntry.expandInto(into: MutableList<AgendaOccurrence>, from: Lo
                 }
             }
             // Missed: shown on today, counting how late it is, until it is done.
-            if (missed && today in from..to &&
-                into.none { it.entry === this && it.date == today }
-            ) {
+            if (missed && today in from..to && notOnTodayYet()) {
                 into += AgendaOccurrence(
                     this, today, null, null,
                     daysUntilDeadline = today.daysUntil(stamp.start),

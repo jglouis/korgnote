@@ -24,7 +24,6 @@ import com.korgnote.common.org.edit.fitsIn
 import com.korgnote.common.org.edit.insertInto
 import com.korgnote.common.org.edit.insertTable
 import com.korgnote.common.org.search.fileTagsOf
-import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.org.todoKeywordsOf
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
@@ -108,7 +107,7 @@ class CompletionController(
             value == null || dismissed -> emptyList()
             // A selection is not a caret: completing over one would silently delete it.
             !value.selection.collapsed -> emptyList()
-            else -> complete(value.text.toOrgDocument(context.todoKeywords), value.selection.start, context)
+            else -> complete(value.text, value.selection.start, context)
         }
         // The list is rebuilt under the selection on every keystroke, so it starts from the top.
         selectedIndex = 0
