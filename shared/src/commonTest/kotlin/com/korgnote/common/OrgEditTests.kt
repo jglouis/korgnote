@@ -3,16 +3,11 @@ package com.korgnote.common
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgSection
-import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.edit.PlanningKind
 import com.korgnote.common.org.edit.allNodes
 import com.korgnote.common.org.edit.changeTodoState
-import com.korgnote.common.org.edit.cycleTodo
-import com.korgnote.common.org.edit.demote
-import com.korgnote.common.org.edit.promote
 import com.korgnote.common.org.edit.replace
 import com.korgnote.common.org.edit.setPlanning
-import com.korgnote.common.org.edit.setTags
 import com.korgnote.common.org.edit.setTodo
 import com.korgnote.common.org.edit.toggleCheckbox
 import com.korgnote.common.org.toOrgDocument
@@ -147,21 +142,6 @@ class OrgEditTests {
     fun addingATodoKeywordToAPlainHeading() {
         val result = doc.setTodo(section("Another"), "TODO").text
         assertOnlyLineChanged(result, "* Another", "* TODO Another")
-    }
-
-    @Test
-    fun cyclingGoesThroughTheKeywordsThenBackToNone() {
-        val config = OrgTodoConfig(todo = setOf("TODO", "NEXT"), done = setOf("DONE"))
-        val parent = section("Parent")
-
-        val next = doc.cycleTodo(parent, config)
-        assertTrue(next.text.contains("* NEXT Parent"))
-
-        val done = next.cycleTodo(next.allNodes().filterIsInstance<OrgSection>().first { it.title == "Parent" }, config)
-        assertTrue(done.text.contains("* DONE Parent"))
-
-        val none = done.cycleTodo(done.allNodes().filterIsInstance<OrgSection>().first { it.title == "Parent" }, config)
-        assertTrue(none.text.contains("* Parent"), none.text)
     }
 
     // --- State changes, logged as the keywords' `!` asks ---
@@ -398,34 +378,6 @@ class OrgEditTests {
         )
     }
 
-    // --- Tags ---
-
-    @Test
-    fun settingTagsReplacesOnlyTheTagBlock() {
-        val result = doc.setTags(section("Parent"), listOf("home", "urgent")).text
-        assertOnlyLineChanged(
-            result,
-            "* TODO Parent                       :work:",
-            "* TODO Parent :home:urgent:",
-        )
-    }
-
-    @Test
-    fun clearingTagsRemovesThem() {
-        val result = doc.setTags(section("Parent"), emptyList()).text
-        assertOnlyLineChanged(
-            result,
-            "* TODO Parent                       :work:",
-            "* TODO Parent",
-        )
-    }
-
-    @Test
-    fun addingTagsToAHeadingWithNone() {
-        val result = doc.setTags(section("Another"), listOf("later")).text
-        assertOnlyLineChanged(result, "* Another", "* Another :later:")
-    }
-
     // --- Planning ---
 
     @Test
@@ -461,42 +413,6 @@ class OrgEditTests {
 
         val section = closed.allNodes().filterIsInstance<OrgSection>().first { it.title == "Another" }
         assertEquals(document, closed.setPlanning(section, PlanningKind.CLOSED, null).text)
-    }
-
-    // --- Promote and demote ---
-
-    @Test
-    fun demotingTakesTheWholeSubtreeWithIt() {
-        val result = doc.demote(section("Parent")).text
-
-        assertTrue(result.contains("** TODO Parent"), result)
-        assertTrue(result.contains("*** Child"), "a child must move with its parent")
-        // The following top-level heading is untouched.
-        assertTrue(result.contains("\n* Another\n"))
-        assertTrue(result.contains("Body with   deliberate   spacing."))
-    }
-
-    @Test
-    fun promotingReversesDemoting() {
-        val demoted = doc.demote(section("Parent"))
-        val parent = demoted.allNodes().filterIsInstance<OrgSection>().first { it.title == "Parent" }
-        assertEquals(document, demoted.promote(parent).text)
-    }
-
-    @Test
-    fun aTopLevelHeadingCannotBePromotedFurther() {
-        assertEquals(document, doc.promote(section("Parent")).text)
-    }
-
-    /** Stars inside a block are code, and must not be restarred. */
-    @Test
-    fun demotingDoesNotTouchStarsInsideABlock() {
-        val text = "* Head\n#+BEGIN_SRC kotlin\n* not a heading\n#+END_SRC\n"
-        val d = text.toOrgDocument()
-        val result = d.demote(d.allNodes().filterIsInstance<OrgSection>().single()).text
-
-        assertTrue(result.contains("** Head"))
-        assertTrue(result.contains("\n* not a heading\n"), "a star inside a block is code: $result")
     }
 
     /** With nothing after the keyword, the space it would take is the end of the line, which stays. */

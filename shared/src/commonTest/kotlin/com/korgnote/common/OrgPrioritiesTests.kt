@@ -5,7 +5,8 @@ import com.korgnote.common.org.OrgPriorities
 import com.korgnote.common.org.OrgPriority
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.agenda.AgendaOptions
-import com.korgnote.common.org.agenda.agenda
+import com.korgnote.common.org.agenda.agendaEntries
+import com.korgnote.common.org.agenda.occurrences
 import com.korgnote.common.org.edit.allNodes
 import com.korgnote.common.org.edit.setPriority
 import com.korgnote.common.org.orgHeadingOf
@@ -124,7 +125,7 @@ class OrgPrioritiesTests {
 
     private val day = LocalDate(2026, 9, 25)
 
-    private fun titles(text: String) = agenda(mapOf("n.org" to text), day, day, AgendaOptions(today = day)).map { it.entry.title }
+    private fun titles(text: String) = agendaEntries(mapOf("n.org" to text)).occurrences(day, day, AgendaOptions(today = day)).map { it.entry.title }
 
     @Test
     fun theAgendaPutsTheHighestFirstWithinATime() {

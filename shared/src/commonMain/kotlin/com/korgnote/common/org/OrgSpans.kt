@@ -46,7 +46,7 @@ enum class OrgSpanKind {
 data class OrgSpan(val range: IntRange, val kind: OrgSpanKind, val nesting: Int = 0)
 
 /**
- * Classifies [text], optionally restricted to the lines overlapping [within].
+ * Classifies [text].
  *
  * This is the single definition of Org syntax for both the highlighter and the reading-mode
  * renderer (D5). It deliberately reproduces one quirk of the old highlighter: a span that carries a
@@ -54,7 +54,7 @@ data class OrgSpan(val range: IntRange, val kind: OrgSpanKind, val nesting: Int 
  * holds only whitespace as zero width. Splitting the whitespace off would make the caret land in the
  * wrong place, which is the bug `OrgWhitespaceRunTest` exists to prevent.
  */
-fun orgSpans(text: String, within: IntRange? = null): List<OrgSpan> {
+fun orgSpans(text: String): List<OrgSpan> {
     val spans = mutableListOf<OrgSpan>()
     val state = OrgLineState()
 
@@ -64,10 +64,7 @@ fun orgSpans(text: String, within: IntRange? = null): List<OrgSpan> {
         val lineEnd = if (newline == -1) text.length else newline
         val line = text.substring(lineStart, lineEnd)
 
-        // State has to advance over every line, even the ones outside the window, or a visible line
-        // inside a block would be classified as ordinary text.
-        val visible = within == null || (lineStart <= within.last && lineEnd >= within.first)
-        scanLine(line, lineStart, state, if (visible) spans else null)
+        scanLine(line, lineStart, state, spans)
 
         if (newline == -1) break
         lineStart = newline + 1
@@ -423,6 +420,3 @@ private fun addLink(m: MatchResult, offset: Int, nesting: Int, add: (IntRange, O
     add(offset + m.value.length - 2 until (offset + m.value.length), OrgSpanKind.Markup, nesting)
     add(offset until (offset + m.value.length), OrgSpanKind.LinkMarkup, nesting)
 }
-
-/** Spans for a slice of this document — the slice is what makes viewport highlighting possible. */
-fun OrgDocument.spans(range: IntRange): List<OrgSpan> = orgSpans(text, range)

@@ -507,39 +507,12 @@ class CaptureTest {
     }
 
     @Test
-    fun anEntryGoesAtTheEndOfItsHeadingsSubtree() {
-        val file = "#+TITLE: Inbox\n* Tasks\n** TODO one\nbody\n\n* Done\n** DONE old\n"
-        assertEquals(
-            "#+TITLE: Inbox\n* Tasks\n** TODO one\nbody\n** TODO two\n\n* Done\n** DONE old\n",
-            fileCapture(file, "* TODO two\n", heading = "Tasks"),
-        )
-    }
-
-    @Test
-    fun aDeeperHeadingPushesTheEntryDeeper() {
-        val file = "* Work\n** Inbox :work:\n*** a\n* Home\n"
-        assertEquals("* Work\n** Inbox :work:\n*** a\n*** b\n**** detail\n* Home\n", fileCapture(file, "* b\n** detail\n", heading = "Inbox"))
-    }
-
-    @Test
-    fun aMissingHeadingIsAddedAtTheEnd() {
-        assertEquals("* Other\n* Tasks\n** TODO x\n", fileCapture("* Other\n", "* TODO x\n", heading = "Tasks"))
-    }
-
-    @Test
     fun twoDevicesCapturingIntoOneInboxKeepBoth() {
         val base = "#+TITLE: Inbox\n\n* Earlier\n"
         val phone = fileCapture(base, "* From the phone\n")
         val laptop = fileCapture(base, "* From the laptop\n")
         val merged = merge(base, phone, laptop)
         assertEquals(MergeResult.Merged("#+TITLE: Inbox\n\n* Earlier\n* From the phone\n* From the laptop\n"), merged)
-    }
-
-    @Test
-    fun twoDevicesCapturingUnderOneHeadingKeepBoth() {
-        val base = "* Tasks\n** a\n* Later\n"
-        val merged = merge(base, fileCapture(base, "* b", "Tasks"), fileCapture(base, "* c", "Tasks"))
-        assertEquals(MergeResult.Merged("* Tasks\n** a\n** b\n** c\n* Later\n"), merged)
     }
 
     /**
@@ -627,5 +600,13 @@ class CaptureTest {
             "* Foo\nSCHEDULED: <2026-12-01 Tue>\n",
             captureInto("* Foo", HeadingRef("a.org", title = "Foo"), Captured(time = "<2026-12-01 Tue>"), HeadingAdditions(time = true)),
         )
+    }
+
+    @Test
+    fun twoDevicesCapturingUnderOneHeadingKeepBoth() {
+        val base = "* Tasks\n** a\n* Later\n"
+        val tasks = HeadingRef("a.org", title = "Tasks")
+        val merged = merge(base, fileUnder(base, tasks, "* b")!!, fileUnder(base, tasks, "* c")!!)
+        assertEquals(MergeResult.Merged("* Tasks\n** a\n** b\n** c\n* Later\n"), merged)
     }
 }

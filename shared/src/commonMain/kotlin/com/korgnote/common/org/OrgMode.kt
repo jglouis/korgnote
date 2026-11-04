@@ -943,21 +943,12 @@ fun orgNoteTitle(text: String): String? {
     return null
 }
 
-// Flips the checked state of the nth (0-based, document order) checkbox item directly in the raw
-// text, changing only that line's "[ ]"/"[X]" marker and leaving every other character - including
-// blank lines, trailing whitespace, and indentation elsewhere in the file - untouched.
-// Returns null if there is no such checkbox (ordinal out of range).
-// Convenience helpers to classify a section's state according to document metadata.
-fun OrgDocument.todoConfig(): OrgTodoConfig = todoKeywords
-
 /**
  * This document as it reads when its text declares no keywords and the fallback is [fallback]:
  * itself when that changes nothing, because it declares its own or was read with the same.
  */
 fun OrgDocument.readWith(fallback: OrgTodoConfig): OrgDocument =
     if (todoFallback == fallback || todoKeywords != todoFallback) this else text.toOrgDocument(fallback)
-fun OrgSection.isTodo(doc: OrgDocument): Boolean = this.todo != null && this.todo in doc.todoConfig().todo
-fun OrgSection.isDone(doc: OrgDocument): Boolean = this.todo != null && this.todo in doc.todoConfig().done
 
 // --- Serialization back to org-mode text ---
 fun OrgNode.toOrgString(): String = when (this) {

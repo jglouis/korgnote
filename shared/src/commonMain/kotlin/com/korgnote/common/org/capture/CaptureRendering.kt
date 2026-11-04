@@ -142,46 +142,12 @@ private fun withoutEmptyDrawers(lines: List<String>): List<String> {
 }
 
 /**
- * [file] with [entry] filed in it: under the heading titled [heading], after what is already
- * there, its headings pushed down a level for each of that heading's; or at the end of the note when
- * [heading] is null. A heading the note does not have is added at its end first, as org-capture
- * does.
+ * [file] with [entry] filed at its end.
  *
- * Only ever adds lines after the existing ones of a subtree, so two devices that each filed one
- * while apart both keep theirs: [com.korgnote.common.sync.merge] keeps two insertions at one place.
+ * Only ever adds lines after the existing ones, so two devices that each filed one while apart both
+ * keep theirs: [com.korgnote.common.sync.merge] keeps two insertions at one place.
  */
-fun fileCapture(file: String, entry: String, heading: String? = null): String {
+fun fileCapture(file: String, entry: String): String {
     val body = entry.trimEnd('\n') + "\n"
-    val lines = if (file.isEmpty()) emptyList() else file.removeSuffix("\n").lines()
-    fun joined(before: List<String>, inserted: String, after: List<String>) = buildString {
-        before.forEach { append(it).append('\n') }
-        append(inserted)
-        after.forEach { append(it).append('\n') }
-    }
-    if (heading == null) return joined(lines, body, emptyList())
-    val wanted = heading.trim()
-    val at = lines.indexOfFirst { titleOf(it) == wanted }
-    if (at < 0) return joined(lines, "* $wanted\n" + demoted(body, 1), emptyList())
-    val level = levelOf(lines[at])
-    var end = at + 1
-    while (end < lines.size && (levelOf(lines[end]) == 0 || levelOf(lines[end]) > level)) end++
-    // Blank lines that end the subtree stay after it, between it and the next heading.
-    var insert = end
-    while (insert > at + 1 && lines[insert - 1].isBlank()) insert--
-    return joined(lines.subList(0, insert), demoted(body, level), lines.subList(insert, lines.size))
-}
-
-/** How deep [line] is as a heading: its stars, or 0 when it is not one. */
-private fun levelOf(line: String): Int = OrgSyntax.heading.find(line)?.groupValues?.get(1)?.length ?: 0
-
-/** [line]'s title as a heading, without its stars and tags; null when it is not a heading. */
-private fun titleOf(line: String): String? {
-    val stars = OrgSyntax.heading.find(line)?.groupValues?.get(1) ?: return null
-    return line.substring(stars.length).replace(Regex("\\s+:[\\w@#%:]+:\\s*$"), "").trim()
-}
-
-/** [entry] with every heading in it [levels] deeper. */
-private fun demoted(entry: String, levels: Int): String {
-    val stars = "*".repeat(levels)
-    return entry.lines().joinToString("\n") { if (OrgSyntax.heading.containsMatchIn(it)) stars + it else it }
+    return if (file.isEmpty()) body else file.removeSuffix("\n") + "\n" + body
 }

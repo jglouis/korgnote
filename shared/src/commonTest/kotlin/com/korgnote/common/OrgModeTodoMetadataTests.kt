@@ -25,7 +25,7 @@ class OrgModeTodoMetadataTests {
         val doc = text.toOrgDocument()
         // The first two lines are keywords, then another keyword, then sections (since they are **)
         // Build config from metadata
-        val cfg = doc.todoConfig()
+        val cfg = doc.todoKeywords
         assertTrue("TODO" in cfg.todo)
         assertTrue("REPORT" in cfg.todo)
         assertTrue("BUG" in cfg.todo)
@@ -38,12 +38,12 @@ class OrgModeTodoMetadataTests {
         // Children: three OrgKeyword, then six OrgSection
         assertEquals(9, doc.children.size)
         // Start from index 3
-        val s1 = assertIs<OrgSection>(doc.children[3]); assertEquals("A regular todo", s1.title); assertEquals("TODO", s1.todo); assertTrue(s1.isTodo(doc)); assertFalse(s1.isDone(doc))
-        val s2 = assertIs<OrgSection>(doc.children[4]); assertEquals("File a report", s2.title); assertEquals("REPORT", s2.todo); assertTrue(s2.isTodo(doc)); assertFalse(s2.isDone(doc))
-        val s3 = assertIs<OrgSection>(doc.children[5]); assertEquals("Fix it", s3.title); assertEquals("BUG", s3.todo); assertTrue(s3.isTodo(doc)); assertFalse(s3.isDone(doc))
-        val s4 = assertIs<OrgSection>(doc.children[6]); assertEquals("Known reason", s4.title); assertEquals("KNOWNCAUSE", s4.todo); assertTrue(s4.isTodo(doc)); assertFalse(s4.isDone(doc))
-        val s5 = assertIs<OrgSection>(doc.children[7]); assertEquals("Solved", s5.title); assertEquals("FIXED", s5.todo); assertFalse(s5.isTodo(doc)); assertTrue(s5.isDone(doc))
-        val s6 = assertIs<OrgSection>(doc.children[8]); assertEquals("No need", s6.title); assertEquals("CANCELED", s6.todo); assertFalse(s6.isTodo(doc)); assertTrue(s6.isDone(doc))
+        val s1 = assertIs<OrgSection>(doc.children[3]); assertEquals("A regular todo", s1.title); assertEquals("TODO", s1.todo); assertTrue(s1.todo in cfg.todo); assertFalse(s1.todo in cfg.done)
+        val s2 = assertIs<OrgSection>(doc.children[4]); assertEquals("File a report", s2.title); assertEquals("REPORT", s2.todo); assertTrue(s2.todo in cfg.todo); assertFalse(s2.todo in cfg.done)
+        val s3 = assertIs<OrgSection>(doc.children[5]); assertEquals("Fix it", s3.title); assertEquals("BUG", s3.todo); assertTrue(s3.todo in cfg.todo); assertFalse(s3.todo in cfg.done)
+        val s4 = assertIs<OrgSection>(doc.children[6]); assertEquals("Known reason", s4.title); assertEquals("KNOWNCAUSE", s4.todo); assertTrue(s4.todo in cfg.todo); assertFalse(s4.todo in cfg.done)
+        val s5 = assertIs<OrgSection>(doc.children[7]); assertEquals("Solved", s5.title); assertEquals("FIXED", s5.todo); assertFalse(s5.todo in cfg.todo); assertTrue(s5.todo in cfg.done)
+        val s6 = assertIs<OrgSection>(doc.children[8]); assertEquals("No need", s6.title); assertEquals("CANCELED", s6.todo); assertFalse(s6.todo in cfg.todo); assertTrue(s6.todo in cfg.done)
     }
 
     @Test
@@ -63,7 +63,7 @@ class OrgModeTodoMetadataTests {
             todoKeywordsOf(text, OrgTodoConfig(setOf("TODO"), setOf("DONE"))),
         )
         val doc = text.toOrgDocument()
-        assertTrue(assertIs<OrgSection>(doc.children.last()).isDone(doc))
+        assertTrue(assertIs<OrgSection>(doc.children.last()).todo in doc.todoKeywords.done)
     }
 
     @Test

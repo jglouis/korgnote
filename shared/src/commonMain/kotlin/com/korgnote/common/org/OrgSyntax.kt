@@ -167,9 +167,6 @@ object OrgSyntax {
     /** One word of a `#+TODO:` line: the keyword, then its optional `(key@/!)` settings. */
     val todoKeywordDeclaration = Regex("^($TODO_WORD)(?:\\([^)]*\\))?$")
 
-    /** The date at the start of a timestamp, capturing year, month and day. */
-    val timestampDate = Regex("<(\\d{4})-(\\d{2})-(\\d{2})")
-
     /** Block types whose content is rendered verbatim in a monospace font. */
     val monospaceBlocks = setOf("src", "example", "export")
 

@@ -53,15 +53,6 @@ fun OrgDocument.clocksOf(heading: OrgSection): List<OrgClock> {
     return clocksIn(start, end)
 }
 
-/**
- * The time clocked on [heading] and everything under it, in minutes, a running clock counted to
- * [now]: what Emacs's `C-c C-x C-d` shows beside the heading.
- */
-fun OrgDocument.clockedMinutes(heading: OrgSection, now: LocalDateTime): Int {
-    if (heading.range.isEmpty()) return 0
-    return clocksIn(heading.range.first, heading.range.last + 1).sumOf { it.minutes(now) }
-}
-
 /** Every clock running in this document, in the order of their headings. */
 fun OrgDocument.runningClocks(): List<RunningClock> =
     allNodes().filterIsInstance<OrgSection>().flatMap { heading ->

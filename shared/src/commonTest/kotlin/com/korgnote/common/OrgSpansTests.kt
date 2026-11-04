@@ -181,21 +181,6 @@ class OrgSpansTests {
         }
     }
 
-    /** Restricting to a window must not change how the lines inside it are classified. */
-    @Test
-    fun windowingKeepsBlockStateAndClassification() {
-        val text = "#+BEGIN_SRC kotlin\n* not a heading\n#+END_SRC\n"
-        val bodyStart = text.indexOf("* not")
-        val windowed = orgSpans(text, bodyStart until (bodyStart + 5))
-
-        val kinds = windowed.filter { it.range.first <= bodyStart && it.range.last >= bodyStart }.map { it.kind }
-        assertTrue(
-            OrgSpanKind.BlockBodyMonospace in kinds,
-            "state must carry across lines outside the window",
-        )
-        assertTrue(OrgSpanKind.Heading !in kinds)
-    }
-
     /** Only a word that could be declared a keyword holds that place; a cookie after any other is title. */
     @Test
     fun aWordNoKeywordCouldBeHoldsNoKeywordPlace() {

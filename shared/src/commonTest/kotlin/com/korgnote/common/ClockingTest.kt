@@ -6,7 +6,6 @@ import com.korgnote.common.org.edit.allNodes
 import com.korgnote.common.org.edit.cancelClock
 import com.korgnote.common.org.edit.clockIn
 import com.korgnote.common.org.edit.clockOut
-import com.korgnote.common.org.edit.clockedMinutes
 import com.korgnote.common.org.edit.clocksOf
 import com.korgnote.common.org.edit.effort
 import com.korgnote.common.org.edit.effortMinutes
@@ -153,8 +152,6 @@ class ClockingTest {
             :END:
         """.trimIndent() + "\n"
         val doc = text.toOrgDocument()
-        assertEquals(60 + 20 + 30, doc.clockedMinutes(doc.heading("Project"), quarterToEleven))
-        assertEquals(20 + 30, doc.clockedMinutes(doc.heading("Part"), quarterToEleven))
         // Its own clocks stop at its first sub-heading.
         assertEquals(1, doc.clocksOf(doc.heading("Project")).size)
         assertEquals(listOf("Part"), doc.runningClocks().map { it.title })

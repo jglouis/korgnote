@@ -6,8 +6,8 @@ import com.korgnote.common.org.agenda.AgendaKind
 import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.AgendaOptions
 import com.korgnote.common.org.agenda.DaySpan
-import com.korgnote.common.org.agenda.agenda
 import com.korgnote.common.org.agenda.agendaEntries
+import com.korgnote.common.org.agenda.occurrences
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlin.test.Test
@@ -29,7 +29,7 @@ class AgendaTests {
         from: LocalDate = day(1),
         to: LocalDate = day(30),
         options: AgendaOptions = this.options,
-    ): List<AgendaOccurrence> = agenda(mapOf("notes.org" to text), from, to, options)
+    ): List<AgendaOccurrence> = agendaEntries(mapOf("notes.org" to text)).occurrences(from, to, options)
 
     private fun List<AgendaOccurrence>.dates() = map { it.date }
 
@@ -358,13 +358,12 @@ class AgendaTests {
 
     @Test
     fun entriesComeFromEveryFileInPathOrder() {
-        val found = agenda(
+        val found = agendaEntries(
             mapOf(
                 "b.org" to "* B <2026-09-24 Thu>\n",
                 "a.org" to "* A <2026-09-24 Thu>\n* A timed <2026-09-24 Thu 08:00>\n",
             ),
-            day(1), day(30), options,
-        )
+        ).occurrences(day(1), day(30), options)
         // All-day first, then by time; ties by file.
         assertEquals(listOf("A", "B", "A timed"), found.map { it.entry.title })
     }

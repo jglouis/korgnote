@@ -248,10 +248,6 @@ private val STAMP_RANGE = Regex("(?:${OrgSyntax.timestamp.pattern})--(?:${OrgSyn
 
 // --- Expanding entries into days ---------------------------------------------------------------
 
-/** Every occurrence of every entry in [files] between [from] and [to], both inclusive. */
-fun agenda(files: Map<String, String>, from: LocalDate, to: LocalDate, options: AgendaOptions): List<AgendaOccurrence> =
-    agendaEntries(files).occurrences(from, to, options)
-
 /**
  * Every occurrence of these entries between [from] and [to], both inclusive, ordered by date, then
  * all-day before timed, then by time, then by priority — most important first, a heading without

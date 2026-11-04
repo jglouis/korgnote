@@ -52,15 +52,9 @@ data class OrgBacklink(
  * across saves is a thing to keep correct (G7), and a scan of this corpus is cheap. The `:ID:`
  * table is the one thing computed ahead, because every `id:` link and every backlink needs it.
  */
-class OrgLinkIndex(
-    private val notes: Map<String, String>,
-    /** The keywords a note that declares none is read with: Org's own `TODO` and `DONE` unless given. */
-    fallback: OrgTodoConfig? = null,
-) {
-    private val fallback: OrgTodoConfig = fallback ?: DEFAULT_TODO_KEYWORDS
-
+class OrgLinkIndex(private val notes: Map<String, String>) {
     /** The keywords [text]'s headings are read with, so that a title is the title Org sees. */
-    private fun keywordsOf(text: String): OrgTodoConfig = todoKeywordsOf(text, fallback)
+    private fun keywordsOf(text: String): OrgTodoConfig = todoKeywordsOf(text, DEFAULT_TODO_KEYWORDS)
 
     /** Each note's `#+LINK:` abbreviations, for the notes that declare any. */
     private val abbreviations: Map<String, Map<String, String>> by lazy {
