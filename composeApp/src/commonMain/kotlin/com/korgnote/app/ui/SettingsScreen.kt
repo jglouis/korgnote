@@ -62,9 +62,6 @@ import com.korgnote.app.data.NoteTemplateSettings
 import com.korgnote.app.data.NotesSource
 import com.korgnote.app.files.notesFolderLabel
 import com.korgnote.app.data.SettingsRepository
-import com.korgnote.app.files.FileLinkMapping
-import com.korgnote.app.notifications.ReminderSettings
-import com.korgnote.common.fs.NotePaths
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.author
 import korgnote.composeapp.generated.resources.ok
@@ -77,10 +74,6 @@ import korgnote.composeapp.generated.resources.settings_change_notes_source
 import korgnote.composeapp.generated.resources.settings_digest
 import korgnote.composeapp.generated.resources.settings_digest_at
 import korgnote.composeapp.generated.resources.settings_dailies_folder
-import korgnote.composeapp.generated.resources.settings_error_daily_folder
-import korgnote.composeapp.generated.resources.settings_error_folder
-import korgnote.composeapp.generated.resources.settings_error_host_port
-import korgnote.composeapp.generated.resources.settings_error_minutes
 import korgnote.composeapp.generated.resources.settings_extra_header
 import korgnote.composeapp.generated.resources.settings_file_links
 import korgnote.composeapp.generated.resources.settings_file_links_subtitle
@@ -119,7 +112,6 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * Scrolls itself, so that the button can stay put: the screen hosting it must not scroll.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     repo: SettingsRepository,
@@ -140,118 +132,28 @@ fun SettingsScreen(
     onNotificationsAllowed: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
-    var host by remember { mutableStateOf("") }
-    var portText by remember { mutableStateOf("") }
+    var form by remember { mutableStateOf(SettingsForm()) }
+    // What the form held when loaded or last saved; null until loaded.
+    var stored by remember { mutableStateOf<SettingsForm?>(null) }
+    val changed = stored != null && form != stored
     var error by remember { mutableStateOf<StringResource?>(null) }
     var saving by remember { mutableStateOf(false) }
     var saved by remember { mutableStateOf(false) }
-    var remindersOn by remember { mutableStateOf(true) }
-    var leadText by remember { mutableStateOf("") }
-    var digestOn by remember { mutableStateOf(false) }
-    var digestTime by remember { mutableStateOf(ReminderSettings().digestTime) }
-    var pickingDigestTime by remember { mutableStateOf(false) }
-    var newNotesFolder by remember { mutableStateOf("") }
-    var fileLinks by remember { mutableStateOf(emptyList<FileLinkMapping>()) }
-    var author by remember { mutableStateOf("") }
-    var dailyFolder by remember { mutableStateOf("") }
-    var extraHeader by remember { mutableStateOf("") }
-    var tagColors by remember { mutableStateOf(emptyMap<String, Int>()) }
-    // What the form held when loaded or last saved; null until loaded.
-    val form = listOf(
-        host, portText, remindersOn, leadText, digestOn, digestTime, newNotesFolder, fileLinks,
-        author, dailyFolder, extraHeader, tagColors,
-    )
-    var stored by remember { mutableStateOf<List<Any>?>(null) }
-    val changed = stored != null && form != stored
 
     LaunchedEffect(Unit) {
-        host = repo.getServerHost()
-        portText = repo.getServerPort().toString()
-        val reminders = repo.getReminderSettings()
-        remindersOn = reminders.enabled
-        leadText = reminders.leadMinutes.toString()
-        digestOn = reminders.digestEnabled
-        digestTime = reminders.digestTime
-        newNotesFolder = repo.getNewNotesFolder()
-        fileLinks = repo.getFileLinkMappings()
-        val template = repo.getNoteTemplate()
-        author = template.author
-        dailyFolder = template.dailyFolder
-        extraHeader = template.extraHeader
-        tagColors = repo.getTagColors()
-        stored = listOf(
-            host, portText, remindersOn, leadText, digestOn, digestTime, newNotesFolder, fileLinks,
-            author, dailyFolder, extraHeader, tagColors,
-        )
-    }
-
-    if (pickingDigestTime) {
-        val state = rememberTimePickerState(initialHour = digestTime.hour, initialMinute = digestTime.minute, is24Hour = true)
-        AlertDialog(
-            onDismissRequest = { pickingDigestTime = false },
-            title = { Text(stringResource(Res.string.settings_digest_at)) },
-            text = { TimePicker(state = state) },
-            confirmButton = {
-                TextButton(onClick = {
-                    digestTime = LocalTime(state.hour, state.minute)
-                    pickingDigestTime = false
-                }) { Text(stringResource(Res.string.ok)) }
-            },
-            dismissButton = { CancelButton(onClick = { pickingDigestTime = false }) },
-        )
+        form = SettingsForm.load(repo)
+        stored = form
     }
 
     fun save() {
-        val port = portText.toIntOrNull()
-        if (usesLocalServer && (host.isBlank() || port == null || port !in 1..65535)) {
-            error = Res.string.settings_error_host_port
-            return
-        }
-        val lead = leadText.toIntOrNull()
-        if (remindersOn && (lead == null || lead !in 0..1440)) {
-            error = Res.string.settings_error_minutes
-            return
-        }
-        val folder = newNotesFolder.trim().trim('/')
-        // Checked as a note path would be, so a bad folder is refused here and not by the server.
-        if (folder.isNotEmpty() && NotePaths.normalize("$folder/x.org") == null) {
-            error = Res.string.settings_error_folder
-            return
-        }
-        val daily = dailyFolder.trim().trim('/')
-        if (daily.isNotEmpty() && NotePaths.normalize("$daily/x.org") == null) {
-            error = Res.string.settings_error_daily_folder
-            return
-        }
-        fileLinkMappingsError(fileLinks)?.let {
-            error = it
-            return
-        }
-        error = null
+        val toSave = form
+        error = toSave.validate()
+        if (error != null) return
         scope.launch {
             saving = true
             try {
-                if (usesLocalServer && port != null) {
-                    repo.setServerHost(host.trim())
-                    repo.setServerPort(port)
-                }
-                val current = repo.getReminderSettings()
-                repo.setReminderSettings(
-                    ReminderSettings(
-                        enabled = remindersOn,
-                        leadMinutes = lead ?: current.leadMinutes,
-                        digestEnabled = digestOn,
-                        digestTime = digestTime,
-                    ),
-                )
-                repo.setNewNotesFolder(folder)
-                repo.setNoteTemplate(NoteTemplateSettings(author.trim(), daily, extraHeader.trimEnd()))
-                repo.setTagColors(tagColors)
-                TagColors.chosen = tagColors
-                repo.setFileLinkMappings(
-                    fileLinks.filter { it.from.isNotBlank() }.map { FileLinkMapping(it.from.trim(), it.to.trim()) },
-                )
-                stored = form
+                toSave.save(repo)
+                stored = toSave
                 saved = true
                 onSaved?.invoke()
             } finally {
@@ -281,165 +183,17 @@ fun SettingsScreen(
                 // The server's settings and pairing are only for the server; a folder or a WebDAV
                 // server shows its state beside where the notes are.
                 val onServer = notesSource == NotesSource.Server
-                if (onChangeNotesSource != null) {
-                    SettingsSection(
-                        icon = if (notesSource is NotesSource.Folder) Icons.Filled.Folder else Icons.Filled.Sync,
-                        title = stringResource(Res.string.settings_notes),
-                        subtitle = when (notesSource) {
-                            is NotesSource.Folder -> stringResource(Res.string.settings_notes_in_folder, notesFolderLabel(notesSource.location))
-                            NotesSource.Server -> stringResource(Res.string.settings_notes_on_server)
-                            NotesSource.WebDav -> repo.getWebDavAccount()
-                                ?.let { stringResource(Res.string.settings_notes_on_webdav_account, it.url, it.username) }
-                                ?: stringResource(Res.string.settings_notes_on_webdav)
-                        },
-                        trailing = { if (!onServer) serverStatus() },
-                    ) {
-                        if (notesSource == NotesSource.WebDav) syncStatus()
-                        OutlinedButton(onClick = onChangeNotesSource) { Text(stringResource(Res.string.settings_change_notes_source)) }
-                    }
-                }
-                // Whether the server can be reached, and what conflicts syncing left, next to its
-                // settings: there is no bar above them.
-                if (onServer && (canPair || usesLocalServer)) {
-                    SettingsSection(
-                        icon = Icons.Filled.Computer,
-                        title = stringResource(Res.string.settings_server),
-                        subtitle = stringResource(Res.string.settings_server_subtitle),
-                        trailing = serverStatus,
-                    ) {
-                        syncStatus()
-                        if (canPair) {
-                            val incomingLink by PairingLinks.pending.collectAsState()
-                            PairingSettings(
-                                repo,
-                                pairing,
-                                onChanged = { onSaved?.invoke() },
-                                incomingLink = incomingLink,
-                                onIncomingLinkUsed = { PairingLinks.pending.value = null },
-                            )
-                        }
-                        // Only where there is a computer of this device's own to run a server: not on a phone.
-                        if (usesLocalServer) {
-                            if (canPair) SectionDivider()
-                            Text(stringResource(Res.string.settings_local_server), style = MaterialTheme.typography.titleSmall)
-                            Hint(
-                                stringResource(
-                                    if (canPair) Res.string.settings_local_server_when_unpaired else Res.string.settings_local_server_this_page,
-                                ),
-                            )
-                            OutlinedTextField(
-                                modifier = Modifier.fillMaxWidth(),
-                                value = host,
-                                onValueChange = { host = it },
-                                label = { Text(stringResource(Res.string.settings_host)) },
-                                singleLine = true,
-                            )
-                            OutlinedTextField(
-                                modifier = Modifier.fillMaxWidth(),
-                                value = portText,
-                                onValueChange = { portText = it.filter { ch -> ch.isDigit() } },
-                                label = { Text(stringResource(Res.string.settings_port)) },
-                                singleLine = true,
-                            )
-                        }
-                    }
-                } else if (onServer) {
-                    // Nothing to set, but somewhere to see the server's state.
-                    SettingsSection(
-                        icon = Icons.Filled.Computer,
-                        title = stringResource(Res.string.settings_server),
-                        subtitle = stringResource(Res.string.settings_server_subtitle),
-                        trailing = serverStatus,
-                    ) {
-                        syncStatus()
-                    }
-                }
-
-                SettingsSection(
-                    icon = Icons.Filled.Notifications,
-                    title = stringResource(Res.string.settings_reminders),
-                    subtitle = stringResource(Res.string.settings_reminders_subtitle),
-                ) {
-                    // Turned down on the welcome screens, or never asked: this is where to change one's mind.
-                    val notifications = rememberNotificationPermission()
-                    if (notifications != null && !notifications.granted && (remindersOn || digestOn)) {
-                        Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
-                            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(
-                                    stringResource(Res.string.settings_notifications_blocked),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                )
-                                OutlinedButton(onClick = { notifications.request { granted -> if (granted) onNotificationsAllowed() } }) {
-                                    Text(stringResource(Res.string.settings_allow_notifications))
-                                }
-                            }
-                        }
-                    }
-                    SwitchRow(stringResource(Res.string.settings_remind_before), remindersOn) { remindersOn = it }
-                    if (remindersOn) {
-                        OutlinedTextField(
-                            modifier = Modifier.fillMaxWidth(),
-                            value = leadText,
-                            onValueChange = { leadText = it.filter { ch -> ch.isDigit() }.take(4) },
-                            label = { Text(stringResource(Res.string.settings_minutes_before)) },
-                            singleLine = true,
-                        )
-                    }
-                    SwitchRow(stringResource(Res.string.settings_digest), digestOn) { digestOn = it }
-                    if (digestOn) {
-                        OutlinedButton(onClick = { pickingDigestTime = true }) {
-                            Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                            Text(stringResource(Res.string.settings_at_time, digestTime.hhmm()))
-                        }
-                    }
-                }
-
-                SettingsSection(
-                    icon = Icons.Filled.EditNote,
-                    title = stringResource(Res.string.settings_new_notes),
-                    subtitle = stringResource(Res.string.settings_new_notes_subtitle),
-                ) {
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = newNotesFolder,
-                        onValueChange = { newNotesFolder = it },
-                        label = { Text(stringResource(Res.string.settings_new_notes_folder)) },
-                        placeholder = { Text("inbox") },
-                        singleLine = true,
-                    )
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = dailyFolder,
-                        onValueChange = { dailyFolder = it },
-                        label = { Text(stringResource(Res.string.settings_dailies_folder)) },
-                        placeholder = { Text(NoteTemplateSettings.DEFAULT_DAILY_FOLDER) },
-                        singleLine = true,
-                    )
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = author,
-                        onValueChange = { author = it },
-                        label = { Text(stringResource(Res.string.author)) },
-                        singleLine = true,
-                    )
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = extraHeader,
-                        onValueChange = { extraHeader = it },
-                        label = { Text(stringResource(Res.string.settings_extra_header)) },
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                        minLines = 2,
-                    )
-                    Hint(stringResource(Res.string.settings_header_note))
-                }
+                if (onChangeNotesSource != null) NotesSourceSection(repo, notesSource, onChangeNotesSource, serverStatus, syncStatus)
+                if (onServer) ServerSection(form, { form = it }, repo, pairing, serverStatus, syncStatus, onPaired = { onSaved?.invoke() })
+                RemindersSection(form, { form = it }, onNotificationsAllowed)
+                NewNotesSection(form) { form = it }
 
                 SettingsSection(
                     icon = Icons.Filled.Palette,
                     title = stringResource(Res.string.settings_tag_colours),
                     subtitle = stringResource(Res.string.settings_tag_colours_subtitle),
                 ) {
-                    TagColorSettings(knownTags, tagColors) { tagColors = it }
+                    TagColorSettings(knownTags, form.tagColors) { form = form.copy(tagColors = it) }
                 }
 
                 SettingsSection(
@@ -447,7 +201,7 @@ fun SettingsScreen(
                     title = stringResource(Res.string.settings_file_links),
                     subtitle = stringResource(Res.string.settings_file_links_subtitle),
                 ) {
-                    FileLinkSettings(fileLinks) { fileLinks = it }
+                    FileLinkSettings(form.fileLinks) { form = form.copy(fileLinks = it) }
                 }
                 // Room to scroll the last field out from under the button.
                 Spacer(Modifier.height(80.dp))
@@ -471,6 +225,194 @@ fun SettingsScreen(
                 )
             }
         }
+    }
+}
+
+/** Where the notes are kept, with the way to keep them elsewhere. A folder or a WebDAV server shows its state here. */
+@Composable
+private fun NotesSourceSection(
+    repo: SettingsRepository,
+    notesSource: NotesSource,
+    onChangeNotesSource: () -> Unit,
+    serverStatus: @Composable () -> Unit,
+    syncStatus: @Composable () -> Unit,
+) {
+    // Changing the account goes through the welcome screens, which compose all this afresh.
+    val webDavAccount = remember(repo, notesSource) { if (notesSource == NotesSource.WebDav) repo.getWebDavAccount() else null }
+    SettingsSection(
+        icon = if (notesSource is NotesSource.Folder) Icons.Filled.Folder else Icons.Filled.Sync,
+        title = stringResource(Res.string.settings_notes),
+        subtitle = when (notesSource) {
+            is NotesSource.Folder -> stringResource(Res.string.settings_notes_in_folder, notesFolderLabel(notesSource.location))
+            NotesSource.Server -> stringResource(Res.string.settings_notes_on_server)
+            NotesSource.WebDav -> webDavAccount
+                ?.let { stringResource(Res.string.settings_notes_on_webdav_account, it.url, it.username) }
+                ?: stringResource(Res.string.settings_notes_on_webdav)
+        },
+        trailing = { if (notesSource != NotesSource.Server) serverStatus() },
+    ) {
+        if (notesSource == NotesSource.WebDav) syncStatus()
+        OutlinedButton(onClick = onChangeNotesSource) { Text(stringResource(Res.string.settings_change_notes_source)) }
+    }
+}
+
+/**
+ * Whether the server can be reached, and what conflicts syncing left, next to its settings: there is
+ * no bar above them. Where there is nothing to set, it is still somewhere to see the server's state.
+ */
+@Composable
+private fun ServerSection(
+    form: SettingsForm,
+    onChange: (SettingsForm) -> Unit,
+    repo: SettingsRepository,
+    pairing: DevicePairing?,
+    serverStatus: @Composable () -> Unit,
+    syncStatus: @Composable () -> Unit,
+    onPaired: () -> Unit,
+) {
+    SettingsSection(
+        icon = Icons.Filled.Computer,
+        title = stringResource(Res.string.settings_server),
+        subtitle = stringResource(Res.string.settings_server_subtitle),
+        trailing = serverStatus,
+    ) {
+        syncStatus()
+        if (canPair) {
+            val incomingLink by PairingLinks.pending.collectAsState()
+            PairingSettings(
+                repo,
+                pairing,
+                onChanged = onPaired,
+                incomingLink = incomingLink,
+                onIncomingLinkUsed = { PairingLinks.pending.value = null },
+            )
+        }
+        // Only where there is a computer of this device's own to run a server: not on a phone.
+        if (usesLocalServer) {
+            if (canPair) SectionDivider()
+            Text(stringResource(Res.string.settings_local_server), style = MaterialTheme.typography.titleSmall)
+            Hint(
+                stringResource(
+                    if (canPair) Res.string.settings_local_server_when_unpaired else Res.string.settings_local_server_this_page,
+                ),
+            )
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = form.host,
+                onValueChange = { onChange(form.copy(host = it)) },
+                label = { Text(stringResource(Res.string.settings_host)) },
+                singleLine = true,
+            )
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = form.portText,
+                onValueChange = { onChange(form.copy(portText = it.filter { ch -> ch.isDigit() })) },
+                label = { Text(stringResource(Res.string.settings_port)) },
+                singleLine = true,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RemindersSection(form: SettingsForm, onChange: (SettingsForm) -> Unit, onNotificationsAllowed: () -> Unit) {
+    var pickingDigestTime by remember { mutableStateOf(false) }
+    if (pickingDigestTime) {
+        val state = rememberTimePickerState(initialHour = form.digestTime.hour, initialMinute = form.digestTime.minute, is24Hour = true)
+        AlertDialog(
+            onDismissRequest = { pickingDigestTime = false },
+            title = { Text(stringResource(Res.string.settings_digest_at)) },
+            text = { TimePicker(state = state) },
+            confirmButton = {
+                TextButton(onClick = {
+                    onChange(form.copy(digestTime = LocalTime(state.hour, state.minute)))
+                    pickingDigestTime = false
+                }) { Text(stringResource(Res.string.ok)) }
+            },
+            dismissButton = { CancelButton(onClick = { pickingDigestTime = false }) },
+        )
+    }
+    SettingsSection(
+        icon = Icons.Filled.Notifications,
+        title = stringResource(Res.string.settings_reminders),
+        subtitle = stringResource(Res.string.settings_reminders_subtitle),
+    ) {
+        // Turned down on the welcome screens, or never asked: this is where to change one's mind.
+        val notifications = rememberNotificationPermission()
+        if (notifications != null && !notifications.granted && (form.remindersOn || form.digestOn)) {
+            Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(Res.string.settings_notifications_blocked),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                    OutlinedButton(onClick = { notifications.request { granted -> if (granted) onNotificationsAllowed() } }) {
+                        Text(stringResource(Res.string.settings_allow_notifications))
+                    }
+                }
+            }
+        }
+        SwitchRow(stringResource(Res.string.settings_remind_before), form.remindersOn) { onChange(form.copy(remindersOn = it)) }
+        if (form.remindersOn) {
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = form.leadText,
+                onValueChange = { onChange(form.copy(leadText = it.filter { ch -> ch.isDigit() }.take(4))) },
+                label = { Text(stringResource(Res.string.settings_minutes_before)) },
+                singleLine = true,
+            )
+        }
+        SwitchRow(stringResource(Res.string.settings_digest), form.digestOn) { onChange(form.copy(digestOn = it)) }
+        if (form.digestOn) {
+            OutlinedButton(onClick = { pickingDigestTime = true }) {
+                Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Text(stringResource(Res.string.settings_at_time, form.digestTime.hhmm()))
+            }
+        }
+    }
+}
+
+@Composable
+private fun NewNotesSection(form: SettingsForm, onChange: (SettingsForm) -> Unit) {
+    SettingsSection(
+        icon = Icons.Filled.EditNote,
+        title = stringResource(Res.string.settings_new_notes),
+        subtitle = stringResource(Res.string.settings_new_notes_subtitle),
+    ) {
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = form.newNotesFolder,
+            onValueChange = { onChange(form.copy(newNotesFolder = it)) },
+            label = { Text(stringResource(Res.string.settings_new_notes_folder)) },
+            placeholder = { Text("inbox") },
+            singleLine = true,
+        )
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = form.dailyFolder,
+            onValueChange = { onChange(form.copy(dailyFolder = it)) },
+            label = { Text(stringResource(Res.string.settings_dailies_folder)) },
+            placeholder = { Text(NoteTemplateSettings.DEFAULT_DAILY_FOLDER) },
+            singleLine = true,
+        )
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = form.author,
+            onValueChange = { onChange(form.copy(author = it)) },
+            label = { Text(stringResource(Res.string.author)) },
+            singleLine = true,
+        )
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth(),
+            value = form.extraHeader,
+            onValueChange = { onChange(form.copy(extraHeader = it)) },
+            label = { Text(stringResource(Res.string.settings_extra_header)) },
+            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+            minLines = 2,
+        )
+        Hint(stringResource(Res.string.settings_header_note))
     }
 }
 
