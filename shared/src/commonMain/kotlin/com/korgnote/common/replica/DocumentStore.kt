@@ -209,8 +209,9 @@ class DocumentStore(private val storage: ReplicaStorage) {
      * local work: an edit, or a deletion. Returns the paths taken.
      *
      * One lock so that a save cannot land between the check and the write; one metadata write because
-     * one for each is what made a first sync quadratic. A crash partway leaves files with an old
-     * record or none, which the next cycle takes again or finds identical.
+     * one for each is what made a first sync quadratic. A write that fails partway still records those
+     * before it. A crash leaves them with an old record or none, which the next cycle takes again or
+     * finds identical.
      */
     suspend fun acceptAllUntouched(files: List<RemoteFile>): List<String> {
         files.forEach { requireSafeReplicaPath(it.path) }
@@ -219,12 +220,17 @@ class DocumentStore(private val storage: ReplicaStorage) {
             val meta = storage.readMeta()
             val taken = files.filterNot { file -> meta.files[file.path]?.let { it.dirty || it.deleted } == true }
             if (taken.isEmpty()) return@withLock emptyList()
-            for (file in taken) {
-                storage.write(file.path, file.text)
-                storage.writeBase(file.path, file.text)
+            val written = mutableListOf<RemoteFile>()
+            try {
+                for (file in taken) {
+                    storage.write(file.path, file.text)
+                    storage.writeBase(file.path, file.text)
+                    written += file
+                }
+            } finally {
+                storage.writeMeta(meta.copy(files = meta.files + written.map { it.path to FileMeta(it.path, etag = it.etag) }))
             }
-            storage.writeMeta(meta.copy(files = meta.files + taken.map { it.path to FileMeta(it.path, etag = it.etag) }))
-            taken.map { it.path }
+            written.map { it.path }
         }
     }
 

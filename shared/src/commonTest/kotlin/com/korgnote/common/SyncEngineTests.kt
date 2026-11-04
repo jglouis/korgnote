@@ -954,6 +954,24 @@ class SyncEngineTests {
         return Triple(crashing, store, disk)
     }
 
+    /** A disk that fills up partway: what was written is on record, not a pile of files with none. */
+    @Test
+    fun aWriteFailingPartWayThroughABundleKeepsTheRecordsOfWhatWasWritten() = runTest {
+        val server = FakeServer()
+        server.bundles = true
+        repeat(10) { server.put("n$it.org", "* Note $it\n") }
+        val disk = InMemoryReplicaStorage()
+        val crashing = CrashingStorage(disk)
+        crashing.crashAtWrite = 4
+
+        assertFailsWith<Crash> { SyncEngine(DocumentStore(crashing), server).sync() }
+
+        val store = DocumentStore(disk)
+        assertEquals(3, store.paths().size)
+        assertEquals(store.paths().toSet(), store.records().keys)
+        store.paths().forEach { assertEquals(server.files[it]?.first, store.meta(it)?.etag) }
+    }
+
     /** Whichever write the crash stopped, the record must not call clean a text the server never saw. */
     @Test
     fun aCrashDuringASaveNeverLeavesAnEditRecordedAsSynced() = runTest {
