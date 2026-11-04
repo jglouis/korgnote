@@ -38,6 +38,15 @@ class AndroidAgendaWidgets(context: Context) : AgendaWidgets {
             }
         }
     }
+
+    override fun synced(at: Instant) {
+        scope.launch {
+            // Saying a sync got through ends what stopped the last one, which they would go on showing.
+            val problemShown = WidgetStore.problem(app) != null
+            WidgetStore.noteSynced(app, at)
+            if (problemShown) redrawWidgets(app)
+        }
+    }
 }
 
 /**

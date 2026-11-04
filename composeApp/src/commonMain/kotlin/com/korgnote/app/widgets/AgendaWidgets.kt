@@ -20,10 +20,18 @@ interface AgendaWidgets {
      * null when that has not happened this run, in which case the widgets keep what they knew.
      */
     fun show(entries: List<AgendaEntry>, lastSynced: Instant?)
+
+    /**
+     * Only the time of the last sync changed: kept for the next time they are drawn. Every push moves
+     * it, and drawing two widgets for each save that moves no date is what they were being spared.
+     */
+    fun synced(at: Instant)
 }
 
 /** Desktop, web and iOS: no widgets, yet. */
 object NoAgendaWidgets : AgendaWidgets {
+    override fun synced(at: Instant) = Unit
+
     override fun show(entries: List<AgendaEntry>, lastSynced: Instant?) = Unit
 }
 

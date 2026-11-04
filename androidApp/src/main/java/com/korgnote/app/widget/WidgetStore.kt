@@ -65,14 +65,17 @@ object WidgetStore {
             val next = File(context.filesDir, "$ENTRIES.new")
             next.writeText(json.encodeToString(serializer, entries))
             next.renameTo(file)
-            if (lastSynced != null && lastSynced > (lastSynced(context) ?: Instant.DISTANT_PAST)) {
-                // A sync got through since: whatever stopped a widget's last one is over.
-                prefs(context).edit {
-                    putLong(KEY_SYNCED, lastSynced.toEpochMilliseconds())
-                    remove(KEY_PROBLEM)
-                }
-            }
-            changed()
+            if (lastSynced != null) noteSynced(context, lastSynced)
+        }
+    }
+
+    /** Keeps [at] when it is later than the sync kept. Read by the widgets the next time they are drawn. */
+    fun noteSynced(context: Context, at: Instant) {
+        if (at <= (lastSynced(context) ?: Instant.DISTANT_PAST)) return
+        // A sync got through since: whatever stopped a widget's last one is over.
+        prefs(context).edit {
+            putLong(KEY_SYNCED, at.toEpochMilliseconds())
+            remove(KEY_PROBLEM)
         }
     }
 

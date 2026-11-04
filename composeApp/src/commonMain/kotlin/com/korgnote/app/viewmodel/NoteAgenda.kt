@@ -139,20 +139,27 @@ class NoteAgenda(
         refreshReminders()
     }
 
-    /** The entries and sync time last handed to [widgets]. */
-    private var shownOnWidgets: Pair<List<AgendaEntry>, Instant?>? = null
+    /** The entries last handed to [widgets], and the sync time they last heard of. */
+    private var entriesOnWidgets: List<AgendaEntry>? = null
+    private var syncedOnWidgets: Instant? = null
 
     /**
-     * Hands the agenda to the widgets, when it or the sync time changed: a save that moves no date
-     * leaves them alone. Not before the notes have been read, for the same reason as reminders: the
-     * empty agenda would blank every widget until they arrive.
+     * Hands the agenda to the widgets when it changed: a save that moves no date leaves them alone,
+     * and a sync time that moved is only noted. Not before the notes have been read, for the same
+     * reason as reminders: the empty agenda would blank every widget until they arrive.
      */
     private fun refreshWidgets() {
         if (!library.loaded) return
-        val shown = index.entries to lastSynced()
-        if (shown == shownOnWidgets) return
-        shownOnWidgets = shown
-        widgets.show(shown.first, shown.second)
+        val entries = index.entries
+        val synced = lastSynced()
+        if (entries != entriesOnWidgets) {
+            entriesOnWidgets = entries
+            syncedOnWidgets = synced
+            widgets.show(entries, synced)
+        } else if (synced != null && synced != syncedOnWidgets) {
+            syncedOnWidgets = synced
+            widgets.synced(synced)
+        }
     }
 
     /** A tapped reminder that arrived before the notes were read, opened once they are. */

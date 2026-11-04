@@ -36,7 +36,12 @@ class AgendaWidgetsTest {
         override fun show(entries: List<AgendaEntry>, lastSynced: Instant?) {
             handedOver += entries to lastSynced
         }
+
+        override fun synced(at: Instant) {
+            syncTimes += at
+        }
     }
+    private val syncTimes = mutableListOf<Instant>()
     private lateinit var viewModel: NotesViewModel
 
     @BeforeTest
@@ -87,6 +92,18 @@ class AgendaWidgetsTest {
         viewModel.changes.saveCurrentFile()
 
         assertEquals(listOf("Design review", "Lunch"), handedOver.last().first.map { it.title })
+    }
+
+    /** Each push moves the sync time: two widgets drawn for every save that moves no date. */
+    @Test
+    fun aSyncThatMovesNoDateOnlySaysWhen() = runTest {
+        viewModel.server.load()
+        val handedOverAtFirst = handedOver.size
+
+        viewModel.server.load()
+
+        assertEquals(handedOverAtFirst, handedOver.size)
+        assertEquals(1, syncTimes.size)
     }
 
     /** A sync usually brings one note: the others' entries are not looked for again. */
