@@ -76,7 +76,7 @@ class NoteLibraryTest {
         val here = StandardTestDispatcher(testScheduler)
         library.reload(parseOn = here)
 
-        val stalled = storage.stallNextRead("a.org")
+        val stalled = storage.stallRead("a.org")
         launch { library.reload(parseOn = here) }
         runCurrent()
         library.put("a.org", "- [X] one\n".toOrgDocument(library.fallbackKeywords))
@@ -94,7 +94,7 @@ class NoteLibraryTest {
         val here = StandardTestDispatcher(testScheduler)
         library.reload(parseOn = here)
 
-        val stalled = storage.stallNextRead("a.org")
+        val stalled = storage.stallRead("a.org")
         launch { library.reload(parseOn = here) }
         runCurrent()
         library.put("a.org", "- [X] one\n".toOrgDocument(library.fallbackKeywords))
@@ -116,7 +116,7 @@ class NoteLibraryTest {
         val here = StandardTestDispatcher(testScheduler)
         library.reload(parseOn = here)
 
-        val stalled = storage.stallNextRead("a.org")
+        val stalled = storage.stallRead("a.org")
         launch { library.reload(parseOn = here) }
         runCurrent()
         store.save("a.org", "* New\n")

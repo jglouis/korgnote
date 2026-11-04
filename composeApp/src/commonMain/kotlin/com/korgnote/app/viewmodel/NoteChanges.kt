@@ -15,6 +15,9 @@ import com.korgnote.common.org.edit.withTimestampToggledAt
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.replica.DocumentStore
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDateTime
 
@@ -51,17 +54,29 @@ class NoteChanges(
      */
     suspend fun saveCurrentFile() {
         val path = note.path ?: return
-        scope.launch { save(path) }.join()
+        // Read now, before anything waits: by the time the disk answers, the screen may be showing
+        // what a reload read, or another note altogether.
+        val text = note.content
+        val keywords = todoKeywords()
+        began(path)
+        scope.launch { save(path, text, keywords) }.join()
     }
 
-    private suspend fun save(path: String) {
-        // A heading's `[2/5]` counts what is under it, which the edit may have changed — and only
-        // those over the edit: the rest of the note is saved as it was.
-        // And a clock edited by hand sums its stamps again, as `C-c C-c` on its line would.
-        val before = store.read(path)
-        note.content = updateClockDurations(updateStatisticsCookies(note.content, todoKeywords(), before = before), before)
-        store.save(path, note.content)
-        library.put(path, note.content.toOrgDocument(library.fallbackKeywords))
+    private suspend fun save(path: String, text: String, keywords: OrgTodoConfig) {
+        val saved = try {
+            // A heading's `[2/5]` counts what is under it, which the edit may have changed — and only
+            // those over the edit: the rest of the note is saved as it was.
+            // And a clock edited by hand sums its stamps again, as `C-c C-c` on its line would.
+            val before = store.read(path)
+            updateClockDurations(updateStatisticsCookies(text, keywords, before = before), before).also { store.save(path, it) }
+        } finally {
+            landed(path)
+        }
+        if (note.path == path && note.content == text) {
+            note.content = saved
+            note.replicaText = saved
+        }
+        library.put(path, saved.toOrgDocument(library.fallbackKeywords))
         refresh()
         server().push()
     }
@@ -114,14 +129,9 @@ class NoteChanges(
      */
     private fun changeOpenNote(refreshAtOnce: Boolean = false, edit: (OrgDocument) -> OrgDocument?) {
         val path = note.path ?: return
-        val document = note.content.toOrgDocument(library.fallbackKeywords)
-        val updated = edit(document) ?: return
-        if (updated.text == document.text) return
-        note.content = updated.text
-        library.put(path, updated)
+        val updated = changeOnScreen(path, edit) ?: return
         if (refreshAtOnce) refresh() else refreshSoon()
-        // A failure leaves the file dirty for the next cycle rather than losing the change.
-        scope.launch { server().push(writeFirst = { store.save(path, note.content) }) }
+        scope.launch { writeAndPush(path, updated.text) }
     }
 
     /**
@@ -129,15 +139,72 @@ class NoteChanges(
      * replica has it — then saved and pushed as a keyword change is.
      */
     suspend fun changeNote(path: String, change: (OrgDocument) -> OrgDocument) {
-        val open = path == note.path
-        val before = if (open) note.content.toOrgDocument(library.fallbackKeywords) else library[path] ?: return
-        val updated = change(before)
-        if (updated.text == before.text) return
-        library.put(path, updated)
-        if (open) note.content = updated.text
+        val updated = if (path == note.path) {
+            changeOnScreen(path, change) ?: return
+        } else {
+            val before = library[path] ?: return
+            change(before).takeIf { it.text != before.text }?.also {
+                library.put(path, it)
+                began(path)
+            } ?: return
+        }
         clocks.refresh()
         refreshSoon()
-        server().push(writeFirst = { store.save(path, updated.text) })
+        writeAndPush(path, updated.text)
+    }
+
+    /**
+     * [edit] made to the open note at [path], on screen and in the library; null when there is
+     * nothing to write. Until a note's text has arrived, what the screen holds is the note before it:
+     * a change made there has no business in this one.
+     */
+    private fun changeOnScreen(path: String, edit: (OrgDocument) -> OrgDocument?): OrgDocument? {
+        if (note.replicaText == null) return null
+        val document = note.content.toOrgDocument(library.fallbackKeywords)
+        val updated = edit(document)?.takeIf { it.text != document.text } ?: return null
+        note.content = updated.text
+        library.put(path, updated)
+        began(path)
+        return updated
+    }
+
+    /** Writes a change begun with [began]. A failure leaves the file dirty for the next cycle rather than losing it. */
+    private suspend fun writeAndPush(path: String, text: String) {
+        server().push(
+            writeFirst = {
+                try {
+                    store.save(path, text)
+                    if (note.path == path && note.content == text) note.replicaText = text
+                } finally {
+                    landed(path)
+                }
+            },
+        )
+    }
+
+    /** The writes on their way to the replica, by note. */
+    private val underWay = MutableStateFlow<Map<String, Int>>(emptyMap())
+
+    private fun began(path: String) {
+        underWay.update { it + (path to (it[path] ?: 0) + 1) }
+    }
+
+    private fun landed(path: String) {
+        underWay.update { writes ->
+            val left = (writes[path] ?: 0) - 1
+            if (left > 0) writes + (path to left) else writes - path
+        }
+    }
+
+    /**
+     * True while a change to [path] is on its way to the replica: the note is ahead of what a read
+     * of it would return, which must not be put back on screen.
+     */
+    fun isWriting(path: String): Boolean = path in underWay.value
+
+    /** Waits until the replica holds every change made so far, before reading it for what is new. */
+    suspend fun whenWritten() {
+        underWay.first { it.isEmpty() }
     }
 
     /**

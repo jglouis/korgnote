@@ -63,7 +63,7 @@ class WritesOutliveTheScreenTest {
     fun aTickSurvivesTheScreenGoingAwayMidWrite() = runTest {
         opened()
         val composition = composition()
-        val disk = storage.stallNextWrite(path)
+        val disk = storage.stallWrite(path)
 
         composition.launch { viewModel.changes.toggleCheckboxAt(text.indexOf("- [ ]")) }
         runCurrent()
@@ -80,7 +80,7 @@ class WritesOutliveTheScreenTest {
         viewModel.editor.beginEdit(0)
         viewModel.editor.onDraftChanged(TextFieldValue("* DONE First\n- [ ] one\n"))
         val composition = composition()
-        val disk = storage.stallNextRead(path)
+        val disk = storage.stallRead(path)
 
         composition.launch { viewModel.editor.commit() }
         runCurrent()

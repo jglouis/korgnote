@@ -24,6 +24,12 @@ class OpenNote {
         internal set
 
     /**
+     * The replica's text that [content] was last shown from or written as. Null until the note's text
+     * has arrived, and with it for a note that was never read: [content] is then not this note's.
+     */
+    internal var replicaText: String? = null
+
+    /**
      * Element to bring into view, set when a file is opened at a particular place — a calendar
      * entry, a search hit, a link. Consumed once, via [onScrolledToElement].
      */
@@ -75,6 +81,7 @@ class OpenNote {
     /** The part of opening [path] that needs no text; a placeholder stands in when there is none. */
     internal fun beginOpening(path: String, hasText: Boolean) {
         label = "Selected: $path"
+        if (path != this.path || !hasText) replicaText = null
         this.path = path
         scrollToElementIndex = null
         restoreTo = null
@@ -88,8 +95,9 @@ class OpenNote {
      *
      * With no such element, the note goes back to [place], where it was left, or to its top.
      */
-    internal fun show(text: String, scrollToOffset: Int?, place: ReadingPlace? = null): Int? {
+    internal fun show(text: String, scrollToOffset: Int?, place: ReadingPlace? = null, fromReplica: String? = text): Int? {
         content = text
+        replicaText = fromReplica
         scrollToElementIndex = scrollToOffset?.let { text.elementIndexOfOffset(it) }
         if (scrollToElementIndex == null) {
             restoreTo = place?.let { kept -> text.elementIndexOfOffset(kept.offset)?.let { ReadingSpot(it, kept.pixels) } }
@@ -102,6 +110,7 @@ class OpenNote {
     internal fun close() {
         path = null
         content = ""
+        replicaText = null
         label = NO_FILE_LABEL
     }
 

@@ -13,25 +13,38 @@ class StallingReplicaStorage(
     private val files: ReplicaStorage = InMemoryReplicaStorage(),
 ) : ReplicaStorage by files {
 
-    private var readsToStall = mutableMapOf<String?, CompletableDeferred<Unit>>()
-    private var writesToStall = mutableMapOf<String?, CompletableDeferred<Unit>>()
+    private class Stall(var skipping: Int, val gate: CompletableDeferred<Unit> = CompletableDeferred())
 
-    /** The next read of [path], or of any note when null, waits until the result is completed. */
-    fun stallNextRead(path: String? = null): CompletableDeferred<Unit> =
-        CompletableDeferred<Unit>().also { readsToStall[path] = it }
+    private val reads = mutableMapOf<String, MutableList<Stall>>()
+    private val writes = mutableMapOf<String, MutableList<Stall>>()
 
-    /** The next write of [path], or of any note when null, waits until the result is completed. */
-    fun stallNextWrite(path: String? = null): CompletableDeferred<Unit> =
-        CompletableDeferred<Unit>().also { writesToStall[path] = it }
+    /** The read of [path] after the next [skipping] waits until the result is completed. */
+    fun stallRead(path: String, skipping: Int = 0): CompletableDeferred<Unit> =
+        Stall(skipping).also { reads.getOrPut(path) { mutableListOf() } += it }.gate
+
+    /** The next write of [path] waits until the result is completed. */
+    fun stallWrite(path: String): CompletableDeferred<Unit> =
+        Stall(0).also { writes.getOrPut(path) { mutableListOf() } += it }.gate
 
     override suspend fun read(path: String): String? {
         val text = files.read(path)
-        (readsToStall.remove(path) ?: readsToStall.remove(null))?.await()
+        reads[path].awaitTurn()
         return text
     }
 
     override suspend fun write(path: String, content: String) {
-        (writesToStall.remove(path) ?: writesToStall.remove(null))?.await()
+        writes[path].awaitTurn()
         files.write(path, content)
+    }
+
+    /** Each stall counts this access down; the first with none left to skip is waited on. */
+    private suspend fun MutableList<Stall>?.awaitTurn() {
+        if (this == null) return
+        val due = firstOrNull { it.skipping == 0 }
+        forEach { if (it !== due) it.skipping-- }
+        if (due != null) {
+            remove(due)
+            due.gate.await()
+        }
     }
 }

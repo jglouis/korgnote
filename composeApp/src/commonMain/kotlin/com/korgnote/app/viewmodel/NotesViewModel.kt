@@ -360,11 +360,20 @@ class NotesViewModel(
      * saving an unchanged file round-trips it byte for byte.
      */
     private suspend fun finishOpening(path: String, scrollToOffset: Int?) {
+        changes.whenWritten()
+        val shown = note.content
         val raw = store.read(path)
         if (note.path == path && raw != null) {
+            // A change made to it while that was read is newer than what was read.
+            val current = note.content != shown || changes.isWriting(path)
             // A jump must never land inside a fold: open everything around the target, and
             // the target itself, since what was asked for may be in its body.
-            note.show(raw, scrollToOffset, places.placeOf(path))?.let { folds.unfoldAncestorsOf(it, includingItself = true) }
+            val index = if (current) {
+                note.show(note.content, scrollToOffset, places.placeOf(path), fromReplica = note.replicaText)
+            } else {
+                note.show(raw, scrollToOffset, places.placeOf(path))
+            }
+            index?.let { folds.unfoldAncestorsOf(it, includingItself = true) }
         }
     }
 
@@ -464,6 +473,8 @@ class NotesViewModel(
      * once everything is shown, as [refreshDerivedViews] does.
      */
     private suspend fun showFromReplica() {
+        // A change on its way there would otherwise be read as it was before it.
+        changes.whenWritten()
         library.reload(parseOn = background)
         pendingRefresh?.cancel()
         pendingRefresh = null
@@ -486,7 +497,10 @@ class NotesViewModel(
             val first = places.lastRead { it in library } ?: pins.shown.firstOrNull() ?: library.documents.keys.minOrNull()
             if (first != null) onFileSelected(first) else note.close()
         } else {
+            val shown = note.content
             store.read(current)?.let { fresh ->
+                // Another note was opened while that was read, and shows its own text.
+                if (note.path != current) return@let
                 // An element is open: the note stays as it is under it, or the element would move
                 // or vanish under the caret — a heading being added is not in the replica until it
                 // is saved. The editor makes its edit on what came in, when it saves.
@@ -494,7 +508,11 @@ class NotesViewModel(
                     if (fresh != editor.textBeforeInsertion && fresh != note.content) editor.noteChangedElsewhere(fresh)
                     return@let
                 }
-                note.content = fresh
+                // A change made to it while that was read is newer than what was read.
+                if (note.content == shown && !changes.isWriting(current)) {
+                    note.content = fresh
+                    note.replicaText = fresh
+                }
             }
         }
         agenda.onNotesShown()
