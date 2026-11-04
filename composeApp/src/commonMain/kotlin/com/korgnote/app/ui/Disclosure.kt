@@ -1,7 +1,13 @@
 package com.korgnote.app.ui
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Icon
@@ -14,6 +20,10 @@ import androidx.compose.ui.graphics.Color
 
 /** How long a chevron takes to turn, and what it opens to unfold: the two move together. */
 internal const val DISCLOSURE_MILLIS = 200
+
+/** How what a chevron folds comes and goes: unfolding from where it hangs, in time with the turn. */
+internal val DisclosureEnter: EnterTransition = expandVertically(tween(DISCLOSURE_MILLIS)) + fadeIn(tween(DISCLOSURE_MILLIS))
+internal val DisclosureExit: ExitTransition = shrinkVertically(tween(DISCLOSURE_MILLIS)) + fadeOut(tween(DISCLOSURE_MILLIS))
 
 /**
  * The one chevron for whatever folds — a folder in the drawer, a heading, an Org drawer: pointing

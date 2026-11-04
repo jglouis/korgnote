@@ -5,10 +5,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.MutableTransitionState
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -258,8 +254,8 @@ fun OrgDocumentView(
             visibility.targetState = !hidden[index]
             AnimatedVisibility(
                 visibleState = visibility,
-                enter = expandVertically(tween(DISCLOSURE_MILLIS)) + fadeIn(tween(DISCLOSURE_MILLIS)),
-                exit = shrinkVertically(tween(DISCLOSURE_MILLIS)) + fadeOut(tween(DISCLOSURE_MILLIS)),
+                enter = DisclosureEnter,
+                exit = DisclosureExit,
             ) {
             val slice = remember(text, element) { element.sliceOf(text) }
             // Not while an element is being edited: the form rewrites the top of the note.

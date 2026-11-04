@@ -1,11 +1,6 @@
 package com.korgnote.app.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -885,8 +880,8 @@ private fun OrgDrawerView(name: String, lines: List<String>, showId: Boolean = f
         }
         AnimatedVisibility(
             visible = expanded,
-            enter = expandVertically(tween(DISCLOSURE_MILLIS)) + fadeIn(tween(DISCLOSURE_MILLIS)),
-            exit = shrinkVertically(tween(DISCLOSURE_MILLIS)) + fadeOut(tween(DISCLOSURE_MILLIS)),
+            enter = DisclosureEnter,
+            exit = DisclosureExit,
         ) {
             Text(
                 text = buildOrgHighlightedString(
