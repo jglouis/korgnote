@@ -2,14 +2,19 @@ package com.korgnote.common
 
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.FileSystemReplicaStorage
+import com.korgnote.common.replica.ReplacingMove
 import com.korgnote.common.replica.ReplicaStorage
+import com.korgnote.common.replica.moveOver
 import kotlinx.coroutines.test.runTest
 import java.io.File
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 /**
  * The same contract as [InMemoryDocumentStoreTest], against a real directory.
@@ -82,6 +87,43 @@ class FileSystemDocumentStoreTest : DocumentStoreContract() {
         val recovered = DocumentStore(FileSystemReplicaStorage(root))
         assertEquals("* Important\n", recovered.read("inbox.org"))
         assertEquals(null, recovered.meta("inbox.org"))
+    }
+}
+
+/** What a write leaves in place, whatever the filesystem makes of a rename. */
+class MoveOverTest {
+    private val folder = Files.createTempDirectory("korgnote-move").toFile()
+    private val temp = File(folder, "note.org.tmp").apply { writeText("new") }
+    private val target = File(folder, "note.org").apply { writeText("old") }
+
+    @AfterTest
+    fun cleanUp() {
+        folder.deleteRecursively()
+    }
+
+    @Test
+    fun aRenameIsAllItTakesWhereItReplaces() {
+        moveOver(temp, target)
+
+        assertEquals("new", target.readText())
+        assertFalse(temp.exists())
+    }
+
+    /** As Windows does: no rename onto a file that exists, so it must never be taken out of the way. */
+    @Test
+    fun aFilesystemThatRefusesTheRenameNeverSeesTheTargetMissing() {
+        moveOver(temp, target) { _, to -> if (to.exists()) false else fail("the target was deleted first") }
+
+        assertEquals("new", target.readText())
+        assertFalse(temp.exists())
+    }
+
+    @Test
+    fun aFilesystemWithNoAtomicMoveStillGetsTheFile() {
+        ReplacingMove.move(temp, target) { from, _ -> throw AtomicMoveNotSupportedException(from.path, null, "not here") }
+
+        assertEquals("new", target.readText())
+        assertFalse(temp.exists())
     }
 }
 

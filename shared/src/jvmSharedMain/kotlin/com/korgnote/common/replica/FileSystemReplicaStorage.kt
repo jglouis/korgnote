@@ -4,6 +4,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption.ATOMIC_MOVE
+import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 
 /**
  * The replica as real files on disk, laid out as `docs/05-sync-protocol.md` describes:
@@ -17,8 +21,10 @@ import java.io.File
  * `notes/` holds ordinary `.org` files in an ordinary directory, so Syncthing or Emacs can keep
  * working against the same folder during the migration.
  *
- * Writes go to a temporary file and are then moved into place, so a crash or a pulled battery
- * leaves either the old content or the new one — never half a note.
+ * Writes go to a temporary file and are then moved into place, so an app that crashes or is killed
+ * leaves either the old content or the new one, never half a note, and a read made meanwhile finds
+ * one or the other. There is no `fsync` before the move yet, so a power cut or a pulled battery can
+ * still lose a save the filesystem had not flushed, as on the server.
  */
 class FileSystemReplicaStorage(root: File) : ReplicaStorage {
 
@@ -81,10 +87,34 @@ class FileSystemReplicaStorage(root: File) : ReplicaStorage {
         target.parentFile?.mkdirs()
         val temp = File(target.parentFile, "${target.name}.tmp")
         temp.writeText(content)
-        if (!temp.renameTo(target)) {
-            // Some filesystems refuse a rename onto an existing file.
-            target.delete()
-            check(temp.renameTo(target)) { "could not move ${temp.path} onto ${target.path}" }
+        moveOver(temp, target)
+    }
+}
+
+/**
+ * Moves [temp] onto [target], which at no moment goes missing.
+ *
+ * On Android, Linux and macOS a rename replaces its target atomically, and this goes no further.
+ * Windows refuses a rename onto a file that exists. Deleting the target first would leave a moment
+ * with no file, in which an unlocked `readMeta` finds no metadata and every note looks unsynced, so
+ * it is replaced in one move instead.
+ */
+internal fun moveOver(temp: File, target: File, rename: (File, File) -> Boolean = File::renameTo) {
+    if (!rename(temp, target)) ReplacingMove.move(temp, target)
+}
+
+/** Apart from the rest, which Android 7 has to load: `java.nio.file` only arrives with Android 8. */
+internal object ReplacingMove {
+    fun move(
+        temp: File,
+        target: File,
+        atomicMove: (File, File) -> Unit = { from, to -> Files.move(from.toPath(), to.toPath(), ATOMIC_MOVE, REPLACE_EXISTING) },
+    ) {
+        try {
+            atomicMove(temp, target)
+        } catch (_: AtomicMoveNotSupportedException) {
+            // A filesystem with no atomic replace: not atomic, but the file still gets there.
+            Files.move(temp.toPath(), target.toPath(), REPLACE_EXISTING)
         }
     }
 }
