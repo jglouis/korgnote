@@ -15,6 +15,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
@@ -135,5 +136,28 @@ class CompletionContextTest {
 
         assertEquals(listOf("Rue Haute 1", "Flagey"), viewModel.completion.context.knownLocations, "most named first")
         assertTrue("family" in viewModel.completion.context.knownTags, "a file tag is a tag too")
+    }
+
+    /** Opening a note changes which note it is, and nothing in the notes: they are not walked again. */
+    @Test
+    fun openingANoteKeepsWhatWasGatheredFromEveryNote() = runTest {
+        val store = DocumentStore(InMemoryReplicaStorage())
+        val viewModel = NotesViewModel(
+            SyncEngine(store, FakeSyncApi(mutableMapOf("a.org" to "#+TODO: NEXT | GONE\n* NEXT First :work:\n", "b.org" to "* Second :home:\n"))),
+            store,
+        )
+        viewModel.server.load()
+        viewModel.onFileSelected("a.org")
+        val before = viewModel.completion.context
+        assertEquals(setOf("work", "home"), before.knownTags.toSet())
+
+        viewModel.onFileSelected("b.org")
+
+        val after = viewModel.completion.context
+        assertSame(before.knownTags, after.knownTags)
+        assertSame(before.knownLocations, after.knownLocations)
+        assertEquals("b.org", after.currentPath)
+        assertEquals(listOf("Second"), after.headings)
+        assertEquals(setOf("TODO"), after.todoKeywords.todo)
     }
 }

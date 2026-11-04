@@ -196,18 +196,30 @@ class CompletionController(
     }
 
     fun refreshContext() {
+        context = forOpenNote(context.copy(knownTags = tagsByUse(), knownLocations = locationsByUse()))
+    }
+
+    /**
+     * Another note was opened: what depends on which one it is. The tags and locations of every note
+     * stay as they are, since opening changes nothing in them, and walking them on each open held
+     * the screen up on a phone.
+     */
+    fun onNoteOpened() {
+        context = forOpenNote(context)
+    }
+
+    /** [base] for the open note as it now is, what it knows of every note left as it is. */
+    private fun forOpenNote(base: CompletionContext): CompletionContext {
         val path = note.path
         val document = path?.let { library[it] }
         val fallbackKeywords = library.fallbackKeywords
-        context = CompletionContext(
+        return base.copy(
             todoKeywords = document?.let { todoKeywordsOf(it.text, fallbackKeywords) } ?: fallbackKeywords,
-            knownTags = tagsByUse(),
             filePaths = library.documents.keys.sorted(),
             currentPath = path.orEmpty(),
             noteIds = links.noteIds,
             noteTitles = links.noteTitles,
             headings = document?.sectionTitles().orEmpty(),
-            knownLocations = locationsByUse(),
             author = author(),
             today = today(),
         )

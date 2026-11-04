@@ -334,7 +334,7 @@ class NotesViewModel(
         if (hasText) places.opened(path)
         links.onOpened()
         // This file's `#+TODO:` keywords and headings are part of what completion offers.
-        completion.refreshContext()
+        completion.onNoteOpened()
         return hasText
     }
 
