@@ -8,9 +8,6 @@ group = "com.korgnote.server"
 version = "1.6.3"
 application {
     mainClass.set("com.korgnote.server.ApplicationKt")
-
-    val isDevelopment: Boolean = project.ext.has("development")
-    applicationDefaultJvmArgs = listOf("-Dio.ktor.development=$isDevelopment")
 }
 
 dependencies {

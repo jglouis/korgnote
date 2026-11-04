@@ -1,4 +1,4 @@
-# T23 — the sync server in a container. Build from the repository root:
+# The sync server in a container. Build from the repository root:
 #
 #   docker build -t korgnote-server .
 #
@@ -53,8 +53,7 @@ USER ${UID}:${GID}
 # any UID but 65532.
 WORKDIR /opt/korgnote
 EXPOSE 8080 8443
-# There is no /bin/sh for Gradle's bin/server script, so start the JVM directly with what that script
-# would pass: the development flag from server/build.gradle.kts, and native access for Netty's
-# transport (which only silences the JDK's warning).
-ENTRYPOINT ["java", "--enable-native-access=ALL-UNNAMED", "-Dio.ktor.development=false", \
+# There is no /bin/sh for Gradle's bin/server script, so start the JVM directly, with native access
+# for Netty's transport (which only silences the JDK's warning).
+ENTRYPOINT ["java", "--enable-native-access=ALL-UNNAMED", \
             "-cp", "/opt/korgnote/lib/*", "com.korgnote.server.ApplicationKt"]
