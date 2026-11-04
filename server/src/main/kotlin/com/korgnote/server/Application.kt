@@ -1,6 +1,5 @@
 package com.korgnote.server
 
-import com.korgnote.common.Greeting
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -112,27 +111,29 @@ fun Application.module(
             respondFavIcon()
         }
 
-        // API endpoints kept under /api to avoid collision with index.html routing
-        // Serve index.html at root when WASM output exists; otherwise fall back to legacy greeting
+        // The web client has `/` when it is served; otherwise something still answers there, so that
+        // opening the server in a browser shows it is running.
         if (webClient == null) {
             get("/") {
-                call.respondText("Ktor: ${Greeting().greet()}")
+                call.respondText(RUNNING)
             }
         }
 
         devicesPage(access, watcher)
 
         route("/api") {
-            // Sync API v1. The endpoints it replaced were deleted in T10.
             syncApiV1(store, journal)
             pairingApi(access)
 
             get("/") {
-                call.respondText("Ktor: ${Greeting().greet()}")
+                call.respondText(RUNNING)
             }
         }
     }
 }
+
+private const val RUNNING = "Ktor: the KorgNote server is running."
+
 suspend fun RoutingContext.respondFavIcon() {
     val bytes = this::class.java.classLoader.getResourceAsStream("favicon.png")?.readBytes()
     if (bytes == null) {

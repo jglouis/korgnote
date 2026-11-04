@@ -22,8 +22,6 @@ extensions.configure<ApplicationExtension> {
         // Raise versionCode on every release: Android refuses a lower one over a higher one.
         versionCode = 14
         versionName = "1.6.3"
-
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     // The release key lives in KeePassXC, and scripts/release.sh hands it over as these properties;
@@ -78,9 +76,6 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.tooling.preview)
     implementation(libs.androidx.activity.compose)
-
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
 
     implementation(libs.koin.core)
     implementation(libs.koin.compose)
