@@ -283,7 +283,47 @@ class ReplicaNamesIosTest {
         SyncEngine(store, server).sync()
 
         assertEquals("* Note\nedited on the old version\n", store.read(together))
-        assertEquals("* Note\nedited on the old version\n", server.files[together])
+        assertEquals("* Note\nedited on the old version\n", server.files[apart])
+        assertTrue(store.dirtyPaths().isEmpty())
+    }
+
+    /** It is still an edit of that spelling: when the same one moved elsewhere, the two merge. */
+    @Test
+    fun anEditUnderOneSpellingMergesWithAnEditElsewhereAfterARestart() = runTest {
+        val root = newRoot()
+        val base = "* Note\n\n* Other\n"
+        val server = Server(together).apply {
+            files[together] = base
+            files[apart] = base
+        }
+        val store = DocumentStore(FileSystemReplicaStorage(root))
+        SyncEngine(store, server).sync()
+        store.save(apart, "* Note\nedit here\n\n* Other\n")
+        server.files[apart] = "* Note\n\n* Other\nedit elsewhere\n"
+
+        val afterRestart = DocumentStore(FileSystemReplicaStorage(root))
+        SyncEngine(afterRestart, server).sync()
+
+        assertEquals("* Note\nedit here\n\n* Other\nedit elsewhere\n", server.files[apart])
+        assertEquals("* Note\nedit here\n\n* Other\nedit elsewhere\n", afterRestart.read(apart))
+    }
+
+    /** With an edit to send, the delta sends it against the version it was made on, and no copy is made. */
+    @Test
+    fun anEditUnderTheOtherSpellingIsSentNotSetAsideWhenTheServerHasOneSpelling() = runTest {
+        val root = newRoot()
+        val server = Server(together).apply { answersWithDeltas = true }
+        FileSystemReplicaStorage(root).write(apart, "* Note\nedited on the old version\n")
+        val etag = "e-${"* Note\n".hashCode()}"
+        FileSystemReplicaStorage(root).writeMeta(
+            ReplicaMeta(100, mapOf(together to FileMeta(together, etag), apart to FileMeta(apart, etag, dirty = true))),
+        )
+        val store = DocumentStore(FileSystemReplicaStorage(root))
+
+        SyncEngine(store, server).sync()
+
+        assertEquals(listOf(apart), server.pushed)
+        assertEquals(2, store.paths().size)
         assertTrue(store.dirtyPaths().isEmpty())
     }
 

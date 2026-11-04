@@ -133,17 +133,13 @@ class FileSystemReplicaStorage(root: String) : ReplicaStorage {
      * Only a complete manifest says which the server has, and the next could be a long way off, so
      * generation 0 asks for one: it takes away the spelling the server does not have. Both stay until
      * then, as a spelling with no record would be fetched again, over the one file, if it is really there.
-     * An edit moves to the spelling nearly every server has, as a server that has only that one refuses
-     * the other as a new note. Here and not in [readMeta]'s callers, as it looks at every name.
+     * An edit not sent goes first: a delta sends it against the version it was made on, where a complete
+     * manifest has a server with the one spelling refuse it as a new note. The next start settles it.
+     * Here and not in [readMeta]'s callers, as it looks at every name.
      */
     private fun ReplicaMeta.withBothSpellingsSettled(): ReplicaMeta {
-        val apart = files.values.filter { accentsTogether(it.path).let { name -> name != it.path && name in files } }
-        if (apart.isEmpty()) return this
-        val edited = apart.filter { it.dirty }.flatMap { record ->
-            val together = files.getValue(accentsTogether(record.path))
-            listOf(record.path to record.copy(dirty = false), together.path to together.copy(dirty = true, deleted = false))
-        }
-        return copy(generation = 0, files = files + edited)
+        val twice = files.keys.groupBy(::accentsTogether).values.filter { it.size > 1 }.flatten()
+        return if (twice.isEmpty() || twice.any { files.getValue(it).dirty }) this else copy(generation = 0)
     }
 
     /** Null when there is no `meta.json`, or its attributes cannot be read. */

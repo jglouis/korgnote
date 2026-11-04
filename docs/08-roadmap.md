@@ -65,6 +65,10 @@ This is the only status list; the rules for keeping it are in the [docs README](
 - **On iOS, closing the drawer on its scrim with Filter focused** leaves the keyboard up over the bottom
   bar.
 - **On iOS, the Keychain outlives the app**, so a reinstall starts paired with the old server.
+- **An iPhone with a server that holds a note under both spellings** has two notes over one file. When one
+  moves elsewhere while the other has an unsent edit, the pull writes over the edit, as it did in 1.6.3.
+- **A dotted name then digits in the link editor**, as in `foo.py:12` or `com.apple.Notes:42`, reads as a host
+  and a port, and gets `https://`.
 - **On iOS, an unreadable `meta.json` with an unsent edit, under a name the server spells with its accents
   apart**, loses the edit to the server's copy and pushes a second note. The file has no record to say
   which spelling it goes by, so it is listed with its accents together. That is what nearly every server
