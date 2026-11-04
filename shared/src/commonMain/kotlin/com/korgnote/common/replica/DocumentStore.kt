@@ -88,6 +88,9 @@ class DocumentStore(private val storage: ReplicaStorage) {
                     path = path,
                     size = content.length.toLong(),
                     dirty = true,
+                    // Saved over its own tombstone, which it replaces, keeping the etag: as in
+                    // [create], the text is pushed as an edit of the version that was deleted.
+                    deleted = false,
                 )),
             ),
         )

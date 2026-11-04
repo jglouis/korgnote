@@ -892,6 +892,51 @@ class SyncEngineTests {
         assertEquals(emptyList(), server.log)
     }
 
+    /**
+     * The note was still on screen when it was deleted, and saved from there. It is pushed as an edit
+     * of the version that was deleted, as a note created over the name is.
+     */
+    @Test
+    fun aSaveAfterADeleteTakesTheNoteBackInsteadOfDeletingItOnTheServer() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* A\n")
+        engine.sync()
+        val etag = store.meta("a.org")?.etag
+
+        store.delete("a.org")
+        store.save("a.org", "* A, saved after the delete\n")
+
+        assertEquals(emptyList(), store.tombstones())
+        assertEquals(etag, store.meta("a.org")?.etag, "the version the save is an edit of")
+        assertTrue(store.isDirty("a.org"))
+
+        val report = engine.sync()
+
+        assertEquals(listOf("a.org"), report.pushed)
+        assertEquals(emptyList(), server.deleted)
+        assertEquals("* A, saved after the delete\n", server.files["a.org"]?.second)
+        assertEquals("* A, saved after the delete\n", store.read("a.org"))
+        assertFalse(store.isDirty("a.org"))
+    }
+
+    /** Edited elsewhere meanwhile: there is no base to merge from, so the save is kept beside it. */
+    @Test
+    fun aSaveAfterADeleteMeetingAnEditElsewhereEndsInAConflictCopy() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* A\n")
+        engine.sync()
+
+        store.delete("a.org")
+        store.save("a.org", "* A, saved after the delete\n")
+        server.put("a.org", "* A, edited elsewhere\n")
+        engine.sync()
+
+        assertEquals("* A, edited elsewhere\n", store.read("a.org"))
+        assertEquals("* A, edited elsewhere\n", server.files["a.org"]?.second)
+        val copy = store.paths().single { it.startsWith("a.sync-conflict-") }
+        assertEquals("* A, saved after the delete\n", store.read(copy))
+    }
+
     @Test
     fun aRenameCreatesTheNewNoteBeforeDeletingTheOldOne() = runTest {
         val (server, store, engine) = setUp()
