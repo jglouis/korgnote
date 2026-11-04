@@ -111,7 +111,7 @@ class LinkNavigationTest {
     fun backSkipsANoteDeletedSince() = runTest {
         openDaily()
         viewModel.links.follow("file:../project.org")
-        viewModel.deleteNote("daily/today.org")
+        viewModel.noteFiles.deleteNote("daily/today.org")
 
         viewModel.links.goBack()
 

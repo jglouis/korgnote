@@ -91,9 +91,9 @@ class SyncConflictTest {
         conflict()
 
         assertEquals(mapOf(path to listOf(copy)), vm.library.conflicts)
-        assertEquals(path, vm.conflictOriginalOf(copy))
-        assertNull(vm.conflictOriginalOf(path))
-        val chunk = vm.conflictComparison(copy)!!.chunks.single()
+        assertEquals(path, vm.noteFiles.conflictOriginalOf(copy))
+        assertNull(vm.noteFiles.conflictOriginalOf(path))
+        val chunk = vm.noteFiles.conflictComparison(copy)!!.chunks.single()
         assertEquals("* WAITING First", chunk.heading)
         assertEquals(listOf("* WAITING First"), chunk.note)
         assertEquals(listOf("* DONE First"), chunk.copy)
@@ -104,7 +104,7 @@ class SyncConflictTest {
         conflict()
         vm.onFileSelected(copy)
 
-        vm.discardConflictCopy(copy)
+        vm.noteFiles.discardConflictCopy(copy)
 
         assertEquals(emptyMap(), vm.library.conflicts)
         assertFalse(copy in api.files, "the server deletes it too, into its trash")
@@ -118,7 +118,7 @@ class SyncConflictTest {
         conflict()
         vm.onFileSelected(copy)
 
-        assertTrue(vm.useConflictCopy(copy))
+        assertTrue(vm.noteFiles.useConflictCopy(copy))
 
         assertEquals(emptyMap(), vm.library.conflicts)
         assertEquals(mine, api.files[path], "pushed as an edit of the server's version")
@@ -132,7 +132,7 @@ class SyncConflictTest {
         conflict()
         vm.onFileSelected(path)
 
-        assertTrue(vm.resolveConflictCopy(vm.conflictComparison(copy)!!, listOf(ChunkChoice.Edited("* NEXT First"))))
+        assertTrue(vm.noteFiles.resolveConflictCopy(vm.noteFiles.conflictComparison(copy)!!, listOf(ChunkChoice.Edited("* NEXT First"))))
 
         val resolved = original.replace("TODO First", "NEXT First")
         assertEquals(emptyMap(), vm.library.conflicts)
@@ -145,10 +145,10 @@ class SyncConflictTest {
     @Test
     fun choicesMadeOnVersionsThatSinceChangedAreRefused() = runTest {
         conflict()
-        val comparison = vm.conflictComparison(copy)!!
+        val comparison = vm.noteFiles.conflictComparison(copy)!!
         store.save(copy, mine.replace("body two", "body two, edited meanwhile"))
 
-        assertFalse(vm.resolveConflictCopy(comparison, listOf(ChunkChoice.Copy)))
+        assertFalse(vm.noteFiles.resolveConflictCopy(comparison, listOf(ChunkChoice.Copy)))
 
         assertEquals(theirs, store.read(path))
         assertEquals(mapOf(path to listOf(copy)), vm.library.conflicts)
@@ -157,7 +157,7 @@ class SyncConflictTest {
     @Test
     fun onlyACopyCanBeUsed() = runTest {
         conflict()
-        assertFalse(vm.useConflictCopy(path))
+        assertFalse(vm.noteFiles.useConflictCopy(path))
         assertEquals(theirs, api.files[path])
     }
 }

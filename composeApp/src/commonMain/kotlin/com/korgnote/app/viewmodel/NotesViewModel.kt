@@ -18,7 +18,6 @@ import com.korgnote.app.data.NoteTemplateSettings
 import com.korgnote.app.capture.CaptureFiler
 import com.korgnote.app.data.SavedSearch
 import com.korgnote.app.data.ReadingPlace
-import com.korgnote.common.fs.NotePaths
 import com.korgnote.common.org.OrgTable
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.edit.TableGrid
@@ -28,24 +27,13 @@ import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.link.LinkTarget
 import com.korgnote.common.org.link.linkTargetsOf
 import com.korgnote.common.org.orgElements
-import com.korgnote.common.org.template.dailyFileName
-import com.korgnote.common.org.template.dailyTitle
-import com.korgnote.common.org.template.newNoteText
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.FolderNoteStorage
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
-import com.korgnote.common.sync.ChunkChoice
-import com.korgnote.common.sync.ConflictChunk
-import com.korgnote.common.sync.conflictChunks
-import com.korgnote.common.sync.conflictCopyOriginal
-import com.korgnote.common.sync.resolveConflict
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.vm_finish_editing_first
-import korgnote.composeapp.generated.resources.vm_not_a_note_path
-import korgnote.composeapp.generated.resources.vm_note_exists
-import korgnote.composeapp.generated.resources.vm_note_title_needed
 import korgnote.composeapp.generated.resources.vm_table_changed
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -67,10 +55,9 @@ import kotlin.uuid.Uuid
  * The app's notes, and everything shown about them.
  *
  * Each concern is its own state holder — [library], [note], [folds], [pins], [editor],
- * [completion], [search], [savedSearches], [links], [files], [agenda], [server], [changes] — and the UI talks to them directly. What stays here is what
+ * [completion], [search], [savedSearches], [links], [files], [agenda], [server], [changes], [noteFiles] — and the UI talks to them directly. What stays here is what
  * crosses them: opening a note, which every one of them follows; rebuilding what is derived from the
- * notes when they change; and the operations that change the notes as files — creating, renaming,
- * deleting, and settling a conflict between a note and its copy.
+ * notes when they change.
  */
 class NotesViewModel(
     sync: SyncEngine,
@@ -193,6 +180,30 @@ class NotesViewModel(
         refresh = ::refreshDerivedViews,
         refreshSoon = ::refreshDerivedViewsSoon,
         showReplica = ::showFromReplica,
+        showMessage = ::showMessage,
+    )
+
+    /** Notes as files: creating, renaming and deleting them, and settling a conflict with a copy. */
+    val noteFiles: NoteFiles = NoteFiles(
+        store,
+        library,
+        note,
+        folds,
+        pins,
+        places,
+        editor,
+        today,
+        newNotesFolder,
+        noteTemplate,
+        newId,
+        scope = viewModelScope,
+        reload = { reloadLibrary() },
+        showReplica = ::showFromReplica,
+        open = { path -> onFileSelected(path) },
+        openAndWait = ::openAndWait,
+        refreshSoon = ::refreshDerivedViewsSoon,
+        // Read when something is pushed, by which time [server] is there.
+        server = { server },
         showMessage = ::showMessage,
     )
 
@@ -435,15 +446,19 @@ class NotesViewModel(
         }
     }
 
+    /** Reads the notes again. A change on its way to the replica would otherwise be read as it was before it. */
+    private suspend fun reloadLibrary() {
+        changes.whenWritten()
+        library.reload(parseOn = background)
+    }
+
     /**
      * Rebuilds everything the UI shows out of the replica, the scans of every note away from the
      * main thread: run on each sync, they held the screen still for seconds on a slow phone. Returns
      * once everything is shown, as [refreshDerivedViews] does.
      */
     private suspend fun showFromReplica() {
-        // A change on its way there would otherwise be read as it was before it.
-        changes.whenWritten()
-        library.reload(parseOn = background)
+        reloadLibrary()
         pendingRefresh?.cancel()
         pendingRefresh = null
         val texts = library.texts()
@@ -543,32 +558,6 @@ class NotesViewModel(
         changes.saveCurrentFile()
     }
 
-    /** Where a note titled [title] would be created, or null when the title makes no file name. */
-    fun newNotePathFor(title: String): String? =
-        NotePaths.fileNameFor(title)?.let { NotePaths.join(newNotesFolder(), it) }
-
-    /**
-     * Creates a note titled [title], tagged with [tags], in the new-notes folder, opens it, and starts
-     * its first heading: a capture, so what was worth writing down gets written before anything else
-     * is asked. It is headed as org-roam heads a note — its own `:ID:`, title, author and date.
-     *
-     * Returns the new path, or null — with [lastErrorMessage] saying why — when the title makes no
-     * file name or a note already has it. Works offline; the next sync pushes it.
-     */
-    suspend fun createNote(title: String, tags: List<String> = emptyList()): String? {
-        val path = newNotePathFor(title)
-        if (path == null) {
-            lastErrorMessage = getString(Res.string.vm_note_title_needed)
-            return null
-        }
-        if (!store.create(path, headOfNewNote(title, tags))) {
-            lastErrorMessage = getString(Res.string.vm_note_exists, path)
-            return null
-        }
-        openNewNote(path)
-        return path
-    }
-
     /** The filer captures go through, with these notes' templates and inbox; null where nothing captures. */
     val captureFiler: CaptureFiler? get() = captures
 
@@ -591,195 +580,6 @@ class NotesViewModel(
         server.pushQuietly()
     }
 
-    /** Where today's daily is, in the daily folder Settings names. */
-    fun todaysDailyPath(): String = NotePaths.join(noteTemplate().dailyFolder, dailyFileName(today()))
-
-    /**
-     * Opens today's daily, creating it first — headed like any new note, titled with the date — when
-     * there is none yet. A new one starts its first heading, as a new note does; one that exists is
-     * only opened, since what is in it is what was being looked for.
-     */
-    suspend fun openToday() {
-        val path = todaysDailyPath()
-        if (path in library) {
-            onFileSelected(path)
-            return
-        }
-        // Already in the replica, though not yet read into the library: it is there to open.
-        if (!store.create(path, headOfNewNote(dailyTitle(today()), emptyList()))) {
-            onFileSelected(path)
-            return
-        }
-        openNewNote(path)
-    }
-
-    private fun headOfNewNote(title: String, tags: List<String>): String {
-        val template = noteTemplate()
-        return newNoteText(
-            id = newId(),
-            title = title,
-            date = today(),
-            author = template.author,
-            tags = tags,
-            extraHeader = template.extraHeader,
-        )
-    }
-
-    /**
-     * Opens a note just written to the replica at its first heading, then pushes it.
-     *
-     * Only what opening needs is waited for: the note read into the library. The links, agenda
-     * and search are rebuilt a moment later, as for a tick, since a note with nothing in it yet
-     * changes none of them; and the push goes on behind, since the note exists here whether or not
-     * the server hears of it. Awaited, the two held the new-note dialog open for a sync round trip
-     * and two scans of every note.
-     */
-    private suspend fun openNewNote(path: String) {
-        editor.cancel()
-        note.path = path
-        library.reload(parseOn = background)
-        refreshDerivedViewsSoon()
-        openAndWait(path)
-        editor.addAtEnd()
-        viewModelScope.launch { server.pushQuietly() }
-    }
-
-    /**
-     * Renames [from] to [to], a path as typed. Content, unsynced edits and folds go with it.
-     * Returns false, with [lastErrorMessage] saying why, when [to] is not a valid path or is taken.
-     */
-    suspend fun renameNote(from: String, to: String): Boolean {
-        val target = NotePaths.normalize(to)
-        if (target == null) {
-            lastErrorMessage = getString(Res.string.vm_not_a_note_path, to)
-            return false
-        }
-        if (target == from) return true
-        val wasOpen = note.path == from
-        // The element editor holds offsets into the note being moved; finish nothing half-way.
-        if (wasOpen) editor.cancel()
-        if (!store.rename(from, target)) {
-            lastErrorMessage = getString(Res.string.vm_note_exists, target)
-            return false
-        }
-        folds.move(from, target)
-        pins.move(from, target)
-        places.move(from, target)
-        if (wasOpen) note.path = target
-        showFromReplica()
-        if (wasOpen) openAndWait(target)
-        server.pushQuietly()
-        return true
-    }
-
-    /** True when [path] holds edits the server has not seen, which a delete would take with it. */
-    suspend fun hasUnsyncedChanges(path: String): Boolean = store.isDirty(path)
-
-    /**
-     * Deletes [path] here and, at the next sync, on the server — only the version deleted here, so
-     * an edit made elsewhere in the meantime brings the note back instead of being lost.
-     * The server keeps a copy in its trash either way.
-     */
-    suspend fun deleteNote(path: String) {
-        if (note.path == path) {
-            editor.cancel()
-            note.path = null
-        }
-        folds.forget(path)
-        pins.forget(path)
-        places.forget(path)
-        store.delete(path)
-        showFromReplica()
-        server.pushQuietly()
-    }
-
-    // --- Conflicts ---
-
-    /**
-     * The note [path] is a conflict copy of, or null when it is not one — or its note is gone, which
-     * leaves nothing to conflict with.
-     */
-    fun conflictOriginalOf(path: String): String? = conflictCopyOriginal(path)?.takeIf { it in library }
-
-    /**
-     * How [copy] differs from its note, chunk by chunk, with the two texts the chunks were cut from;
-     * null when it is no copy of a note here.
-     */
-    fun conflictComparison(copy: String): ConflictComparison? {
-        val original = conflictOriginalOf(copy) ?: return null
-        val note = library[original]?.text ?: return null
-        val copied = library[copy]?.text ?: return null
-        return ConflictComparison(original, copy, note, copied, conflictChunks(note, copied))
-    }
-
-    /**
-     * Settles a conflict by keeping the note as it is: [copy] is deleted, here and on the server,
-     * which keeps it in its trash. A reader looking at the copy is taken to the note.
-     */
-    suspend fun discardConflictCopy(copy: String) {
-        val original = conflictOriginalOf(copy)
-        val wasOpen = note.path == copy
-        deleteNote(copy)
-        if (wasOpen && original != null) openAndWait(original)
-    }
-
-    /**
-     * Settles a conflict in favour of [copy]: its text becomes the note's, pushed as an edit of the
-     * server's version, and the copy is deleted. Returns false, changing nothing, when [copy] is not
-     * a conflict copy of a note here.
-     */
-    suspend fun useConflictCopy(copy: String): Boolean {
-        val original = conflictOriginalOf(copy) ?: return false
-        val wasOpen = note.path == copy || note.path == original
-        // The element editor holds offsets into a text about to be replaced.
-        if (wasOpen) editor.cancel()
-        if (!store.replaceWithCopy(original, copy)) return false
-        folds.forget(copy)
-        pins.forget(copy)
-        places.forget(copy)
-        if (wasOpen) note.path = original
-        showFromReplica()
-        if (wasOpen) openAndWait(original)
-        server.pushQuietly()
-        return true
-    }
-
-    /**
-     * Settles a conflict chunk by chunk: each chunk of [comparison] as [choices] says, at the same
-     * index, becomes the note, pushed as an edit of the server's version, and the copy is deleted.
-     * Every chunk the note's way is [discardConflictCopy]; every one the copy's, [useConflictCopy].
-     *
-     * False, changing nothing, when the note or the copy no longer holds what [comparison] was made
-     * from — a sync landed while the choices were made — and they have to be made again.
-     */
-    suspend fun resolveConflictCopy(comparison: ConflictComparison, choices: List<ChunkChoice>): Boolean {
-        val (original, copy, noteText, copyText) = comparison
-        if (conflictOriginalOf(copy) != original) return false
-        if (store.read(original) != noteText || store.read(copy) != copyText) {
-            // What was compared is behind the replica: show what it holds, for new chunks.
-            showFromReplica()
-            return false
-        }
-        val content = resolveConflict(noteText, copyText, choices)
-        val wasOpen = note.path == copy || note.path == original
-        // The element editor holds offsets into a text about to be replaced.
-        if (wasOpen) editor.cancel()
-        // Checked again under the store's lock: a sync can still land between the two.
-        if (!store.resolveConflict(original, copy, noteText, copyText, content)) {
-            showFromReplica()
-            if (wasOpen) note.path?.let { openAndWait(it) }
-            return false
-        }
-        folds.forget(copy)
-        pins.forget(copy)
-        places.forget(copy)
-        if (wasOpen) note.path = original
-        showFromReplica()
-        if (wasOpen) openAndWait(original)
-        server.pushQuietly()
-        return true
-    }
-
     internal companion object {
         /**
          * How long the ticking has to stop before [refreshDerivedViewsSoon] refreshes: long enough
@@ -792,12 +592,3 @@ class NotesViewModel(
         val PLACE_SAVE_PAUSE = 500.milliseconds
     }
 }
-
-/** A note in conflict and one of its copies, as they were when compared: see [NotesViewModel.conflictComparison]. */
-data class ConflictComparison(
-    val original: String,
-    val copy: String,
-    val noteText: String,
-    val copyText: String,
-    val chunks: List<ConflictChunk>,
-)

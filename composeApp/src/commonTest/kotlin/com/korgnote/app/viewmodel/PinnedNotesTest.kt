@@ -84,7 +84,7 @@ class PinnedNotesTest {
         val vm = viewModel()
         vm.server.load()
 
-        assertTrue(vm.renameNote(agenda, "plans/agenda"))
+        assertTrue(vm.noteFiles.renameNote(agenda, "plans/agenda"))
 
         assertEquals(listOf("plans/agenda.org", todo), saved)
         assertEquals(listOf("plans/agenda.org", todo), vm.pins.shown)
@@ -96,7 +96,7 @@ class PinnedNotesTest {
         val vm = viewModel()
         vm.server.load()
 
-        vm.deleteNote(todo)
+        vm.noteFiles.deleteNote(todo)
 
         assertEquals(listOf(agenda), saved)
     }

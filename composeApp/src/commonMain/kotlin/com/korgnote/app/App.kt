@@ -251,7 +251,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     // Opens or starts today's daily, from the drawer.
     val openToday = {
         scope.launch {
-            vm.openToday()
+            vm.noteFiles.openToday()
             selectedScreen = BottomItem.FILE
             drawerState.close()
         }
@@ -323,14 +323,14 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     }
     if (creatingNote) {
         NewNoteDialog(
-            pathFor = vm::newNotePathFor,
+            pathFor = vm.noteFiles::newNotePathFor,
             knownTags = vm.completion.context.knownTags,
             error = noteDialogError,
             onDismiss = { creatingNote = false; noteDialogError = null },
             onCreate = { title, tags ->
                 scope.launch {
                     // Stays open when refused, with the reason shown behind it.
-                    if (vm.createNote(title, tags) == null) {
+                    if (vm.noteFiles.createNote(title, tags) == null) {
                         noteDialogError = vm.lastErrorMessage.also { vm.clearError() }
                     } else {
                         creatingNote = false
@@ -382,7 +382,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
             onDismiss = { renamingNote = null; noteDialogError = null },
             onRename = { target ->
                 scope.launch {
-                    if (vm.renameNote(path, target)) {
+                    if (vm.noteFiles.renameNote(path, target)) {
                         renamingNote = null
                         noteDialogError = null
                     } else {
@@ -394,7 +394,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     }
     comparingCopy?.let { copy ->
         // Worked out again whenever a note's text changes, so the chunks are always the current ones.
-        val comparison = remember(copy, vm.library.revision) { vm.conflictComparison(copy) }
+        val comparison = remember(copy, vm.library.revision) { vm.noteFiles.conflictComparison(copy) }
         var refused by remember(copy) { mutableStateOf(false) }
         if (comparison == null) {
             // Settled meanwhile, here or on another device.
@@ -405,7 +405,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                 comparison = comparison,
                 onApply = { choices ->
                     scope.launch {
-                        if (vm.resolveConflictCopy(comparison, choices)) comparingCopy = null else refused = true
+                        if (vm.noteFiles.resolveConflictCopy(comparison, choices)) comparingCopy = null else refused = true
                     }
                 },
                 onDismiss = { comparingCopy = null },
@@ -421,7 +421,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
             onDismiss = { deletingNote = null },
             onDelete = {
                 deletingNote = null
-                scope.launch { vm.deleteNote(path) }
+                scope.launch { vm.noteFiles.deleteNote(path) }
             },
         )
     }
@@ -550,7 +550,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                             pinned = vm.pins.shown.toSet(),
                             onTogglePin = { vm.pins.toggle(it) },
                             onDeleteFile = { path ->
-                                scope.launch { deletingNote = path to vm.hasUnsyncedChanges(path) }
+                                scope.launch { deletingNote = path to vm.noteFiles.hasUnsyncedChanges(path) }
                             },
                             modifier = Modifier.weight(1f)
                         )
@@ -906,8 +906,8 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                     ConflictBanner(
                                         conflict,
                                         onCompare = { comparingCopy = conflict.copy },
-                                        onKeepNote = { scope.launch { vm.discardConflictCopy(conflict.copy) } },
-                                        onUseCopy = { scope.launch { vm.useConflictCopy(conflict.copy) } },
+                                        onKeepNote = { scope.launch { vm.noteFiles.discardConflictCopy(conflict.copy) } },
+                                        onUseCopy = { scope.launch { vm.noteFiles.useConflictCopy(conflict.copy) } },
                                         keptSide = keptSide,
                                     )
                                     Spacer(modifier = Modifier.height(12.dp))
