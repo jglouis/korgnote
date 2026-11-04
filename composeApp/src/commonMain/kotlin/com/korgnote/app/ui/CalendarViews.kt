@@ -827,51 +827,7 @@ private fun DayColumn(
             val occurrence = block.occurrence
             // By entry, not by place: what is open on a block stays with it when a sync adds one before it.
             key(occurrence.entry.file, occurrence.entry.stamp.range.first, occurrence.time) {
-                val accent = occurrence.entry.kind.accent()
-                val keywordColor = keywordColors.of(occurrence.entry)
-                val width = maxWidth / block.columns
-                val height = hourHeight * (block.endMinute - block.startMinute) / 60
-                // The time under the title where there is room for both, rather than half of it cut off:
-                // where a block sits on the grid already says roughly when it is.
-                val time = occurrence.timeLabel()?.takeIf { height - 4.dp >= titleLine + timeLine }
-                // As many lines of title as the block is tall, less its time; a long meeting in a
-                // narrow column is otherwise two lines of title and a long empty block under them.
-                val lines = ((height - 4.dp - (if (time != null) timeLine else 0.dp)) / titleLine).toInt().coerceAtLeast(1)
-                val inset = if (compact) 1.dp else 3.dp
-                var menu by remember { mutableStateOf(false) }
-                Column(
-                    Modifier
-                        .offset(x = width * block.column, y = hourHeight * block.startMinute / 60)
-                        .width(width)
-                        .height(height)
-                        .padding(1.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        // Opaque, so the hour lines do not run through the text.
-                        .background(MaterialTheme.colorScheme.surface)
-                        .background(accent.copy(alpha = 0.18f))
-                        .keywordEdge(keywordColor)
-                        .openOrMenu({ onOpen(occurrence) }) { menu = true }
-                        .dimmedIfDone(occurrence)
-                        .padding(
-                            start = (if (keywordColor != null) KEYWORD_EDGE else 0.dp) + inset,
-                            end = inset,
-                            top = 1.dp,
-                            bottom = 1.dp,
-                        ),
-                ) {
-                    EntryMenu(occurrence.entry.file, occurrence.entry.headingOffset, occurrence.entry.todo, menu, onDismiss = { menu = false }, entry = occurrence.entry)
-                    Text(
-                        occurrence.headline(keywordColor = keywordColor, titleOnly = compact),
-                        modifier = Modifier.keywordDescription(occurrence, compact),
-                        style = titleStyle,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = lines,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    time?.let {
-                        Text(it, fontSize = TIME_LABEL_SIZE, lineHeight = TIME_LABEL_LINE, color = accent, maxLines = 1)
-                    }
-                }
+                EventBlock(block, width = maxWidth / block.columns, hourHeight = hourHeight, keywordColors = keywordColors, compact = compact, titleLine = titleLine, timeLine = timeLine, onOpen = onOpen)
             }
         }
 
@@ -881,6 +837,68 @@ private fun DayColumn(
                 Box(Modifier.fillMaxWidth().height(2.dp).offset(y = 3.dp).background(nowColor))
                 Box(Modifier.size(8.dp).background(nowColor, CircleShape))
             }
+        }
+    }
+}
+
+/**
+ * A timed entry on the hour grid, as tall as it lasts: its title, as many lines of it as the block
+ * has room for, and its time under it where there is room for both.
+ */
+@Composable
+private fun EventBlock(
+    block: TimedBlock,
+    width: Dp,
+    hourHeight: Dp,
+    keywordColors: KeywordColors,
+    compact: Boolean,
+    titleLine: Dp,
+    timeLine: Dp,
+    onOpen: (AgendaOccurrence) -> Unit,
+) {
+    val occurrence = block.occurrence
+    val accent = occurrence.entry.kind.accent()
+    val keywordColor = keywordColors.of(occurrence.entry)
+    val height = hourHeight * (block.endMinute - block.startMinute) / 60
+    // The time under the title where there is room for both, rather than half of it cut off:
+    // where a block sits on the grid already says roughly when it is.
+    val time = occurrence.timeLabel()?.takeIf { height - 4.dp >= titleLine + timeLine }
+    // As many lines of title as the block is tall, less its time; a long meeting in a
+    // narrow column is otherwise two lines of title and a long empty block under them.
+    val lines = ((height - 4.dp - (if (time != null) timeLine else 0.dp)) / titleLine).toInt().coerceAtLeast(1)
+    val inset = if (compact) 1.dp else 3.dp
+    var menu by remember { mutableStateOf(false) }
+    Column(
+        Modifier
+            .offset(x = width * block.column, y = hourHeight * block.startMinute / 60)
+            .width(width)
+            .height(height)
+            .padding(1.dp)
+            .clip(RoundedCornerShape(4.dp))
+            // Opaque, so the hour lines do not run through the text.
+            .background(MaterialTheme.colorScheme.surface)
+            .background(accent.copy(alpha = 0.18f))
+            .keywordEdge(keywordColor)
+            .openOrMenu({ onOpen(occurrence) }) { menu = true }
+            .dimmedIfDone(occurrence)
+            .padding(
+                start = (if (keywordColor != null) KEYWORD_EDGE else 0.dp) + inset,
+                end = inset,
+                top = 1.dp,
+                bottom = 1.dp,
+            ),
+    ) {
+        EntryMenu(occurrence.entry.file, occurrence.entry.headingOffset, occurrence.entry.todo, menu, onDismiss = { menu = false }, entry = occurrence.entry)
+        Text(
+            occurrence.headline(keywordColor = keywordColor, titleOnly = compact),
+            modifier = Modifier.keywordDescription(occurrence, compact),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = lines,
+            overflow = TextOverflow.Ellipsis,
+        )
+        time?.let {
+            Text(it, fontSize = TIME_LABEL_SIZE, lineHeight = TIME_LABEL_LINE, color = accent, maxLines = 1)
         }
     }
 }
