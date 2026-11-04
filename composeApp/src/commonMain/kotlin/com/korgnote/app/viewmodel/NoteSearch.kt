@@ -4,8 +4,8 @@ import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.korgnote.app.ui.File
-import com.korgnote.app.ui.Folder
+import com.korgnote.common.fs.File
+import com.korgnote.common.fs.Folder
 import com.korgnote.common.org.search.SearchHit
 import com.korgnote.common.org.search.searchOrg
 import kotlinx.coroutines.CoroutineScope
@@ -66,7 +66,6 @@ class NoteSearch(
             when (child) {
                 is File -> child.takeIf { file -> words.all { file.name.contains(it, ignoreCase = true) } }
                 is Folder -> filterFolder(child, words)
-                else -> null
             }
         }
         return if (children.isEmpty()) null else Folder(name = folder.name, path = folder.path, children = children)

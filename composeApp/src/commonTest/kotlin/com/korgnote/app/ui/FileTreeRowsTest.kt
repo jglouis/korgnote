@@ -1,5 +1,7 @@
 package com.korgnote.app.ui
 
+import com.korgnote.common.fs.File
+import com.korgnote.common.fs.Folder
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals

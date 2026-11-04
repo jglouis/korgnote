@@ -3,9 +3,7 @@ package com.korgnote.app.viewmodel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.korgnote.app.ui.File
-import com.korgnote.app.ui.Folder
-import com.korgnote.app.ui.Node
+import com.korgnote.common.fs.Folder
 import com.korgnote.common.fs.TreeUtils
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.toOrgDocument
@@ -16,9 +14,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import com.korgnote.common.fs.File as SharedFile
-import com.korgnote.common.fs.Folder as SharedFolder
-import com.korgnote.common.fs.Node as SharedNode
 
 /**
  * The notes as last read from the replica, parsed, and the tree the drawer shows them in.
@@ -104,7 +99,7 @@ class NoteLibrary(private val store: DocumentStore) {
             parsed.putAll(changedMeanwhile)
             this.paths = parsed.keys.toSet()
             val allPaths = (paths + changedMeanwhile.keys).distinct()
-            tree = mapRootToUiFolder(TreeUtils.buildFromPaths(allPaths, rootName = "Documents"))
+            tree = TreeUtils.buildFromPaths(allPaths, rootName = "Documents")
             conflicts = conflictsIn(allPaths)
             loaded = true
             revision++
@@ -128,17 +123,4 @@ class NoteLibrary(private val store: DocumentStore) {
         changedDuringReload?.put(path, document)
         revision++
     }
-
-    private fun mapSharedToUi(node: SharedNode): Node {
-        return when (node) {
-            is SharedFile -> File(node.name, node.path)
-            is SharedFolder -> Folder(
-                name = node.name,
-                path = node.path,
-                children = node.children.map { mapSharedToUi(it) }
-            )
-        }
-    }
-
-    private fun mapRootToUiFolder(shared: SharedFolder): Folder = mapSharedToUi(shared) as Folder
 }

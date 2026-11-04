@@ -1,9 +1,9 @@
 package com.korgnote.app.viewmodel
 
 import com.korgnote.app.data.NoteTemplateSettings
-import com.korgnote.app.ui.File
-import com.korgnote.app.ui.Folder
-import com.korgnote.app.ui.Node
+import com.korgnote.common.fs.File
+import com.korgnote.common.fs.Folder
+import com.korgnote.common.fs.Node
 import com.korgnote.common.org.edit.FileKeywords
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage

@@ -1,5 +1,9 @@
 package com.korgnote.app.ui
 
+import com.korgnote.common.fs.File
+import com.korgnote.common.fs.Folder
+import com.korgnote.common.fs.Node
+
 /**
  * One line of the file tree as it is drawn: a node, how far it is indented, and — for a folder —
  * whether it is open.

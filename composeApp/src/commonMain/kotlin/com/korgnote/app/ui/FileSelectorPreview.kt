@@ -1,5 +1,7 @@
 package com.korgnote.app.ui
 
+import com.korgnote.common.fs.File
+import com.korgnote.common.fs.Folder
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -49,23 +51,6 @@ import korgnote.composeapp.generated.resources.editor_pin
 import korgnote.composeapp.generated.resources.editor_rename_or_move
 import korgnote.composeapp.generated.resources.editor_unpin
 import org.jetbrains.compose.resources.stringResource
-
-// A simple in-memory model for preview/demo purposes
-interface Node {
-    val name: String
-    val path: String
-}
-
-data class Folder(
-    override val name: String,
-    override val path: String,
-    val children: List<Node>
-) : Node
-
-data class File(
-    override val name: String,
-    override val path: String
-) : Node
 
 /**
  * The file tree.

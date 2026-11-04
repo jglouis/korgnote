@@ -1,5 +1,7 @@
 package com.korgnote.app.ui
 
+import com.korgnote.common.fs.File
+import com.korgnote.common.fs.Folder
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
