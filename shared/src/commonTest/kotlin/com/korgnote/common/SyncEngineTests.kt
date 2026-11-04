@@ -870,6 +870,33 @@ class SyncEngineTests {
         assertEquals("* A, edited on the laptop\n", store.read("a.org"))
     }
 
+    /**
+     * Found by [SyncEngineRandomTests]: the note made here is deleted before the server's of that name
+     * could be fetched. Nothing is left here to push, so only a delta that still lists the server's
+     * would ever bring it.
+     */
+    @Test
+    fun aNameTakenOnTheServerIsAskedForAgainWhenItsNoteCouldNotBeFetched() = runTest {
+        val (server, store, engine) = setUp()
+        server.generation = 5
+        engine.sync()
+
+        store.create("a.org", "* Mine\n")
+        server.put("a.org", "* Theirs\n")
+        server.generation = 6
+        server.refuses += "a.org"
+
+        assertEquals(listOf("a.org"), engine.sync().failed)
+        assertEquals(5, store.generation())
+
+        store.delete("a.org")
+        server.refuses.clear()
+        engine.sync()
+
+        assertEquals("* Theirs\n", store.read("a.org"))
+        assertEquals(6, store.generation())
+    }
+
     // --- A crash in the middle of a save ---
 
     private class Crash : RuntimeException("the battery was pulled")

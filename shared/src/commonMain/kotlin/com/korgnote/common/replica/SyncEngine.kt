@@ -90,12 +90,12 @@ class SyncEngine(
             fromBundle += file
             return PullOutcome.LEFT
         }
-        var pullFailed = false
+        var fetchFailed = false
 
         fun record(outcome: PullOutcome, path: String) {
             when (outcome) {
                 PullOutcome.TAKEN -> pulled.add(path)
-                PullOutcome.FAILED -> { failed.add(path); pullFailed = true }
+                PullOutcome.FAILED -> { failed.add(path); fetchFailed = true }
                 PullOutcome.LEFT -> Unit
             }
         }
@@ -108,6 +108,7 @@ class SyncEngine(
             PushOutcome.MERGED -> { pushed.add(path); merged.add(path) }
             PushOutcome.CONFLICT -> conflicted.add(path)
             PushOutcome.FAILED -> failed.add(path)
+            PushOutcome.NOT_FETCHED -> { failed.add(path); fetchFailed = true }
             PushOutcome.SKIPPED -> Unit
         }
 
@@ -223,7 +224,7 @@ class SyncEngine(
         // not list it and it would stay stale until a complete manifest. Nothing else waits for it:
         // every other file went through above, and does in the cycles after, so one the server never
         // serves costs longer deltas, at worst a complete manifest each time, and nothing more.
-        if (!pullFailed) store.setGeneration(manifest.generation)
+        if (!fetchFailed) store.setGeneration(manifest.generation)
         return SyncReport(
             pulled = pulled,
             pushed = pushed,
@@ -314,7 +315,8 @@ class SyncEngine(
     private suspend fun reconcile(path: String): PushOutcome {
         val local = store.read(path) ?: return PushOutcome.SKIPPED
         val base = store.base(path) ?: return keepTheirs(path)
-        val remote = (api.fetch(path) as? FetchResult.Fetched)?.file ?: return PushOutcome.FAILED
+        val answer = api.fetch(path)
+        val remote = (answer as? FetchResult.Fetched)?.file ?: return outcomeOfNoFile(answer)
 
         return when (val result = merge(base, local, remote.text)) {
             is MergeResult.Merged -> {
@@ -339,7 +341,11 @@ class SyncEngine(
         }
     }
 
-    private enum class PushOutcome { PUSHED, MERGED, CONFLICT, FAILED, SKIPPED }
+    /** A fetch that brought nothing to merge with. Tried again next cycle, which the generation must allow. */
+    private fun outcomeOfNoFile(answer: FetchResult) =
+        if (answer is FetchResult.Failed) PushOutcome.NOT_FETCHED else PushOutcome.FAILED
+
+    private enum class PushOutcome { PUSHED, MERGED, CONFLICT, FAILED, NOT_FETCHED, SKIPPED }
 
     private enum class PullOutcome { TAKEN, LEFT, FAILED }
 
@@ -379,7 +385,8 @@ class SyncEngine(
 
     /** The server's [path] takes the path; what is here, if it differs, is kept as a conflict copy. */
     private suspend fun keepTheirs(path: String): PushOutcome {
-        val theirs = (api.fetch(path) as? FetchResult.Fetched)?.file ?: return PushOutcome.FAILED
+        val answer = api.fetch(path)
+        val theirs = (answer as? FetchResult.Fetched)?.file ?: return outcomeOfNoFile(answer)
         return if (store.keepServerVersion(path, theirs.text, theirs.etag, timestamp()) != null) {
             PushOutcome.CONFLICT
         } else {
