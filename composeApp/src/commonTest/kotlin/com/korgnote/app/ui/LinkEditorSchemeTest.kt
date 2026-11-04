@@ -25,6 +25,16 @@ class LinkEditorSchemeTest {
         assertEquals("https://example.com:8080#top", withScheme("example.com:8080#top"))
     }
 
+    /** A dot further along says nothing: `sms` has none, so it is no host, and those digits no port. */
+    @Test
+    fun aSchemeBeforeDigitsIsLeftAloneWhateverFollowsThem() {
+        assertEquals("sms:5551234?body=see.you", withScheme("sms:5551234?body=see.you"))
+        assertEquals("tel:5551234#ext.1", withScheme("tel:5551234#ext.1"))
+        assertEquals("sip:1001?subject=a.b", withScheme("sip:1001?subject=a.b"))
+        assertEquals("tel:5551234", withScheme("tel:5551234"))
+        assertEquals("geo:48.85,2.35", withScheme("geo:48.85,2.35"))
+    }
+
     @Test
     fun anAddressWithASchemeOrNoHostIsLeftAlone() {
         assertEquals("https://example.com/x", withScheme(" https://example.com/x "))

@@ -214,8 +214,11 @@ internal fun withScheme(address: String): String {
     return if (TYPED_SCHEME.containsMatchIn(a) || '.' !in a.substringBefore('/')) a else "https://$a"
 }
 
-/** A scheme may hold dots, as `org.foo.app:open` does; what follows the colon in `example.com:8080` is a port. */
-private val TYPED_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*:(?!\\d+(?:[/?#]|$))")
+/**
+ * A scheme may hold dots, as `org.foo.app:open` does; what follows the colon in `example.com:8080` is
+ * a port. With no dot before the colon it is a scheme whatever follows, as in `tel:5551234#ext.1`.
+ */
+private val TYPED_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+-]*:|^[A-Za-z][A-Za-z0-9+.-]*:(?!\\d+(?:[/?#]|$))")
 
 /** The `file:`, or `file+sys:`, that [target] is written with, in the case it is written in; else nothing. */
 private fun filePrefixOf(target: String): String =
