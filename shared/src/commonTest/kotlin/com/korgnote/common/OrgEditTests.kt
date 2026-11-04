@@ -508,4 +508,40 @@ class OrgEditTests {
         val last = "* TODO".toOrgDocument()
         assertEquals("* ", last.setTodo(last.children.filterIsInstance<OrgSection>().single(), null).text)
     }
+
+    private fun planned(text: String, kind: PlanningKind, stamp: String?): String {
+        val parsed = text.toOrgDocument()
+        return parsed.setPlanning(parsed.children.filterIsInstance<OrgSection>().single(), kind, stamp).text
+    }
+
+    /** Org keeps them on one line, and changing one of them is no reason to lose the other. */
+    @Test
+    fun aPlanningLineWithTwoStampsKeepsTheOneNotBeingChanged() {
+        val text = "* Foo\nSCHEDULED: <2026-11-01 Sun> DEADLINE: <2026-11-09 Mon>\nBody\n"
+        assertEquals(
+            "* Foo\nSCHEDULED: <2026-12-01 Tue> DEADLINE: <2026-11-09 Mon>\nBody\n",
+            planned(text, PlanningKind.SCHEDULED, "<2026-12-01 Tue>"),
+        )
+        assertEquals(
+            "* Foo\nSCHEDULED: <2026-11-01 Sun> DEADLINE: <2026-12-01 Tue>\nBody\n",
+            planned(text, PlanningKind.DEADLINE, "<2026-12-01 Tue>"),
+        )
+        assertEquals("* Foo\nDEADLINE: <2026-11-09 Mon>\nBody\n", planned(text, PlanningKind.SCHEDULED, null))
+        assertEquals("* Foo\nSCHEDULED: <2026-11-01 Sun>\nBody\n", planned(text, PlanningKind.DEADLINE, null))
+    }
+
+    @Test
+    fun aPlanningLineKeepsItsIndentAndItsMissingNewline() {
+        assertEquals(
+            "* Foo\n  SCHEDULED: <2026-12-01 Tue>",
+            planned("* Foo\n  SCHEDULED: <2026-11-01 Sun>", PlanningKind.SCHEDULED, "<2026-12-01 Tue>"),
+        )
+    }
+
+    /** The last heading of a note may end it, with no newline to write the new line after. */
+    @Test
+    fun aPlanningLineUnderTheLastLineOfANoteIsALineOfItsOwn() {
+        assertEquals("* Foo\nSCHEDULED: <2026-12-01 Tue>\n", planned("* Foo", PlanningKind.SCHEDULED, "<2026-12-01 Tue>"))
+        assertEquals("* Foo\nSCHEDULED: <2026-12-01 Tue>\n", planned("* Foo\n", PlanningKind.SCHEDULED, "<2026-12-01 Tue>"))
+    }
 }

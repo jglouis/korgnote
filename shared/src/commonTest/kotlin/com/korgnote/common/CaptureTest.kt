@@ -605,4 +605,27 @@ class CaptureTest {
             ),
         )
     }
+
+    /** Capturing a time keeps the deadline already on that line. */
+    @Test
+    fun aCapturedTimeReplacesOnlyTheScheduledStamp() {
+        assertEquals(
+            "* Foo\nSCHEDULED: <2026-12-01 Tue> DEADLINE: <2026-11-09 Mon>\n",
+            captureInto(
+                "* Foo\nSCHEDULED: <2026-11-01 Sun> DEADLINE: <2026-11-09 Mon>\n",
+                HeadingRef("a.org", title = "Foo"),
+                Captured(time = "<2026-12-01 Tue>"),
+                HeadingAdditions(time = true),
+            ),
+        )
+    }
+
+    /** Captured onto a note's last line, the heading has to still be there to be found again. */
+    @Test
+    fun aCapturedTimeOntoALastHeadingWithoutANewlineIsFiled() {
+        assertEquals(
+            "* Foo\nSCHEDULED: <2026-12-01 Tue>\n",
+            captureInto("* Foo", HeadingRef("a.org", title = "Foo"), Captured(time = "<2026-12-01 Tue>"), HeadingAdditions(time = true)),
+        )
+    }
 }

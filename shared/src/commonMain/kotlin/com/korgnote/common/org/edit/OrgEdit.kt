@@ -560,7 +560,8 @@ fun OrgDocument.setTags(heading: OrgSection, tags: List<String>): OrgDocument {
 enum class PlanningKind { SCHEDULED, DEADLINE, CLOSED }
 
 /**
- * Sets a planning line for [heading], or removes it when [timestamp] is null.
+ * Sets [kind]'s stamp on [heading], or removes it when [timestamp] is null, leaving any other stamp
+ * on the same line alone. The line goes when that was its last stamp.
  *
  * A new planning line goes directly under the heading, which is where Org puts it.
  */
@@ -569,19 +570,31 @@ fun OrgDocument.setPlanning(
     kind: PlanningKind,
     timestamp: String?,
 ): OrgDocument {
-    val existing = heading.children
-        .filterIsInstance<OrgPlanning>()
-        .firstOrNull { it.planType == kind.name && !it.range.isEmpty() }
-
-    if (existing != null) {
-        // The node's range covers its line and the newline that ends it.
-        return if (timestamp == null) replace(existing.range, "")
-        else replace(existing.range, "${kind.name}: $timestamp\n")
+    for (node in heading.children.filterIsInstance<OrgPlanning>()) {
+        if (node.range.isEmpty()) continue
+        val line = lineRangeAt(node.range.first) ?: continue
+        val source = text.substring(line.first, line.last + 1)
+        val keywords = OrgSyntax.planningKeyword.findAll(source).toList()
+        val at = keywords.indexOfFirst { it.groupValues[1] == kind.name }
+        if (at < 0) continue
+        val keywordEnd = keywords[at].range.last + 1
+        val next = keywords.getOrNull(at + 1)?.range?.first
+        val written = source.substring(keywordEnd, next ?: source.length)
+        if (timestamp == null) {
+            // Nothing else on it: the node's range covers the line and the newline that ends it.
+            if (keywords.size == 1) return replace(node.range, "")
+            // Last on the line, the space before it goes with it; otherwise the one after it does.
+            val from = if (next != null) keywords[at].range.first else source.substring(0, keywords[at].range.first).trimEnd().length
+            return replace((line.first + from) until (line.first + (next ?: source.length)), "")
+        }
+        val valueStart = keywordEnd + (written.length - written.trimStart().length)
+        val valueEnd = valueStart + written.trim().length
+        val gap = if (valueStart == keywordEnd) " " else ""
+        return replace((line.first + valueStart) until (line.first + valueEnd), gap + timestamp)
     }
     if (timestamp == null) return this
     val parts = headingPartsOf(heading) ?: return this
-    val insertAt = minOf(parts.lineEnd + 1, text.length)
-    return replace(insertAt until insertAt, "${kind.name}: $timestamp\n")
+    return insertLines(parts.lineEnd + 1, "${kind.name}: $timestamp\n")
 }
 
 /** Makes [heading] and everything under it one level shallower. */
