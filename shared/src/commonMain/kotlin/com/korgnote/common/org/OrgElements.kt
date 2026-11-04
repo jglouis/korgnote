@@ -39,11 +39,10 @@ private fun headingLevel(line: String): Int = line.takeWhile { it == '*' }.lengt
 private fun headingTitle(line: String): String = line.dropWhile { it == '*' }.trim()
 
 /**
- * Splits the document into directly editable [OrgElement]s, in document order and covering the
- * whole text with no gaps or overlaps.
+ * Calls [action] with where each heading line starts and the line, in document order, until it
+ * returns false.
  */
-fun String.orgElements(): List<OrgElement> {
-    val headings = mutableListOf<OrgElement>()
+private inline fun String.forEachHeadingLine(action: (offset: Int, line: String) -> Boolean) {
     var offset = 0
     // Blocks and drawers are opaque, exactly as they are to the parser: a `* foo` inside a source
     // block is code. The two must agree line for line, or the range offered for editing would not be
@@ -77,11 +76,29 @@ fun String.orgElements(): List<OrgElement> {
                 }
             }
         }
-        if (isHeading) {
-            // endExclusive is filled in below, once the following heading is known.
-            headings.add(OrgElement(offset, offset, headingLevel(line), headingTitle(line)))
-        }
+        if (isHeading && !action(offset, line)) return
         offset += line.length + 1
+    }
+}
+
+/**
+ * Where this document's first heading starts, or its end when it has none: the end of its preamble,
+ * found without splitting the rest of it.
+ */
+internal fun String.orgPreambleEnd(): Int {
+    forEachHeadingLine { offset, _ -> return offset }
+    return length
+}
+
+/**
+ * Splits the document into directly editable [OrgElement]s, in document order and covering the
+ * whole text with no gaps or overlaps.
+ */
+fun String.orgElements(): List<OrgElement> {
+    val headings = mutableListOf<OrgElement>()
+    forEachHeadingLine { offset, line ->
+        // endExclusive is filled in below, once the following heading is known.
+        headings.add(OrgElement(offset, offset, headingLevel(line), headingTitle(line)))
     }
 
     val elements = mutableListOf<OrgElement>()

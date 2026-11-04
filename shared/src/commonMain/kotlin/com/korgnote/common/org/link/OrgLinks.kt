@@ -56,6 +56,38 @@ class OrgLinkIndex(private val notes: Map<String, String>) {
     /** The keywords [text]'s headings are read with, so that a title is the title Org sees. */
     private fun keywordsOf(text: String): OrgTodoConfig = todoKeywordsOf(text, DEFAULT_TODO_KEYWORDS)
 
+    /** What a search may land on in each note, read from it only when one first looks there. */
+    private val anchors: Map<String, Anchors> = notes.mapValues { (_, text) -> Anchors(text) }
+
+    private inner class Anchors(private val text: String) {
+        /** Every way a heading can be named, normalised, with where it starts: the first heading wins. */
+        val headings: Map<String, Int> by lazy {
+            val keywords = keywordsOf(text)
+            buildMap {
+                for (element in text.orgElements()) {
+                    if (element.isPreamble) continue
+                    val heading = orgHeadingOf(element.sliceOf(text).substringBefore('\n'), keywords)
+                    fun spelling(words: String) = getOrPut(words.normalised()) { element.start }
+                    spelling(heading.title)
+                    // Org also leaves out the `COMMENT` that comments a subtree out, which a link may keep too.
+                    heading.title.takeIf(OrgSyntax::isCommentedTitle)?.let { spelling(it.removePrefix("COMMENT").trim()) }
+                    // Both spellings: Org leaves the keyword out of the title, but a link may have kept it.
+                    spelling(listOfNotNull(heading.todo, heading.title).joinToString(" "))
+                }
+            }
+        }
+
+        /** Each `<<target>>`, and then each `#+NAME:`, normalised, with where it is: the first wins. */
+        val named: Map<String, Int> by lazy {
+            buildMap {
+                for (m in OrgSyntax.target.findAll(text)) {
+                    if (m.groupValues[1].length == m.groupValues[3].length) getOrPut(m.groupValues[2].normalised()) { m.range.first }
+                }
+                for (m in NAME_KEYWORD.findAll(text)) getOrPut(m.groupValues[1].normalised()) { m.range.first }
+            }
+        }
+    }
+
     /** Each note's `#+LINK:` abbreviations, for the notes that declare any. */
     private val abbreviations: Map<String, Map<String, String>> by lazy {
         buildMap {
@@ -139,9 +171,12 @@ class OrgLinkIndex(private val notes: Map<String, String>) {
             if (!text.contains("[[")) continue
             val elements by lazy { text.orgElements() }
             val keywords by lazy { keywordsOf(text) }
+            // The links come in document order, so the element each is in only ever moves on.
+            var at = -1
             for (m in OrgSyntax.link.findAll(text)) {
                 val target = targetPathOf(m.groupValues[1], from = source) ?: continue
-                val element = elements.lastOrNull { it.start <= m.range.first }
+                while (at + 1 < elements.size && elements[at + 1].start <= m.range.first) at++
+                val element = elements.getOrNull(at)
                 val context = element?.takeUnless { it.isPreamble }?.let { orgHeadingOf(it.title.prependStars(), keywords).title }
                     ?: source
                 found.getOrPut(target) { mutableListOf() } += OrgBacklink(source, m.range.first, context)
@@ -204,39 +239,13 @@ class OrgLinkIndex(private val notes: Map<String, String>) {
     private fun searchIn(path: String, search: String, link: String): OrgLinkResolution {
         val text = notes[path] ?: return OrgLinkResolution.NotFound(link)
         val offset = when {
-            search.startsWith("*") -> headingOffset(text, search.substring(1))
+            search.startsWith("*") -> anchors.getValue(path).headings[search.substring(1).normalised()]
             search.startsWith("#") -> CUSTOM_ID.findAll(text)
                 .firstOrNull { it.groupValues[1] == search.substring(1).trim() }?.range?.first
             search.all { it.isDigit() } && search.isNotEmpty() -> lineOffset(text, search.toInt())
-            else -> fuzzyOffset(text, search)
+            else -> anchors.getValue(path).let { it.named[search.normalised()] ?: it.headings[search.normalised()] }
         }
         return if (offset == null) OrgLinkResolution.NotFound(link) else OrgLinkResolution.Note(path, offset)
-    }
-
-    private fun fuzzyOffset(text: String, search: String): Int? {
-        val wanted = search.normalised()
-        OrgSyntax.target.findAll(text)
-            .firstOrNull { it.groupValues[1].length == it.groupValues[3].length && it.groupValues[2].normalised() == wanted }
-            ?.let { return it.range.first }
-        NAME_KEYWORD.findAll(text)
-            .firstOrNull { it.groupValues[1].normalised() == wanted }?.let { return it.range.first }
-        return headingOffset(text, search)
-    }
-
-    private fun headingOffset(text: String, title: String): Int? {
-        val wanted = title.normalised()
-        val keywords = keywordsOf(text)
-        return text.orgElements().firstOrNull { element ->
-            if (element.isPreamble) return@firstOrNull false
-            val line = element.sliceOf(text).substringBefore('\n')
-            val heading = orgHeadingOf(line, keywords)
-            // Org also leaves out the `COMMENT` that comments a subtree out, which a link may keep too.
-            val uncommented = heading.title.takeIf(OrgSyntax::isCommentedTitle)?.removePrefix("COMMENT")?.trim()
-            // Both spellings: Org leaves the keyword out of the title, but a link may have kept it.
-            heading.title.normalised() == wanted ||
-                uncommented?.normalised() == wanted ||
-                listOfNotNull(heading.todo, heading.title).joinToString(" ").normalised() == wanted
-        }?.start
     }
 
     private fun lineOffset(text: String, line: Int): Int? {

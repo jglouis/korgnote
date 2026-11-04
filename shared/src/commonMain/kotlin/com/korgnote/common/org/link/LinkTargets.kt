@@ -4,10 +4,9 @@ import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.edit.STATISTICS_COOKIE
-import com.korgnote.common.org.orgElements
+import com.korgnote.common.org.orgPreambleEnd
 import com.korgnote.common.org.orgNoteTitle
 import com.korgnote.common.org.ownId
-import com.korgnote.common.org.sliceOf
 
 /**
  * Somewhere an org-roam link can lead: a note as a whole, or any heading in it.
@@ -75,13 +74,12 @@ internal fun descriptionOf(title: String): String {
     var text = OrgSyntax.link.replace(title) { m -> m.groupValues.getOrNull(2)?.takeIf { it.isNotEmpty() } ?: m.groupValues[1] }
     text = STATISTICS_COOKIE.replace(text, "")
     OrgSyntax.priority.find(text)?.let { text = text.removeRange(it.range) }
-    return text.replace('[', '(').replace(']', ')').replace(Regex("\\s+"), " ").trim()
+    return text.replace('[', '(').replace(']', ')').replace(WHITESPACE, " ").trim()
 }
 
 /** The `:ID:` a note declares for itself, above its first heading. */
 internal fun fileIdIn(text: String): String? {
-    val preamble = text.orgElements().firstOrNull()?.takeIf { it.isPreamble } ?: return null
-    return OrgSyntax.idProperty.find(preamble.sliceOf(text))?.groupValues?.get(1)
+    return OrgSyntax.idProperty.find(text.substring(0, text.orgPreambleEnd()))?.groupValues?.get(1)
 }
 
 /**
@@ -137,5 +135,6 @@ private fun lineAt(text: String, start: Int): String =
 private fun nextLine(text: String, start: Int): Int? = text.indexOf('\n', start).takeIf { it >= 0 }?.plus(1)
     ?.takeIf { it < text.length }
 
+private val WHITESPACE = Regex("\\s+")
 private val PROPERTIES = Regex("^\\s*:PROPERTIES:\\s*$", RegexOption.IGNORE_CASE)
 private val BLANK_ID = Regex("^\\s*:ID:\\s*$", RegexOption.IGNORE_CASE)
