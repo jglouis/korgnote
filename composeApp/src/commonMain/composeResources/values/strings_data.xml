@@ -1,6 +1,7 @@
 <resources>
     <!-- Messages from the view models: the message line, and what an open note says. -->
     <string name="vm_edit_conflict">This part of the note also changed elsewhere while you were editing it; nothing was written.</string>
+    <string name="vm_kept_beside">%1$s also changed elsewhere. That version is kept; yours is saved beside it as a .sync-conflict- copy.</string>
     <string name="vm_reschedule_moved">The entry changed since the calendar showed it; its date was left as it is.</string>
     <string name="vm_finish_editing_first">Save or discard the element you are editing first.</string>
     <string name="vm_refiled">Moved under %1$s.</string>

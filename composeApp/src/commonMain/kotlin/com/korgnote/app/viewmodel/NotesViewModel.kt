@@ -196,21 +196,6 @@ class NotesViewModel(
     /** The clocks running in the notes, for the bar that shows them on every tab. */
     val clocks: NoteClocks = NoteClocks(library, clockNotifier)
 
-    /** What changes a note's text. */
-    val changes: NoteChanges = NoteChanges(
-        viewModelScope,
-        store,
-        library,
-        note,
-        clocks,
-        now,
-        todoKeywords = { todoKeywords },
-        // Read when something is pushed, by which time [server] is there.
-        server = { server },
-        refresh = ::refreshDerivedViews,
-        refreshSoon = ::refreshDerivedViewsSoon,
-    )
-
     val editor: ElementEditor = ElementEditor(
         note,
         folds,
@@ -218,6 +203,24 @@ class NotesViewModel(
         save = { changes.saveCurrentFile() },
         draftMoved = { completion.onDraftChanged() },
         editEnded = { completion.reset() },
+    )
+
+    /** What changes a note's text. */
+    val changes: NoteChanges = NoteChanges(
+        viewModelScope,
+        store,
+        library,
+        note,
+        editor,
+        clocks,
+        now,
+        todoKeywords = { todoKeywords },
+        // Read when something is pushed, by which time [server] is there.
+        server = { server },
+        refresh = ::refreshDerivedViews,
+        refreshSoon = ::refreshDerivedViewsSoon,
+        showReplica = ::showFromReplica,
+        showMessage = ::showMessage,
     )
 
     val links: LinkNavigator = LinkNavigator(
@@ -766,13 +769,12 @@ class NotesViewModel(
             editor.refileSection(index, target.offset)
         } else {
             editor.moveSectionOut(index) { subtree ->
-                val before = library[target.path]?.text ?: return@moveSectionOut false
-                val filed = before.withOrgSubtreeFiled(subtree, target.offset) ?: return@moveSectionOut false
-                // The heading's `[2/5]` counts what is under it, which now includes this.
-                val updated = updateStatisticsCookies(filed, todoKeywordsOf(filed, library.fallbackKeywords), before = before)
-                store.save(target.path, updated)
-                library.put(target.path, updated.toOrgDocument(library.fallbackKeywords))
-                true
+                changes.writeOtherNote(target.path) { before ->
+                    before.withOrgSubtreeFiled(subtree, target.offset)?.let { filed ->
+                        // The heading's `[2/5]` counts what is under it, which now includes this.
+                        updateStatisticsCookies(filed, todoKeywordsOf(filed, library.fallbackKeywords), before = before)
+                    }
+                }
             }
         }
         if (moved) {
@@ -819,14 +821,12 @@ class NotesViewModel(
                 note.content = withHeadingId(note.content, target.offset ?: return, id)
             }
         } else {
-            val before = library[path]?.text ?: return
-            val updated = target.offset?.let { withHeadingId(before, it, id) } ?: withFileId(before, id)
-            if (updated != before) {
-                store.save(path, updated)
-                library.put(path, updated.toOrgDocument(library.fallbackKeywords))
-                refreshDerivedViewsSoon()
-                server.pushQuietly()
+            val written = changes.writeOtherNote(path) { before ->
+                target.offset?.let { withHeadingId(before, it, id) } ?: withFileId(before, id)
             }
+            if (!written) return
+            refreshDerivedViewsSoon()
+            server.pushQuietly()
         }
         // The edit may have ended while the other note was written; the link then has nowhere to go.
         if (editor.editingIndex != index) return

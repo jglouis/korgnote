@@ -1,5 +1,6 @@
 package com.korgnote.app.viewmodel
 
+import com.korgnote.app.di.conflictTimestamp
 import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgPriority
@@ -14,16 +15,30 @@ import com.korgnote.common.org.edit.updateStatisticsCookies
 import com.korgnote.common.org.edit.withTimestampToggledAt
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.replica.DocumentStore
+import com.korgnote.common.sync.MergeResult
+import com.korgnote.common.sync.conflictCopyName
+import com.korgnote.common.sync.merge
+import korgnote.composeapp.generated.resources.Res
+import korgnote.composeapp.generated.resources.vm_edit_conflict
+import korgnote.composeapp.generated.resources.vm_kept_beside
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.LocalDateTime
+import org.jetbrains.compose.resources.getString
 
 /**
  * Changing a note's text: what writes to the replica on the app's behalf, then keeps the library and
  * the screen in step and passes the change on to where the notes are kept.
+ *
+ * A change is made on the text the person was looking at, since that is what its offsets mean, and
+ * the replica may have moved past that text: a sync pulled an edit from Emacs, or a background worker
+ * filed a capture, and the notes have not been read again yet. So a change is merged with what the
+ * replica holds by the time it lands, never written over it. Written over it, and pushed with the
+ * server's newest etag, it would silently take back whatever had come in.
  */
 class NoteChanges(
     /**
@@ -34,6 +49,7 @@ class NoteChanges(
     private val store: DocumentStore,
     private val library: NoteLibrary,
     private val note: OpenNote,
+    private val editor: ElementEditor,
     private val clocks: NoteClocks,
     /** The wall-clock time state changes are stamped with. */
     private val now: () -> LocalDateTime,
@@ -45,6 +61,10 @@ class NoteChanges(
     private val refresh: () -> Unit,
     /** Rebuilds what is derived from the notes once changes stop coming. */
     private val refreshSoon: () -> Unit,
+    /** Reads the replica again and shows what it holds. */
+    private val showReplica: suspend () -> Unit,
+    /** Shows a message to the user. */
+    private val showMessage: (String) -> Unit,
 ) {
     /**
      * Writes the open note to the replica, then tries to push.
@@ -58,26 +78,41 @@ class NoteChanges(
         // what a reload read, or another note altogether.
         val text = note.content
         val keywords = todoKeywords()
-        began(path)
-        scope.launch { save(path, text, keywords) }.join()
+        val base = began(path, note.replicaText, text)
+        scope.launch { save(path, base, text, keywords) }.join()
     }
 
-    private suspend fun save(path: String, text: String, keywords: OrgTodoConfig) {
-        val saved = try {
+    private suspend fun save(path: String, base: String?, text: String, keywords: OrgTodoConfig) {
+        var saved = text
+        val written = try {
             // A heading's `[2/5]` counts what is under it, which the edit may have changed — and only
             // those over the edit: the rest of the note is saved as it was.
             // And a clock edited by hand sums its stamps again, as `C-c C-c` on its line would.
-            val before = store.read(path)
-            updateClockDurations(updateStatisticsCookies(text, keywords, before = before), before).also { store.save(path, it) }
+            val before = base ?: store.read(path)
+            saved = updateClockDurations(updateStatisticsCookies(text, keywords, before = before), before)
+            land(path, base, saved, bringBack = true)
         } finally {
             landed(path)
         }
-        if (note.path == path && note.content == text) {
-            note.content = saved
-            note.replicaText = saved
-        }
-        library.put(path, saved.toOrgDocument(library.fallbackKeywords))
+        if (written == null) return keepBeside(path, saved)
+        showWritten(path, text, written)
+        library.put(path, written.toOrgDocument(library.fallbackKeywords))
         refresh()
+        server().push()
+    }
+
+    /**
+     * What was typed, when it cannot be merged with what the replica now holds: kept beside the note
+     * as a conflict copy, as a sync does with a conflict, for the person to settle. A tick can simply
+     * be made again; words cannot.
+     */
+    private suspend fun keepBeside(path: String, text: String) {
+        val stamp = conflictTimestamp()
+        var copy = conflictCopyName(path, stamp)
+        var attempt = 2
+        while (!store.create(copy, text)) copy = conflictCopyName(path, "$stamp-${attempt++}")
+        showReplica()
+        showMessage(getString(Res.string.vm_kept_beside, path))
         server().push()
     }
 
@@ -129,71 +164,153 @@ class NoteChanges(
      */
     private fun changeOpenNote(refreshAtOnce: Boolean = false, edit: (OrgDocument) -> OrgDocument?) {
         val path = note.path ?: return
-        val updated = changeOnScreen(path, edit) ?: return
+        val change = changeOnScreen(path, edit) ?: return
         if (refreshAtOnce) refresh() else refreshSoon()
-        scope.launch { writeAndPush(path, updated.text) }
+        scope.launch { writeAndPush(change) }
     }
 
     /**
-     * [change] made to the note at [path] — the open one as it stands on screen, or another as the
-     * replica has it — then saved and pushed as a keyword change is.
+     * [change] made to the note at [path], on the text the person was looking at — the open one as it
+     * stands on screen, or another as the library has it — then saved and pushed as a keyword change is.
      */
     suspend fun changeNote(path: String, change: (OrgDocument) -> OrgDocument) {
-        val updated = if (path == note.path) {
+        val made = if (path == note.path) {
             changeOnScreen(path, change) ?: return
         } else {
             val before = library[path] ?: return
-            change(before).takeIf { it.text != before.text }?.also {
-                library.put(path, it)
-                began(path)
-            } ?: return
+            val updated = change(before)
+            if (updated.text == before.text) return
+            library.put(path, updated)
+            Change(path, began(path, before.text, updated.text), updated.text)
         }
         clocks.refresh()
         refreshSoon()
-        writeAndPush(path, updated.text)
+        writeAndPush(made)
     }
+
+    /**
+     * [edit] made to a note other than the open one, as the library has it, and written. False when
+     * it declines by returning null, or what it was made on has moved in a way it cannot be merged
+     * with. Pushing is left to the caller, whose own change may go with it.
+     */
+    suspend fun writeOtherNote(path: String, edit: (String) -> String?): Boolean {
+        val before = library[path]?.text ?: return false
+        val updated = edit(before) ?: return false
+        if (updated == before) return true
+        library.put(path, updated.toOrgDocument(library.fallbackKeywords))
+        val base = began(path, before, updated)
+        val written = try {
+            land(path, base, updated)
+        } finally {
+            landed(path)
+        }
+        if (written == null) {
+            showReplica()
+            return false
+        }
+        showWritten(path, updated, written)
+        return true
+    }
+
+    /** A change shown and on its way to the replica: its [text], made on [base]. */
+    private class Change(val path: String, val base: String?, val text: String)
 
     /**
      * [edit] made to the open note at [path], on screen and in the library; null when there is
      * nothing to write. Until a note's text has arrived, what the screen holds is the note before it:
      * a change made there has no business in this one.
      */
-    private fun changeOnScreen(path: String, edit: (OrgDocument) -> OrgDocument?): OrgDocument? {
+    private fun changeOnScreen(path: String, edit: (OrgDocument) -> OrgDocument?): Change? {
         if (note.replicaText == null) return null
         val document = note.content.toOrgDocument(library.fallbackKeywords)
         val updated = edit(document)?.takeIf { it.text != document.text } ?: return null
         note.content = updated.text
         library.put(path, updated)
-        began(path)
-        return updated
+        return Change(path, began(path, note.replicaText, updated.text), updated.text)
     }
 
-    /** Writes a change begun with [began]. A failure leaves the file dirty for the next cycle rather than losing it. */
-    private suspend fun writeAndPush(path: String, text: String) {
+    /**
+     * Writes [change]. A failure leaves the file dirty for the next cycle rather than losing it; one
+     * that cannot be merged is refused, with a word, and what the replica holds is shown.
+     */
+    private suspend fun writeAndPush(change: Change) {
         server().push(
             writeFirst = {
-                try {
-                    store.save(path, text)
-                    if (note.path == path && note.content == text) note.replicaText = text
+                val written = try {
+                    land(change.path, change.base, change.text)
                 } finally {
-                    landed(path)
+                    landed(change.path)
+                }
+                if (written == null) {
+                    showReplica()
+                    showMessage(getString(Res.string.vm_edit_conflict))
+                } else {
+                    showWritten(change.path, change.text, written)
                 }
             },
         )
     }
 
-    /** The writes on their way to the replica, by note. */
-    private val underWay = MutableStateFlow<Map<String, Int>>(emptyMap())
+    /** One write at a time, in the order they were made: each is made on the one before it. */
+    private val landing = Mutex()
 
-    private fun began(path: String) {
-        underWay.update { it + (path to (it[path] ?: 0) + 1) }
+    /**
+     * Writes [text], made on [base], merged with whatever the replica has come to hold since. The
+     * text now in the replica; null, with nothing written, when the two changed the same lines or the
+     * note is gone. Only [bringBack] writes a note that is gone.
+     */
+    private suspend fun land(path: String, base: String?, text: String, bringBack: Boolean = false): String? = landing.withLock {
+        repeat(WRITE_ATTEMPTS) {
+            val current = store.read(path)
+            if (current == null) {
+                if (!bringBack) return@withLock null
+                store.save(path, text)
+                return@withLock text
+            }
+            val merged = if (base == null || current == base) text else (merge(base, text, current) as? MergeResult.Merged)?.text
+            if (merged == null) return@withLock null
+            if (store.saveIfUnchanged(path, current, merged)) return@withLock merged
+        }
+        null
+    }
+
+    /** [written] landed for a change that made [text]: when something came in, it is now to be seen. */
+    private fun showWritten(path: String, text: String, written: String) {
+        if (written != text) {
+            library.put(path, written.toOrgDocument(library.fallbackKeywords))
+            refreshSoon()
+        }
+        if (note.path != path) return
+        if (editor.editingIndex != null) {
+            // The screen stays under the element being edited, whose save makes its edit on this.
+            note.replicaText = text
+            if (written != text) editor.noteChangedElsewhere(written)
+        } else if (note.content == text) {
+            note.content = written
+            note.replicaText = written
+        }
+        // Otherwise another change is on its way, made on this one, and will do the same.
+    }
+
+    /** The writes on their way to the replica, by note. */
+    private val underWay = MutableStateFlow<Map<String, Queued>>(emptyMap())
+
+    /** How many writes are on their way to a note, and what the last of them makes it. */
+    private class Queued(val writes: Int, val text: String)
+
+    /**
+     * A change that makes [path] [text] is on its way. Returns what it is made on: what the last one
+     * under way made the note, or else [base].
+     */
+    private fun began(path: String, base: String?, text: String): String? {
+        val queued = underWay.value[path]
+        underWay.value += path to Queued((queued?.writes ?: 0) + 1, text)
+        return if (queued != null) queued.text else base
     }
 
     private fun landed(path: String) {
-        underWay.update { writes ->
-            val left = (writes[path] ?: 0) - 1
-            if (left > 0) writes + (path to left) else writes - path
-        }
+        val queued = underWay.value[path] ?: return
+        underWay.value = if (queued.writes > 1) underWay.value + (path to Queued(queued.writes - 1, queued.text)) else underWay.value - path
     }
 
     /**
@@ -213,4 +330,9 @@ class NoteChanges(
      */
     fun OrgDocument.withStatistics(since: OrgDocument): OrgDocument =
         updateStatisticsCookies(text, todoKeywords(), before = since.text).let { if (it == text) this else it.toOrgDocument(todoFallback) }
+
+    private companion object {
+        /** Saves in a row lost to another write before giving up. */
+        const val WRITE_ATTEMPTS = 5
+    }
 }

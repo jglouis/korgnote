@@ -217,6 +217,7 @@ class ElementEditor(
             showMessage(getString(Res.string.vm_edit_conflict))
             return
         }
+        newer?.let { note.replicaText = it }
         note.content = updated
         clear()
         save()
