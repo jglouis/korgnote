@@ -43,6 +43,7 @@ import korgnote.composeapp.generated.resources.notes_create
 import korgnote.composeapp.generated.resources.notes_date
 import korgnote.composeapp.generated.resources.notes_delete_anyway
 import korgnote.composeapp.generated.resources.notes_delete_explained
+import korgnote.composeapp.generated.resources.notes_delete_no_copy
 import korgnote.composeapp.generated.resources.notes_delete_title
 import korgnote.composeapp.generated.resources.notes_delete_unsynced
 import korgnote.composeapp.generated.resources.notes_details
@@ -298,6 +299,8 @@ fun RenameNoteDialog(
 fun DeleteNoteDialog(
     path: String,
     hasUnsyncedChanges: Boolean,
+    /** Only the KorgNote server has a trash; a folder or a WebDAV server just deletes. */
+    keepsACopy: Boolean,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -314,7 +317,7 @@ fun DeleteNoteDialog(
                     Spacer(Modifier.height(8.dp))
                 }
                 Text(
-                    stringResource(Res.string.notes_delete_explained),
+                    stringResource(if (keepsACopy) Res.string.notes_delete_explained else Res.string.notes_delete_no_copy),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

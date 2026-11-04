@@ -81,6 +81,7 @@
     <string name="notes_delete_title">Delete %1$s?</string>
     <string name="notes_delete_unsynced">This note has changes that have not reached the server yet. They exist only on this device and will be lost.</string>
     <string name="notes_delete_explained">It is deleted on every device. The server keeps a copy in .korgnote-trash, and if someone edits it elsewhere before this reaches the server, it comes back.</string>
+    <string name="notes_delete_no_copy">It is deleted, and KorgNote keeps no copy of it.</string>
     <string name="notes_delete_anyway">Delete anyway</string>
 
     <!-- Links -->

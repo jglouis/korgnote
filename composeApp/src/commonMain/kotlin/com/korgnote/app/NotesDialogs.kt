@@ -6,6 +6,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import com.korgnote.app.ui.*
 import com.korgnote.app.capture.CaptureLinks
+import com.korgnote.app.data.NotesSource
 import com.korgnote.app.capture.DeviceCalendar
 import com.korgnote.common.org.capture.SharedContent
 import org.koin.compose.getKoin
@@ -146,6 +147,7 @@ internal fun NotesAppState.NotesDialogs() {
         is NoteDialog.DeletingNote -> DeleteNoteDialog(
             path = open.path,
             hasUnsyncedChanges = open.unsynced,
+            keepsACopy = source == NotesSource.Server,
             onDismiss = { close(open) },
             onDelete = {
                 close(open)

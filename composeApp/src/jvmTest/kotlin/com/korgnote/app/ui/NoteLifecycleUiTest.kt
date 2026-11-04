@@ -2,6 +2,9 @@ package com.korgnote.app.ui
 
 import com.korgnote.common.fs.File
 import com.korgnote.common.fs.Folder
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.longClick
@@ -138,9 +141,24 @@ class NoteLifecycleUiTest {
 
     @Test
     fun theDeleteDialogWarnsAboutUnsyncedChanges() = runComposeUiTest {
-        setContent { DeleteNoteDialog("inbox.org", hasUnsyncedChanges = true, onDelete = {}, onDismiss = {}) }
+        setContent { DeleteNoteDialog("inbox.org", hasUnsyncedChanges = true, keepsACopy = true, onDelete = {}, onDismiss = {}) }
 
         onNodeWithText("have not reached the server", substring = true).assertExists()
         onNodeWithText("Delete anyway").assertExists()
+    }
+
+    @Test
+    fun theDeleteDialogSaysTheServerKeepsACopyOnlyWhenOneDoes() = runComposeUiTest {
+        var keepsACopy by mutableStateOf(true)
+        setContent {
+            DeleteNoteDialog("inbox.org", hasUnsyncedChanges = false, keepsACopy = keepsACopy, onDelete = {}, onDismiss = {})
+        }
+        onNodeWithText(".korgnote-trash", substring = true).assertExists()
+
+        keepsACopy = false
+        waitForIdle()
+
+        onNodeWithText(".korgnote-trash", substring = true).assertDoesNotExist()
+        onNodeWithText("keeps no copy", substring = true).assertExists()
     }
 }
