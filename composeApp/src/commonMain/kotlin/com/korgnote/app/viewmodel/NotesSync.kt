@@ -11,9 +11,6 @@ interface NotesSync {
     /** Why the notes could not be reached on the last attempt, or null when they were. */
     val unreachable: String?
 
-    /** True while a [retry] the user asked for is in flight. */
-    val retrying: Boolean
-
     /** True while a sync runs, for the status icon to show it working. */
     val syncing: Boolean
 

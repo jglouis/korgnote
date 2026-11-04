@@ -79,7 +79,7 @@ class CompletionEditingTest {
         viewModel.completion.accept(viewModel.completion.suggestions.single())
 
         assertEquals("* TODO ", viewModel.editor.draft)
-        assertEquals("* TODO ".length, viewModel.editor.draftCaret)
+        assertEquals("* TODO ".length, viewModel.editor.draftValue.selection.start)
     }
 
     /** The caret belongs inside the block, not after it — which is what `caretOffset` is for. */
@@ -90,7 +90,7 @@ class CompletionEditingTest {
         viewModel.completion.accept(viewModel.completion.suggestions.single())
 
         assertEquals("#+BEGIN_SRC\n\n#+END_SRC", viewModel.editor.draft)
-        assertEquals("#+BEGIN_SRC\n".length, viewModel.editor.draftCaret)
+        assertEquals("#+BEGIN_SRC\n".length, viewModel.editor.draftValue.selection.start)
     }
 
     @Test

@@ -64,9 +64,6 @@ class ElementEditor(
     /** The element's text as it is being edited. */
     val draft: String get() = draftValue.text
 
-    /** Where the caret is; after the stars of a heading that was just added. */
-    val draftCaret: Int get() = draftValue.selection.start
-
     /** [draftValue] while an element is being edited, null otherwise. */
     val activeDraft: TextFieldValue? get() = draftValue.takeIf { editingIndex != null }
 

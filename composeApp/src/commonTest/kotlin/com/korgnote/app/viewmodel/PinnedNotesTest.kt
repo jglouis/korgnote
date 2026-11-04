@@ -53,11 +53,11 @@ class PinnedNotesTest {
 
         assertEquals(listOf(todo, agenda), saved)
         assertEquals(listOf(todo, agenda), vm.pins.shown)
-        assertTrue(vm.pins.isPinned(agenda))
+        assertTrue(agenda in vm.pins.shown)
 
         vm.pins.toggle(todo)
         assertEquals(listOf(agenda), saved)
-        assertFalse(vm.pins.isPinned(todo))
+        assertFalse(todo in vm.pins.shown)
     }
 
     @Test

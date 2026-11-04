@@ -81,7 +81,7 @@ class ElementEditingTest {
         viewModel.editor.onDraftChanged(TextFieldValue("$typed\n", TextRange(typed.length + 1)))
 
         assertEquals("* Shopping\n- milk\n- ", viewModel.editor.draft)
-        assertEquals(viewModel.editor.draft.length, viewModel.editor.draftCaret)
+        assertEquals(viewModel.editor.draft.length, viewModel.editor.draftValue.selection.start)
     }
 
     @Test
@@ -147,7 +147,7 @@ class ElementEditingTest {
         viewModel.editor.addAtEnd()
 
         assertEquals("* \n", viewModel.editor.draft)
-        assertEquals(2, viewModel.editor.draftCaret)
+        assertEquals(2, viewModel.editor.draftValue.selection.start)
     }
 
     @Test

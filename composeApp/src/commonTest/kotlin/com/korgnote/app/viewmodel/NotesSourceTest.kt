@@ -98,7 +98,6 @@ class NotesSourceTest {
     private class StoppableSync : NotesSync {
         var stopped = false
         override val unreachable: String? = null
-        override val retrying = false
         override val syncing = false
         override val lastSynced: Instant? = null
         override suspend fun load() {}

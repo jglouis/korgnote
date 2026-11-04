@@ -45,8 +45,8 @@ class FolderSync(
     override var unreachable by mutableStateOf<String?>(null)
         private set
 
-    override var retrying by mutableStateOf(false)
-        private set
+    /** True while a [retry] the user asked for is in flight: a second tap adds nothing. */
+    private var retrying = false
 
     override var lastSynced by mutableStateOf<Instant?>(null)
         private set

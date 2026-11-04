@@ -117,7 +117,7 @@ class HeadingLinkTest {
         viewModel.linkForm.insertLinkTo(viewModel.target("Today"))
 
         assertEquals("* Today\n:PROPERTIES:\n:ID:       new-1\n:END:\nMet Bob.\n[[id:new-1][Today]]", viewModel.editor.draft)
-        assertEquals(viewModel.editor.draft.length, viewModel.editor.draftCaret, "the caret is after the link")
+        assertEquals(viewModel.editor.draft.length, viewModel.editor.draftValue.selection.start, "the caret is after the link")
     }
 
     @Test

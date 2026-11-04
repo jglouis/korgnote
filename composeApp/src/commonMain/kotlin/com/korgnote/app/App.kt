@@ -52,8 +52,8 @@ import com.korgnote.app.capture.CaptureSignals
 import com.korgnote.app.data.PairingLinks
 import com.korgnote.app.viewmodel.LinkEdit
 import org.koin.mp.KoinPlatform
-import com.korgnote.app.viewmodel.NotesSourceChoice
 import com.korgnote.app.viewmodel.NoteFileResult
+import com.korgnote.app.viewmodel.NotesSourceChoice
 import com.korgnote.app.viewmodel.NotesViewModel
 import org.koin.core.parameter.parametersOf
 import com.korgnote.app.viewmodel.OpenNote

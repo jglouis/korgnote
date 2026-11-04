@@ -62,9 +62,8 @@ class ServerSync(
     override var unreachable by mutableStateOf<String?>(null)
         private set
 
-    /** True while a [retry] the user asked for is in flight. */
-    override var retrying by mutableStateOf(false)
-        private set
+    /** True while a [retry] the user asked for is in flight: a second tap adds nothing. */
+    private var retrying = false
 
     /**
      * When the replica last matched the server: the end of the last sync that got through, or the

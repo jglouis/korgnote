@@ -108,7 +108,7 @@ class LinkEditTest {
         viewModel.linkForm.saveLink(edit, "file:~/Sync/invoice.pdf", edit.link.description)
 
         assertTrue(viewModel.editor.draft.startsWith("* Today\n[[file:~/Sync/invoice.pdf][Read]] [[https://old"))
-        assertEquals("* Today\n[[file:~/Sync/invoice.pdf][Read]]".length, viewModel.editor.draftCaret)
+        assertEquals("* Today\n[[file:~/Sync/invoice.pdf][Read]]".length, viewModel.editor.draftValue.selection.start)
     }
 
     @Test
@@ -146,6 +146,6 @@ class LinkEditTest {
         viewModel.editor.onDraftChanged(TextFieldValue(pasted, TextRange(at + 19)))
 
         assertTrue(viewModel.editor.draft.contains("the docs]] [[https://example.com][and]] [[id:done-id]"), viewModel.editor.draft)
-        assertEquals(at + "[[https://example.com][and]]".length, viewModel.editor.draftCaret)
+        assertEquals(at + "[[https://example.com][and]]".length, viewModel.editor.draftValue.selection.start)
     }
 }

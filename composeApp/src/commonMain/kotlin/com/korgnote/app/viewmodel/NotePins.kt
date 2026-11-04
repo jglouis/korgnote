@@ -25,8 +25,6 @@ class NotePins(
      */
     val shown: List<String> get() = library.paths.let { paths -> pinned.filter { it in paths } }
 
-    fun isPinned(path: String): Boolean = path in pinned
-
     /** Pins [path] at the end of the list, or unpins it. */
     fun toggle(path: String) {
         update(if (path in pinned) pinned - path else pinned + path)

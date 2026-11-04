@@ -245,7 +245,6 @@ class ServerSyncTest {
         runCurrent()
 
         assertNull(server.unreachable)
-        assertFalse(server.retrying)
         assertEquals(2, api.streamOpened, "reconnected at once, not 2 s later")
     }
 
@@ -257,7 +256,6 @@ class ServerSyncTest {
         server.retry()
 
         assertNotNull(server.unreachable)
-        assertFalse(server.retrying)
         assertNull(message)
     }
 
