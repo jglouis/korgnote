@@ -10,11 +10,11 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.korgnote.app.capture.hasUnsentEdits
 import com.korgnote.app.viewmodel.BackgroundSync
 import com.korgnote.app.widget.WidgetStore
 import com.korgnote.app.widget.redrawWidgets
 import com.korgnote.app.widget.syncInBackground
-import com.korgnote.common.replica.DocumentStore
 import org.koin.mp.KoinPlatform
 import java.util.concurrent.TimeUnit
 
@@ -33,7 +33,7 @@ class BackgroundSyncWorker(context: Context, params: WorkerParameters) : Corouti
         // Sent for an edit that could not be: the network is back, but the server may not be.
         val waiting = problem == WidgetStore.PROBLEM_SERVER &&
             tags.contains(WHEN_ONLINE) &&
-            KoinPlatform.getKoin().getOrNull<DocumentStore>()?.dirtyPaths()?.isNotEmpty() == true
+            KoinPlatform.getKoin().hasUnsentEdits()
         return if (waiting && runAttemptCount < MAX_ATTEMPTS) Result.retry() else Result.success()
     }
 

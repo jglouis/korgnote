@@ -1,6 +1,8 @@
 package com.korgnote.app.capture
 
 import com.korgnote.app.data.NotesSource
+import com.korgnote.app.data.SettingsRepository
+import com.korgnote.app.data.chosenNotesSource
 import com.korgnote.app.di.WEBDAV
 import com.korgnote.app.di.conflictTimestamp
 import com.korgnote.app.files.NoteFolderAccess
@@ -40,4 +42,10 @@ fun Koin.notesStore(source: NotesSource): DocumentStore = when (source) {
     NotesSource.Server -> get()
     NotesSource.WebDav -> get(WEBDAV)
     is NotesSource.Folder -> DocumentStore(FolderNoteStorage(get<NoteFolderAccess>().open(source.location), ::conflictTimestamp))
+}
+
+/** True when the notes in use hold an edit that has not reached where they are kept. */
+suspend fun Koin.hasUnsentEdits(): Boolean {
+    val source = get<SettingsRepository>().chosenNotesSource() ?: return false
+    return notesStore(source).dirtyPaths().isNotEmpty()
 }
