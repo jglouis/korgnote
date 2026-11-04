@@ -294,16 +294,16 @@ private fun RenderNode(
                         }
 
                         is OrgListItem -> {
-                            OrgLine("$marker ${joinOrgLines(child.text)}", todoConfig)
+                            ListItemLine(marker, joinOrgLines(child.text))
                             ItemContents(child.children, todoConfig, onToggleCheckbox)
                         }
 
                         is OrgDescriptionItem -> {
-                            OrgLine("$marker ${child.term} :: ${joinOrgLines(child.description)}", todoConfig)
+                            ListItemLine(marker, "${child.term} :: ${joinOrgLines(child.description)}")
                             ItemContents(child.children, todoConfig, onToggleCheckbox)
                         }
 
-                        is OrgRaw -> OrgLine("$marker ${child.content}", todoConfig)
+                        is OrgRaw -> ListItemLine(marker, child.content)
 
                         else -> RenderNode(child, todoConfig, onToggleCheckbox)
                     }
@@ -680,6 +680,12 @@ private fun OrgLine(line: String, todoConfig: OrgTodoConfig, style: TextStyle = 
         text = buildOrgHighlightedString(line, MaterialTheme.colorScheme.primary, todoConfig, viewMode = true),
         style = style
     )
+}
+
+/** A list item's [marker] and [text], neither of them read as Org a second time. */
+@Composable
+private fun ListItemLine(marker: String, text: String) {
+    Text(text = buildOrgListItemString(marker, text), style = MaterialTheme.typography.bodyMedium)
 }
 
 private fun isBlankLine(line: String) = line.isBlank()

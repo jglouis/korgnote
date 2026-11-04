@@ -679,6 +679,18 @@ private fun AnnotatedString.Builder.appendItemText(text: String, viewMode: Boole
 /** Highlights the text of a list item (without its bullet/checkbox) for reading mode. */
 fun buildOrgItemString(text: String): AnnotatedString = buildAnnotatedString { appendItemText(text, viewMode = true) }
 
+/**
+ * A parsed list item for reading mode: its [marker], then its text.
+ *
+ * Built from the parts rather than by printing `$marker $text` and highlighting that, which would
+ * read the line a second time: a `*` item, which only its indentation made an item, would come back
+ * a heading.
+ */
+internal fun buildOrgListItemString(marker: String, text: String): AnnotatedString = buildAnnotatedString {
+    withStyle(SpanStyle(color = OrgColors.bullet, fontWeight = FontWeight.Bold)) { append("$marker ") }
+    appendItemText(text, viewMode = true)
+}
+
 private fun isEmphasisPre(text: String, i: Int) = OrgSyntax.emphasisMayOpenAt(text, i)
 private fun isEmphasisPost(text: String, end: Int) = OrgSyntax.emphasisMayCloseAt(text, end)
 
