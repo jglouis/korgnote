@@ -67,4 +67,16 @@ class ReadingListItemTest {
         onAllNodesWithText("- a", substring = true).assertCountEquals(1)
         onAllNodesWithText("- b", substring = true).assertCountEquals(1)
     }
+
+    /** What the parser leaves in a paragraph that is not plain text is still drawn on a line of its own. */
+    @Test
+    fun specialLinesLeftInAParagraphStayOnTheirOwnLines() = runComposeUiTest {
+        setContent { OrgDocumentView(text = "- item\n\n  before\n  -----\n  after\n\n:END:\nwords\n") }
+
+        onAllNodesWithText("before").assertCountEquals(1)
+        onAllNodesWithText("-----").assertCountEquals(0)
+        onAllNodesWithText("after").assertCountEquals(1)
+        onAllNodesWithText(":END:").assertCountEquals(1)
+        onAllNodesWithText("words").assertCountEquals(1)
+    }
 }

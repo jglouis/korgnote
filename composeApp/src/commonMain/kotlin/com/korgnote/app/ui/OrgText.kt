@@ -93,7 +93,6 @@ import com.korgnote.common.org.OrgTableRow
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.isNumeric
 import com.korgnote.common.org.joinOrgLines
-import com.korgnote.common.org.parseOrgTable
 import com.korgnote.common.org.todoSequencesOf
 import com.korgnote.common.org.srcLanguageOf
 import com.korgnote.common.org.toOrgDocument
@@ -221,8 +220,6 @@ private fun RenderNode(
             node.children.forEach { child -> RenderNode(child, todoConfig, onToggleCheckbox, onSetTodo, onEditTable) }
         }
 
-        // The grammar models these now, so they render from the node rather than by re-scanning
-        // text. The views themselves are the ones OrgBody already used.
         // Without the indentation all its lines share, which a block inside a list item has from the
         // item: Org strips it too (`org-src-preserve-indentation` is off by default).
         is OrgBlock -> OrgBlockView(node.type.lowercase(), node.parameters, node.body.trimEnd('\n').trimIndent().split('\n'), todoConfig)
@@ -688,10 +685,8 @@ private fun ListItemLine(marker: String, text: String) {
     Text(text = buildOrgListItemString(marker, text), style = MaterialTheme.typography.bodyMedium)
 }
 
-private fun isBlankLine(line: String) = line.isBlank()
-
 private fun isSpecialLine(line: String): Boolean =
-    isBlankLine(line) ||
+    line.isBlank() ||
         OrgSyntax.heading.containsMatchIn(line) ||
         OrgSyntax.blockBegin.containsMatchIn(line) ||
         OrgSyntax.blockEnd.containsMatchIn(line) ||
@@ -704,8 +699,9 @@ private fun isSpecialLine(line: String): Boolean =
         OrgSyntax.listItem.containsMatchIn(line)
 
 /**
- * Renders raw Org text (section content or a paragraph) by grouping lines into tables, blocks,
- * drawers, paragraphs and single special lines.
+ * Renders a paragraph as the parser left it: its plain lines joined into one wrapped text, and on a
+ * line of its own whatever it holds that is not plain, as a rule under a list item is. Tables, blocks
+ * and drawers never get here: the parser has already made them nodes.
  */
 @Composable
 fun OrgBody(text: String, todoConfig: OrgTodoConfig = DefaultOrgTodoConfig) {
@@ -714,40 +710,9 @@ fun OrgBody(text: String, todoConfig: OrgTodoConfig = DefaultOrgTodoConfig) {
         var i = 0
         while (i < lines.size) {
             val line = lines[i]
-            val blockBegin = OrgSyntax.blockBegin.find(line)
             when {
-                blockBegin != null -> {
-                    var j = i + 1
-                    while (j < lines.size && !OrgSyntax.blockEnd.containsMatchIn(lines[j])) j++
-                    OrgBlockView(
-                        type = blockBegin.groupValues[1].lowercase(),
-                        params = blockBegin.groupValues[2].trim(),
-                        lines = lines.subList(i + 1, j)
-                    )
-                    i = j + 1
-                }
-
-                OrgSyntax.isTableLine(line) -> {
-                    var j = i
-                    while (j < lines.size && OrgSyntax.isTableLine(lines[j])) j++
-                    OrgTableView(parseOrgTable(lines.subList(i, j)))
-                    i = j
-                }
-
-                OrgSyntax.drawerBegin.containsMatchIn(line) && !OrgSyntax.drawerEnd.containsMatchIn(line) -> {
-                    var j = i + 1
-                    while (j < lines.size && !OrgSyntax.drawerEnd.containsMatchIn(lines[j])) j++
-                    OrgDrawerView(name = line.trim(), lines = lines.subList(i + 1, j))
-                    i = j + 1
-                }
-
                 OrgSyntax.horizontalRule.containsMatchIn(line) -> {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
-                    i++
-                }
-
-                isBlankLine(line) -> {
-                    Spacer(Modifier.height(6.dp))
                     i++
                 }
 

@@ -105,13 +105,13 @@ fun OrgEditor_Preview() {
 @Composable
 fun OrgTable_Preview() {
     PreviewSurface {
-        OrgBody(
-            """
+        OrgText(
+            content = """
             | Name | Qty | Price |
             |-
             | Apples | 10 | 1.20 |
             | Pears with a long name | 3 | 0.95 |
-            """.trimIndent()
+            """.trimIndent().toOrgDocument(),
         )
     }
 }
