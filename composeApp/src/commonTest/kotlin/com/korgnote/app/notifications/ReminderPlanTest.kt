@@ -155,6 +155,17 @@ class ReminderPlanTest {
         assertEquals(plan(text).map { it.id }, plan(text, at = now.date.let { LocalDateTime(it, LocalTime(9, 0)) }).map { it.id })
     }
 
+    /** iOS keeps one reminder for each id, so with the date alone only the day's last would fire. */
+    @Test
+    fun eachTimeARepeatFallsOnADayIsItsOwnReminder() {
+        val reminders = plan("* Pills <2026-09-23 Wed 12:00 +4h>\n")
+
+        val today = reminders.filter { it.at.date == now.date }
+        // Midnight's is ten minutes before it, so still today.
+        assertEquals(listOf(at(23, 11, 50), at(23, 15, 50), at(23, 19, 50), at(23, 23, 50)), today.map { it.at })
+        assertEquals(reminders.size, reminders.map { it.id }.distinct().size)
+    }
+
     @Test
     fun settingsSurviveBeingStored() {
         val settings = ReminderSettings(enabled = false, leadMinutes = 45, digestEnabled = true, digestTime = LocalTime(6, 5))

@@ -156,7 +156,7 @@ fun planReminders(
             val at = LocalDateTime(occurrence.date, time).minusMinutes(settings.leadMinutes)
             if (at <= now) continue
             reminders += Reminder(
-                id = "entry:${occurrence.entry.file}:${occurrence.entry.stamp.range.first}:${occurrence.date}",
+                id = "entry:${occurrence.entry.file}:${occurrence.entry.stamp.range.first}:${occurrence.date}:$time",
                 at = at,
                 title = occurrence.entry.plainHeadline(),
                 body = listOfNotNull(occurrence.timeLabel(), occurrence.entry.kind.word(words), occurrence.entry.file)
