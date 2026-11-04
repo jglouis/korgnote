@@ -5,7 +5,6 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.provider.DocumentsContract
 import android.webkit.MimeTypeMap
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -183,7 +182,6 @@ private fun below(context: Context, tree: Uri, document: Uri): List<String>? {
     val prefix = if (treeId.endsWith(':')) treeId else "$treeId/"
     if (documentId.startsWith(prefix)) return documentId.removePrefix(prefix).split('/').filter { it.isNotEmpty() }
     // Other providers' ids mean nothing to read; they can say how to get to it from the tree's top.
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
     val path = DocumentsContract.findDocumentPath(
         context.contentResolver,
         DocumentsContract.buildDocumentUriUsingTree(tree, documentId),
@@ -206,9 +204,7 @@ private class OpenDocumentIn : ActivityResultContract<Uri?, Uri?>() {
             .addCategory(Intent.CATEGORY_OPENABLE)
             .setType("*/*")
             .apply {
-                if (input != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    putExtra(DocumentsContract.EXTRA_INITIAL_URI, input)
-                }
+                if (input != null) putExtra(DocumentsContract.EXTRA_INITIAL_URI, input)
             }
 
     override fun parseResult(resultCode: Int, intent: Intent?): Uri? =

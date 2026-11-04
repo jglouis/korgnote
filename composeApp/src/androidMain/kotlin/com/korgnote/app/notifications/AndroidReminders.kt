@@ -213,8 +213,6 @@ object ReminderAlarms {
             .takeIf { it != 0 } ?: context.applicationInfo.icon
 
     private suspend fun ensureChannel(context: Context) {
-        // Channels exist from Android 8; before it, the builder's priority is what counts.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java)
         // Created again each time: for a channel that exists, that only renames it, so its name
         // follows the language the app is shown in while the user's choices for it stay.

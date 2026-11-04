@@ -2,7 +2,7 @@ package com.korgnote.common
 
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.FileSystemReplicaStorage
-import com.korgnote.common.replica.ReplacingMove
+import com.korgnote.common.replica.replacingMove
 import com.korgnote.common.replica.ReplicaStorage
 import com.korgnote.common.replica.moveOver
 import kotlinx.coroutines.test.runTest
@@ -215,17 +215,6 @@ class MoveOverTest {
         folder.deleteRecursively()
     }
 
-    /** Android 7 has no `java.nio.file`, so where a rename is refused it goes back to making room first. */
-    @Test
-    fun whereTheReplacingMoveCannotLoadTheTargetMakesWayForTheRename() {
-        moveOver(temp, target, replacing = { _, _ -> throw NoClassDefFoundError("java/nio/file/Files") }) { from, to ->
-            !to.exists() && from.renameTo(to)
-        }
-
-        assertEquals("new", target.readText())
-        assertFalse(temp.exists())
-    }
-
     @Test
     fun aRenameIsAllItTakesWhereItReplaces() {
         moveOver(temp, target)
@@ -245,7 +234,7 @@ class MoveOverTest {
 
     @Test
     fun aFilesystemWithNoAtomicMoveStillGetsTheFile() {
-        ReplacingMove.move(temp, target) { from, _ -> throw AtomicMoveNotSupportedException(from.path, null, "not here") }
+        replacingMove(temp, target) { from, _ -> throw AtomicMoveNotSupportedException(from.path, null, "not here") }
 
         assertEquals("new", target.readText())
         assertFalse(temp.exists())

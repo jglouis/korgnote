@@ -110,32 +110,21 @@ class FileSystemReplicaStorage(root: File) : ReplicaStorage {
 internal fun moveOver(
     temp: File,
     target: File,
-    replacing: ((File, File) -> Unit)? = null,
     rename: (File, File) -> Boolean = File::renameTo,
 ) {
-    if (rename(temp, target)) return
-    try {
-        if (replacing != null) replacing(temp, target) else ReplacingMove.move(temp, target)
-    } catch (_: LinkageError) {
-        // Android 7, which cannot load the replacing move: only making room is left to it there.
-        target.delete()
-        check(rename(temp, target)) { "could not move ${temp.path} onto ${target.path}" }
-    }
+    if (!rename(temp, target)) replacingMove(temp, target)
 }
 
-/** Apart from the rest, which Android 7 has to load: `java.nio.file` only arrives with Android 8. */
-internal object ReplacingMove {
-    fun move(
-        temp: File,
-        target: File,
-        atomicMove: (File, File) -> Unit = { from, to -> Files.move(from.toPath(), to.toPath(), ATOMIC_MOVE, REPLACE_EXISTING) },
-    ) {
-        try {
-            atomicMove(temp, target)
-        } catch (_: AtomicMoveNotSupportedException) {
-            // A filesystem with no atomic replace: not atomic, but the file still gets there.
-            Files.move(temp.toPath(), target.toPath(), REPLACE_EXISTING)
-        }
+internal fun replacingMove(
+    temp: File,
+    target: File,
+    atomicMove: (File, File) -> Unit = { from, to -> Files.move(from.toPath(), to.toPath(), ATOMIC_MOVE, REPLACE_EXISTING) },
+) {
+    try {
+        atomicMove(temp, target)
+    } catch (_: AtomicMoveNotSupportedException) {
+        // A filesystem with no atomic replace: not atomic, but the file still gets there.
+        Files.move(temp.toPath(), target.toPath(), REPLACE_EXISTING)
     }
 }
 

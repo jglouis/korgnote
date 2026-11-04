@@ -5,7 +5,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.korgnote.app.ui.buildOrgInlineString
@@ -90,7 +89,6 @@ class AndroidClockNotifier(
     }
 
     private suspend fun ensureChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         // Low: it is there to be glanced at and stopped, never to sound or pop up.
         app.getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL_ID, getString(Res.string.clock_channel_name), NotificationManager.IMPORTANCE_LOW).apply {

@@ -48,14 +48,12 @@ This is the only status list; the rules for keeping it are in the [docs README](
   The line under a closed `:PROPERTIES:` drawer has the same trouble: the tap opens the drawer.
 - **In Note details the keyboard covers Save**, so a tap there can land on a suggestion instead. In the
   element editor it covers the link picker's *Cancel* and *Web or file link…* the same way.
-- **Android 7 cannot run the app.** On API 24 it stops as a source is chosen, with `NoClassDefFoundError
-  java/time/ZoneOffset`, as it has since at least 1.2.0: `minSdk` says 24, and nothing desugars `java.time`,
-  which arrives in API 26. API 25 has the same gap and was not run.
 - **One note or folder the server cannot read stops every full sync**, with a `500` that names its path.
   Deliberate as far as what is listed goes: left out, it would go from every phone. Nothing tells the
   person which file it is.
 - **A few changes on disk wait for the one-minute walk**: a file removed 50 ms after a dot-folder appears,
-  as the first move to the trash does (1 in 12), and a folder delete now and then.
+  as the first move to the trash does (1 in 12), a folder delete now and then, and an edit in the moment
+  after a folder rename is journaled, before its new watches are built.
 - **A signed-in API request with `..` in its path** can get a web client file (`/api/v1/../../composeApp.js`
   gives 200, not 404). No note is reachable that way. **`Host: [::1]`** gets 403 on the plain port.
 - **A wrong WebDAV password met during onboarding** says "Check them in Settings", where there is no
