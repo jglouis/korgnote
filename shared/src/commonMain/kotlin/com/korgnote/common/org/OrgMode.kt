@@ -111,8 +111,7 @@ data class OrgRaw(val content: String) : OrgNode()
 // TODO state for headings is a free-form string (e.g., TODO, DONE, WAITING) defined by document metadata.
 // We intentionally avoid an enum to allow arbitrary states.
 
-// Checkbox list item like: - [ ] Task or - [X] Done
-// Only supports simple on/off state; nested states are out of scope for now.
+// Checkbox list item like: - [ ] Task, - [X] Done or - [-] Some of it
 data class OrgCheckboxItem(
     val checked: Boolean,
     val text: String,
@@ -359,8 +358,8 @@ fun String.toOrgDocument(fallback: OrgTodoConfig = DEFAULT_TODO_KEYWORDS): OrgDo
         var idx = start
         while (idx < limit && lines[idx].isOrgTableLine()) idx++
         val table = parseOrgTable(lines.subList(start, idx))
-        // Cells keep an empty range: locating them needs intra-line offsets, which waits for the
-        // real table grammar in T5.
+        // Cells keep an empty range: locating them needs intra-line offsets, and the grid editor
+        // replaces whole tables.
         table.rows.forEachIndexed { row, tableRow -> tableRow.spanning(start + row, start + row + 1) }
         return table.spanning(start, idx) to idx
     }

@@ -501,10 +501,9 @@ private class HeadingPiece(val style: SpanStyle?, var text: String, val inline: 
 /**
  * Folds any piece that is only whitespace into its neighbour.
  *
- * A style run holding nothing but whitespace is measured as zero width by the Skia text backend
- * (desktop, iOS and web), which made the spaces around a TODO keyword vanish while typing; Android
- * uses a different backend and never showed it. Whitespace carries no glyph, so which run owns it
- * makes no visible difference.
+ * Whitespace carries no glyph, so which run owns it makes no visible difference. See the note on
+ * `orgSpans` for why it is done, and `docs/notes/editor-perf.md` for what the disappearing spaces
+ * this was once meant to fix really were.
  */
 private fun List<HeadingPiece>.foldWhitespaceIntoNeighbours() {
     forEachIndexed { index, piece ->

@@ -5,9 +5,9 @@ package com.korgnote.common.org
  *
  * This lives in `shared/` so the parser and the highlighter recognise Org the same way. It used to
  * sit beside the highlighter, which left the parser with its own private notion of what a heading or
- * a list item was — the kind of split that lets the two disagree about a file. Moving it here is the
- * first half of the "one grammar" idea; T6 finishes the job by having the highlighter consume the
- * parse tree instead of re-scanning the text.
+ * a list item was — the kind of split that lets the two disagree about a file. The parser and the
+ * line scanner in `OrgSpans.kt` both read these patterns, and anything else that has to recognise a
+ * construct should too.
  *
  * The `\]` escapes are flagged as redundant by the IDE (JVM semantics) but they are required:
  * Kotlin/JS and Kotlin/Wasm compile regexes with the JavaScript `u` flag, where a lone `]` is a SyntaxError.

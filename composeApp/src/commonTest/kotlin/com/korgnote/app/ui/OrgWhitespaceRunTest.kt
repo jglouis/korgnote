@@ -8,12 +8,12 @@ import kotlin.test.assertTrue
 import com.korgnote.common.org.OrgSyntax
 
 /**
- * The highlighter must never produce a style run consisting only of whitespace.
+ * The highlighter must never produce a style run consisting only of whitespace: whitespace travels
+ * with an adjacent token rather than sitting in a run of its own.
  *
- * Skia's text backend — desktop, iOS and web, but not Android — measures such a run as zero width,
- * which made the spaces around a TODO keyword disappear while typing even though the text was
- * correct underneath. Whitespace therefore has to travel with an adjacent token rather than sit in
- * a run of its own.
+ * This was written to fix spaces disappearing around a TODO keyword while typing, on the belief that
+ * Skia measures such a run as zero width. Measuring showed it does not, and the real cause was a span
+ * changing the line's metrics (`docs/notes/editor-perf.md`). The property is kept, and held here.
  */
 class OrgWhitespaceRunTest {
 

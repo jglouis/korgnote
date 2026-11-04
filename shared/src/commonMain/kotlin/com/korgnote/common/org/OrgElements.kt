@@ -144,7 +144,7 @@ fun String.withNewOrgElement(at: Int, level: Int): OrgInsertion {
  * end of the list.
  *
  * Elements are flat — a heading's children are elements of their own — so this is how a heading
- * finds everything beneath it, the same range T4 gives a section. The preamble owns no subtree.
+ * finds everything beneath it, the same range a parsed section has. The preamble owns no subtree.
  */
 fun List<OrgElement>.subtreeEnd(index: Int): Int {
     val element = getOrNull(index) ?: return index

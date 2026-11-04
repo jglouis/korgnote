@@ -49,10 +49,11 @@ data class OrgSpan(val range: IntRange, val kind: OrgSpanKind, val nesting: Int 
  * Classifies [text].
  *
  * This is the single definition of Org syntax for both the highlighter and the reading-mode
- * renderer (D5). It deliberately reproduces one quirk of the old highlighter: a span that carries a
- * colour absorbs the whitespace beside it, because the Skia text backend measures a style run that
- * holds only whitespace as zero width. Splitting the whitespace off would make the caret land in the
- * wrong place, which is the bug `OrgWhitespaceRunTest` exists to prevent.
+ * renderer (D5). It keeps one habit of the old highlighter: a span that carries a colour absorbs the
+ * whitespace beside it, so that no whitespace sits in a style run of its own. That began as a fix on
+ * the belief that the Skia text backend measures such a run as zero width, which measuring later
+ * showed false (`docs/notes/editor-perf.md`). It fixed nothing, but does no harm, and
+ * `OrgWhitespaceRunTest` holds it.
  */
 fun orgSpans(text: String): List<OrgSpan> {
     val spans = mutableListOf<OrgSpan>()
@@ -238,8 +239,7 @@ private fun addHeading(line: String, offset: Int, add: (IntRange, OrgSpanKind, I
     add(offset until (offset + line.length), OrgSpanKind.Heading, stars.length)
 
     // Pieces are collected first so the whitespace between them can be folded in before anything is
-    // emitted: a span that holds only whitespace is measured as zero width by the Skia text backend,
-    // which moves the caret. See the note on [orgSpans] and `OrgWhitespaceRunTest`.
+    // emitted. See the note on [orgSpans] and `OrgWhitespaceRunTest`.
     val pieces = mutableListOf<Pair<IntRange, OrgSpanKind?>>()
     var pos = stars.length
     pieces.add(0 until pos to OrgSpanKind.Stars)

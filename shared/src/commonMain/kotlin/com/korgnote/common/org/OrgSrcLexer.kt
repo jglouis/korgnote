@@ -72,9 +72,8 @@ private fun interface SrcLexer {
  * The tokens of one line, collected left to right.
  *
  * Text between tokens stays unstyled. When that text is only whitespace it is folded into the token
- * after it (or, at the end of the line, the one before): a style run holding only whitespace is
- * measured as zero width by the Skia text backend, which collapses indentation and moves the caret.
- * See the note on [orgSpans] and `OrgWhitespaceRunTest`.
+ * after it (or, at the end of the line, the one before), so that no whitespace sits in a style run of
+ * its own. See the note on [orgSpans] and `OrgWhitespaceRunTest`.
  */
 private class SrcTokens(val line: String) {
     private class Token(var start: Int, var end: Int, val kind: OrgSpanKind)
