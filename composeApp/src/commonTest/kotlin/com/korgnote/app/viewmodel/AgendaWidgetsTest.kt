@@ -1,6 +1,8 @@
 package com.korgnote.app.viewmodel
 
 import com.korgnote.app.widgets.AgendaWidgets
+import com.korgnote.app.notifications.NoopNotificationScheduler
+import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
@@ -12,6 +14,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -97,13 +100,21 @@ class AgendaWidgetsTest {
     /** Each push moves the sync time: two widgets drawn for every save that moves no date. */
     @Test
     fun aSyncThatMovesNoDateOnlySaysWhen() = runTest {
-        viewModel.server.load()
-        val handedOverAtFirst = handedOver.size
+        val library = NoteLibrary(DocumentStore(InMemoryReplicaStorage(mapOf(work to workText))))
+        library.reload(parseOn = UnconfinedTestDispatcher(testScheduler))
+        var lastSynced = Instant.fromEpochSeconds(1_000)
+        val agenda = NoteAgenda(
+            backgroundScope, library, { LocalDate(2026, 9, 23) }, NoopNotificationScheduler, { ReminderSettings() },
+            { LocalDateTime(2026, 9, 23, 8, 0) }, open = { _, _ -> }, widgets = widgets, lastSynced = { lastSynced },
+        )
+        agenda.refresh()
+        assertEquals(1, handedOver.size)
 
-        viewModel.server.load()
+        lastSynced = Instant.fromEpochSeconds(2_000)
+        agenda.refresh()
 
-        assertEquals(handedOverAtFirst, handedOver.size)
-        assertEquals(1, syncTimes.size)
+        assertEquals(1, handedOver.size)
+        assertEquals(listOf(lastSynced), syncTimes)
     }
 
     /** A sync usually brings one note: the others' entries are not looked for again. */
