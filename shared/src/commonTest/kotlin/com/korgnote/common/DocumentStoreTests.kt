@@ -2,11 +2,7 @@ package com.korgnote.common
 
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
-import com.korgnote.common.replica.ReplicaChange
 import com.korgnote.common.replica.ReplicaStorage
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -22,7 +18,6 @@ import kotlin.test.assertTrue
  * `FileSystemDocumentStoreTest` runs this same contract against a real directory, which is what
  * makes the in-memory implementation a fair stand-in for the web build and for tests.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
 abstract class DocumentStoreContract {
 
     abstract suspend fun storage(): ReplicaStorage
@@ -51,12 +46,11 @@ abstract class DocumentStoreContract {
     @Test
     fun contentFromTheServerIsNotDirtyAndBecomesTheBase() = runTest {
         val store = store()
-        store.acceptFromServer("inbox.org", "* From server\n", etag = "abc", generation = 7)
+        store.acceptFromServer("inbox.org", "* From server\n", etag = "abc")
 
         assertFalse(store.isDirty("inbox.org"))
         assertEquals("* From server\n", store.base("inbox.org"))
         assertEquals("abc", store.meta("inbox.org")?.etag)
-        assertEquals(7, store.meta("inbox.org")?.lastSyncedGeneration)
     }
 
     @Test
@@ -70,21 +64,6 @@ abstract class DocumentStoreContract {
         assertTrue(store.isDirty("inbox.org"))
     }
 
-    /** The whole point of the replica: a bulk refresh must not discard unsynced work. */
-    @Test
-    fun aBulkRefreshKeepsLocalEdits() = runTest {
-        val store = store()
-        store.acceptFromServer("a.org", "* A\n")
-        store.acceptFromServer("b.org", "* B\n")
-        store.save("a.org", "* A edited offline\n")
-
-        store.acceptAllFromServer(mapOf("a.org" to "* A from server\n", "b.org" to "* B v2\n"))
-
-        assertEquals("* A edited offline\n", store.read("a.org"), "a dirty file must not be overwritten")
-        assertEquals("* B v2\n", store.read("b.org"))
-        assertTrue(store.isDirty("a.org"))
-    }
-
     @Test
     fun deletingRemovesTheDocumentItsBaseAndItsMetadata() = runTest {
         val store = store()
@@ -95,30 +74,6 @@ abstract class DocumentStoreContract {
         assertNull(store.base("gone.org"))
         assertNull(store.meta("gone.org"))
         assertContentEquals(emptyList(), store.paths())
-    }
-
-    @Test
-    fun everyMutationEmitsAChange() = runTest {
-        val store = store()
-        val seen = mutableListOf<ReplicaChange>()
-        // Unconfined so the collector is subscribed before the first emission, and cancelled with
-        // the test rather than left running.
-        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
-            store.changes.collect { seen.add(it) }
-        }
-
-        store.save("inbox.org", "* One\n")
-        store.acceptFromServer("other.org", "* Two\n")
-        store.delete("inbox.org")
-
-        assertEquals(
-            listOf(
-                ReplicaChange.Saved("inbox.org"),
-                ReplicaChange.PulledFromServer("other.org"),
-                ReplicaChange.Deleted("inbox.org"),
-            ),
-            seen,
-        )
     }
 
     @Test

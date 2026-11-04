@@ -42,7 +42,7 @@ class FileSystemDocumentStoreTest : DocumentStoreContract() {
 
         // First run: the app syncs, then the user edits with the server unreachable.
         DocumentStore(FileSystemReplicaStorage(root)).apply {
-            acceptFromServer("inbox.org", "* TODO From server\n", etag = "v1", generation = 3)
+            acceptFromServer("inbox.org", "* TODO From server\n", etag = "v1")
             save("inbox.org", "* TODO Edited on a train\n")
         }
 
@@ -75,6 +75,42 @@ class FileSystemDocumentStoreTest : DocumentStoreContract() {
         // Nothing but .org files in the working copy: a stray meta file would sync to the server.
         val strays = File(root, "notes").walkTopDown().filter { it.isFile && it.extension != "org" }
         assertEquals(emptyList(), strays.toList(), "the working copy must hold notes only")
+    }
+
+    /** As every version so far wrote it: pretty-printed, and with fields nothing reads any more. */
+    @Test
+    fun metadataWrittenByEarlierVersionsStillLoads() = runTest {
+        val root = newRoot()
+        File(root, ".korgnote").mkdirs()
+        File(root, ".korgnote/meta.json").writeText(
+            """
+            {
+                "generation": 1758300000421,
+                "files": {
+                    "inbox.org": {
+                        "path": "inbox.org",
+                        "size": 2310,
+                        "mtime": 1758300000000,
+                        "etag": "9f2a",
+                        "dirty": true,
+                        "lastSyncedGeneration": 1758300000000
+                    },
+                    "gone.org": {
+                        "path": "gone.org",
+                        "etag": "41bc",
+                        "deleted": true
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val store = DocumentStore(FileSystemReplicaStorage(root))
+
+        assertEquals(1758300000421, store.generation())
+        assertEquals("9f2a", store.meta("inbox.org")?.etag)
+        assertTrue(store.isDirty("inbox.org"))
+        assertEquals(listOf("gone.org"), store.tombstones().map { it.path })
     }
 
     /** A half-written or corrupt meta.json must not make the notes unreadable. */

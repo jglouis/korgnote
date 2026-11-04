@@ -5,18 +5,18 @@ import kotlinx.serialization.Serializable
 /**
  * What the client knows about one file, beyond its content.
  *
- * [etag] and [lastSyncedGeneration] are what the server last told us; [dirty] is ours alone and
- * means "changed locally since that sync". A dirty file is the only thing that ever needs pushing,
- * and it survives restarts because this metadata is written to disk beside the replica.
+ * [etag] is what the server last told us; [dirty] is ours alone and means "changed locally since
+ * that sync". A dirty file is the only thing that ever needs pushing, and it survives restarts because
+ * this metadata is written to disk beside the replica.
+ *
+ * Files already on devices also hold `size`, `mtime` and `lastSyncedGeneration`, which nothing read.
+ * They are skipped on reading, and go the next time the file is written.
  */
 @Serializable
 data class FileMeta(
     val path: String,
-    val size: Long = 0,
-    val mtime: Long = 0,
     val etag: String? = null,
     val dirty: Boolean = false,
-    val lastSyncedGeneration: Long = 0,
     /**
      * A tombstone: deleted here, and the server has not been told yet.
      *
