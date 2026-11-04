@@ -102,6 +102,9 @@ class ServerSync(
         onReplicaChanged()
     }
 
+    /** The replica is one, shared with whatever synced it. */
+    override suspend fun onChangedElsewhere() = onReplicaChanged()
+
     /**
      * Syncs now, because the user asked to; on success the change stream reconnects at once
      * instead of waiting out its backoff.

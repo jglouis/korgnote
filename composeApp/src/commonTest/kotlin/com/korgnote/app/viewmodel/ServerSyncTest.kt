@@ -64,6 +64,19 @@ class ServerSyncTest {
         runCurrent()
     }
 
+    /** A widget has just synced: what it brought is shown, without syncing again or clearing what is said. */
+    @Test
+    fun aSyncMadeElsewhereIsShownAndNotMadeAgain() = runTest {
+        val server = serverSync()
+        message = "Something the user is reading"
+
+        server.onChangedElsewhere()
+
+        assertEquals(0, api.manifestRequests)
+        assertEquals(1, replicaShown)
+        assertEquals("Something the user is reading", message)
+    }
+
     /** A burst of files, shown one by one, read every note for each. */
     @Test
     fun aBurstOnTheStreamIsShownOnce() = runTest {

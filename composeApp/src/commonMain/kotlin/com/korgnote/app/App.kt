@@ -241,7 +241,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     // A widget synced the replica under the notes on screen: read them again, as when the server
     // says they changed, so nothing showing what they held before is saved back over them.
     LaunchedEffect(vm) {
-        WidgetSyncs.finished.collect { vm.server.load() }
+        WidgetSyncs.finished.collect { vm.server.onChangedElsewhere() }
     }
     var noteDialogError by remember { mutableStateOf<String?>(null) }
     // The conflict copy being compared with its note.

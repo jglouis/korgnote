@@ -102,6 +102,7 @@ class NotesSourceTest {
         override val syncing = false
         override val lastSynced: Instant? = null
         override suspend fun load() {}
+        override suspend fun onChangedElsewhere() {}
         override suspend fun retry() {}
         override fun watch() {}
         override fun stop() {

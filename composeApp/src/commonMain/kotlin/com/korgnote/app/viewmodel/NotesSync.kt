@@ -23,6 +23,12 @@ interface NotesSync {
     /** Catches up with where the notes are kept, then shows whatever they now hold. */
     suspend fun load()
 
+    /**
+     * Something other than the app, such as a widget's sync, just changed the notes where this reads
+     * them: shows what they now hold, with no need to sync again.
+     */
+    suspend fun onChangedElsewhere()
+
     /** [load], because the user asked to. */
     suspend fun retry()
 

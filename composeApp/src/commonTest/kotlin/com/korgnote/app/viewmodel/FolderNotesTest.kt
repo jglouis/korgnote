@@ -70,6 +70,17 @@ class FolderNotesTest {
         assertTrue(vm.server is FolderSync)
     }
 
+    /** A widget looked at the folder through a storage of its own: this one has seen nothing yet. */
+    @Test
+    fun aChangeSeenElsewhereIsLookedForHere() = runTest {
+        vm.server.load()
+        folder.writeOutside("inbox.org", "* DONE Call the bank\n")
+
+        vm.server.onChangedElsewhere()
+
+        assertEquals("* DONE Call the bank\n", vm.note.content)
+    }
+
     @Test
     fun aSaveGoesStraightIntoTheFolder() = runTest {
         vm.server.load()

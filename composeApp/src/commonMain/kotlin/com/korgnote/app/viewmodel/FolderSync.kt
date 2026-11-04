@@ -72,6 +72,9 @@ class FolderSync(
         onReplicaChanged()
     }
 
+    /** What changed it read the folder through a storage of its own: this one has yet to look. */
+    override suspend fun onChangedElsewhere() = load()
+
     override suspend fun retry() {
         if (retrying) return
         retrying = true
