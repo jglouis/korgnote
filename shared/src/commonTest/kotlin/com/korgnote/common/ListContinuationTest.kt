@@ -69,4 +69,25 @@ class ListContinuationTest {
         assertNull(continueList("- a", 3, "- ab"), "not a newline")
         assertNull(continueList("- a", 3, "- a\n\n"), "a paste, not one Enter")
     }
+
+    /** Enter on a box with nothing after it, not even a space, ends the list: it is an empty item. */
+    @Test
+    fun enterOnAnEmptyBoxWithNoTrailingSpaceEndsTheList() {
+        assertEquals("- one\n|", enter("- one\n- [ ]|"))
+        assertEquals("- one\n|", enter("- one\n- [ ] |"))
+    }
+
+    /** A `[@5]` makes the item 5, whatever it writes, so the next one is 6, as reading mode shows it. */
+    @Test
+    fun theNextNumberCountsOnFromACounter() {
+        assertEquals("3. [@5] x\n6. |", enter("3. [@5] x|"))
+        assertEquals("3) [@5] [ ] x\n6) [ ] |", enter("3) [@5] [ ] x|"))
+    }
+
+    /** A counter means nothing in a bulleted list, and is no text either. */
+    @Test
+    fun aCounterAloneIsAnEmptyItem() {
+        assertEquals("|", enter("3. [@5] |"))
+        assertEquals("- [@5] x\n- |", enter("- [@5] x|"))
+    }
 }

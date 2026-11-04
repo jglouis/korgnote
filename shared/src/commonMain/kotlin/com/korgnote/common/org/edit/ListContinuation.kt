@@ -23,10 +23,13 @@ fun continueList(before: String, caret: Int, after: String): CompletionResult? {
     val line = before.substring(lineStart, caret)
     // Enter in the middle of an item splits it: what follows the caret becomes the next item.
     val rest = before.substring(caret).substringBefore('\n')
-    val item = LIST_ITEM.matchEntire(line) ?: return null
+    val item = OrgSyntax.listItem.find(line) ?: return null
     // In a source or example block the text is code: a `- ` in YAML is not an Org list.
     if (insideVerbatimBlock(before.substring(0, lineStart))) return null
-    val (indent, bullet, box, content) = item.destructured
+    val indent = item.groupValues[1]
+    val bullet = item.groupValues[2]
+    val box = item.groupValues[4]
+    val content = line.substring(item.value.length)
     // At the start of a line, a star is a heading's.
     if (bullet == "*" && indent.isEmpty()) return null
 
@@ -38,7 +41,7 @@ fun continueList(before: String, caret: Int, after: String): CompletionResult? {
 
     val next = buildString {
         append(indent)
-        append(nextBullet(bullet))
+        append(nextBullet(bullet, counter = OrgSyntax.listCounter.find(item.value)?.groupValues?.get(1)?.toIntOrNull()))
         append(' ')
         if (box.isNotEmpty()) append("[ ] ")
     }
@@ -46,14 +49,14 @@ fun continueList(before: String, caret: Int, after: String): CompletionResult? {
     return CompletionResult(text, caret + 1 + next.length)
 }
 
-/** `-` stays `-`; `3.` becomes `4.`, `3)` becomes `4)`. */
-private fun nextBullet(bullet: String): String {
+/**
+ * `-` stays `-`; `3.` becomes `4.`, `3)` becomes `4)`, or what follows its [counter] when it has one,
+ * since a `[@5]` numbers the item whatever it writes.
+ */
+private fun nextBullet(bullet: String, counter: Int?): String {
     val number = bullet.dropLast(1).toIntOrNull() ?: return bullet
-    return "${number + 1}${bullet.last()}"
+    return "${(counter ?: number) + 1}${bullet.last()}"
 }
-
-/** A list item's line, up to the caret: its indent, bullet, checkbox and text. */
-private val LIST_ITEM = Regex("^([ \\t]*)([-+*]|\\d+[.)])[ \\t]+(\\[[ xX-]\\][ \\t]+)?(.*)$")
 
 /** Blocks whose body Org reads as it is, not as Org: lists in them are someone else's syntax. */
 private val VERBATIM_BLOCKS = setOf("SRC", "EXAMPLE", "EXPORT", "COMMENT")
