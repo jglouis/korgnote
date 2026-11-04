@@ -4,14 +4,13 @@ Addresses G4, G5 and defects D1, D2, D3, D8, D9, D10, D11.
 
 ## Server: a file store that tells the truth
 
-Before any protocol work, the server must stop believing its startup snapshot (D1). This is
-the one urgent fix in the whole plan, because the current design can overwrite edits you
-made in Emacs.
+The server answers from the disk on every request (`server/…/FileStore.kt`). It once served a snapshot
+taken at startup, which could overwrite edits made in Emacs (D1).
 
 ```kotlin
-class FileStore(val root: Path) {
-    fun list(): List<FileMeta>                    // walks the tree on demand
-    fun read(path: String): String?
+class FileStore(val root: Path, val readOnly: Boolean = false) {
+    fun list(): List<FileMeta>                      // walks the tree on demand
+    fun readWithMeta(path: String): FileContent?    // a file's text and its version, from one read
     fun meta(path: String): FileMeta?
     fun put(path: String, content: String, ifMatch: String?, mustNotExist: Boolean): WriteResult
     fun delete(path: String, ifMatch: String?): WriteResult
@@ -20,26 +19,55 @@ class FileStore(val root: Path) {
 data class FileMeta(val path: String, val size: Long, val mtimeMillis: Long, val etag: String)
 ```
 
-Watching is a class of its own, `server/…/NotesWatcher.kt` (a `java.nio` `WatchService`), which
-turns each change on disk into a journal entry.
-
 - `etag` is a **content hash** (SHA-256, hex-truncated to 16 bytes), not an mtime: Emacs and
   Syncthing rewrite mtimes freely, and a hash makes "did this change?" exact.
-- Cache hashes keyed by `(path, size, mtime)` so a manifest request rehashes only what moved.
+- Hashes are cached by `(path, size, mtime)` so a manifest request rehashes only what moved. A file
+  changed in the last two seconds is hashed again next time: where timestamps are coarse, an edit
+  moments later can keep its size and its time, and a stale etag would pass `If-Match`.
 - `put` is atomic: write to a temporary file in the same directory, then rename. A crash or a
-  dying connection never truncates a note. There is no `fsync` before the rename yet, so a
-  power cut can still lose a save the filesystem had not flushed — a known gap.
-- Path validation on every call: reject absolute paths, `..` segments, and anything that
-  resolves outside `root` after symlink resolution — for a new file, the nearest folder that
-  exists, so a note cannot be created through a folder linked in from elsewhere. Only `.org` is
-  allowed, and files are capped at 32 MB. The current implicit protection — "the path
-  must already be in the startup map" — disappears once creating files is allowed (D11), so
-  this has to be explicit.
+  dying connection never truncates a note. There is no `fsync` before the rename, so a power cut can
+  still lose a save the filesystem had not flushed.
+- The `If-Match` check and the move are under one lock, so of two devices pushing from the same version
+  only one wins and the other is told to merge. An editor outside the server does not take it: a save
+  landing in that instant is overwritten, which nothing on a plain filesystem can prevent.
+- A text and its etag come from one read (`readWithMeta`): read apart, an edit landing between pairs the
+  old etag with the new text, and the client's next push is a false conflict.
+
+**What is a note.** `isLibraryPath` is one rule for what is listed, what can be read and written, and
+what is watched: an `.org` file, in no dot-folder. `.korgnote-trash` holds what was deleted, `.stversions`
+Syncthing's old versions and `.git` git's own business; served as notes, those would reach every phone
+as more copies of the same headings. On top of it, every call rejects absolute paths, empty, `.` and `..`
+segments, and anything that resolves outside `root` after symlink resolution — for a new file, the nearest
+folder that exists, so a note cannot be created through a folder linked in from elsewhere. Files are
+capped at 32 MB. `list` goes through the same check, so a symlink leading outside is not listed: it
+could not be fetched, and a phone would keep trying.
+
+A path that leaves the manifest this way is, to a phone, a note deleted on the server. A clean copy goes
+at the next complete manifest. A copy with an unsent edit is kept and pushed as a new note, which the
+server refuses with `422`, so the push fails each cycle, and says nothing, while the edit stays in the
+replica. A dot-*file* is not covered by the rule; see [open gaps](08-roadmap.md#open-and-known-gaps).
+
+**With no notes folder**, `ServerConfig.openStore` serves an empty, read-only, unwatched library, and says
+so in the log and on the Devices page. A container sets `KORGNOTE_REQUIRE_NOTES_DIR`, which stops the
+server instead.
+
+**Watching** is a class of its own, `server/…/NotesWatcher.kt` (a `java.nio` `WatchService`), which turns
+each change on disk into a journal entry. Anything that moves folders, an overflow of events or an
+invalid key makes it build its watches again from scratch and walk the tree, journaling every difference:
+a watch follows its folder's inode, so a renamed folder is its old notes deleted and its new ones made.
+It walks the tree once a minute as well (`rescanEvery`), because a watch can miss events and say nothing:
+Docker Desktop's file sharing drops some made on the host. What that walk finds, and no event reported
+within ten seconds, is logged as a warning and counted rather than healed quietly.
+
+How it is doing is `WatcherStatus`, shown under *Notes folder* on the Devices page: the notes and folders
+watched and when they were last checked, with a warning when watching fails, when the checks stop, or
+when an edit was found that no file event reported. A phone told "nothing changed" by a server that
+stopped looking reports a good sync, so this is the only place to notice.
 
 ## Protocol
 
-Versioned under `/api/v1`. All responses compressible (install Ktor's `Compression` plugin —
-Org text gzips roughly 4–5×, D10).
+Versioned under `/api/v1`. All responses are compressible (Ktor's `Compression` plugin; Org text gzips
+roughly 4–5×, D10).
 
 ### `GET /api/v1/manifest[?since=<generation>]`
 
@@ -58,7 +86,9 @@ Org text gzips roughly 4–5×, D10).
 The client diffs this against its own metadata. With `since`, the server answers from an
 in-memory journal fed by the file watcher and sets `complete: false`; if the generation is
 unknown (server restarted, journal trimmed) it returns a full manifest with
-`complete: true`. The client must handle both — which keeps the journal a pure optimisation.
+`complete: true`. The client handles both, which keeps the journal a pure optimisation. The classes are
+shared by server and apps (`Manifest`, `ManifestEntry`). A full manifest's generation is read before the
+walk, so a change landing during it is reported again rather than lost.
 A delta names each path once, as its latest change, so a note deleted and made again is listed
 as present. A delta names only what moved on the server, so the client pushes its dirty and
 never-synced files even when the delta leaves them out: absence means "unchanged remotely".
@@ -77,7 +107,10 @@ the *worst* case (a cold client). The steady state is a `since` query returning 
 
 Request `If-None-Match: <etag>` → `304 Not Modified` with no body, or `200` with the raw
 bytes, `ETag`, and `Content-Type: text/plain; charset=utf-8`; `404` when there is no such
-file. The app never sends `If-None-Match` here: it only fetches what the manifest says moved.
+file. The app never sends `If-None-Match` here: it only fetches what the manifest says moved. To the
+client a `404` is `FetchResult.Gone`, deleted since it was listed, and the next manifest will say so;
+anything else that brings no file is `FetchResult.Failed`, which may be a file that exists, and of which
+nothing can be said ([below](#sync-algorithm)).
 
 ETags go out unquoted (`ETag: 9f2a…`); the server strips quotes from the ones it is sent.
 
@@ -90,9 +123,9 @@ One request, many files — one JSON object per line, served as `application/jso
 {"path":"projects/work.org","etag":"41bc…","text":"…"}
 ```
 
-Needed by any client that starts empty and wants the whole corpus: the web app on every
-page load, and a freshly installed native client on first sync. Without it, a cold start is
-N conditional `GET`s, which is a poor trade even over HTTP/2. With `since`, it returns only
+For any client that starts empty and wants the whole corpus: the web app on every page load, and a
+freshly installed native client on first sync. Without it, a cold start is N `GET`s, which is a poor
+trade even over HTTP/2. With `since`, it returns only
 what changed — making it equally useful as a catch-up after a device has been offline for a
 while. The engine asks for it only when a cycle has eight or more files to pull: one at a time,
 a first sync of 371 notes took about 80 s on a phone, and about 15 s with the bundle.
@@ -109,21 +142,22 @@ Body is the raw file content. Headers:
 |---|---|
 | `If-Match: <etag>` | "I am editing the version with this hash." → `409 Conflict` if the server has moved on |
 | `If-None-Match: *` | "Create only — fail if it exists." (new notes, capture) |
-| neither | Unconditional: create or replace. The server accepts it; the app never sends it. |
+| neither | Unconditional: create or replace. The server accepts it; the app cannot ask for it, as `PushCondition` has only the two above. |
 
 Responses: `200 {"etag": "…"}`, `409` with the current `ETag` so the client can fetch and
-merge, `404` for `If-Match` on a file that is not there, `403` when the server is serving its
-bundled samples read-only, `413` over size limit, `422` invalid path.
+merge, `404` for `If-Match` on a file that is not there, `403` when the library is read-only (no notes
+folder), `413` over size limit, `422` invalid path, and `500` when the disk refuses the write. That body
+names the note but not where the notes are on this computer; the cause goes to the server's log.
 
 > `409` rather than `412` is the pragmatic choice: this is a *mergeable* conflict, not a
-> failed precondition the client should give up on. Either is defensible; pick one and
-> document it — the client behaviour is what matters.
+> failed precondition the client should give up on.
 
 ### `DELETE /api/v1/files/{path...}`
 
 `If-Match` required — `422` without it. `204` on success, `409` with the current `ETag` when
-the file moved, `404` when it is already gone. Server moves the file to a trash directory
-(`.korgnote-trash/<date>/…`) rather than unlinking — cheap insurance for a sync bug.
+the file moved, `404` when it is already gone, and `403` and `500` as for a `PUT`. The server moves the
+file to a trash directory (`.korgnote-trash/<date>/…`) rather than unlinking: cheap insurance for a sync
+bug.
 
 ### `GET /api/v1/events` (SSE)
 
@@ -137,8 +171,9 @@ data: {"generation":1758300000423,"path":"old.org","etag":null,"deleted":true}
 
 Fed by the file watcher, so changes made in Emacs or delivered by Syncthing reach the
 clients within seconds. SSE over WebSocket because it is one-directional, survives proxies,
-reconnects natively, and needs no extra dependency. Clients must treat it as a *hint* —
-correctness always comes from the manifest diff.
+reconnects natively, and needs no extra dependency. Clients treat it as a *hint*: correctness always
+comes from the manifest diff. For the same reason a client that stops reading loses the oldest events
+rather than holding up the writer, and catches up from the manifest.
 
 A quiet stream sends a `: ping` comment every 30 s. A connection can die without either end
 hearing of it (a phone asleep, or moved to another network), and then looks exactly like one with
@@ -158,7 +193,7 @@ certificate's fingerprint, so a phone needs no proxy and no certificate authorit
 
 | Port | For | Who gets in |
 |---|---|---|
-| 8443, TLS (`KORGNOTE_HTTPS_PORT`) | paired devices | the sync API only, with `Authorization: Bearer <device token>`; `POST /api/pair` excepted, which is how a device gets one. Anything outside `/api/`, or under `/api/local/`, is `404`; an unknown or revoked token `401`. |
+| 8443, TLS (`KORGNOTE_HTTPS_PORT`) | paired devices | `/api/v1/`, with `Authorization: Bearer <device token>`, and `/api/pair`, which is how a device gets one. Everything else is `404`, however the path is spelled: what may be reached is checked against the path as it was sent, while routing ignores empty segments and decodes the rest. An unknown or revoked token is `401`. |
 | 8080, plain (`KORGNOTE_PORT`) | this computer | no token. Bound to `127.0.0.1` (`KORGNOTE_HTTP_HOST`). The connection must come from loopback — or, in a container, from its network's gateway, which is where the host's published port arrives — or `403`. The `Host` must also name this computer (`localhost` or a loopback address), or `403` — which stops DNS rebinding — and a change that carries an `Origin` must come from the server's own pages. Serves the web client, the desktop app, the Devices page (`/devices`) and `POST /api/local/pairing`, which `scripts/pair.sh` calls. |
 
 TLS uses a self-signed certificate the server makes on first start and keeps, with its id and
@@ -197,7 +232,7 @@ What this trusts, stated plainly:
   .korgnote/
     base/                         last-synced content, same tree shape (merge ancestor)
       inbox.org
-    meta.json                     per path: etag, size, mtime, dirty, lastSyncedGeneration
+    meta.json                     the generation, and per path: etag, dirty, deleted
 ```
 
 Keeping `base/` as real files doubles disk usage of a few megabytes of text and buys
@@ -207,10 +242,34 @@ exactly when you are offline, which is when conflicts get created.
 The replica lives in the app's own storage on every platform; it is never a user-visible
 folder. Keeping notes in such a folder is a separate source, below.
 
-`DocumentStore` owns this directory and is the only writer. It exposes documents, marks
-them dirty on save, and emits change events that the ViewModels observe. Access goes
-through `ReplicaStorage` (Okio or `kotlinx-io` for the filesystem implementation), which is
-also what lets the store be tested without touching a disk.
+`DocumentStore` owns this directory and is the only writer. It exposes documents and marks them dirty
+on save. Files already on devices may also hold `size`, `mtime` and `lastSyncedGeneration` in `meta.json`,
+which nothing read: they decode, and go the next time the file is written.
+
+Access goes through `ReplicaStorage`, which is also what lets the store be tested without touching a
+disk: `FileSystemReplicaStorage` is `java.io` on the JVM and Android and `NSFileManager` on iOS, written
+atomically on both, and `InMemoryReplicaStorage` serves the web and the tests.
+
+What keeps a write from landing on another, all in `DocumentStore`, under its one lock:
+
+- **A save over a note on record writes the record first.** A crash between the two writes then leaves
+  the old text marked dirty, which is pushed as an identical write; the other way round leaves new text
+  marked clean, which the next pull overwrites. With no text there yet, the file goes first: a file with
+  no record is pushed as a new note, where a dirty record of no text would refuse the server's note of
+  that name for ever.
+- **A save during a pull stays dirty, and the fetched text is dropped.** Text that took a round trip goes
+  through `acceptIfUntouched`, which writes only while the path is as it was when the server was asked;
+  the next cycle finds the edit meeting the server's change, and merges them. `markPushed` re-reads the
+  note, so an edit made while a push was in flight stays dirty too.
+- **A bundle is taken under one lock with one metadata write** (`acceptAllUntouched`), leaving out any
+  file with local work. One write for each is what made a first sync quadratic. A write that fails partway
+  still records those before it.
+
+`meta.json` is decoded once and kept (`DecodedMeta`) until its modification time or size moves. The engine
+asks for one file's record hundreds of times a cycle, and decoding it for each made a cycle quadratic in
+the notes held. It is kept under the storage rather than in the store, since a folder's storage keeps no
+metadata at all; and the file stays the truth, so a second copy of the desktop app on the same replica is
+seen as soon as it writes.
 
 ### Three places for the notes
 
@@ -240,7 +299,7 @@ proxy passing on its own name gets `403`. A browser cannot pair (`canPair` is fa
 
 | | Native | Web |
 |---|---|---|
-| Initial load | manifest diff, fetch stale files, cached across restarts | manifest, then `GET /api/v1/bundle` on page load |
+| Initial load | manifest diff, fetch stale files, cached across restarts | manifest on page load, then `GET /api/v1/bundle` once eight or more files are to pull |
 | Save | write locally (always succeeds), push at once | the same, into memory; document stays dirty and retries if the push fails |
 | Live updates | SSE → targeted pull | SSE → targeted pull (same code, same reconnect loop) |
 | Base copies | on disk, survive restarts | in memory, lost on reload |
@@ -249,11 +308,8 @@ proxy passing on its own name gets `403`. A browser cannot pair (`canPair` is fa
 
 The only behavioural difference the user can perceive is that a browser reload starts from
 the server — which, since every save is pushed at once, means losing only an edit still open
-and not yet saved. Optionally keep a `localStorage` draft per path to close even that gap; it is
-not built.
-
-See [02-assessment.md](02-assessment.md#the-web-target-keep-it-as-a-full-online-client)
-for the cost analysis behind this choice.
+and not yet saved. A `localStorage` draft per path would close even that gap; it is not built.
+[03](03-target-architecture.md#the-web-target) says why the web stays a full client.
 
 ## Sync algorithm
 
@@ -261,6 +317,13 @@ Per path, compare three versions: **L** local, **B** base (last synced), **R** r
 (manifest entry). One cycle runs at a time (`shared/…/replica/SyncEngine.kt`): a save, the
 change stream and a retry each start one, and two running together sent the same pending
 deletion three times. One that waits finds the work done.
+
+What the server is asked is typed. A write says what it must find (`PushCondition`: `Matches` an etag, or
+`Absent`), so there is no unconditional push to make by mistake. A fetch is `FetchResult`: `Fetched`,
+`Gone` or `Failed`. **A file that fails to fetch keeps the generation where it was**, or the next delta
+would not list it and it would stay stale until a complete manifest. Nothing else waits for it: every
+other file goes through, so one the server never serves costs longer deltas, at worst a complete manifest
+each time, and nothing more. A fetch that finds a file `Gone` moves on, since the next manifest says so.
 
 | L vs B | R vs B | Action |
 |---|---|---|
@@ -273,7 +336,7 @@ deletion three times. One that waits finds the work done.
 | deleted locally | changed | forget the deletion and pull R — never discard an edit |
 | deleted locally | deleted remotely | forget the deletion |
 | same | deleted remotely | delete locally |
-| changed | deleted remotely | keep local, re-push as a new file, log it — never discard an edit |
+| changed | deleted remotely | keep local, re-push as a new file — never discard an edit |
 | created locally | absent | `PUT` with `If-None-Match: *` |
 | created locally | created remotely | R takes the path; L is kept beside it as a conflict copy |
 | present, no record of B | present | as above, unless L and R are identical. A corrupt `meta.json` is read as empty, and pulling R over every note then took any edit not yet pushed. |
@@ -354,11 +417,28 @@ piece.
   a three-way merge would have taken without asking, is shown like the rest.
 
 When a sync ends in a conflict the message line says so, since the open note's text changes
-under the reader; and any sync that moved the replica redraws it, a save's included — left on
+under the reader; and any sync that moved the replica redraws it, a save's included: left on
 screen, the old text would be written back by the next save. An element open in the editor when
 a sync lands is not replaced under the caret: the newer note is set aside, and saving makes the
 edit on it, merged line by line; only a change to the same lines is refused
 (`composeApp/…/viewmodel/ElementEditor.kt`).
+
+### A change landing on what came in
+
+A change is made on the text the person was looking at, since that is what its offsets mean, and the
+replica may have moved past that text: a sync pulled an edit from Emacs, or a background worker filed a
+capture, and the notes have not been read again yet. So `NoteChanges` merges a change with what the
+replica holds by the time it lands, one write at a time, never over it. Written over it, and pushed with
+the server's newest etag, it would silently take back whatever had come in.
+
+What cannot be merged depends on what it was:
+
+- **Typed text** goes to a `.sync-conflict-` copy beside the note, as a sync does with a conflict, since
+  words cannot simply be made again.
+- **A one-tap change** (a tick, a keyword, a priority, a date moved) is refused with a message, and what
+  the replica holds is shown. It can simply be made again.
+- **A note deleted under the change.** A save brings the note back, since it holds what was typed, and
+  says so. A tick cannot: there is nothing to tick.
 
 Org files merge well in practice: edits usually land under different headings, and a
 line-level diff3 resolves those without help. ~200 lines of pure Kotlin, and the most
@@ -372,7 +452,7 @@ What is built (`composeApp/…/viewmodel/ServerSync.kt`):
 |---|---|
 | App start | full sync cycle |
 | Coming back to the app | full cycle, and the change stream is woken out of its backoff: changes made elsewhere are most likely waiting then |
-| SSE `changed` / `deleted` event | targeted pull or removal of that path |
+| SSE `changed` / `deleted` event | targeted pull or removal of that path. A burst is shown as one: the first change at once, and those that come while that is shown or within 300 ms of it together, rereading only the paths they name (`ServerSync.followStream`, `NoteLibrary.reload`) |
 | Change stream lost or reconnected | full cycle, since the stream missed whatever changed meanwhile; reconnects back off from 1 s to 30 s |
 | Change stream silent 90 s after a heartbeat | taken as dead: reconnect and full cycle |
 | Local save | mark dirty, and run a cycle at once, which pushes it — no debounce |
@@ -389,36 +469,19 @@ computer got no reminder on the phone until the app was opened, and an edit made
 the phone until then too. Checked on a phone with the app closed: the edit reached the server
 seconds after it came back, and the new meeting's reminder was set.
 
-Not built, on purpose: a periodic manifest poll while in the foreground — the change stream, its
-heartbeat watchdog and the catch-up after each reconnection already cover it. Not built yet: iOS
-`BGAppRefreshTask`, which iOS runs when it chooses if at all; reminders on an iPhone are to be seen
-working first (T18).
+Not built, on purpose: a periodic manifest poll while in the foreground. The change stream, its
+heartbeat watchdog and the catch-up after each reconnection already cover it. iOS's `BGAppRefreshTask`,
+which iOS runs when it chooses if at all, is not built either.
 
-iOS will not give you daemon-like background sync. Design for it: a foreground sync is
-fast, reminders are scheduled locally in advance
-([07](07-calendar-agenda.md#notifications)), and nothing user-visible depends on a
-background wake-up.
+iOS does not give an app daemon-like background sync, so the design does not count on one: a foreground
+sync is fast, reminders are scheduled locally in advance ([07](07-calendar-agenda.md#notifications)), and
+nothing user-visible depends on a background wake-up.
 
 ## Deferred: delta sync
 
-Whole-file transfer of gzipped text is already inside budget, so **do not build deltas
-now**. If measurement ever justifies it, the hook is: `PUT` accepts
+Whole-file transfer of gzipped text is inside budget, so deltas are not built. If measurement ever
+justifies them, the hook is: `PUT` accepts
 `Content-Type: application/vnd.korgnote.patch` with `If-Match` naming the base version, body
 being a unified diff produced by the same diff engine the merge uses. Server applies it,
 verifies the resulting hash matches a client-supplied `X-Result-Etag`, and falls back to
 requesting a full `PUT` on mismatch. Nothing else in the protocol changes.
-
-## Migration from the current API
-
-All three steps are done; the old endpoints went in T10.
-
-1. Add `/api/v1/*` alongside the existing endpoints; server keeps working for the current
-   client.
-2. Move the client to `DocumentStore` + `SyncEngine`, reading and writing locally, syncing
-   in the background.
-3. Delete `GET /api/org-content`, `GET /api/org-tree-paths`, `GET|POST /api/content/{…}` and
-   `KtorOrgRepository`. The file tree is then built from the local replica by the existing
-   `TreeUtils.buildFromPaths`, which moves client-side unchanged.
-
-Step 3 is also what retires the last user of AST serialization, unblocking the model
-redesign in [04-org-core.md](04-org-core.md).
