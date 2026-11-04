@@ -16,6 +16,8 @@ import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.sync.conflictsIn
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import com.korgnote.common.fs.File as SharedFile
 import com.korgnote.common.fs.Folder as SharedFolder
@@ -86,28 +88,46 @@ class NoteLibrary(private val store: DocumentStore) {
      * Each note's headings are read with its own keywords, or with [fallbackKeywords] when it
      * declares none.
      */
-    suspend fun reload(parseOn: CoroutineDispatcher = Dispatchers.Default) {
-        val previous = parsed.toMap()
-        val paths = store.paths()
-        val fallback = fallbackKeywords
-        val fresh = withContext(parseOn) {
-            val texts = buildMap { for (path in paths) store.read(path)?.let { put(path, it) } }
-            texts.mapValues { (path, text) ->
-                previous[path]?.takeIf { it.text == text }?.readWith(fallback) ?: text.toOrgDocument(fallback)
+    suspend fun reload(parseOn: CoroutineDispatcher = Dispatchers.Default) = reloading.withLock {
+        val changedMeanwhile = mutableMapOf<String, OrgDocument>()
+        changedDuringReload = changedMeanwhile
+        try {
+            val previous = parsed.toMap()
+            val paths = store.paths()
+            val fallback = fallbackKeywords
+            val fresh = withContext(parseOn) {
+                val texts = buildMap { for (path in paths) store.read(path)?.let { put(path, it) } }
+                texts.mapValues { (path, text) ->
+                    previous[path]?.takeIf { it.text == text }?.readWith(fallback) ?: text.toOrgDocument(fallback)
+                }
             }
+            parsed.clear()
+            parsed.putAll(fresh)
+            parsed.putAll(changedMeanwhile)
+            this.paths = parsed.keys.toSet()
+            val allPaths = (paths + changedMeanwhile.keys).distinct()
+            tree = mapRootToUiFolder(TreeUtils.buildFromPaths(allPaths, rootName = "Documents"))
+            conflicts = conflictsIn(allPaths)
+            loaded = true
+            revision++
+        } finally {
+            changedDuringReload = null
         }
-        parsed.clear()
-        parsed.putAll(fresh)
-        this.paths = parsed.keys.toSet()
-        tree = mapRootToUiFolder(TreeUtils.buildFromPaths(paths, rootName = "Documents"))
-        conflicts = conflictsIn(paths)
-        loaded = true
-        revision++
     }
+
+    /** One reload at a time: one that began earlier holds older text, and must not land after a later one. */
+    private val reloading = Mutex()
+
+    /**
+     * What [put] was given during the reload under way, if one is: that reload may have read the
+     * note before the change reached the replica, and must not undo it.
+     */
+    private var changedDuringReload: MutableMap<String, OrgDocument>? = null
 
     /** Replaces one note with [document], as just saved; the tree is unchanged since the path is. */
     fun put(path: String, document: OrgDocument) {
         parsed[path] = document
+        changedDuringReload?.put(path, document)
         revision++
     }
 

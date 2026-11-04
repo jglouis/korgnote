@@ -4,7 +4,11 @@ import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -13,6 +17,7 @@ import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 
 /** Reloading the notes after a sync, which usually brings one of them. */
+@OptIn(ExperimentalCoroutinesApi::class)
 class NoteLibraryTest {
 
     @Test
@@ -61,6 +66,66 @@ class NoteLibraryTest {
 
         assertSame(before, library["b.org"])
         assertEquals("SHIPPED Release", library.headingOf("b.org").title)
+    }
+
+    /** A tick lands while a reload is reading: the text read just before it must not undo it. */
+    @Test
+    fun aNoteChangedDuringAReloadKeepsTheChange() = runTest {
+        val storage = StallingReplicaStorage(InMemoryReplicaStorage(mapOf("a.org" to "- [ ] one\n")))
+        val library = NoteLibrary(DocumentStore(storage))
+        val here = StandardTestDispatcher(testScheduler)
+        library.reload(parseOn = here)
+
+        val stalled = storage.stallNextRead("a.org")
+        launch { library.reload(parseOn = here) }
+        runCurrent()
+        library.put("a.org", "- [X] one\n".toOrgDocument(library.fallbackKeywords))
+        stalled.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals("- [X] one\n", library["a.org"]?.text)
+    }
+
+    @Test
+    fun aChangeDuringAReloadDoesNotOutliveTheReloadAfterIt() = runTest {
+        val storage = StallingReplicaStorage(InMemoryReplicaStorage(mapOf("a.org" to "- [ ] one\n")))
+        val store = DocumentStore(storage)
+        val library = NoteLibrary(store)
+        val here = StandardTestDispatcher(testScheduler)
+        library.reload(parseOn = here)
+
+        val stalled = storage.stallNextRead("a.org")
+        launch { library.reload(parseOn = here) }
+        runCurrent()
+        library.put("a.org", "- [X] one\n".toOrgDocument(library.fallbackKeywords))
+        stalled.complete(Unit)
+        advanceUntilIdle()
+
+        store.save("a.org", "- [X] one, changed in Emacs\n")
+        library.reload(parseOn = here)
+
+        assertEquals("- [X] one, changed in Emacs\n", library["a.org"]?.text)
+    }
+
+    /** The reload that started first holds the older text, and must not be the one that lands last. */
+    @Test
+    fun overlappingReloadsLeaveTheNewestText() = runTest {
+        val storage = StallingReplicaStorage(InMemoryReplicaStorage(mapOf("a.org" to "* Old\n")))
+        val store = DocumentStore(storage)
+        val library = NoteLibrary(store)
+        val here = StandardTestDispatcher(testScheduler)
+        library.reload(parseOn = here)
+
+        val stalled = storage.stallNextRead("a.org")
+        launch { library.reload(parseOn = here) }
+        runCurrent()
+        store.save("a.org", "* New\n")
+        launch { library.reload(parseOn = here) }
+        runCurrent()
+        stalled.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals("* New\n", library["a.org"]?.text)
     }
 
     private fun NoteLibrary.headingOf(path: String): OrgSection = assertIs<OrgSection>(get(path)?.children?.first())
