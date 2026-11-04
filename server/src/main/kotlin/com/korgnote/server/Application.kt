@@ -188,15 +188,6 @@ fun Application.module(
     watcher?.start(this)
     monitor.subscribe(ApplicationStopping) { watcher?.stop() }
 
-    /**
-     * The version of each file this server last handed out, used to refuse a save that would
-     * overwrite a change the client never saw — an edit made in Emacs, or arriving via Syncthing.
-     *
-     * A client that sends `If-Match` is checked against that instead. This is deliberately not a
-     * full concurrency protocol: two app clients editing the same file still race, which is D9 and
-     * waits for the sync work.
-     */
-
     routing {
         // Robust resolver for the WASM app output directory (Option A)
         fun wasmCandidates(): List<File> {

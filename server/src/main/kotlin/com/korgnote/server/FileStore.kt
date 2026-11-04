@@ -1,5 +1,6 @@
 package com.korgnote.server
 
+import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDate
@@ -54,6 +55,14 @@ class FileStore(
     private data class HashEntry(val size: Long, val mtimeMillis: Long, val etag: String)
 
     private val hashes = ConcurrentHashMap<String, HashEntry>()
+
+    /**
+     * Held from a write's check of the version to its move into place, so that of two devices pushing
+     * from the same version only one wins and the other is told to merge. An editor outside the
+     * server does not take it: a save landing in that instant is still overwritten, which nothing on
+     * a plain filesystem can prevent.
+     */
+    private val writing = Any()
 
     /** Every note currently on disk, in path order. */
     fun list(): List<FileMeta> {
@@ -138,34 +147,45 @@ class FileStore(
         val bytes = content.encodeToByteArray()
         if (bytes.size > MAX_BYTES) return WriteResult.Rejected("file too large")
 
-        val exists = file.isRegularFile()
-        if (mustNotExist && exists) return WriteResult.Conflict(metaOf(path, file))
-        if (ifMatch != null) {
-            if (!exists) return WriteResult.NotFound
-            val current = metaOf(path, file)
-            if (current.etag != ifMatch) return WriteResult.Conflict(current)
-        }
-
-        return try {
-            Files.createDirectories(file.parent)
-            val temporary = Files.createTempFile(file.parent, ".korgnote", ".tmp")
-            try {
-                Files.write(temporary, bytes)
-                keepPermissions(temporary, replacing = file.takeIf { exists })
-                Files.move(
-                    temporary,
-                    file,
-                    StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE,
-                )
-            } catch (failure: Exception) {
-                Files.deleteIfExists(temporary)
-                throw failure
+        return synchronized(writing) {
+            val exists = file.isRegularFile()
+            if (mustNotExist && exists) return WriteResult.Conflict(metaOf(path, file))
+            if (ifMatch != null) {
+                if (!exists) return WriteResult.NotFound
+                val current = metaOf(path, file)
+                if (current.etag != ifMatch) return WriteResult.Conflict(current)
             }
-            hashes.remove(path)
-            WriteResult.Written(metaOf(path, file))
-        } catch (failure: Exception) {
-            WriteResult.Rejected(failure.message ?: "write failed")
+
+            try {
+                Files.createDirectories(file.parent)
+                val temporary = Files.createTempFile(file.parent, ".korgnote", ".tmp")
+                try {
+                    Files.write(temporary, bytes)
+                    keepPermissions(temporary, replacing = file.takeIf { exists })
+                    if (mustNotExist) {
+                        // Not an atomic move, which replaces whatever it finds: an editor may have
+                        // made this file since the check, and a new note must never replace one.
+                        Files.move(temporary, file)
+                    } else {
+                        Files.move(
+                            temporary,
+                            file,
+                            StandardCopyOption.REPLACE_EXISTING,
+                            StandardCopyOption.ATOMIC_MOVE,
+                        )
+                    }
+                } catch (appeared: FileAlreadyExistsException) {
+                    Files.deleteIfExists(temporary)
+                    return WriteResult.Conflict(metaOf(path, file))
+                } catch (failure: Exception) {
+                    Files.deleteIfExists(temporary)
+                    throw failure
+                }
+                hashes.remove(path)
+                WriteResult.Written(metaOf(path, file))
+            } catch (failure: Exception) {
+                WriteResult.Rejected(failure.message ?: "write failed")
+            }
         }
     }
 
@@ -178,20 +198,22 @@ class FileStore(
     fun delete(path: String, ifMatch: String?): WriteResult {
         if (readOnly) return WriteResult.ReadOnly
         val file = resolve(path) ?: return WriteResult.Rejected("invalid path")
-        if (!file.isRegularFile()) return WriteResult.NotFound
+        return synchronized(writing) {
+            if (!file.isRegularFile()) return WriteResult.NotFound
 
-        val current = metaOf(path, file)
-        if (ifMatch != null && current.etag != ifMatch) return WriteResult.Conflict(current)
+            val current = metaOf(path, file)
+            if (ifMatch != null && current.etag != ifMatch) return WriteResult.Conflict(current)
 
-        return try {
-            val day = LocalDate.now().toString()
-            val target = root.resolve(".korgnote-trash").resolve(day).resolve(path)
-            Files.createDirectories(target.parent)
-            Files.move(file, uniqueTrashPath(target), StandardCopyOption.ATOMIC_MOVE)
-            hashes.remove(path)
-            WriteResult.Written(current)
-        } catch (failure: Exception) {
-            WriteResult.Rejected(failure.message ?: "delete failed")
+            try {
+                val day = LocalDate.now().toString()
+                val target = root.resolve(".korgnote-trash").resolve(day).resolve(path)
+                Files.createDirectories(target.parent)
+                Files.move(file, uniqueTrashPath(target), StandardCopyOption.ATOMIC_MOVE)
+                hashes.remove(path)
+                WriteResult.Written(current)
+            } catch (failure: Exception) {
+                WriteResult.Rejected(failure.message ?: "delete failed")
+            }
         }
     }
 

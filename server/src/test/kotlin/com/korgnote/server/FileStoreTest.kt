@@ -207,4 +207,71 @@ class FileStoreTest {
             outside.toFile().deleteRecursively()
         }
     }
+
+    // --- Two writers at once: the check and the move must be one step ---
+
+    /** Runs [writers] at the same moment and returns what each came back with. */
+    private fun <T> together(vararg writers: () -> T): List<T> {
+        val start = java.util.concurrent.CyclicBarrier(writers.size)
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(writers.size)
+        try {
+            return writers.map { writer -> pool.submit<T> { start.await(); writer() } }.map { it.get() }
+        } finally {
+            pool.shutdown()
+        }
+    }
+
+    /** Two devices pushing from the same version: one wins and the other must merge, or an edit is lost. */
+    @Test
+    fun ofTwoPushesFromTheSameVersionOnlyOneWins() {
+        repeat(ROUNDS) { round ->
+            val base = "* base $round\n"
+            writeFile("race.org", base)
+            val etag = store.meta("race.org")!!.etag
+
+            val results = together(
+                { store.put("race.org", "* from one $round\n", ifMatch = etag) },
+                { store.put("race.org", "* from two $round\n", ifMatch = etag) },
+            )
+
+            assertEquals(1, results.count { it is WriteResult.Written }, "round $round: $results")
+            assertEquals(1, results.count { it is WriteResult.Conflict }, "round $round: $results")
+        }
+    }
+
+    /** A note made at the same path on two devices: both must survive, one as a conflict copy. */
+    @Test
+    fun ofTwoCreationsOfTheSamePathOnlyOneWins() {
+        repeat(ROUNDS) { round ->
+            val path = "new-$round.org"
+
+            val results = together(
+                { store.put(path, "* from one\n", mustNotExist = true) },
+                { store.put(path, "* from two\n", mustNotExist = true) },
+            )
+
+            assertEquals(1, results.count { it is WriteResult.Written }, "round $round: $results")
+            assertEquals(1, results.count { it is WriteResult.Conflict }, "round $round: $results")
+        }
+    }
+
+    /** A delete against a version a save has just replaced must not take the save to the trash. */
+    @Test
+    fun aDeleteAndAPushFromTheSameVersionDoNotBothWin() {
+        repeat(ROUNDS) { round ->
+            writeFile("race.org", "* base $round\n")
+            val etag = store.meta("race.org")!!.etag
+
+            val results = together(
+                { store.put("race.org", "* edited $round\n", ifMatch = etag) },
+                { store.delete("race.org", ifMatch = etag) },
+            )
+
+            assertEquals(1, results.count { it is WriteResult.Written }, "round $round: $results")
+        }
+    }
+
+    private companion object {
+        const val ROUNDS = 200
+    }
 }
