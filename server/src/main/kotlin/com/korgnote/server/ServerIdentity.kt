@@ -1,5 +1,6 @@
 package com.korgnote.server
 
+import com.korgnote.common.pairing.sha256Hex
 import io.ktor.network.tls.certificates.buildKeyStore
 import io.ktor.network.tls.certificates.saveToFile
 import io.ktor.network.tls.extensions.HashAlgorithm
@@ -8,7 +9,6 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermissions
 import java.security.KeyStore
-import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.UUID
 import javax.security.auth.x500.X500Principal
@@ -79,9 +79,6 @@ class ServerIdentity private constructor(
     }
 }
 
-internal fun sha256Hex(bytes: ByteArray): String =
-    MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-
 /** [bytes] random bytes as hex, from the system's strong source: tokens, codes, passwords. */
 internal fun randomHex(bytes: Int): String =
-    ByteArray(bytes).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
+    ByteArray(bytes).also { SecureRandom().nextBytes(it) }.toHexString()

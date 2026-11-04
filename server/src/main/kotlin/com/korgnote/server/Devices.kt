@@ -1,6 +1,7 @@
 package com.korgnote.server
 
 import com.korgnote.common.pairing.PairRequest
+import com.korgnote.common.pairing.sha256Hex
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File

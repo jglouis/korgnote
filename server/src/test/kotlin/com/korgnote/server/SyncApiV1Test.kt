@@ -1,5 +1,6 @@
 package com.korgnote.server
 
+import com.korgnote.common.pairing.sha256Hex
 import io.ktor.client.request.delete
 import io.ktor.client.request.prepareGet
 import io.ktor.client.request.get

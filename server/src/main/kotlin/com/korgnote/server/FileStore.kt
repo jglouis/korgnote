@@ -1,12 +1,12 @@
 package com.korgnote.server
 
+import com.korgnote.common.pairing.sha256Hex
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDate
 import java.nio.file.StandardCopyOption
 import java.nio.file.attribute.PosixFilePermissions
-import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.path.exists
 import kotlin.io.path.fileSize
@@ -256,10 +256,7 @@ class FileStore(
         return FileMeta(path, size, mtime, etag)
     }
 
-    private fun hashOf(content: ByteArray): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(content)
-        return digest.take(ETAG_BYTES).joinToString("") { byte -> "%02x".format(byte) }
-    }
+    private fun hashOf(content: ByteArray): String = sha256Hex(content).take(ETAG_HEX_DIGITS)
 
     private fun relativePathOf(file: Path): String =
         root.relativize(file).joinToString("/") { it.toString() }
@@ -290,7 +287,7 @@ class FileStore(
     }
 
     private companion object {
-        const val ETAG_BYTES = 16
+        const val ETAG_HEX_DIGITS = 32
 
         /** FAT keeps two seconds, ext3 and HFS+ one; anything finer is safe under this too. */
         const val TIMESTAMP_GRAIN_MILLIS = 2_000L

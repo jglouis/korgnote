@@ -35,7 +35,7 @@ class PinnedTrustManager(private val accepted: () -> Set<String>) : X509Extended
 
     private fun check(chain: Array<out X509Certificate>?) {
         val leaf = chain?.firstOrNull() ?: throw CertificateException("The server showed no certificate.")
-        if (fingerprintOf(leaf.encoded) !in accepted()) {
+        if (sha256Hex(leaf.encoded) !in accepted()) {
             throw CertificateException("The server's certificate is not the one this device paired with.")
         }
     }
@@ -43,11 +43,11 @@ class PinnedTrustManager(private val accepted: () -> Set<String>) : X509Extended
     private fun refuseClients(): Nothing = throw CertificateException("This trust manager checks servers only.")
 
     companion object {
-        fun fingerprintOf(der: ByteArray): String =
-            MessageDigest.getInstance("SHA-256").digest(der).joinToString("") { "%02x".format(it) }
-
         /** A TLS context that trusts what [accepted] says, for a client engine to connect with. */
         fun sslContext(accepted: () -> Set<String>): SSLContext =
             SSLContext.getInstance("TLS").apply { init(null, arrayOf(PinnedTrustManager(accepted)), null) }
     }
 }
+
+/** The SHA-256 of [bytes] in lower-case hex, as a certificate's fingerprint is written. */
+fun sha256Hex(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).toHexString()
