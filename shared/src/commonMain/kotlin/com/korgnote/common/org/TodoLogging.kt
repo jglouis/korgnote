@@ -39,13 +39,23 @@ data class TodoLogging(
     }
 }
 
-/** How [text] logs state changes: its `#+TODO:` keywords' settings and its `#+STARTUP:` options. */
+/**
+ * How [text] logs state changes: its `#+TODO:` keywords' settings and its `#+STARTUP:` options. A
+ * line inside a block is the block's text and sets nothing, however it reads.
+ */
 fun todoLoggingOf(text: String): TodoLogging {
     val keywords = mutableMapOf<String, KeywordLogging>()
     var done: LogKind? = null
     var repeat: LogKind? = LogKind.Time
     var intoDrawer = false
+    var block: String? = null
     for (line in text.lineSequence()) {
+        val open = block
+        if (open != null) {
+            if (OrgSyntax.closesBlock(line, open)) block = null
+            continue
+        }
+        block = OrgSyntax.blockBegin.find(line)?.groupValues?.get(1)
         OrgSyntax.todoKeywordsLine.find(line)?.let { m ->
             for (word in m.groupValues[1].split(' ', '\t')) {
                 val setting = KEYWORD_SETTING.matchEntire(word) ?: continue

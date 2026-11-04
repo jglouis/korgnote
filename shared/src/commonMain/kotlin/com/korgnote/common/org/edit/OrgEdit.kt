@@ -492,7 +492,7 @@ private fun OrgDocument.insertLogNote(heading: OrgSection, note: String): OrgDoc
             insertAt = text.indexOf('\n', logbook.range.first) + 1
             "$note\n"
         }
-        logsIntoDrawer() -> ":LOGBOOK:\n$note\n:END:\n"
+        todoLoggingOf(text).intoDrawer -> ":LOGBOOK:\n$note\n:END:\n"
         else -> "$note\n"
     }
     return insertLines(insertAt, entry)
@@ -540,14 +540,6 @@ internal fun OrgDocument.insertLines(at: Int, lines: String): OrgDocument {
     if (at >= text.length && !text.endsWith('\n')) return replace(text.length until text.length, "\n$lines")
     return replace(at until at, lines)
 }
-
-private val STARTUP = Regex("^#\\+STARTUP:(.*)", RegexOption.IGNORE_CASE)
-
-/** Whether the file sets `#+STARTUP: logdrawer`, Org's per-file `org-log-into-drawer`. */
-private fun OrgDocument.logsIntoDrawer(): Boolean =
-    metadata.mapNotNull { STARTUP.find(it.trim())?.groupValues?.get(1) }
-        .flatMap { it.trim().split(Regex("\\s+")) }
-        .any { it.equals("logdrawer", ignoreCase = true) }
 
 /** Replaces [heading]'s tags, or removes them when [tags] is empty. */
 fun OrgDocument.setTags(heading: OrgSection, tags: List<String>): OrgDocument {

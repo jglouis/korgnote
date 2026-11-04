@@ -184,4 +184,39 @@ class TodoLoggingTests {
         val result = changed("#+TODO: TODO | DONE(d@)\n$repeating", "DONE", note = "Used the rain water.")
         assertEquals(true, result.endsWith("- State \"DONE\"       from \"TODO\"       $stamp \\\\\n  Used the rain water.\n"), result)
     }
+
+    /** Org reads `#+STARTUP:` in order, so the option written last wins. */
+    @Test
+    fun nologdrawerTurnsTheDrawerOffAgain() {
+        val text = "#+TODO: TODO WAIT(w!) | DONE\n#+STARTUP: logdrawer\n#+STARTUP: nologdrawer\n* TODO Task\n"
+        assertEquals(
+            "#+TODO: TODO WAIT(w!) | DONE\n#+STARTUP: logdrawer\n#+STARTUP: nologdrawer\n* WAIT Task\n" +
+                "- State \"WAIT\"       from \"TODO\"       $stamp\n",
+            changed(text, "WAIT"),
+        )
+    }
+
+    /** A note about Org may show `#+STARTUP:` in a block, where it is code and sets nothing. */
+    @Test
+    fun aStartupLineInsideABlockSetsNothing() {
+        val block = "#+BEGIN_SRC org\n#+STARTUP: logdrawer logdone\n#+END_SRC\n"
+        val logging = todoLoggingOf(block)
+        assertEquals(false, logging.intoDrawer)
+        assertNull(logging.done)
+        assertEquals(
+            "#+TODO: TODO WAIT(w!) | DONE\n$block* WAIT Task\n- State \"WAIT\"       from \"TODO\"       $stamp\n",
+            changed("#+TODO: TODO WAIT(w!) | DONE\n$block* TODO Task\n", "WAIT"),
+        )
+    }
+
+    /** Another block's `#+END_` does not close it, as it does not for the parser. */
+    @Test
+    fun aStartupLineAfterAnotherBlocksEndStillSetsNothing() {
+        assertEquals(false, todoLoggingOf("#+BEGIN_SRC org\n#+END_QUOTE\n#+STARTUP: logdrawer\n#+END_SRC\n").intoDrawer)
+    }
+
+    @Test
+    fun aStartupLineAfterABlockStillCounts() {
+        assertEquals(true, todoLoggingOf("#+BEGIN_SRC org\n#+END_SRC\n#+STARTUP: logdrawer\n").intoDrawer)
+    }
 }
