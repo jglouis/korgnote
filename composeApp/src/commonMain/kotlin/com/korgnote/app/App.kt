@@ -1,6 +1,5 @@
 package com.korgnote.app
 
-import com.korgnote.common.org.link.LinkTarget
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -8,7 +7,6 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -30,10 +28,6 @@ import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.NotesSource
 import com.korgnote.app.data.SavedSearch
 import com.korgnote.app.data.LastScreen
-import kotlinx.datetime.LocalDate
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import kotlin.time.Clock
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.data.offersNotesFolder
 import com.korgnote.app.ui.CalendarActions
@@ -50,7 +44,6 @@ import korgnote.composeapp.generated.resources.capture_event
 import com.korgnote.app.capture.CaptureQueue
 import com.korgnote.app.capture.CaptureSignals
 import com.korgnote.app.data.PairingLinks
-import com.korgnote.app.viewmodel.LinkEdit
 import org.koin.mp.KoinPlatform
 import com.korgnote.app.viewmodel.NoteFileResult
 import com.korgnote.app.viewmodel.NotesSourceChoice
@@ -76,7 +69,6 @@ import org.koin.compose.viewmodel.koinViewModel
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.app_add_heading_at_end
 import korgnote.composeapp.generated.resources.app_discard_element
-import korgnote.composeapp.generated.resources.app_file
 import korgnote.composeapp.generated.resources.app_files
 import korgnote.composeapp.generated.resources.app_filter_files
 import korgnote.composeapp.generated.resources.app_filter_files_hint
@@ -85,13 +77,11 @@ import korgnote.composeapp.generated.resources.app_new_table
 import korgnote.composeapp.generated.resources.app_open_drawer
 import korgnote.composeapp.generated.resources.app_save_element
 import korgnote.composeapp.generated.resources.app_scroll_to_end
-import korgnote.composeapp.generated.resources.app_search
 import korgnote.composeapp.generated.resources.app_select_file
 import korgnote.composeapp.generated.resources.app_todays_daily
 import korgnote.composeapp.generated.resources.back
 import korgnote.composeapp.generated.resources.calendar
 import korgnote.composeapp.generated.resources.notes_conflict_moved
-import korgnote.composeapp.generated.resources.settings
 import org.jetbrains.compose.resources.stringResource
 import com.korgnote.app.ui.StateNoteDialog
 
@@ -132,15 +122,13 @@ fun App() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSource: () -> Unit) {
-    val settingsRepo = koinInject<SettingsRepository>()
-    // Where the app was left, to open there again: the tab, and the calendar's view.
-    val resumed = remember { settingsRepo.getLastScreen() }
-    var selectedScreen by rememberSaveable {
-        mutableStateOf(BottomItem.entries.firstOrNull { it.name == resumed.tab } ?: BottomItem.FILE)
-    }
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
     val vm = koinViewModel<NotesViewModel>(key = "notes:${source.encode()}") { parametersOf(source) }
+    rememberNotesAppState(source, vm, koinInject<SettingsRepository>()).NotesShell(choice, onChangeSource)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NotesAppState.NotesShell(choice: NotesSourceChoice, onChangeSource: () -> Unit) {
     val focusManager = LocalFocusManager.current
     LaunchedEffect(Unit) { TagColors.chosen = settingsRepo.getTagColors() }
     LaunchedEffect(vm) {
@@ -183,40 +171,6 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
             vm.places.saveReadingPlace()
         }
     }
-    // At most one of these is open; each names the note it is about.
-    var creatingNote by remember { mutableStateOf(false) }
-    // The calendar's "Capture an event": the capture sheet, open on the phone's calendar.
-    var capturingEvent by remember { mutableStateOf(false) }
-    var editingDetails by remember { mutableStateOf(false) }
-    // The notes and headings a link can go to, while the link picker is open.
-    var pickingLink by remember { mutableStateOf<List<LinkTarget>?>(null) }
-    /** The heading being refiled, by element index, with where it can go. */
-    var refiling by remember { mutableStateOf<Pair<Int, List<LinkTarget>>?>(null) }
-    var editingLink by remember { mutableStateOf<LinkEdit?>(null) }
-    // A table being made from the editor's Table button, before it goes into the element.
-    var insertingTable by remember { mutableStateOf(false) }
-    var renamingNote by remember { mutableStateOf<String?>(null) }
-    var deletingNote by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
-    // A search being named: one about to be saved, or (true) a saved one being renamed.
-    var namingSearch by remember { mutableStateOf<Pair<SavedSearch, Boolean>?>(null) }
-    // The calendar's view and period as last seen there, which its tab opens on again, now or at
-    // the next launch. A period left on an earlier day is not taken back: the calendar opens on
-    // today, in the view it was left in.
-    var calendarView by rememberSaveable(stateSaver = OptionalCalendarTargetSaver) {
-        mutableStateOf(resumed.calendarView(today = currentDate()))
-    }
-    // The view and day the calendar opens on: from its tab, the one it was left on; when asked from
-    // elsewhere — a tapped SCHEDULED or DEADLINE date opens its day, a widget the view it shows —
-    // that one; and null for the calendar's own starting view, when it was never left anywhere.
-    // Each request from elsewhere is counted, so asking for the same day again starts there again,
-    // wherever the calendar was moved since.
-    var calendarTarget by rememberSaveable(stateSaver = OptionalCalendarTargetSaver) { mutableStateOf(calendarView) }
-    var calendarRequests by rememberSaveable { mutableIntStateOf(0) }
-    val openCalendar = { target: CalendarTarget ->
-        calendarTarget = target
-        calendarRequests++
-        selectedScreen = BottomItem.CALENDAR
-    }
     // Kept as it changes, so that the app opens on it again however it is closed.
     LaunchedEffect(Unit) {
         snapshotFlow { selectedScreen to calendarView }.collect { (tab, view) ->
@@ -244,23 +198,8 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     LaunchedEffect(vm) {
         WidgetSyncs.finished.collect { vm.server.onChangedElsewhere() }
     }
-    var noteDialogError by remember { mutableStateOf<String?>(null) }
-    // The conflict copy being compared with its note.
-    var comparingCopy by remember { mutableStateOf<String?>(null) }
-    // Whose version a note in conflict holds, for the banner and the comparison to say.
-    val keptSide = if (source is NotesSource.Folder) KeptSide.FOLDER else KeptSide.SERVER
-    // Opens or starts today's daily, from the drawer.
-    val openToday = {
-        scope.launch {
-            vm.noteFiles.openToday()
-            selectedScreen = BottomItem.FILE
-            drawerState.close()
-        }
-        Unit
-    }
     // Why something could not be done, shown for a moment rather than over the note, where it
     // stayed until the next thing went wrong. Being offline shows in the top bar instead.
-    val snackbarHostState = remember { SnackbarHostState() }
     // Not keyed on the message: clearing it would restart the effect and cancel the snackbar
     // the moment it appeared. A newer message replaces the one on screen.
     LaunchedEffect(vm) {
@@ -271,10 +210,6 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                 snackbarHostState.showSnackbar(message, withDismissAction = true, duration = SnackbarDuration.Long)
             }
     }
-    // The open note's scroll position, held here for the floating buttons to read and move, and
-    // kept while another tab shows, so that coming back to File finds the note where it was left.
-    // Another note opened moves it to where that one was left; see OpenNote.restoreTo.
-    val documentListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     // Where the reader is in the open note, to open it there again; the view model keeps it once
     // the scrolling stops. Not while the note is still being brought to where it was opened at.
     LaunchedEffect(vm, documentListState) {
@@ -609,11 +544,6 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
             // Edge to edge, the cutout and the three-button bar sit on a side in landscape; the
             // rail keeps the start one clear and the screen beside it the rest.
             val safeInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
-            val selectTab = { item: BottomItem ->
-                // Back to where the calendar was left; its own tab, tapped again, leaves it be.
-                if (item == BottomItem.CALENDAR && selectedScreen != BottomItem.CALENDAR) calendarTarget = calendarView
-                selectedScreen = item
-            }
             Row {
                 if (rail) {
                     NavigationRail(windowInsets = safeInsets.only(WindowInsetsSides.Vertical + WindowInsetsSides.Start)) {
@@ -1041,20 +971,6 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     }
 }
 
-/**
- * The calendar's view as it was left, to open on again [today]: in the same period when it was left
- * today, and on today otherwise. Null when it was never left anywhere.
- */
-private fun LastScreen.calendarView(today: LocalDate): CalendarTarget? {
-    val mode = CalendarMode.entries.firstOrNull { it.name == calendarMode } ?: return null
-    val date = calendarDate
-        ?.takeIf { savedOn == today.toString() }
-        ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-    return CalendarTarget(mode, date ?: today)
-}
-
-private fun currentDate(): LocalDate = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
-
 /** What the system's back does while [enabled]. Of two such handlers the later one is asked first. */
 @Composable
 private fun OnBack(enabled: Boolean, onBack: () -> Unit) {
@@ -1063,27 +979,6 @@ private fun OnBack(enabled: Boolean, onBack: () -> Unit) {
         isBackEnabled = enabled,
         onBackCompleted = onBack,
     )
-}
-
-private enum class BottomItem {
-    FILE, SEARCH, CALENDAR, SETTINGS;
-
-    @Composable
-    fun getLabel() = stringResource(
-        when (this) {
-            FILE -> Res.string.app_file
-            SEARCH -> Res.string.app_search
-            CALENDAR -> Res.string.calendar
-            SETTINGS -> Res.string.settings
-        },
-    )
-
-    fun getIconRes() = when (this) {
-        FILE -> Icons.Filled.Description
-        SEARCH -> Icons.Filled.Search
-        CALENDAR -> Icons.Filled.CalendarMonth
-        SETTINGS -> Icons.Filled.Settings
-    }
 }
 
 /** One of the drawer's actions: an icon and what it does, as a button that looks like one. */
