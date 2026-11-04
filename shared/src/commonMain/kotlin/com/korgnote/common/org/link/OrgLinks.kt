@@ -80,7 +80,7 @@ class OrgLinkIndex(
         buildMap {
             for ((path, text) in notes) {
                 if (!text.contains(":ID:", ignoreCase = true)) continue
-                for (m in ID_LINE.findAll(text)) {
+                for (m in OrgSyntax.idProperty.findAll(text)) {
                     // The first declaration wins, as it does in Emacs when an id is duplicated.
                     val id = m.groupValues[1]
                     if (id !in this) put(id, OrgLinkResolution.Note(path, m.range.first))
@@ -179,9 +179,7 @@ class OrgLinkIndex(
 
     /** The `:ID:` the note declares for itself, above its first heading, if it has one. */
     fun fileIdOf(path: String): String? {
-        val text = notes[path] ?: return null
-        val preamble = text.orgElements().firstOrNull()?.takeIf { it.isPreamble } ?: return null
-        return ID_LINE.find(preamble.sliceOf(text))?.groupValues?.get(1)
+        return fileIdIn(notes[path] ?: return null)
     }
 
     /**
@@ -299,7 +297,6 @@ class OrgLinkIndex(
         val SCHEME = Regex("^([A-Za-z][A-Za-z0-9+-]*):(?!\\s)")
         val FILE_SCHEMES = setOf("file", "file+sys", "file+emacs")
         val EXTERNAL_SCHEMES = setOf("http", "https", "mailto", "ftp")
-        val ID_LINE = Regex("(?im)^[ \\t]*:ID:[ \\t]+(\\S+)[ \\t]*$")
         val CUSTOM_ID = Regex("(?im)^[ \\t]*:CUSTOM_ID:[ \\t]+(\\S+)[ \\t]*$")
         val COOKIE = Regex("\\[\\d*/\\d*]|\\[\\d*%]")
 

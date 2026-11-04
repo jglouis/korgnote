@@ -1,12 +1,12 @@
 package com.korgnote.common.org.link
 
 import com.korgnote.common.org.OrgDocument
-import com.korgnote.common.org.OrgDrawer
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.edit.STATISTICS_COOKIE
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.orgNoteTitle
+import com.korgnote.common.org.ownId
 import com.korgnote.common.org.sliceOf
 
 /**
@@ -45,7 +45,7 @@ fun linkTargetsOf(notes: Map<String, OrgDocument>): List<LinkTarget> = buildList
         fun walk(sections: List<OrgSection>, outline: List<String>) {
             for (section in sections) {
                 val title = descriptionOf(section.title)
-                add(LinkTarget(path, noteTitle, outline, title, section.range.first, section.ownId()))
+                add(LinkTarget(path, noteTitle, outline, title, section.range.first, section.ownId))
                 walk(section.children.filterIsInstance<OrgSection>(), outline + title)
             }
         }
@@ -78,19 +78,10 @@ internal fun descriptionOf(title: String): String {
     return text.replace('[', '(').replace(']', ')').replace(Regex("\\s+"), " ").trim()
 }
 
-/** The `:ID:` of the section's own property drawer, not one of a sub-heading's. */
-private fun OrgSection.ownId(): String? =
-    children.asSequence()
-        .filterIsInstance<OrgDrawer>()
-        .filter { it.name.equals("PROPERTIES", ignoreCase = true) }
-        .flatMap { it.properties }
-        .firstOrNull { (key, _) -> key.equals("ID", ignoreCase = true) }
-        ?.second?.trim()?.takeIf { it.isNotEmpty() }
-
 /** The `:ID:` a note declares for itself, above its first heading. */
-private fun fileIdIn(text: String): String? {
+internal fun fileIdIn(text: String): String? {
     val preamble = text.orgElements().firstOrNull()?.takeIf { it.isPreamble } ?: return null
-    return FILE_ID_LINE.find(preamble.sliceOf(text))?.groupValues?.get(1)
+    return OrgSyntax.idProperty.find(preamble.sliceOf(text))?.groupValues?.get(1)
 }
 
 /**
@@ -128,7 +119,11 @@ private fun withIdInDrawer(text: String, drawerStart: Int, id: String): String {
     var line = nextLine(text, drawerStart)
     while (line != null) {
         val content = lineAt(text, line)
-        if (ID_PROPERTY.containsMatchIn(content)) return text
+        if (OrgSyntax.idProperty.matches(content)) return text
+        // Written but blank: no id to keep, and no second `:ID:` to add.
+        if (BLANK_ID.matches(content)) {
+            return text.replaceRange(line, line + content.length, content.takeWhile { it.isWhitespace() } + ":ID:       $id")
+        }
         if (OrgSyntax.drawerEnd.containsMatchIn(content)) return text.replaceRange(line, line, ":ID:       $id\n")
         line = nextLine(text, line)
     }
@@ -143,5 +138,4 @@ private fun nextLine(text: String, start: Int): Int? = text.indexOf('\n', start)
     ?.takeIf { it < text.length }
 
 private val PROPERTIES = Regex("^\\s*:PROPERTIES:\\s*$", RegexOption.IGNORE_CASE)
-private val FILE_ID_LINE = Regex("(?im)^[ \\t]*:ID:[ \\t]+(\\S+)[ \\t]*$")
-private val ID_PROPERTY = Regex("^\\s*:ID:", RegexOption.IGNORE_CASE)
+private val BLANK_ID = Regex("^\\s*:ID:\\s*$", RegexOption.IGNORE_CASE)

@@ -73,6 +73,18 @@ data class OrgSection(
     val priority: OrgPriority? = null,
 ) : OrgNode()
 
+/** [key]'s value in this heading's own property drawer, not a sub-heading's; null when it has none. */
+fun OrgSection.property(key: String): String? =
+    children.asSequence()
+        .filterIsInstance<OrgDrawer>()
+        .filter { it.name.equals("PROPERTIES", ignoreCase = true) }
+        .flatMap { it.properties }
+        .firstOrNull { (name, _) -> name.equals(key, ignoreCase = true) }
+        ?.second?.trim()
+
+/** This heading's own `:ID:`; a blank one is none. */
+val OrgSection.ownId: String? get() = property("ID")?.takeIf { it.isNotEmpty() }
+
 /**
  * A list. [bulletType] is the character a plain list is marked with (`-`, `+`, `*`); an ordered list
  * reports [ordered] instead, since its markers are `1.`/`1)` and differ per item.

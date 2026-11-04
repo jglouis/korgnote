@@ -847,11 +847,8 @@ internal fun orgDrawerSource(name: String, lines: List<String>): String =
 /** The `:ID:` a `:PROPERTIES:` drawer holds, or null when it is another drawer or has none. */
 internal fun drawerIdOf(name: String, lines: List<String>): String? {
     if (!name.trim().trim(':').equals("PROPERTIES", ignoreCase = true)) return null
-    return lines.firstNotNullOfOrNull { ID_PROPERTY.matchEntire(it)?.groupValues?.get(1)?.trim() }
-        ?.takeIf { it.isNotEmpty() }
+    return lines.firstNotNullOfOrNull { OrgSyntax.idProperty.matchEntire(it)?.groupValues?.get(1) }
 }
-
-private val ID_PROPERTY = Regex("^\\s*:ID:\\s*(.*)$", RegexOption.IGNORE_CASE)
 
 /**
  * A note's `#+TODO:` line as what it declares: its keywords, each in the colour headings show it in,

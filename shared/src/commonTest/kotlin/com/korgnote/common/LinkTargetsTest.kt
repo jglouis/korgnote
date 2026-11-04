@@ -1,6 +1,8 @@
 package com.korgnote.common
 
 import com.korgnote.common.org.link.LinkTarget
+import com.korgnote.common.org.link.OrgLinkIndex
+import com.korgnote.common.org.link.OrgLinkResolution
 import com.korgnote.common.org.link.linkTargetsOf
 import com.korgnote.common.org.link.matching
 import com.korgnote.common.org.link.withFileId
@@ -115,5 +117,33 @@ class LinkTargetsTest {
         assertEquals("Garden", orgNoteTitle("#+BEGIN_SRC org\n#+TITLE: Code\n#+END_SRC\n#+TITLE: Garden\n"))
         assertEquals(null, orgNoteTitle("#+TITLE:\n* Inbox\n"))
         assertEquals(null, orgNoteTitle("#+TITLES: no\n# #+TITLE: no\n"))
+    }
+
+    /** A heading whose `:ID:` is blank has none: it is offered as needing one, and gets it there. */
+    @Test
+    fun aBlankIdIsFilledInSoTheLinkMadeToItLands() {
+        val text = "* Plan\n:PROPERTIES:\n:ID:\n:END:\n"
+        assertNull(linkTargetsOf(mapOf("a.org" to text.toOrgDocument())).last().id)
+
+        val given = withHeadingId(text, 0, "new-id")
+        assertEquals("* Plan\n:PROPERTIES:\n:ID:       new-id\n:END:\n", given)
+        assertEquals(OrgLinkResolution.Note("a.org", given.indexOf(":ID:")), OrgLinkIndex(mapOf("a.org" to given)).resolve("id:new-id", "a.org"))
+    }
+
+    @Test
+    fun aBlankFileIdIsFilledInToo() {
+        assertEquals(":PROPERTIES:\n  :ID:       new-id\n:END:\n* H\n", withFileId(":PROPERTIES:\n  :ID:   \n:END:\n* H\n", "new-id"))
+    }
+
+    /** Everything after `:ID:` is the id, as Org reads a property: what is offered is what resolves. */
+    @Test
+    fun anIdWithASpaceIsOfferedAndResolved() {
+        val text = ":PROPERTIES:\n:ID: note id\n:END:\n* Plan\n:PROPERTIES:\n:ID: a b\n:END:\n"
+        val offered = linkTargetsOf(mapOf("a.org" to text.toOrgDocument()))
+        assertEquals(listOf("note id", "a b"), offered.map { it.id })
+
+        val index = OrgLinkIndex(mapOf("a.org" to text))
+        assertEquals(OrgLinkResolution.Note("a.org", text.indexOf(":ID: a b")), index.resolve("id:a b", "a.org"))
+        assertEquals("note id", index.fileIdOf("a.org"))
     }
 }

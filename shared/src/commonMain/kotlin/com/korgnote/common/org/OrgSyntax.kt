@@ -32,6 +32,12 @@ object OrgSyntax {
     val drawerBegin = Regex("^\\s*:[A-Za-z0-9_-]+:\\s*$")
     val drawerEnd = Regex("^\\s*:END:\\s*$", RegexOption.IGNORE_CASE)
     val property = Regex("^(\\s*:[A-Za-z0-9_+-]+:)(.*)$")
+
+    /**
+     * A line of `:ID:` with a value, capturing it: all of what follows, as Org reads a property, so a
+     * note's text can be scanned for it too. Blank, it declares no id.
+     */
+    val idProperty = Regex("^[ \\t]*:ID:[ \\t]*(\\S(?:.*\\S)?)[ \\t]*$", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
     val planning = Regex("^\\s*(SCHEDULED|DEADLINE|CLOSED):")
     /** A `CLOCK:` line of a logbook, its keyword (group 1) and what follows it (group 2). */
     val clock = Regex("^(\\s*CLOCK:)(.*)$")

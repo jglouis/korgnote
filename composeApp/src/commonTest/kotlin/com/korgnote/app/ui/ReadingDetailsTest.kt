@@ -47,4 +47,13 @@ class ReadingDetailsTest {
         assertEquals("5 min ago", syncAgeSentence(at, at + 5.minutes))
         assertEquals("a day ago", syncAgeSentence(at, at + 1.days))
     }
+
+    /** The label on a drawer says what the rest of the app reads as this heading's id, or nothing. */
+    @Test
+    fun aDrawersIdIsItsWholeValueAndABlankOneIsNone() {
+        assertEquals("a b", drawerIdOf("PROPERTIES", listOf(":ID: a b")))
+        assertEquals("abc", drawerIdOf(":properties:", listOf("  :id:  abc  ")))
+        assertEquals(null, drawerIdOf("PROPERTIES", listOf(":ID:")))
+        assertEquals(null, drawerIdOf("LOGBOOK", listOf(":ID: abc")))
+    }
 }

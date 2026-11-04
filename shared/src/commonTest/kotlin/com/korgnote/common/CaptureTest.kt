@@ -591,4 +591,18 @@ class CaptureTest {
             captureInto("* H\n", HeadingRef("a.org", title = "H"), shared, HeadingAdditions(link = true)),
         )
     }
+
+    /** Whoever reads the id, it is the same id: this heading's is its whole value. */
+    @Test
+    fun aHeadingIsFoundByAnIdWithASpace() {
+        assertEquals(
+            "* Renamed\n:PROPERTIES:\n:ID: a b\n:END:\n- [[https://x.org][X]]\n",
+            captureInto(
+                "* Renamed\n:PROPERTIES:\n:ID: a b\n:END:\n",
+                HeadingRef("a.org", title = "Old", id = "a b"),
+                Captured(title = "X", link = "https://x.org"),
+                HeadingAdditions(link = true),
+            ),
+        )
+    }
 }

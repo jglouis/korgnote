@@ -10,6 +10,7 @@ import com.korgnote.common.org.edit.setPlanning
 import com.korgnote.common.org.edit.setProperty
 import com.korgnote.common.org.link.LinkTarget
 import com.korgnote.common.org.link.descriptionOf
+import com.korgnote.common.org.ownId
 import com.korgnote.common.org.todoKeywordsOf
 import com.korgnote.common.org.toOrgDocument
 import kotlinx.serialization.Serializable
@@ -132,7 +133,7 @@ private fun findHeading(text: String, ref: HeadingRef): Found? {
         }
     }
     walk(document(text).children, emptyList())
-    val match = ref.id?.let { id -> sections.firstOrNull { (section, _) -> idOf(section) == id } }
+    val match = ref.id?.let { id -> sections.firstOrNull { (section, _) -> section.ownId == id } }
         // As written first: passing over what looks like a keyword may land on another heading.
         ?: sections.firstOrNull { (section, outline) -> outline == ref.outline && descriptionOf(section.title) == ref.title }
         ?: sections.firstOrNull { (section, outline) -> sameOutline(outline, ref.outline) && sameTitle(descriptionOf(section.title), ref.title) }
@@ -179,14 +180,6 @@ fun fileUnder(file: String, heading: HeadingRef, entry: String): String? {
     val before = file.substring(0, at)
     return before + (if (before.isEmpty() || before.endsWith('\n')) "" else "\n") + body + file.substring(at)
 }
-
-private fun idOf(section: OrgSection): String? =
-    section.children.asSequence()
-        .filterIsInstance<com.korgnote.common.org.OrgDrawer>()
-        .filter { it.name.equals("PROPERTIES", ignoreCase = true) }
-        .flatMap { it.properties }
-        .firstOrNull { (key, _) -> key.equals("ID", ignoreCase = true) }
-        ?.second?.trim()
 
 /** [text] with [lines] at the end of [found]'s own content, before the blank lines that end it. */
 private fun insertBeforeChildren(text: String, found: Found, lines: String): String {
