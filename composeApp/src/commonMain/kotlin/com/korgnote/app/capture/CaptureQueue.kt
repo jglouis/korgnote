@@ -84,6 +84,9 @@ interface CaptureQueueFolder {
 /** The queue itself: captures in the order they were taken. */
 class CaptureQueue(private val folder: CaptureQueueFolder) {
 
+    /** Whether something other than the app captures into it; see [CaptureQueueFolder.readByOthers]. */
+    val readByOthers: Boolean get() = folder.readByOthers
+
     suspend fun add(request: CaptureRequest) = folder.write(fileName(request.id), request.encode())
 
     /** Every capture waiting, oldest first. A file that cannot be read is left for a newer app. */

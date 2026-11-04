@@ -475,7 +475,8 @@ class NotesViewModel(
      */
     suspend fun fileCaptures() {
         val filer = captures ?: return
-        filer.offerHeadings(linkTargetsOf(library.documents))
+        // Only for what reads them, and not before the notes are read: it would be told there are none.
+        if (library.loaded && filer.offersHeadings) filer.offerHeadings(linkTargetsOf(library.documents))
         if (filer.fileWaiting(store).isEmpty()) return
         showFromReplica()
         server.pushQuietly()

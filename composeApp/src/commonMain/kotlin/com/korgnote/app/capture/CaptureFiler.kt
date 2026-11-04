@@ -79,6 +79,9 @@ class CaptureFiler(
     /** Where a new note titled [title] would be made: in the new-notes folder; null when the title makes no file name. */
     fun newNotePath(title: String): String? = NotePaths.fileNameFor(title)?.let { NotePaths.join(newNotesFolder(), it) }
 
+    /** Whether anything captures without the app, and so needs to be told about the headings. */
+    val offersHeadings: Boolean get() = queue.readByOthers
+
     /** Tells what captures without the app which headings there are to capture into. */
     suspend fun offerHeadings(targets: List<LinkTarget>) = queue.offerHeadings(destinationsAmong(targets).mapNotNull(HeadingRef::of))
 
