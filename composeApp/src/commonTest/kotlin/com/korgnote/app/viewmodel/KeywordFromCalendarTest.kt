@@ -66,6 +66,20 @@ class KeywordFromCalendarTest {
         assertEquals(setOf("TODO", "WAIT"), viewModel.stateNotes.keywordsOf(work).todo)
     }
 
+    /** What a `[1/2]` counts as done is the note's own, whichever note happens to be open. */
+    @Test
+    fun aCookieCountsWithTheKeywordsOfItsOwnNote() = runTest {
+        val own = "#+TODO: NEXT | FINISHED\n* Report [0/2]\n** NEXT Figures\n** FINISHED Table\n"
+        repository.files[work] = own
+        viewModel.server.load()
+        viewModel.onFileSelected(open)
+
+        viewModel.stateNotes.setTodo(work, own.indexOf("** NEXT Figures"), "FINISHED")
+        advanceUntilIdle()
+
+        assertEquals(true, repository.files[work]?.contains("* Report [2/2]"), repository.files[work])
+    }
+
     @Test
     fun aKeywordThatAsksForANoteOpensItsNoteToAsk() = runTest {
         viewModel.server.load()

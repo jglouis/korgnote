@@ -144,7 +144,7 @@ class NoteChanges(
      * — blank lines, trailing whitespace, formatting — is left exactly as it was on disk.
      */
     fun toggleCheckboxAt(offsetInDocument: Int) = changeOpenNote { document ->
-        document.nodeAt<OrgCheckboxItem>(offsetInDocument)?.let { document.tickAsOrgDoes(it).withStatistics(since = document) }
+        document.nodeAt<OrgCheckboxItem>(offsetInDocument)?.let { document.tickAsOrgDoes(it).withStatistics(todoKeywords(), since = document) }
     }
 
     /**
@@ -153,7 +153,7 @@ class NoteChanges(
      */
     fun changeTodoStateAt(offsetInDocument: Int, keyword: String?, noteText: String? = null) = changeOpenNote { document ->
         document.nodeAt<OrgSection>(offsetInDocument)?.let { heading ->
-            document.changeTodoState(heading, keyword, now(), todoKeywords(), noteText).withStatistics(since = document)
+            document.changeTodoState(heading, keyword, now(), todoKeywords(), noteText).withStatistics(todoKeywords(), since = document)
         }
     }
 
@@ -383,15 +383,15 @@ class NoteChanges(
         underWay.first { it.isEmpty() }
     }
 
-    /**
-     * This document with the statistics cookies over what changed [since] counting what is now
-     * under them, as Org updates them.
-     */
-    fun OrgDocument.withStatistics(since: OrgDocument): OrgDocument =
-        updateStatisticsCookies(text, todoKeywords(), before = since.text).let { if (it == text) this else it.toOrgDocument(todoFallback) }
-
     private companion object {
         /** Saves in a row lost to another write before giving up. */
         const val WRITE_ATTEMPTS = 5
     }
 }
+
+/**
+ * This document with the statistics cookies over what changed [since] counting what is now under them
+ * by [keywords], as Org updates them.
+ */
+internal fun OrgDocument.withStatistics(keywords: OrgTodoConfig, since: OrgDocument): OrgDocument =
+    updateStatisticsCookies(text, keywords, before = since.text).let { if (it == text) this else it.toOrgDocument(todoFallback) }

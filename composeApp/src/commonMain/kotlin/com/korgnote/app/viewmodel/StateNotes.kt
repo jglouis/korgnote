@@ -126,7 +126,7 @@ class StateNotes(
         scope.launch {
             changes.changeNote(path) { doc ->
                 val target = doc.nodeAt<OrgSection>(headingOffset) ?: return@changeNote doc
-                with(changes) { doc.changeTodoState(target, keyword, at, keywords).withStatistics(since = doc) }
+                doc.changeTodoState(target, keyword, at, keywords).withStatistics(keywords, since = doc)
             }
         }
     }
