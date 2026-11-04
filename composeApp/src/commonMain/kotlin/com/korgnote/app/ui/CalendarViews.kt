@@ -415,7 +415,8 @@ fun AgendaListView(
             // Room for a time only on a day that has one: a column of nothing but icons would push
             // every title a third of the way across.
             val leading = if (section.occurrences.any { it.timeLabel() != null }) 88.dp else 24.dp
-            items(section.occurrences, key = { "${section.date}-${it.entry.file}-${it.entry.stamp.range.first}-${it.date}" }) {
+            // The time as well: a stamp repeating by the hour lands on one day several times.
+            items(section.occurrences, key = { "${section.date}-${it.entry.file}-${it.entry.stamp.range.first}-${it.date}-${it.time}" }) {
                 AgendaRow(it, today, leading, keywordColors.of(it.entry), onOpen = { onOpen(it) })
             }
         }
