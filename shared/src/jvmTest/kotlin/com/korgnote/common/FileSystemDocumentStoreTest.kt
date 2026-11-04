@@ -113,6 +113,66 @@ class FileSystemDocumentStoreTest : DocumentStoreContract() {
         assertEquals(listOf("gone.org"), store.tombstones().map { it.path })
     }
 
+    /**
+     * Nothing on Android or iOS opens a replica twice, but two copies of the desktop app can. A
+     * record kept from before the other's write would be written back over it, and lose the flag
+     * that says an edit still has to be pushed.
+     */
+    @Test
+    fun aWriteByAnotherStoreOverTheSameFolderIsSeenAndKept() = runTest {
+        val root = newRoot()
+        val first = DocumentStore(FileSystemReplicaStorage(root))
+        val second = DocumentStore(FileSystemReplicaStorage(root))
+        first.save("a.org", "* A\n")
+        assertEquals(listOf("a.org"), second.dirtyPaths())
+
+        second.save("b.org", "* B\n")
+        assertEquals(listOf("a.org", "b.org"), first.dirtyPaths())
+
+        first.save("c.org", "* C\n")
+        assertEquals(listOf("a.org", "b.org", "c.org"), second.dirtyPaths())
+    }
+
+    /** The same size, as when only an etag changed: the time is what tells. */
+    @Test
+    fun aRewriteOfTheSameSizeIsSeen() = runTest {
+        val root = newRoot()
+        val store = DocumentStore(FileSystemReplicaStorage(root))
+        store.acceptFromServer("a.org", "* A\n", etag = "v1")
+        assertEquals("v1", store.meta("a.org")?.etag)
+
+        val file = File(root, ".korgnote/meta.json")
+        val modified = file.lastModified()
+        file.writeText(file.readText().replace("v1", "v2"))
+        file.setLastModified(modified + 2_000)
+
+        assertEquals("v2", store.meta("a.org")?.etag)
+    }
+
+    /** What the keeping is for: a file that did not move is not read again, let alone decoded. */
+    @Test
+    fun metadataIsNotReadAgainUntilTheFileMoves() = runTest {
+        val root = newRoot()
+        val store = DocumentStore(FileSystemReplicaStorage(root))
+        store.acceptFromServer("a.org", "* A\n", etag = "v1")
+
+        val file = File(root, ".korgnote/meta.json")
+        val modified = file.lastModified()
+        file.writeText(file.readText().replace("v1", "v2"))
+        file.setLastModified(modified)
+
+        assertEquals("v1", store.meta("a.org")?.etag)
+    }
+
+    /** Pretty-printed it was twice the size, for no reader: nobody opens it by hand. */
+    @Test
+    fun metadataIsWrittenCompactly() = runTest {
+        val root = newRoot()
+        DocumentStore(FileSystemReplicaStorage(root)).save("a.org", "* A\n")
+
+        assertFalse('\n' in File(root, ".korgnote/meta.json").readText())
+    }
+
     /** A half-written or corrupt meta.json must not make the notes unreadable. */
     @Test
     fun corruptMetadataDoesNotLoseTheNotes() = runTest {

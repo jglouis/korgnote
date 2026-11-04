@@ -31,7 +31,8 @@ class FileSystemReplicaStorage(root: File) : ReplicaStorage {
     private val notesDir = File(root, "notes")
     private val baseDir = File(root, ".korgnote/base")
     private val metaFile = File(root, ".korgnote/meta.json")
-    private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
+    private val json = Json { ignoreUnknownKeys = true }
+    private val decoded = DecodedMeta()
 
     private fun fileFor(dir: File, path: String): File {
         requireSafeReplicaPath(path)
@@ -73,22 +74,33 @@ class FileSystemReplicaStorage(root: File) : ReplicaStorage {
 
     override suspend fun readMeta(): ReplicaMeta = withContext(Dispatchers.IO) {
         if (!metaFile.isFile) return@withContext ReplicaMeta()
-        // A corrupt or half-written meta.json must not make the app unopenable: the replica's files
-        // are the real data, and metadata can be rebuilt by the next sync.
-        runCatching { json.decodeFromString<ReplicaMeta>(metaFile.readText()) }
-            .getOrElse { ReplicaMeta() }
+        decoded.read(metaFile.metaStamp()) {
+            // A corrupt or half-written meta.json must not make the app unopenable: the replica's files
+            // are the real data, and metadata can be rebuilt by the next sync.
+            runCatching { json.decodeFromString<ReplicaMeta>(metaFile.readText()) }
+                .getOrElse { ReplicaMeta() }
+        }
     }
 
     override suspend fun writeMeta(meta: ReplicaMeta) = withContext(Dispatchers.IO) {
-        writeAtomically(metaFile, json.encodeToString(meta))
+        // Stamped before the move, which keeps it, so another process writing right after it cannot
+        // have its stamp recorded here as this content's.
+        val temp = writeTemporary(metaFile, json.encodeToString(meta))
+        val stamp = temp.metaStamp()
+        moveOver(temp, metaFile)
+        decoded.wrote(stamp, meta)
     }
 
     private fun writeAtomically(target: File, content: String) {
-        target.parentFile?.mkdirs()
-        val temp = File(target.parentFile, "${target.name}.tmp")
-        temp.writeText(content)
-        moveOver(temp, target)
+        moveOver(writeTemporary(target, content), target)
     }
+
+    private fun writeTemporary(target: File, content: String): File {
+        target.parentFile?.mkdirs()
+        return File(target.parentFile, "${target.name}.tmp").apply { writeText(content) }
+    }
+
+    private fun File.metaStamp() = MetaStamp(lastModified(), length())
 }
 
 /**

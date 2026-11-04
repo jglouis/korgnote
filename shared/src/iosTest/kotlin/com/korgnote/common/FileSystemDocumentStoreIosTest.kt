@@ -43,6 +43,20 @@ class FileSystemDocumentStoreIosTest : DocumentStoreContract() {
         assertEquals(null, store.read("a.org"))
     }
 
+    /** Another store over the same folder writes: what this one knows must follow the file. */
+    @Test
+    fun aWriteByAnotherStoreIsSeen() = runTest {
+        val root = newRoot()
+        val first = DocumentStore(FileSystemReplicaStorage(root))
+        val second = DocumentStore(FileSystemReplicaStorage(root))
+        first.save("a.org", "* A\n")
+        assertEquals(listOf("a.org"), second.dirtyPaths())
+
+        second.save("b.org", "* B\n")
+
+        assertEquals(listOf("a.org", "b.org"), first.dirtyPaths())
+    }
+
     @Test
     fun aNoteSurvivesARestart() = runTest {
         val root = newRoot()

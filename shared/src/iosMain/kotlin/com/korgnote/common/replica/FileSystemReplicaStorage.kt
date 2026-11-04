@@ -7,7 +7,11 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import platform.Foundation.NSApplicationSupportDirectory
+import platform.Foundation.NSDate
+import platform.Foundation.NSFileModificationDate
+import platform.Foundation.NSFileSize
 import platform.Foundation.NSFileManager
+import platform.Foundation.NSNumber
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSString
 import platform.Foundation.create
@@ -15,6 +19,7 @@ import platform.Foundation.NSURL
 import platform.Foundation.NSUTF8StringEncoding
 import platform.Foundation.NSUserDomainMask
 import platform.Foundation.stringWithContentsOfFile
+import platform.Foundation.timeIntervalSince1970
 import platform.Foundation.writeToFile
 
 /**
@@ -31,7 +36,8 @@ class FileSystemReplicaStorage(root: String) : ReplicaStorage {
     private val notesDir = "$root/notes"
     private val baseDir = "$root/.korgnote/base"
     private val metaFile = "$root/.korgnote/meta.json"
-    private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
+    private val json = Json { ignoreUnknownKeys = true }
+    private val decoded = DecodedMeta()
 
     private fun pathIn(dir: String, path: String): String {
         requireSafeReplicaPath(path)
@@ -82,13 +88,27 @@ class FileSystemReplicaStorage(root: String) : ReplicaStorage {
     }
 
     override suspend fun readMeta(): ReplicaMeta = withContext(Dispatchers.IO) {
-        val text = readText(metaFile) ?: return@withContext ReplicaMeta()
-        // Metadata can be rebuilt by the next sync; the notes cannot. Never fail the open.
-        runCatching { json.decodeFromString<ReplicaMeta>(text) }.getOrElse { ReplicaMeta() }
+        val stamp = metaStamp() ?: return@withContext ReplicaMeta()
+        decoded.read(stamp) {
+            // Metadata can be rebuilt by the next sync; the notes cannot. Never fail the open.
+            readText(metaFile)
+                ?.let { text -> runCatching { json.decodeFromString<ReplicaMeta>(text) }.getOrNull() }
+                ?: ReplicaMeta()
+        }
     }
 
     override suspend fun writeMeta(meta: ReplicaMeta) = withContext(Dispatchers.IO) {
         writeText(metaFile, json.encodeToString(meta))
+        metaStamp()?.let { decoded.wrote(it, meta) }
+        Unit
+    }
+
+    /** Null when there is no `meta.json`, or its attributes cannot be read. */
+    private fun metaStamp(): MetaStamp? {
+        val attributes = manager.attributesOfItemAtPath(metaFile, error = null) ?: return null
+        val modified = attributes[NSFileModificationDate] as? NSDate ?: return null
+        val size = attributes[NSFileSize] as? NSNumber ?: return null
+        return MetaStamp((modified.timeIntervalSince1970 * 1_000_000).toLong(), size.longLongValue)
     }
 }
 
