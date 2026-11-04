@@ -38,10 +38,13 @@ class ElementEditingTest {
 
     @BeforeTest
     fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
+        val main = UnconfinedTestDispatcher()
+        Dispatchers.setMain(main)
         repository = FakeSyncApi(mutableMapOf(path to initialText))
         val store = DocumentStore(InMemoryReplicaStorage())
-        viewModel = NotesViewModel(SyncEngine(store, repository), store, now = { LocalDateTime(2026, 10, 24, 14, 5) })
+        // Not the real background dispatcher: work left running on it comes back to the main
+        // dispatcher of whichever test is on by then, and fails that one.
+        viewModel = NotesViewModel(SyncEngine(store, repository), store, now = { LocalDateTime(2026, 10, 24, 14, 5) }, background = main)
     }
 
     @AfterTest

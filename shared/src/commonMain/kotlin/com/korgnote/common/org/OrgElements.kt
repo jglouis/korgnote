@@ -24,7 +24,7 @@ data class OrgElement(
 fun OrgElement.sliceOf(text: String): String = text.substring(start, endExclusive)
 
 /**
- * A line begins a heading: stars, then whitespace, as Org has it, so `*bold* text` is not one.
+ * A line begins a heading: stars, then a space, as Org has it, so `*bold* text` is not one.
  *
  * Deliberately the same rule as [toOrgDocument]'s section detection: if the splitter and the
  * parser disagreed about where a heading starts, the range shown for editing would not be the
