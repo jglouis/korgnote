@@ -6,6 +6,7 @@ import com.korgnote.common.replica.RemoteEntry
 import com.korgnote.common.replica.RemoteFile
 import com.korgnote.common.replica.RemoteManifest
 import com.korgnote.common.replica.SyncApi
+import com.korgnote.common.sync.Manifest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.HttpRequestBuilder
@@ -34,17 +35,6 @@ import kotlinx.serialization.json.Json
 import org.jetbrains.compose.resources.getString
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
-
-@Serializable
-private data class WireEntry(val path: String, val size: Long, val mtime: Long, val etag: String)
-
-@Serializable
-private data class WireManifest(
-    val generation: Long,
-    val complete: Boolean,
-    val entries: List<WireEntry>,
-    val deleted: List<String> = emptyList(),
-)
 
 /** A line of `GET /bundle`: a file, or the marker that the server stopped short. */
 @Serializable
@@ -126,7 +116,7 @@ class KtorSyncApi(
 
     override suspend fun manifest(since: Long?): RemoteManifest {
         val suffix = if (since != null) "/manifest?since=$since" else "/manifest"
-        val wire: WireManifest = reach { api, token -> client.get(api + suffix) { authorize(token) }.unlessRefused().body() }
+        val wire: Manifest = reach { api, token -> client.get(api + suffix) { authorize(token) }.unlessRefused().body() }
         return RemoteManifest(
             generation = wire.generation,
             complete = wire.complete,

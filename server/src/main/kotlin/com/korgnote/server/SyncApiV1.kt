@@ -1,5 +1,7 @@
 package com.korgnote.server
 
+import com.korgnote.common.sync.Manifest
+import com.korgnote.common.sync.ManifestEntry
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -27,18 +29,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
-
-@Serializable
-data class ManifestEntry(val path: String, val size: Long, val mtime: Long, val etag: String)
-
-@Serializable
-data class Manifest(
-    val generation: Long,
-    /** False when this is a delta answered from the journal rather than the whole library. */
-    val complete: Boolean,
-    val entries: List<ManifestEntry>,
-    val deleted: List<String> = emptyList(),
-)
 
 @Serializable
 private data class BundleLine(
