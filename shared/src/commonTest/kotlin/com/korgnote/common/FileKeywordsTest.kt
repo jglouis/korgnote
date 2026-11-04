@@ -90,4 +90,23 @@ class FileKeywordsTest {
             withFileKeywords("  #+STARTUP: logdone\n* H\n", com.korgnote.common.org.edit.FileKeywords(title = "Garden")),
         )
     }
+
+    /** Text in a block is the block's: Org reads the note's own keywords around it. */
+    @Test
+    fun aKeywordInABlockIsNotTheNotes() {
+        val text = "#+BEGIN_SRC org\n  #+TITLE: inner\n#+END_SRC\n#+TITLE: real\n"
+
+        assertEquals("real", fileKeywordsOf(text).title)
+        assertEquals(
+            "#+BEGIN_SRC org\n  #+TITLE: inner\n#+END_SRC\n#+TITLE: new\n",
+            withFileKeywords(text, FileKeywords(title = "new")),
+        )
+    }
+
+    @Test
+    fun aNewKeywordIsNotPutInABlock() {
+        val text = "#+BEGIN_SRC org\n#+NAME: inner\n#+END_SRC\n* Heading\n"
+
+        assertEquals("#+TITLE: new\n$text", withFileKeywords(text, FileKeywords(title = "new")))
+    }
 }

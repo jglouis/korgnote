@@ -54,11 +54,21 @@ private fun withFileKeyword(text: String, key: String, spelling: String, value: 
     var afterTopDrawer = -1
     var inTopDrawer = false
     var index = 0
+    var block: String? = null
     while (lineStart < text.length) {
         val end = text.indexOf('\n', lineStart).let { if (it < 0) text.length else it }
         val next = if (end < text.length) end + 1 else end
         val line = text.substring(lineStart, end)
         if (OrgSyntax.heading.containsMatchIn(line)) break
+        val open = block
+        if (open != null) {
+            // What a block holds is the block's, however much it looks like the note's own keywords.
+            if (OrgSyntax.closesBlock(line, open)) block = null
+            lineStart = next
+            index++
+            continue
+        }
+        block = OrgSyntax.blockBegin.find(line)?.groupValues?.get(1)
         val match = OrgSyntax.fileKeyword.matchEntire(line)
         if (match != null && match.groupValues[1].equals(key, ignoreCase = true)) {
             val written = line.substring(0, line.indexOf(':') + 1)
@@ -91,7 +101,19 @@ private fun withFileKeyword(text: String, key: String, spelling: String, value: 
     return text.substring(0, at) + lead + "$spelling: $value\n" + text.substring(at)
 }
 
-/** The lines above the first heading, where Org reads a file's keywords. */
-private fun preambleLines(text: String): Sequence<String> = text.lineSequence().takeWhile { !OrgSyntax.heading.containsMatchIn(it) }
+/** The lines above the first heading and outside any block, where Org reads a file's keywords. */
+private fun preambleLines(text: String): Sequence<String> = sequence {
+    var block: String? = null
+    for (line in text.lineSequence()) {
+        if (OrgSyntax.heading.containsMatchIn(line)) return@sequence
+        val open = block
+        if (open != null) {
+            if (OrgSyntax.closesBlock(line, open)) block = null
+            continue
+        }
+        block = OrgSyntax.blockBegin.find(line)?.groupValues?.get(1)
+        yield(line)
+    }
+}
 
 private val KEYWORD_LINE = Regex("^[ \\t]*#\\+\\w+:")

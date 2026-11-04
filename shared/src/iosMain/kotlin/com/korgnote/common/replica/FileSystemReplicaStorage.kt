@@ -91,9 +91,7 @@ class FileSystemReplicaStorage(root: String) : ReplicaStorage {
         val stamp = metaStamp() ?: return@withContext ReplicaMeta()
         decoded.read(stamp) {
             // Metadata can be rebuilt by the next sync; the notes cannot. Never fail the open.
-            readText(metaFile)
-                ?.let { text -> runCatching { json.decodeFromString<ReplicaMeta>(text) }.getOrNull() }
-                ?: ReplicaMeta()
+            readText(metaFile)?.let { text -> runCatching { json.decodeFromString<ReplicaMeta>(text) }.getOrNull() }
         }
     }
 

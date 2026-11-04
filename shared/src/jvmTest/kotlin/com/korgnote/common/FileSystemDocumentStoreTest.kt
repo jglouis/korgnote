@@ -184,6 +184,24 @@ class FileSystemDocumentStoreTest : DocumentStoreContract() {
         assertEquals("* Important\n", recovered.read("inbox.org"))
         assertEquals(null, recovered.meta("inbox.org"))
     }
+
+    /** A read that failed says nothing about the file, which is what a decoded copy stands for. */
+    @Test
+    fun aFailedReadOfTheMetadataIsNotRememberedForItsStamp() = runTest {
+        val root = newRoot()
+        DocumentStore(FileSystemReplicaStorage(root)).acceptFromServer("a.org", "* a\n", "etag-a")
+        // A new instance, as after starting again, knows nothing of the file until it reads it.
+        val storage = FileSystemReplicaStorage(root)
+        val meta = File(root, ".korgnote/meta.json")
+        check(meta.setReadable(false))
+        try {
+            assertEquals(emptyMap(), storage.readMeta().files)
+        } finally {
+            check(meta.setReadable(true))
+        }
+
+        assertEquals("etag-a", storage.readMeta().files["a.org"]?.etag)
+    }
 }
 
 /** What a write leaves in place, whatever the filesystem makes of a rename. */
@@ -195,6 +213,17 @@ class MoveOverTest {
     @AfterTest
     fun cleanUp() {
         folder.deleteRecursively()
+    }
+
+    /** Android 7 has no `java.nio.file`, so where a rename is refused it goes back to making room first. */
+    @Test
+    fun whereTheReplacingMoveCannotLoadTheTargetMakesWayForTheRename() {
+        moveOver(temp, target, replacing = { _, _ -> throw NoClassDefFoundError("java/nio/file/Files") }) { from, to ->
+            !to.exists() && from.renameTo(to)
+        }
+
+        assertEquals("new", target.readText())
+        assertFalse(temp.exists())
     }
 
     @Test

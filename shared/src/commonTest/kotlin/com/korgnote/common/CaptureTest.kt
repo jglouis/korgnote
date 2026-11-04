@@ -609,4 +609,10 @@ class CaptureTest {
         val merged = merge(base, fileUnder(base, tasks, "* b")!!, fileUnder(base, tasks, "* c")!!)
         assertEquals(MergeResult.Merged("* Tasks\n** a\n** b\n** c\n* Later\n"), merged)
     }
+
+    /** One capital is a word as often as a keyword: "A plan" is not "B plan" with a keyword taken off. */
+    @Test
+    fun aFirstWordOfOneLetterIsNotPassedOverAsAKeyword() {
+        assertNull(fileUnder("* B plan\n", HeadingRef("n.org", title = "A plan"), "* Filed\n"))
+    }
 }

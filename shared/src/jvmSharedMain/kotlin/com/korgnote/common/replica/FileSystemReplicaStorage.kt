@@ -74,8 +74,7 @@ class FileSystemReplicaStorage(root: File) : ReplicaStorage {
         decoded.read(metaFile.metaStamp()) {
             // A corrupt or half-written meta.json must not make the app unopenable: the replica's files
             // are the real data, and metadata can be rebuilt by the next sync.
-            runCatching { json.decodeFromString<ReplicaMeta>(metaFile.readText()) }
-                .getOrElse { ReplicaMeta() }
+            runCatching { json.decodeFromString<ReplicaMeta>(metaFile.readText()) }.getOrNull()
         }
     }
 
@@ -108,8 +107,20 @@ class FileSystemReplicaStorage(root: File) : ReplicaStorage {
  * with no file, in which an unlocked `readMeta` finds no metadata and every note looks unsynced, so
  * it is replaced in one move instead.
  */
-internal fun moveOver(temp: File, target: File, rename: (File, File) -> Boolean = File::renameTo) {
-    if (!rename(temp, target)) ReplacingMove.move(temp, target)
+internal fun moveOver(
+    temp: File,
+    target: File,
+    replacing: ((File, File) -> Unit)? = null,
+    rename: (File, File) -> Boolean = File::renameTo,
+) {
+    if (rename(temp, target)) return
+    try {
+        if (replacing != null) replacing(temp, target) else ReplacingMove.move(temp, target)
+    } catch (_: LinkageError) {
+        // Android 7, which cannot load the replacing move: only making room is left to it there.
+        target.delete()
+        check(rename(temp, target)) { "could not move ${temp.path} onto ${target.path}" }
+    }
 }
 
 /** Apart from the rest, which Android 7 has to load: `java.nio.file` only arrives with Android 8. */

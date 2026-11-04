@@ -26,10 +26,14 @@ internal class DecodedMeta {
 
     private val known = AtomicReference<Known?>(null)
 
-    fun read(stamp: MetaStamp, decode: () -> ReplicaMeta): ReplicaMeta {
+    /**
+     * What the file at [stamp] holds. Empty when [decode] gets nothing from it, which is not kept: a
+     * read can fail for a moment, and the file would look empty until something next wrote to it.
+     */
+    fun read(stamp: MetaStamp, decode: () -> ReplicaMeta?): ReplicaMeta {
         val seen = known.load()
         if (seen?.stamp == stamp) return seen.meta
-        val meta = decode()
+        val meta = decode() ?: return ReplicaMeta()
         known.compareAndSet(seen, Known(stamp, meta))
         return meta
     }

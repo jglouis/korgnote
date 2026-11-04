@@ -155,7 +155,8 @@ private fun sameOutline(a: List<String>, b: List<String>): Boolean =
 private fun withoutKeyword(title: String): String =
     KEYWORD.find(title)?.let { title.substring(it.range.last + 1) } ?: title
 
-private val KEYWORD = Regex("^${OrgSyntax.TODO_WORD}\\s+")
+/** Two characters at least: "A plan" and "B plan" are two headings, not one with its keyword changed. */
+private val KEYWORD = Regex("^[A-Z][A-Z0-9_-]+\\s+")
 
 /**
  * [file] with [entry] filed as a new entry under the heading [heading] names: after what is there,

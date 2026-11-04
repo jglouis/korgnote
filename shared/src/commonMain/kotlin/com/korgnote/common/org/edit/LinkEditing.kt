@@ -70,9 +70,11 @@ fun linkAt(text: String, caret: Int): DraftLink? {
  */
 fun orgLinkOf(target: String, description: String): String {
     val t = target.trim().replace("[", "%5B").replace("]", "%5D")
-    val d = description.replace('[', '(').replace(']', ')').replace(Regex("\\s+"), " ").trim()
+    val d = description.replace('[', '(').replace(']', ')').replace(WHITESPACE_RUN, " ").trim()
     return if (d.isEmpty() || d == t) "[[$t]]" else "[[$t][$d]]"
 }
+
+private val WHITESPACE_RUN = Regex("\\s+")
 
 /** [text] with [start]–[end] replaced by the link [orgLinkOf] writes, and the caret after it. */
 fun withLink(text: String, start: Int, end: Int, target: String, description: String): CompletionResult {
