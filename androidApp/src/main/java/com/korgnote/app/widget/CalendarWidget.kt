@@ -46,6 +46,7 @@ import com.korgnote.app.widgets.monthTitle
 import com.korgnote.app.widgets.widgetAgenda
 import com.korgnote.app.widgets.widgetCount
 import com.korgnote.common.org.agenda.AgendaIndex
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
@@ -99,8 +100,13 @@ class ShowMonth : ActionCallback {
             if (month.isNullOrEmpty()) prefs.remove(CalendarWidget.SHOWN_MONTH) else prefs[CalendarWidget.SHOWN_MONTH] = month
         }
         val widget = CalendarWidget()
-        runCatching { widget.drawNow(context, glanceId) }
-            .onFailure { println("[DEBUG_LOG][CalendarWidget] Drawing the month at once failed: ${it.message}") }
+        try {
+            widget.drawNow(context, glanceId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            println("[DEBUG_LOG][CalendarWidget] Drawing the month at once failed: ${t.message}")
+        }
         widget.update(context, glanceId)
     }
 

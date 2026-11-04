@@ -19,6 +19,7 @@ import com.korgnote.common.org.agenda.AgendaOptions
 import com.korgnote.common.org.agenda.ClockedSpan
 import com.korgnote.common.org.agenda.agendaEntries
 import com.korgnote.common.org.agenda.clockedSpans
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -93,12 +94,15 @@ class NoteAgenda(
 
     init {
         scope.launch {
-            runCatching { reminderWords() }
-                .onSuccess {
-                    reminderWords = it
-                    refreshReminders()
-                }
-                .onFailure { println("[DEBUG_LOG][NoteAgenda] Loading the reminders' words failed: ${it.message}") }
+            // Not runCatching: it would swallow cancellation.
+            try {
+                reminderWords = reminderWords()
+                refreshReminders()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                println("[DEBUG_LOG][NoteAgenda] Loading the reminders' words failed: ${t.message}")
+            }
         }
     }
 
@@ -124,8 +128,13 @@ class NoteAgenda(
         plannedReminders = plan
         scope.launch {
             reminderLock.withLock {
-                runCatching { notifications.replaceAll(plan) }
-                    .onFailure { println("[DEBUG_LOG][NoteAgenda] Scheduling reminders failed: ${it.message}") }
+                try {
+                    notifications.replaceAll(plan)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    println("[DEBUG_LOG][NoteAgenda] Scheduling reminders failed: ${t.message}")
+                }
             }
         }
     }
