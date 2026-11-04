@@ -52,6 +52,67 @@ class MergeTests {
         }
     }
 
+    /**
+     * Which of several equally long matches is taken decides what a merge sees. Reading the ends
+     * first is only a saving: it must take the very lines a walk from the start over a whole table
+     * takes, or the same two edits merge differently, or write a section twice.
+     */
+    @Test
+    fun trimmingTheEndsChoosesTheSameMatchesAsAWholeTable() {
+        val random = Random(20261105)
+        val lines = listOf("", "", "a", "b", "* H")
+        fun some(size: Int) = List(random.nextInt(size)) { lines[random.nextInt(lines.size)] }
+        repeat(20_000) {
+            val start = some(4)
+            val end = some(5)
+            val from = start + some(10) + end
+            val to = start + some(10) + end
+            assertEquals(
+                alignmentOverAWholeTable(from, to).toList(),
+                alignment(from, to).toList(),
+                "$from against $to",
+            )
+        }
+    }
+
+    private fun alignmentOverAWholeTable(from: List<String>, to: List<String>): Array<Int?> {
+        val result = arrayOfNulls<Int>(from.size)
+        val lengths = Array(from.size + 1) { IntArray(to.size + 1) }
+        for (i in from.indices.reversed()) {
+            for (j in to.indices.reversed()) {
+                lengths[i][j] = if (from[i] == to[j]) lengths[i + 1][j + 1] + 1 else maxOf(lengths[i + 1][j], lengths[i][j + 1])
+            }
+        }
+        var i = 0
+        var j = 0
+        while (i < from.size && j < to.size) {
+            when {
+                from[i] == to[j] -> { result[i] = j; i++; j++ }
+                lengths[i + 1][j] >= lengths[i][j + 1] -> i++
+                else -> j++
+            }
+        }
+        return result
+    }
+
+    /** The reply to a push was lost, and the text went on being edited: the section is there once. */
+    @Test
+    fun aSectionBothSidesAddedAfterABlankLineIsKeptOnce() {
+        assertEquals(
+            MergeResult.Merged("* A\nfoo2\n\n* B\nbody\n"),
+            merge("* A\nfoo\n", "* A\nfoo2\n\n* B\nbody\n", "* A\nfoo\n\n* B\nbody\n"),
+        )
+    }
+
+    /** As Emacs appends: a blank line, then the section. It must not reach across to the other edit. */
+    @Test
+    fun aSectionAppendedAfterABlankLineMergesWithAnEditAboveIt() {
+        assertEquals(
+            MergeResult.Merged("* A\nfoo2\nmid\nbar2\n\n* B\n"),
+            merge("* A\nfoo\nmid\nbar\n", "* A\nfoo2\nmid\nbar\n\n* B\n", "* A\nfoo\nmid\nbar2\n"),
+        )
+    }
+
     private fun longestCommonSubsequence(a: List<String>, b: List<String>): Int {
         val lengths = Array(a.size + 1) { IntArray(b.size + 1) }
         for (i in a.indices.reversed()) {
