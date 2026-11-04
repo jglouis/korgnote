@@ -184,6 +184,22 @@ class SyncApiV1Test {
     }
 
     @Test
+    fun aDotFolderIsOutOfReachOfTheApi() = testApplication {
+        val dir = notesDir("a.org" to "* A\n", ".stversions/a~1.org" to "* old A\n")
+        serve(dir)
+
+        val manifest = client.get("/api/v1/manifest").bodyAsText()
+        assertTrue(!manifest.contains("stversions"), manifest)
+        assertTrue(!client.get("/api/v1/bundle").bodyAsText().contains("stversions"))
+        assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/files/.stversions/a~1.org").status)
+        assertEquals(
+            HttpStatusCode.UnprocessableEntity,
+            client.put("/api/v1/files/.korgnote-trash/planted.org") { setBody("* planted\n") }.status,
+        )
+        assertTrue(!File(dir, ".korgnote-trash/planted.org").exists())
+    }
+
+    @Test
     fun theBundleStreamsOneJsonObjectPerFile() = testApplication {
         serve(notesDir("a.org" to "* A\n", "b.org" to "* B\n"))
 

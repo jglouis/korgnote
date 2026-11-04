@@ -9,7 +9,6 @@ import java.nio.file.attribute.PosixFilePermissions
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.path.exists
-import kotlin.io.path.extension
 import kotlin.io.path.fileSize
 import kotlin.io.path.getLastModifiedTime
 import kotlin.io.path.isDirectory
@@ -36,6 +35,21 @@ sealed interface WriteResult {
 
     data object ReadOnly : WriteResult
 }
+
+/**
+ * Whether a folder, relative to the notes directory, holds notes of the library. A dot-folder does
+ * not: `.korgnote-trash` holds what was deleted, `.stversions` Syncthing's old versions, `.git` git's
+ * own business. Served as notes, those would reach every phone as more copies of the same headings.
+ */
+internal fun isLibraryFolder(relativePath: String): Boolean = relativePath.split('/').none { it.startsWith('.') }
+
+/**
+ * Whether [relativePath], `/`-separated from the notes directory, is a note of the library: an `.org`
+ * file in no dot-folder. This one rule is what is listed, what can be read and written, and what is
+ * watched.
+ */
+internal fun isLibraryPath(relativePath: String): Boolean =
+    relativePath.endsWith(".org") && isLibraryFolder(relativePath.substringBeforeLast('/', ""))
 
 /**
  * Reads and writes the notes directory, answering from the disk every time it is asked.
@@ -68,14 +82,14 @@ class FileStore(
     fun list(): List<FileMeta> {
         if (!root.exists() || !root.isDirectory()) return emptyList()
         return Files.walk(root).use { paths ->
-            paths.filter {
-                it.isRegularFile() && it.extension in ALLOWED_EXTENSIONS &&
-                    // Deleted notes live under the root but are not part of the library.
-                    !it.any { segment -> segment.toString() == TRASH_DIRECTORY }
-            }
-                .map { metaOf(relativePathOf(it), it) }
+            paths.filter { it.isRegularFile() }
+                .map { relativePathOf(it) to it }
+                // Through [resolve], so that what is listed can also be fetched: a link to a file
+                // outside the root cannot, and a phone would keep trying.
+                .filter { (path, _) -> resolve(path) != null }
+                .map { (path, file) -> metaOf(path, file) }
                 .toList()
-        }.filterNotNull().sortedBy { it.path }
+        }.sortedBy { it.path }
     }
 
     fun read(path: String): String? {
@@ -267,18 +281,18 @@ class FileStore(
     /**
      * Turns a request path into a file inside [root], or null when it is not one.
      *
-     * Rejects absolute paths, empty or `.`/`..` segments, unexpected extensions, and anything that
-     * still resolves outside the root once symlinks are followed. The old code was protected only
-     * by the accident of checking its startup map first; creating files will remove that accident.
+     * Rejects absolute paths, empty or `.`/`..` segments, anything that [isLibraryPath] says is not a
+     * note, and anything that still resolves outside the root once symlinks are followed. The old
+     * code was protected only by the accident of checking its startup map first; creating files will
+     * remove that accident.
      */
     private fun resolve(path: String): Path? {
         if (path.isBlank()) return null
         val segments = path.split('/')
         if (segments.any { it.isBlank() || it == "." || it == ".." || it.contains('\\') }) return null
+        if (!isLibraryPath(path)) return null
 
         val candidate = runCatching { root.resolve(path).normalize() }.getOrNull() ?: return null
-        if (candidate.extension !in ALLOWED_EXTENSIONS) return null
-
         val rootReal = runCatching { root.toRealPath() }.getOrElse { root.normalize() }
         if (!candidate.normalize().startsWith(root.normalize())) return null
         // Through links, the file — or, for a new one, the nearest folder it would be made in — must
@@ -290,8 +304,6 @@ class FileStore(
     }
 
     private companion object {
-        const val TRASH_DIRECTORY = ".korgnote-trash"
-        val ALLOWED_EXTENSIONS = setOf("org")
         const val ETAG_BYTES = 16
         const val MAX_BYTES = 32 * 1024 * 1024
     }

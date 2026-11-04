@@ -372,17 +372,19 @@ class NotesWatcher(
     }
 
     /**
-     * The trash is not part of the library; `.git` holds no notes, and git makes and deletes folders
-     * in it all the time, each of which would be a rebuild.
+     * Whether [path] is outside the library, by [isLibraryFolder]. Git makes and deletes folders in
+     * `.git` all the time, each of which would otherwise be a rebuild. A file gone from the disk is
+     * judged by the folder it was in, as what it was cannot be asked any more.
      */
-    private fun excluded(path: Path): Boolean =
-        root.relativize(path).any { it.toString() == TRASH_DIRECTORY || it.toString() == ".git" }
+    private fun excluded(path: Path): Boolean {
+        val relative = root.relativize(path).joinToString("/") { it.toString() }
+        return !isLibraryFolder(if (path.isDirectory()) relative else relative.substringBeforeLast('/', ""))
+    }
 
     private fun relativePathOf(file: Path): String =
         root.relativize(file).joinToString("/") { it.toString() }.ifEmpty { "." }
 
     private companion object {
-        const val TRASH_DIRECTORY = ".korgnote-trash"
         const val SHOWN_PATHS = 5
 
         fun now() = System.currentTimeMillis()

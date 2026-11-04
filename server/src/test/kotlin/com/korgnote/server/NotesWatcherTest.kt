@@ -107,20 +107,43 @@ class NotesWatcherTest {
 
     @Test
     fun theRescanFindsWhatNoEventReported() = runBlocking {
-        // `.git` is not watched but is listed, so a note written there raises no event: only a walk
-        // of the tree finds it, as it finds an edit whose event was dropped.
-        val git = root.resolve(".git").createDirectories()
+        // A link is a note, and what it points at is its content, but `.git` is not watched: an edit
+        // to the target there raises no event for the link. Only a walk of the tree finds it, as it
+        // finds an edit whose event was dropped.
+        val target = root.resolve(".git").createDirectories().resolve("target.org")
+        target.writeText("* e\n")
+        Files.createSymbolicLink(root.resolve("e.org"), target)
         startWatching(rescanEvery = 1.seconds)
 
         val before = journal.generation
-        git.resolve("e.org").writeText("* e\n")
-        awaitChange(before, ".git/e.org") { it.path == ".git/e.org" && !it.deleted }
+        target.writeText("* e, edited\n")
+        awaitChange(before, "e.org") { it.path == "e.org" && !it.deleted }
 
         // And it says so, rather than healing it quietly, once no event has come for it.
         val reported = withTimeoutOrNull(WAIT) { while (watcher.status.missed == 0) delay(100.milliseconds) }
         assertNotNull(reported, "the missed change was never reported")
         assertEquals(1, watcher.status.missed)
-        assertEquals(listOf(".git/e.org"), watcher.status.lastMissedPaths)
+        assertEquals(listOf("e.org"), watcher.status.lastMissedPaths)
+    }
+
+    /** Syncthing keeps old versions in `.stversions`: neither a change to a note, nor a folder that moved. */
+    @Test
+    fun aDotFolderIsNotWatched() = runBlocking {
+        val versions = root.resolve(".stversions").createDirectories()
+        startWatching(rescanEvery = 1.seconds)
+        assertEquals(2, watcher.status.folders, "the root and sub/")
+
+        val before = journal.generation
+        versions.resolve("a~1.org").writeText("* old a\n")
+        root.resolve(".new").createDirectories().resolve("x.org").writeText("* x\n")
+        // A real edit to wait for, by which time anything the two above caused has been seen.
+        root.resolve("a.org").appendText("* edited\n")
+        awaitChange(before, "edit of a.org") { it.path == "a.org" && !it.deleted }
+        delay(GRACE + 2.seconds)
+
+        assertEquals(listOf("a.org"), journal.changesSince(before)?.changes.orEmpty().map { it.path })
+        assertEquals(0, watcher.status.rebuilds, "a dot folder appearing moved no folder of the library")
+        assertEquals(0, watcher.status.missed)
     }
 
     @Test

@@ -208,6 +208,67 @@ class FileStoreTest {
         }
     }
 
+    // --- What the library is: Syncthing's old versions and the like are not notes ---
+
+    @Test
+    fun aNoteInADotFolderIsNotPartOfTheLibrary() {
+        writeFile("a.org", "* a\n")
+        writeFile(".stversions/a~20260101.org", "* old a\n")
+        writeFile("sub/.hidden/b.org", "* b\n")
+
+        assertEquals(listOf("a.org"), store.list().map { it.path })
+        assertNull(store.meta(".stversions/a~20260101.org"))
+        assertNull(store.read(".stversions/a~20260101.org"))
+        assertNull(store.meta("sub/.hidden/b.org"))
+    }
+
+    @Test
+    fun aDotFolderCannotBeWrittenToOrDeletedFrom() {
+        writeFile(".korgnote-trash/old.org", "* old\n")
+
+        assertIs<WriteResult.Rejected>(store.put(".korgnote-trash/planted.org", "* planted\n"))
+        assertIs<WriteResult.Rejected>(store.put(".new/planted.org", "* planted\n", mustNotExist = true))
+        assertIs<WriteResult.Rejected>(store.delete(".korgnote-trash/old.org", ifMatch = "any"))
+        assertEquals(false, root.resolve(".korgnote-trash/planted.org").toFile().exists())
+        assertEquals(false, root.resolve(".new").toFile().exists())
+        assertEquals("* old\n", root.resolve(".korgnote-trash/old.org").readText())
+    }
+
+    /** The app's own folder storage hides these too, but a server's library has always included them. */
+    @Test
+    fun aDotFileOutsideADotFolderStaysInTheLibrary() {
+        writeFile(".plan.org", "* plan\n")
+        writeFile("sub/.other.org", "* other\n")
+
+        assertEquals(listOf(".plan.org", "sub/.other.org"), store.list().map { it.path })
+        assertEquals("* plan\n", store.read(".plan.org"))
+    }
+
+    /** Listed, it reached every phone as a note that could not be fetched. */
+    @Test
+    fun aLinkToAFileOutsideTheRootIsNotListed() {
+        val outside = createTempDirectory("korgnote-outside")
+        try {
+            outside.resolve("o.org").writeText("* outside\n")
+            java.nio.file.Files.createSymbolicLink(root.resolve("linked.org"), outside.resolve("o.org"))
+            writeFile("a.org", "* a\n")
+
+            assertEquals(listOf("a.org"), store.list().map { it.path })
+            assertNull(store.meta("linked.org"))
+        } finally {
+            outside.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun aLinkToANoteInsideTheRootIsANoteToo() {
+        writeFile("a.org", "* a\n")
+        java.nio.file.Files.createSymbolicLink(root.resolve("also-a.org"), root.resolve("a.org"))
+
+        assertEquals(listOf("a.org", "also-a.org"), store.list().map { it.path })
+        assertEquals("* a\n", store.read("also-a.org"))
+    }
+
     // --- Two writers at once: the check and the move must be one step ---
 
     /** Runs [writers] at the same moment and returns what each came back with. */
