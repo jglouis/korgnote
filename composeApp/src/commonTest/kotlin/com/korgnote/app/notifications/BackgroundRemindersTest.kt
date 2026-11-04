@@ -27,7 +27,7 @@ class BackgroundRemindersTest {
             InMemoryReplicaStorage(mapOf("work.org" to "* Design review <2026-09-23 Wed 10:00>\n* Other\n")),
         )
 
-        planRemindersFrom(store, scheduler, ReminderSettings(), now)
+        planRemindersFrom(agendaOf(store), scheduler, ReminderSettings(), now)
 
         assertEquals(listOf("Design review"), handedOver.single().map { it.title })
     }
@@ -45,7 +45,7 @@ class BackgroundRemindersTest {
             ),
         )
 
-        planRemindersFrom(store, scheduler, ReminderSettings(), now)
+        planRemindersFrom(agendaOf(store), scheduler, ReminderSettings(), now)
 
         assertEquals(listOf("NEXT New call", "FINISHED Lunch"), handedOver.single().map { it.title })
     }

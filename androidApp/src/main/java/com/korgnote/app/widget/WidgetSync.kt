@@ -14,11 +14,12 @@ import com.korgnote.app.capture.backendFor
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.data.chosenNotesSource
 import com.korgnote.app.notifications.NotificationScheduler
+import com.korgnote.app.notifications.agendaOf
 import com.korgnote.app.notifications.planRemindersFrom
 import com.korgnote.app.notifications.reminderWords
 import com.korgnote.app.sync.BackgroundSyncWorker
 import com.korgnote.app.widgets.WidgetSyncs
-import com.korgnote.common.org.agenda.agendaEntries
+import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.replica.DocumentStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.TimeZone
@@ -82,9 +83,9 @@ suspend fun syncInBackground(context: Context): String? {
     val synced = syncNotes(context)
     WidgetStore.setProblem(context, synced.problem)
     synced.store?.let { store ->
-        val texts = store.paths().mapNotNull { path -> store.read(path)?.let { path to it } }.toMap()
-        WidgetStore.save(context, agendaEntries(texts), synced.at)
-        planReminders(store)
+        val entries = agendaOf(store)
+        WidgetStore.save(context, entries, synced.at)
+        planReminders(entries)
     }
     // The app, if it is open, reads the notes the sync may have changed under it.
     WidgetSyncs.finished.tryEmit(Unit)
@@ -105,12 +106,12 @@ suspend fun syncAndRedraw(context: Context) {
 /** The notes after a sync: where they are kept now, when it got through, and what stopped it if not. */
 private class SyncedNotes(val store: DocumentStore?, val at: Instant?, val problem: String?)
 
-/** Reminders from the notes as [store] now holds them, worded in the app's language. */
-private suspend fun planReminders(store: DocumentStore) {
+/** Reminders from [entries], worded in the app's language. */
+private suspend fun planReminders(entries: List<AgendaEntry>) {
     val koin = KoinPlatform.getKoin()
     try {
         planRemindersFrom(
-            store,
+            entries,
             koin.get<NotificationScheduler>(),
             koin.get<SettingsRepository>().getReminderSettings(),
             Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()),
