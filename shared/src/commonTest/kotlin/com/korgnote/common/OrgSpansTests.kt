@@ -195,4 +195,16 @@ class OrgSpansTests {
         )
         assertTrue(OrgSpanKind.Heading !in kinds)
     }
+
+    /** Only a word that could be declared a keyword holds that place; a cookie after any other is title. */
+    @Test
+    fun aWordNoKeywordCouldBeHoldsNoKeywordPlace() {
+        for (word in listOf("2026", "--", "ÉTÉ")) {
+            val text = "* $word [#A] plans"
+            val spans = spansOf(text)
+            assertTrue(OrgSpanKind.Todo !in spans.kindsAt(text, word), word)
+            assertTrue(OrgSpanKind.Priority !in spans.map { it.kind }, word)
+        }
+        assertTrue(OrgSpanKind.Todo in spansOf("* NEXT2 plans").kindsAt("* NEXT2 plans", "NEXT2"))
+    }
 }

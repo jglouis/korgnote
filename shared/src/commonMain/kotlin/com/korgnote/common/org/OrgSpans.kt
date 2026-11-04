@@ -264,9 +264,7 @@ private fun addHeading(line: String, offset: Int, add: (IntRange, OrgSpanKind, I
     skipWhitespace()
 
     val firstWord = line.substring(pos).takeWhile { !it.isWhitespace() }
-    if (firstWord.isNotEmpty() &&
-        firstWord.all { it.isUpperCase() || it.isDigit() || it == '_' || it == '-' }
-    ) {
+    if (KEYWORD_POSITION.matches(firstWord)) {
         // Whether this counts as a TODO keyword depends on the document's configuration, which the
         // client knows; the span says only that this is the heading's keyword position.
         pieces.add(pos until (pos + firstWord.length) to OrgSpanKind.Todo)
@@ -309,6 +307,8 @@ private fun addHeading(line: String, offset: Int, add: (IntRange, OrgSpanKind, I
         }
     }
 }
+
+private val KEYWORD_POSITION = Regex(OrgSyntax.TODO_WORD)
 
 private fun addListItem(line: String, offset: Int, item: MatchResult, add: (IntRange, OrgSpanKind, Int) -> Unit) {
     // The indent, the bullet and the whitespace after it share one span, for the same reason the
