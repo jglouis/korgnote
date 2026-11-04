@@ -10,7 +10,7 @@ plugins {
     alias(libs.plugins.android.kmp.library) apply false
 }
 
-// ktor-client-core 3.6.0 pins ws 8.20.1 (GHSA, fixed in 8.21.0); drop once ktor ships a newer pin.
+// ktor-client-core 3.6.1 pins ws 8.20.1 (GHSA, fixed in 8.21.0); drop once ktor ships a newer pin.
 plugins.withType<org.jetbrains.kotlin.gradle.targets.wasm.yarn.WasmYarnPlugin> {
     the<org.jetbrains.kotlin.gradle.targets.wasm.yarn.WasmYarnRootExtension>().resolution("ws", "8.21.0")
 }

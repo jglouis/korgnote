@@ -50,8 +50,7 @@ private const val BUNDLE_BYTE_BUDGET = 8 * 1024 * 1024
  * The sync API described in `docs/05-sync-protocol.md`.
  *
  * Everything is conditional and path-addressed: clients diff a manifest, fetch what they lack, and
- * push with the etag they edited. The old endpoints stay alongside until the client cuts over
- * in T10.
+ * push with the etag they edited.
  */
 fun Route.syncApiV1(
     store: FileStore,

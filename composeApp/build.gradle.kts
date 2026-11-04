@@ -63,7 +63,7 @@ kotlin {
             implementation(libs.compose.ui.tooling.preview)
             implementation(libs.compose.ui.tooling)
             implementation(libs.androidx.activity.compose)
-            // Ktor Android engine (choose exactly one)
+            // The sync API's Ktor engine.
             implementation(libs.ktor.client.android)
             // WebDAV's PROPFIND and MKCOL, which HttpURLConnection, under the Android engine, refuses.
             implementation(libs.ktor.client.okhttp)

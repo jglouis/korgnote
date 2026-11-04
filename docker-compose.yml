@@ -1,4 +1,4 @@
-# T23 — the sync server with the notes directory from the host.
+# The sync server with the notes directory from the host.
 #
 #   scripts/run-server-container.sh [NOTES_DIR]     # sets everything below, then runs this
 #
