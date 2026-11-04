@@ -203,6 +203,14 @@ class SyncEngine(
             pendingDeletes += tombstones.values.filter { it.path !in covered }
         }
 
+        // A conflict copy made above is a new note, sent now: the next cycle may be a long way off,
+        // and on this device alone, settling the conflict would delete the only copy there is. Once
+        // the server holds it, that deletion leaves it in the server's trash.
+        val records = store.records()
+        for (path in store.paths() - localPaths) {
+            if (records[path]?.etag == null) record(pushNew(path), path)
+        }
+
         for (tombstone in pendingDeletes) {
             val etag = tombstone.etag ?: continue
             when (api.delete(tombstone.path, etag)) {

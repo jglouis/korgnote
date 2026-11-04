@@ -369,7 +369,8 @@ note it names.
   cycle merges with that save too.
 - Conflicting hunks → conflict markers are **never** written into a note. **The server is the
   source of truth**: `R` keeps the path, in `notes/` and `base/`, and `L` is written beside it
-  as `name.sync-conflict-20260920-101500.org`, a new note the next cycle pushes. A file in the
+  as `name.sync-conflict-20260920-101500.org`, a new note the same cycle pushes, so that settling the
+  conflict at once leaves the copy in the server's trash rather than deleting the only one. A file in the
   notes directory is therefore never replaced by a version nobody merged — Emacs never sees its
   file rewritten under it — and both conflict cases, edited and created, follow one rule. The
   naming deliberately mirrors Syncthing's, which anyone using it already knows how to deal with; a second

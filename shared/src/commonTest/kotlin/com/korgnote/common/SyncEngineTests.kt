@@ -45,6 +45,9 @@ class SyncEngineTests {
         var deletedPaths = mutableListOf<String>()
         var completeManifests = true
 
+        /** Paths whose pushes the server refuses. */
+        val failingPushes = mutableSetOf<String>()
+
         /**
          * When set, a delta manifest lists only these paths, as the real server's journal does: a
          * delta names what moved on the server, so a file only edited locally is absent from it.
@@ -115,6 +118,7 @@ class SyncEngineTests {
         override suspend fun push(path: String, content: String, condition: PushCondition): PushResult {
             beforeNextPush?.also { beforeNextPush = null }?.invoke()
             pushed.add(path)
+            if (path in failingPushes) return PushResult.Failed("refused")
             val current = files[path]
             if (condition is PushCondition.Matches && current != null && current.first != condition.etag) {
                 return PushResult.Conflict(current.first)
@@ -501,6 +505,65 @@ class SyncEngineTests {
             server.files.containsKey("a.sync-conflict-20260921-101500.org"),
             "the other device must be able to see it: ${server.files.keys}",
         )
+    }
+
+    /**
+     * Sent by the cycle that made it. Left for the next one, which may be a long way off, it was on
+     * this phone alone, and the reader settling the conflict in the meantime deleted the only copy.
+     */
+    @Test
+    fun aConflictCopyReachesTheServerInTheCycleThatMadeIt() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* TODO Task\n")
+        engine.sync()
+        store.save("a.org", "* DONE Task\n")
+        server.put("a.org", "* NEXT Task\n")
+
+        val report = engine.sync()
+
+        val copy = "a.sync-conflict-20260921-101500.org"
+        assertEquals("* DONE Task\n", server.files[copy]?.second)
+        assertTrue(copy in report.pushed, "${report.pushed}")
+        assertEquals(false, store.meta(copy)?.dirty)
+    }
+
+    /** Keep this one, right after the conflict: the server takes the copy into its trash, not nothing. */
+    @Test
+    fun aConflictCopySettledRightAfterTheConflictIsDeletedOnTheServer() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* TODO Task\n")
+        engine.sync()
+        store.save("a.org", "* DONE Task\n")
+        server.put("a.org", "* NEXT Task\n")
+        engine.sync()
+
+        val copy = "a.sync-conflict-20260921-101500.org"
+        store.delete(copy)
+        engine.sync()
+
+        assertEquals(listOf(copy), server.deleted)
+        assertFalse(server.files.containsKey(copy))
+    }
+
+    /** The server refusing the copy leaves it here, for the next cycle, and says so. */
+    @Test
+    fun aConflictCopyTheServerRefusesStaysForTheNextCycle() = runTest {
+        val (server, store, engine) = setUp()
+        server.put("a.org", "* TODO Task\n")
+        engine.sync()
+        store.save("a.org", "* DONE Task\n")
+        server.put("a.org", "* NEXT Task\n")
+        val copy = "a.sync-conflict-20260921-101500.org"
+        server.failingPushes += copy
+
+        val report = engine.sync()
+
+        assertTrue(copy in report.failed, "${report.failed}")
+        assertEquals("* DONE Task\n", store.read(copy))
+
+        server.failingPushes -= copy
+        engine.sync()
+        assertEquals("* DONE Task\n", server.files[copy]?.second)
     }
 
     @Test
