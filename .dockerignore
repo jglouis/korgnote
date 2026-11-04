@@ -1,4 +1,5 @@
-# Keep the build context to what `:server:installDist` needs to configure and compile.
+# Keep the build context to what the Dockerfile's Gradle tasks need to configure and compile: its
+# `COPY . .` runs them again whenever anything copied changes.
 .git
 .gradle
 .kotlin
@@ -8,9 +9,16 @@ build/
 notes/
 iosApp/
 docs/
+fastlane/
+scripts/
+.github/
+README.md
+LICENSE
+Dockerfile
+docker-compose.yml
 # Holds the host's Android SDK path, which means nothing inside the image.
 local.properties
 *.iml
 .DS_Store
-# Holds the token for docker compose; it must not end up in the build context.
+# Holds this computer's settings for docker compose, which mean nothing inside the image either.
 .env
