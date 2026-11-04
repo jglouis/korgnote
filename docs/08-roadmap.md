@@ -37,11 +37,19 @@ This is the only status list; the rules for keeping it are in the [docs README](
   ([09](09-element-editing.md#a-sync-during-an-edit)), but a tick beside a line that came in is refused,
   and an edit saved offline beside one becomes a conflict copy, though neither touched the other's line.
 - **Turning the phone** closes an open New note dialog with its title, and reverts unsaved Settings
-  values. Both are plain `remember`.
+  values. Both are plain `remember`. Switching tab reverts those values too, with no warning.
+- **A sync can close a dialog without a word.** A reschedule picker or a delete confirmation closes
+  when a sync moves its entry or heading, rather than act on the wrong one. Nothing is changed, but
+  the date chosen is lost and nothing says why.
+- **Saving a new heading with nothing typed** writes `* ` to the file.
 - **A shared address is cut at a bracket.** `https://example.com/a[1]` in shared text files `/a` as the
   link and `[1]` in the title (`firstUrlIn`).
 - **A tap on body text just under a date link**, within its width, opens the calendar, not the editor.
-- **In Note details the keyboard covers Save**, so a tap there can land on a suggestion instead.
+  The line under a closed `:PROPERTIES:` drawer has the same trouble: the tap opens the drawer.
+- **In Note details the keyboard covers Save**, so a tap there can land on a suggestion instead. In the
+  element editor it covers the link picker's *Cancel* and *Web or file link…* the same way.
+- **The Agenda widget at two columns** gives half its width to the time, and a title breaks mid-word.
+- **The delete confirmation shows a heading's raw tags**, as in `Soup :winter:`.
 - **A first sync over the bundle's 8 MB cap writes what the bundle held only after the fetches**, so a
   kill partway downloads those notes again. It converges, at the cost of the bandwidth.
 - **`todoKeywordsOf` still reads `#+TODO:` inside blocks**, where `todoLoggingOf` and `orgNoteTitle`
