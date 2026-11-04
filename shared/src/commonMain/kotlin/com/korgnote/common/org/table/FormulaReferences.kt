@@ -56,7 +56,7 @@ internal object FormulaReferences {
     fun ruleRemoved(formulas: List<String>, removed: Int): List<String> =
         formulas.map { renumberRules(it) { n -> if (n == removed) null else if (n > removed) n - 1 else n } }
 
-    private fun targetOf(formula: String): String = formula.substringBefore('=').trim()
+    private fun targetOf(formula: String): String = formulaTarget(formula)
 
     /** [formula] with every number [pattern] finds replaced as [map] says; null marks it `INVALID`. */
     private fun renumber(formula: String, pattern: Regex, key: String, map: (Int) -> Int?): String =

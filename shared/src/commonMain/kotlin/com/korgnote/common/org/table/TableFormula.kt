@@ -55,6 +55,47 @@ internal class TableFormula(
     }
 }
 
+/** What [formula], one entry of a `#+TBLFM:` line, fills, as written: `$3`, `@>$2`, `@17$9..@26$9`. */
+fun formulaTarget(formula: String): String = formula.substringBefore('=').trim()
+
+/**
+ * One entry of a `#+TBLFM:` line, as a form edits it. [column] and [row] say what it fills when that
+ * is a whole column, `$3`, or one cell, `@2$3` or `@>$3`, the two a form can pick from the table.
+ */
+data class FormulaParts(
+    val target: String,
+    /** All that follows the `=`. */
+    val right: String,
+    /** [right] without a format that only sets the decimals. */
+    val expression: String,
+    /** How many decimals `;%.2f` asks for, or null with no such format. */
+    val decimals: Int?,
+    val column: Int?,
+    /** The row of a one-cell target: `>` for the last, or its number; null for anything else. */
+    val row: String?,
+)
+
+/** The parts of [formula]; see [FormulaParts]. */
+fun formulaPartsOf(formula: String): FormulaParts {
+    val target = formulaTarget(formula)
+    val right = formula.substringAfter('=', "").trim()
+    val decimals = DECIMALS_FORMAT.find(right)
+    val wholeColumn = COLUMN_TARGET.matchEntire(target)
+    val oneCell = CELL_TARGET.matchEntire(target)
+    return FormulaParts(
+        target = target,
+        right = right,
+        expression = if (decimals != null) right.replace(DECIMALS_FORMAT, "") else right,
+        decimals = decimals?.groupValues?.get(1)?.toInt(),
+        column = (wholeColumn?.groupValues?.get(1) ?: oneCell?.groupValues?.get(2))?.toIntOrNull(),
+        row = oneCell?.groupValues?.get(1),
+    )
+}
+
+private val DECIMALS_FORMAT = Regex(""";%\.(\d)f$""")
+private val COLUMN_TARGET = Regex("""^\$(\d+)$""")
+private val CELL_TARGET = Regex("""^@(>|\d+)\$(\d+)$""")
+
 /** Why a formula cannot be computed, said so that whoever wrote it can fix it. */
 class FormulaError(message: String) : Exception(message)
 

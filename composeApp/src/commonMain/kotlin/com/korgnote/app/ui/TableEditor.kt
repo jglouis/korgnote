@@ -63,6 +63,7 @@ import com.korgnote.common.org.table.FormulaCell
 import com.korgnote.common.org.table.FormulaNote
 import com.korgnote.common.org.table.Recalculation
 import com.korgnote.common.org.table.formulaCells
+import com.korgnote.common.org.table.formulaTarget
 import com.korgnote.common.org.table.reviewFormulas
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.editor_already_up_to_date
@@ -244,7 +245,7 @@ fun TableEditorDialog(
                         },
                         onCompletionKey = { key -> completion?.answer(key) ?: false },
                         onColumnFormula = { column ->
-                            val existing = grid.formulas.indexOfFirst { it.substringBefore('=').trim() == "\$$column" }
+                            val existing = grid.formulas.indexOfFirst { formulaTarget(it) == "\$$column" }
                             editingFormula = if (existing >= 0) existing to grid.formulas[existing] else null to "\$$column="
                         },
                         onComputedCell = { index -> editingFormula = index to grid.formulas[index] },

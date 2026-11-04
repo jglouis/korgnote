@@ -6,8 +6,10 @@ import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.edit.replaceOrgTable
 import com.korgnote.common.org.edit.tableFormulaLine
 import com.korgnote.common.org.table.FormulaNote
+import com.korgnote.common.org.table.FormulaParts
 import com.korgnote.common.org.table.Recalculation
 import com.korgnote.common.org.table.describeFormula
+import com.korgnote.common.org.table.formulaPartsOf
 import com.korgnote.common.org.table.reviewFormulas
 import com.korgnote.common.org.toOrgDocument
 import kotlin.test.Test
@@ -176,5 +178,18 @@ class TableFormulaEditTest {
         assertEquals("‹amount›, last row = sum(‹amount›, rows 2–3)", describeFormula(expenses, "@>$3=vsum(@I..@-I)"))
         assertEquals("‹amount›, every row = ‹amount› of the row above * 2  (shown as %.2f)", describeFormula(expenses, "$3=@-1$3 * 2;%.2f"))
         assertEquals("‹what›, row 2 = ‹who› to ‹amount›", describeFormula(expenses, "@2$2=$1..$3"))
+    }
+
+    @Test
+    fun aFormulaIsSplitAsTheFormEditsIt() {
+        assertEquals(
+            FormulaParts("\$3", "\$1+\$2;%.2f", "\$1+\$2", 2, column = 3, row = null),
+            formulaPartsOf("\$3 = \$1+\$2;%.2f"),
+        )
+        assertEquals(FormulaParts("@>\$2", "vsum(@I..@II)", "vsum(@I..@II)", null, column = 2, row = ">"), formulaPartsOf("@>\$2=vsum(@I..@II)"))
+        assertEquals(FormulaParts("@4\$2", "1", "1", null, column = 2, row = "4"), formulaPartsOf("@4\$2=1"))
+        assertEquals(FormulaParts("@17\$9..@26\$9", "1;%.2e", "1;%.2e", null, column = null, row = null), formulaPartsOf("@17\$9..@26\$9=1;%.2e"))
+        assertEquals(FormulaParts("\$3", "", "", null, column = 3, row = null), formulaPartsOf("\$3="))
+        assertEquals(FormulaParts("", "", "", null, column = null, row = null), formulaPartsOf(""))
     }
 }

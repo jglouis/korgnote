@@ -64,8 +64,7 @@ private fun oddOnesOut(rows: List<List<String>?>, formulas: List<String>): List<
     val cell = Regex("""^@([^$]+)\$(\d+)$""")
     data class Sibling(val index: Int, val row: String, val column: String, val right: String)
     val siblings = formulas.mapIndexedNotNull { index, text ->
-        val target = text.substringBefore('=').trim()
-        val match = cell.matchEntire(target) ?: return@mapIndexedNotNull null
+        val match = cell.matchEntire(formulaTarget(text)) ?: return@mapIndexedNotNull null
         Sibling(index, match.groupValues[1], match.groupValues[2], text.substringAfter('=').trim())
     }
     val notes = mutableListOf<FormulaNote>()
@@ -107,7 +106,7 @@ private fun fixedRows(rows: List<List<String>?>, formulas: List<String>): List<F
     val notes = mutableListOf<FormulaNote>()
     val lastLine = layout.dataLines.lastOrNull() ?: return emptyList()
     for ((index, text) in formulas.withIndex()) {
-        val target = text.substringBefore('=').trim()
+        val target = formulaTarget(text)
         var rewritten = text
         Regex("""^@(\d+)(\$\d+)$""").matchEntire(target)?.let { match ->
             if (layout.dataLines.getOrNull(match.groupValues[1].toInt() - 1) == lastLine && isTotalRow(layout, lastLine)) {
@@ -198,7 +197,7 @@ fun describeFormula(rows: List<List<String>?>, formula: String): String {
     val layout = TableLayout(rows)
     val names = columnNames(rows)
     fun name(column: Int) = "‹" + (names.getOrNull(column - 1)?.takeIf { it.isNotBlank() } ?: "column $column") + "›"
-    val target = formula.substringBefore('=').trim()
+    val target = formulaTarget(formula)
     val right = formula.substringAfter('=', "").trim()
     if (right.isEmpty()) return formula
 

@@ -42,6 +42,7 @@ import com.korgnote.common.org.table.Recalculation
 import com.korgnote.common.org.table.columnNames
 import com.korgnote.common.org.table.describeFormula
 import com.korgnote.common.org.table.formulaCells
+import com.korgnote.common.org.table.formulaPartsOf
 import com.korgnote.common.org.table.formulaSyntaxProblem
 import com.korgnote.common.org.table.recalculate
 import com.korgnote.common.org.table.rowsAboveTotal
@@ -168,31 +169,24 @@ internal fun FormulaEditorDialog(
     fun columnLabel(column: Int) = names.getOrNull(column - 1)?.takeIf { it.isNotBlank() } ?: stringResource(Res.string.editor_column_number, column)
     val dataLines = grid.rows.indices.filter { grid.rows[it] != null }
 
-    val initialTarget = initial.substringBefore('=').trim()
-    val initialRight = initial.substringAfter('=', "").trim()
-    val decimalsFormat = Regex(""";%\.(\d)f$""")
-    val initialDecimals = decimalsFormat.find(initialRight)?.groupValues?.get(1)?.toInt()
-
-    val columnTarget = Regex("""^\$(\d+)$""").matchEntire(initialTarget)
-    val cellTarget = Regex("""^@(>|\d+)\$(\d+)$""").matchEntire(initialTarget)
+    val parts = remember(initial) { formulaPartsOf(initial) }
+    val fillsCell = parts.row != null
+    val fillsColumn = parts.column != null && !fillsCell
     var kind by remember {
         mutableStateOf(
             when {
-                columnTarget != null || initialTarget.isEmpty() -> TargetKind.Column
-                cellTarget != null -> TargetKind.Cell
+                fillsColumn || parts.target.isEmpty() -> TargetKind.Column
+                fillsCell -> TargetKind.Cell
                 else -> TargetKind.Other
             },
         )
     }
-    var column by remember { mutableStateOf((columnTarget?.groupValues?.get(1) ?: cellTarget?.groupValues?.get(2))?.toIntOrNull() ?: 1) }
+    var column by remember { mutableStateOf(parts.column ?: 1) }
     // The row of a one-cell formula: ">" for the last, or its number.
-    var row by remember { mutableStateOf(cellTarget?.groupValues?.get(1) ?: ">") }
-    var otherTarget by remember { mutableStateOf(initialTarget) }
-    var expression by remember {
-        val text = if (initialDecimals != null) initialRight.replace(decimalsFormat, "") else initialRight
-        mutableStateOf(TextFieldValue(text, TextRange(text.length)))
-    }
-    var decimals by remember { mutableStateOf(initialDecimals) }
+    var row by remember { mutableStateOf(parts.row ?: ">") }
+    var otherTarget by remember { mutableStateOf(parts.target) }
+    var expression by remember { mutableStateOf(TextFieldValue(parts.expression, TextRange(parts.expression.length))) }
+    var decimals by remember { mutableStateOf(parts.decimals) }
 
     val target = when (kind) {
         TargetKind.Column -> "\$$column"
@@ -210,14 +204,14 @@ internal fun FormulaEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(if (initialRight.isEmpty()) Res.string.editor_new_formula else Res.string.editor_edit_formula)) },
+        title = { Text(stringResource(if (parts.right.isEmpty()) Res.string.editor_new_formula else Res.string.editor_edit_formula)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(Res.string.editor_fills), style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = kind == TargetKind.Column, onClick = { kind = TargetKind.Column }, label = { Text(stringResource(Res.string.editor_every_row)) })
                     FilterChip(selected = kind == TargetKind.Cell, onClick = { kind = TargetKind.Cell }, label = { Text(stringResource(Res.string.editor_one_cell)) })
-                    if (cellTarget == null && columnTarget == null && initialTarget.isNotEmpty()) {
+                    if (!fillsCell && !fillsColumn && parts.target.isNotEmpty()) {
                         FilterChip(selected = kind == TargetKind.Other, onClick = { kind = TargetKind.Other }, label = { Text(stringResource(Res.string.editor_as_written)) })
                     }
                 }
