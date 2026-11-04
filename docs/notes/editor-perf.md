@@ -1,8 +1,7 @@
 # T12a — Editor performance diagnostic: results
 
-Measured 2026-09-20 on a ~45 KB Org file (`chars=45777`). Target used for these numbers:
-_(fill in: desktop JVM / iOS / wasm)_ — slowness was originally reported as worst on iOS
-and wasm.
+Measured 2026-09-20 on a ~45 KB Org file (`chars=45777`). The target these numbers were taken on was
+not recorded; slowness was originally reported as worst on iOS and wasm.
 
 ## Verdict
 
@@ -57,47 +56,8 @@ It is not sufficient on its own: one full pass still costs ~25 ms against a 16.7
 
 Viewport scoping is what makes it smooth, and more importantly makes cost **independent of
 document size**. At the current ~0.55 ms/KB, a 200 KB file would cost ~110 ms per call and
-~330 ms per keystroke; scoped to the viewport it stays flat.
-
-## Implementation notes for T12b
-
-The transformed text must contain the **entire** document, or the field renders only part of
-it. So do not shrink the text — attach spans only to visible lines:
-
-```kotlin
-AnnotatedString(text = text.text, spanStyles = spansForVisibleLinesOnly)
-```
-
-Full text, ~100 spans. Cheaper to build *and* cheaper for Compose to lay out.
-
-Getting the visible range into the transformation, given `filter` is not a composable and
-cannot subscribe to state:
-
-1. `App.kt` already has the outer `rememberScrollState()`; capture `TextLayoutResult` via
-   `onTextLayout` and the field's position via `onGloballyPositioned`.
-2. Map scroll offset → visible line via `TextLayoutResult.getLineForVerticalPosition`, then
-   → char offsets via `getLineStart` / `getLineEnd`. Pad by a screen above and below.
-3. Pass the range as a **constructor parameter** and key the `remember` on it:
-   `remember(headingColor, visibleRange) { OrgSyntaxHighlightTransformation(headingColor, visibleRange) }`.
-   A new instance on range change triggers a refilter; no state subscription needed inside
-   `filter`.
-4. Gate updates so the range only changes when it moves meaningfully (e.g. by a line),
-   otherwise filter → layout → state → filter can loop.
-
-`buildOrgHighlightedString` then needs a variant that appends unstyled text for lines
-outside the range. Its `LineState` (block type, drawer) must still be correct at the
-viewport start — do a cheap pre-scan from the top of the document that only tests for
-`BEGIN_`/`END_`/drawer markers (2 regexes per line, no `AnnotatedString` building) rather
-than a full highlight pass.
-
-## Consequences for the roadmap
-
-- T12b no longer needs block virtualisation; the UX problems that came with it (cross-block
-  selection, find/replace, caret movement over boundaries, undo across splices) are all
-  avoided.
-- Span-count reduction (merging adjacent same-style spans) is **not** needed as a separate
-  optimisation: viewport scoping cuts spans ~30× on its own.
-- Memoisation can land immediately, independent of everything else.
+~330 ms per keystroke; scoped to the viewport it stays flat. It was built, and later retired with the
+whole-file editor it served (T22): an element is small enough to highlight whole.
 
 ---
 
