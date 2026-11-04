@@ -82,44 +82,43 @@ fun Route.syncApiV1(
 
             if (delta != null) {
                 // The journal could answer: send only what moved.
+                val entries = onDisk {
+                    delta.changes.filterNot { it.deleted }.mapNotNull { entry ->
+                        store.meta(entry.path)?.let {
+                            ManifestEntry(it.path, it.size, it.mtimeMillis, it.etag)
+                        }
+                    }
+                }
                 call.respond(
                     Manifest(
                         generation = delta.generation,
                         complete = false,
-                        entries = delta.changes.filterNot { it.deleted }.mapNotNull { entry ->
-                            store.meta(entry.path)?.let {
-                                ManifestEntry(it.path, it.size, it.mtimeMillis, it.etag)
-                            }
-                        },
+                        entries = entries,
                         deleted = delta.changes.filter { it.deleted }.map { it.path },
                     ),
                 )
                 return@get
             }
 
-            call.respond(
-                Manifest(
-                    generation = journal.generation,
-                    complete = true,
-                    entries = store.list().map {
-                        ManifestEntry(it.path, it.size, it.mtimeMillis, it.etag)
-                    },
-                ),
-            )
+            // Before the walk, so that a change landing during it is reported again rather than lost.
+            val generation = journal.generation
+            val entries = onDisk {
+                store.list().map { ManifestEntry(it.path, it.size, it.mtimeMillis, it.etag) }
+            }
+            call.respond(Manifest(generation = generation, complete = true, entries = entries))
         }
 
         get("/bundle") {
             val since = call.request.queryParameters["since"]?.toLongOrNull()
             val delta = since?.let { journal.changesSince(it) }
             val paths = delta?.changes?.filterNot { it.deleted }?.map { it.path }
-                ?: store.list().map { it.path }
+                ?: onDisk { store.list().map { it.path } }
 
             // Streamed, not assembled: the whole library is megabytes and need not be held twice.
             call.respondTextWriter(ContentType.Application.Json) {
                 var budget = BUNDLE_BYTE_BUDGET
                 for (path in paths) {
-                    // Reading files is blocking; keep it off the thread serving the response.
-                    val file = withContext(Dispatchers.IO) { store.readWithMeta(path) } ?: continue
+                    val file = onDisk { store.readWithMeta(path) } ?: continue
                     val text = file.text
                     if (budget - text.length < 0) {
                         val marker = json.encodeToString(BundleTruncated(generation = journal.generation))
@@ -176,12 +175,12 @@ fun Route.syncApiV1(
                 val path = call.pathSegments()
                 // A client that has a version is answered from the hash, without reading the file.
                 val known = call.request.header(HttpHeaders.IfNoneMatch)?.trim('"')
-                if (known != null && store.meta(path)?.etag == known) {
+                if (known != null && onDisk { store.meta(path) }?.etag == known) {
                     call.response.header(HttpHeaders.ETag, known)
                     call.respond(HttpStatusCode.NotModified)
                     return@get
                 }
-                val file = store.readWithMeta(path)
+                val file = onDisk { store.readWithMeta(path) }
                 if (file == null) {
                     call.respondText("Not found: $path", status = HttpStatusCode.NotFound)
                     return@get
@@ -196,7 +195,7 @@ fun Route.syncApiV1(
                 val mustNotExist = call.request.header(HttpHeaders.IfNoneMatch)?.trim() == "*"
                 val content = call.receiveText()
 
-                call.respondTo(store.put(path, content, ifMatch, mustNotExist), path) { meta ->
+                call.respondTo(onDisk { store.put(path, content, ifMatch, mustNotExist) }, path) { meta ->
                     journal.record(path, meta.etag)
                     call.response.header(HttpHeaders.ETag, meta.etag)
                     call.respond(EtagResponse(meta.etag))
@@ -213,7 +212,7 @@ fun Route.syncApiV1(
                     )
                     return@delete
                 }
-                call.respondTo(store.delete(path, ifMatch), path) {
+                call.respondTo(onDisk { store.delete(path, ifMatch) }, path) {
                     journal.record(path, etag = null, deleted = true)
                     call.respond(HttpStatusCode.NoContent)
                 }
@@ -242,6 +241,9 @@ private suspend fun ApplicationCall.respondTo(result: WriteResult, path: String,
         WriteResult.ReadOnly -> respondText("Read-only library", status = HttpStatusCode.Forbidden)
     }
 }
+
+/** The store reads and writes files, which blocks; that must not happen on a thread serving requests. */
+private suspend fun <T> onDisk(work: () -> T): T = withContext(Dispatchers.IO) { work() }
 
 private fun ApplicationCall.pathSegments(): String =
     parameters.getAll("path")?.joinToString("/").orEmpty()
