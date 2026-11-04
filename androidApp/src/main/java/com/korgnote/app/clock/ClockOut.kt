@@ -15,13 +15,12 @@ import com.korgnote.app.data.chosenNotesSource
 import com.korgnote.app.notifications.AndroidClockNotifier
 import com.korgnote.app.sync.BackgroundSyncWorker
 import com.korgnote.app.viewmodel.ClockRunning
+import com.korgnote.app.viewmodel.withClock
 import com.korgnote.app.widget.WidgetIntents
 import com.korgnote.app.widget.WidgetStore
 import com.korgnote.app.widget.redrawWidgets
 import com.korgnote.app.widget.syncInBackground
-import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.edit.clockOut
-import com.korgnote.common.org.edit.nodeAt
 import com.korgnote.common.org.edit.runningClocks
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.replica.DocumentStore
@@ -80,10 +79,8 @@ class ClockOutWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val source = koin.get<SettingsRepository>().chosenNotesSource() ?: return Result.success()
         val store = koin.notesStore(source)
         store.read(path)?.let { text ->
-            val doc = text.toOrgDocument()
-            val clock = doc.runningClocks().firstOrNull { it.title == title && it.start == start }
-            val heading = clock?.let { doc.nodeAt<OrgSection>(it.headingStart) }
-            if (heading != null) store.save(path, doc.clockOut(heading, at).text)
+            val stopped = text.toOrgDocument().withClock(ClockRunning(path, 0, title, start)) { doc, heading -> doc.clockOut(heading, at) }
+            if (stopped.text != text) store.save(path, stopped.text)
         }
         // At once, rather than after the sync: the tap should take the notification away.
         clockNotifier(applicationContext).post(runningIn(store))

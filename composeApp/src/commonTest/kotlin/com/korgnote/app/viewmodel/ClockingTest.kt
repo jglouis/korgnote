@@ -67,7 +67,7 @@ class ClockingTest {
         viewModel.server.load()
         viewModel.onFileSelected(work)
 
-        viewModel.clockInAt(viewModel.note.content.indexOf("* Review"))
+        viewModel.clockActions.clockInAt(viewModel.note.content.indexOf("* Review"))
         advanceUntilIdle()
 
         assertEquals("* Report\n* Review\n:LOGBOOK:\nCLOCK: [2026-11-01 Sun 09:30]\n:END:\n", repository.files[work])
@@ -82,11 +82,11 @@ class ClockingTest {
     fun clockingInStopsTheClockRunningAboveInTheSameNote() = runTest {
         viewModel.server.load()
         viewModel.onFileSelected(work)
-        viewModel.clockInAt(0)
+        viewModel.clockActions.clockInAt(0)
         advanceUntilIdle()
 
         time = LocalDateTime(2026, 11, 1, 10, 0)
-        viewModel.clockInAt(viewModel.note.content.indexOf("* Review"))
+        viewModel.clockActions.clockInAt(viewModel.note.content.indexOf("* Review"))
         advanceUntilIdle()
 
         assertEquals(
@@ -101,7 +101,7 @@ class ClockingTest {
         viewModel.server.load()
         viewModel.onFileSelected(work)
 
-        viewModel.clockOut(viewModel.clocks.running.single(), at = LocalDateTime(2026, 11, 1, 8, 45))
+        viewModel.clockActions.clockOut(viewModel.clocks.running.single(), at = LocalDateTime(2026, 11, 1, 8, 45))
         advanceUntilIdle()
 
         assertTrue(repository.files[home]!!.contains("--[2026-11-01 Sun 08:45] =>  0:45"))
@@ -113,10 +113,10 @@ class ClockingTest {
     fun cancellingLeavesTheNoteAsItWas() = runTest {
         viewModel.server.load()
         viewModel.onFileSelected(work)
-        viewModel.clockInAt(0)
+        viewModel.clockActions.clockInAt(0)
         advanceUntilIdle()
 
-        viewModel.cancelClockAt(0)
+        viewModel.clockActions.cancelClockAt(0)
         advanceUntilIdle()
 
         assertEquals("* Report\n* Review\n", repository.files[work])
@@ -127,10 +127,10 @@ class ClockingTest {
         viewModel.server.load()
         viewModel.onFileSelected(work)
         // Report, then Review: Garden was stopped by the first, Report by the second.
-        viewModel.clockInAt(0)
+        viewModel.clockActions.clockInAt(0)
         advanceUntilIdle()
         time = LocalDateTime(2026, 11, 1, 10, 0)
-        viewModel.clockInAt(viewModel.note.content.indexOf("* Review"))
+        viewModel.clockActions.clockInAt(viewModel.note.content.indexOf("* Review"))
         advanceUntilIdle()
 
         assertEquals(listOf("Report", "Garden"), viewModel.clocks.recent.map { it.title })
@@ -138,7 +138,7 @@ class ClockingTest {
         // Back to the task the interruption took over from.
         time = LocalDateTime(2026, 11, 1, 10, 20)
         val report = viewModel.clocks.recent.first()
-        viewModel.clockIn(report.path, report.headingStart)
+        viewModel.clockActions.clockIn(report.path, report.headingStart)
         advanceUntilIdle()
         assertEquals(listOf("Report"), viewModel.clocks.running.map { it.title })
         assertEquals(listOf("Review", "Garden"), viewModel.clocks.recent.map { it.title })

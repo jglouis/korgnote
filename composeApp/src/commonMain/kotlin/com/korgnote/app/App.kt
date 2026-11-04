@@ -575,12 +575,12 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
             val rail = wide && !editingShort
             // What a running clock counts to: the bar's elapsed time and the totals beside headings,
             // moved on each minute while a clock runs, and still otherwise.
-            val clockTime by produceState(vm.currentTime(), vm.clocks.running, vm.clocks.recent) {
-                value = vm.currentTime()
+            val clockTime by produceState(vm.clockActions.currentTime(), vm.clocks.running, vm.clocks.recent) {
+                value = vm.clockActions.currentTime()
                 // Also while the bar offers to clock back in, so that it goes when the hour is up.
                 while (clockBarIsLive(vm.clocks.running, vm.clocks.recent, value)) {
                     delay((60 - value.second) * 1000L)
-                    value = vm.currentTime()
+                    value = vm.clockActions.currentTime()
                 }
             }
             // The sync's state, and any conflict, go wherever the top bar's actions go.
@@ -760,10 +760,10 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                     vm.onFileSelected(clock.path, scrollToOffset = clock.headingStart)
                                     selectedScreen = BottomItem.FILE
                                 },
-                                onClockOut = { clock, at -> vm.clockOut(clock, at) },
-                                onCancel = { vm.cancelClock(it) },
+                                onClockOut = { clock, at -> vm.clockActions.clockOut(clock, at) },
+                                onCancel = { vm.clockActions.cancelClock(it) },
                                 recent = vm.clocks.recent,
-                                onClockIn = { vm.clockIn(it.path, it.headingStart) },
+                                onClockIn = { vm.clockActions.clockIn(it.path, it.headingStart) },
                                 onOpenRecent = { task ->
                                     vm.onFileSelected(task.path, scrollToOffset = task.headingStart)
                                     selectedScreen = BottomItem.FILE
@@ -938,10 +938,10 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                         },
                                         onRefileSection = { index -> refiling = index to vm.refileTargets(index) },
                                         onSetPriority = { offset, priority -> vm.changes.setPriorityAt(offset, priority) },
-                                        onClockIn = { vm.clockInAt(it) },
-                                        onClockOut = { vm.clockOutAt(it) },
-                                        onCancelClock = { vm.cancelClockAt(it) },
-                                        onSetEffort = { offset, minutes -> vm.setEffortAt(offset, minutes) },
+                                        onClockIn = { vm.clockActions.clockInAt(it) },
+                                        onClockOut = { vm.clockActions.clockOutAt(it) },
+                                        onCancelClock = { vm.clockActions.cancelClockAt(it) },
+                                        onSetEffort = { offset, minutes -> vm.clockActions.setEffortAt(offset, minutes) },
                                         clockTime = clockTime,
                                         foldedElements = vm.folds.folded,
                                         onToggleFold = { vm.folds.toggle(it) },
@@ -1014,9 +1014,9 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                     headerActions = statusIcons,
                                     actions = remember(vm) {
                                         CalendarActions(
-                                            isRunning = { file, offset -> vm.clockRunningOn(file, offset) != null },
-                                            clockIn = { file, offset -> vm.clockIn(file, offset) },
-                                            clockOut = { file, offset -> vm.clockRunningOn(file, offset)?.let { vm.clockOut(it) } },
+                                            isRunning = { file, offset -> vm.clockActions.clockRunningOn(file, offset) != null },
+                                            clockIn = { file, offset -> vm.clockActions.clockIn(file, offset) },
+                                            clockOut = { file, offset -> vm.clockActions.clockRunningOn(file, offset)?.let { vm.clockActions.clockOut(it) } },
                                             open = { file, offset ->
                                                 vm.onFileSelected(file, scrollToOffset = offset)
                                                 selectedScreen = BottomItem.FILE
