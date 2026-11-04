@@ -121,7 +121,7 @@ class FileStoreTest {
         for (attempt in listOf("../secret.org", "../../secret.org", "a/../../secret.org", outside.toString())) {
             val result = store.write(attempt, "clobbered\n", null)
             assertTrue(
-                result is WriteResult.Rejected || result is WriteResult.NotFound,
+                result is WriteResult.Invalid || result is WriteResult.NotFound,
                 "traversal attempt should not be accepted: $attempt (was $result)",
             )
         }
@@ -136,9 +136,14 @@ class FileStoreTest {
     }
 
     @Test
+    fun aNoteOverTheLimitIsTooLarge() {
+        assertIs<WriteResult.TooLarge>(store.put("big.org", "x".repeat(32 * 1024 * 1024 + 1)))
+    }
+
+    @Test
     fun onlyOrgFilesCanBeWritten() {
         writeFile("notes.txt", "plain\n")
-        assertIs<WriteResult.Rejected>(store.write("notes.txt", "changed\n", null))
+        assertIs<WriteResult.Invalid>(store.write("notes.txt", "changed\n", null))
         assertEquals("plain\n", root.resolve("notes.txt").readText())
     }
 
@@ -153,6 +158,20 @@ class FileStoreTest {
         val readOnly = FileStore(root, readOnly = true)
         assertIs<WriteResult.ReadOnly>(readOnly.write("inbox.org", "changed\n", null))
         assertEquals("* TODO one\n", root.resolve("inbox.org").readText())
+    }
+
+    @Test
+    fun aFolderThatRefusesTheWriteIsAFailureAndLeavesNothingBehind() {
+        writeFile("sub/a.org", "* a\n")
+        val folder = root.resolve("sub").toFile()
+        assertTrue(folder.setWritable(false))
+        try {
+            assertIs<WriteResult.Failed>(store.put("sub/a.org", "* b\n"))
+            assertIs<WriteResult.Failed>(store.delete("sub/a.org", ifMatch = null))
+        } finally {
+            folder.setWritable(true)
+        }
+        assertEquals("* a\n", root.resolve("sub/a.org").readText())
     }
 
     @Test
@@ -201,7 +220,7 @@ class FileStoreTest {
 
             val result = store.put("linked/new.org", "* escaped\n", mustNotExist = true)
 
-            assertIs<WriteResult.Rejected>(result)
+            assertIs<WriteResult.Invalid>(result)
             assertTrue(outside.toFile().list().isNullOrEmpty(), "nothing may be written outside the root")
         } finally {
             outside.toFile().deleteRecursively()
@@ -226,9 +245,9 @@ class FileStoreTest {
     fun aDotFolderCannotBeWrittenToOrDeletedFrom() {
         writeFile(".korgnote-trash/old.org", "* old\n")
 
-        assertIs<WriteResult.Rejected>(store.put(".korgnote-trash/planted.org", "* planted\n"))
-        assertIs<WriteResult.Rejected>(store.put(".new/planted.org", "* planted\n", mustNotExist = true))
-        assertIs<WriteResult.Rejected>(store.delete(".korgnote-trash/old.org", ifMatch = "any"))
+        assertIs<WriteResult.Invalid>(store.put(".korgnote-trash/planted.org", "* planted\n"))
+        assertIs<WriteResult.Invalid>(store.put(".new/planted.org", "* planted\n", mustNotExist = true))
+        assertIs<WriteResult.Invalid>(store.delete(".korgnote-trash/old.org", ifMatch = "any"))
         assertEquals(false, root.resolve(".korgnote-trash/planted.org").toFile().exists())
         assertEquals(false, root.resolve(".new").toFile().exists())
         assertEquals("* old\n", root.resolve(".korgnote-trash/old.org").readText())

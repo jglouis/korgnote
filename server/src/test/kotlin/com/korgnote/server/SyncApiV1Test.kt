@@ -199,6 +199,49 @@ class SyncApiV1Test {
         assertTrue(!File(dir, ".korgnote-trash/planted.org").exists())
     }
 
+    /**
+     * The disk refusing is the server's problem, not the request's: a client must not be told its
+     * path is invalid, and has no use for where the notes are on this computer. A folder named
+     * `large` is there because the status used to be chosen by looking for that word in the message.
+     */
+    @Test
+    fun aWriteTheDiskRefusesIsAServerErrorThatDoesNotSayWhere() = testApplication {
+        val dir = notesDir("large/a.org" to "* A\n")
+        val folder = File(dir, "large")
+        serve(dir)
+        val etag = client.get("/api/v1/files/large/a.org").headers[HttpHeaders.ETag]!!
+        assertTrue(folder.setWritable(false))
+        try {
+            for (response in listOf(
+                client.put("/api/v1/files/large/new.org") { setBody("* new\n") },
+                client.put("/api/v1/files/large/a.org") {
+                    header(HttpHeaders.IfMatch, etag)
+                    setBody("* A edited\n")
+                },
+                client.delete("/api/v1/files/large/a.org") { header(HttpHeaders.IfMatch, etag) },
+            )) {
+                assertEquals(HttpStatusCode.InternalServerError, response.status)
+                assertTrue(!response.bodyAsText().contains(dir.path), response.bodyAsText())
+            }
+        } finally {
+            folder.setWritable(true)
+        }
+    }
+
+    @Test
+    fun whatIsWrongWithARequestIsStillSaid() = testApplication {
+        serve(notesDir("a.org" to "* A\n"))
+
+        val invalid = client.put("/api/v1/files/notes.txt") { setBody("x") }
+        assertEquals(HttpStatusCode.UnprocessableEntity, invalid.status)
+        assertEquals(
+            HttpStatusCode.UnprocessableEntity,
+            client.delete("/api/v1/files/notes.txt") { header(HttpHeaders.IfMatch, "any") }.status,
+        )
+        val tooLarge = client.put("/api/v1/files/big.org") { setBody("x".repeat(32 * 1024 * 1024 + 1)) }
+        assertEquals(HttpStatusCode.PayloadTooLarge, tooLarge.status)
+    }
+
     @Test
     fun theBundleStreamsOneJsonObjectPerFile() = testApplication {
         serve(notesDir("a.org" to "* A\n", "b.org" to "* B\n"))

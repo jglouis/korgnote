@@ -3,6 +3,8 @@ package com.korgnote.server
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.log
 import io.ktor.server.request.header
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.header
@@ -197,33 +199,10 @@ fun Route.syncApiV1(
                 val mustNotExist = call.request.header(HttpHeaders.IfNoneMatch)?.trim() == "*"
                 val content = call.receiveText()
 
-                when (val result = store.put(path, content, ifMatch, mustNotExist)) {
-                    is WriteResult.Written -> {
-                        journal.record(path, result.meta.etag)
-                        call.response.header(HttpHeaders.ETag, result.meta.etag)
-                        call.respond(EtagResponse(result.meta.etag))
-                    }
-                    // 409, not 412: the versions can still be merged, so the client should fetch
-                    // and try again rather than treat this as a failed precondition.
-                    is WriteResult.Conflict -> {
-                        call.response.header(HttpHeaders.ETag, result.current.etag)
-                        call.respondText(
-                            "Conflict: the file changed on the server",
-                            status = HttpStatusCode.Conflict,
-                        )
-                    }
-                    WriteResult.NotFound ->
-                        call.respondText("Not found: $path", status = HttpStatusCode.NotFound)
-                    is WriteResult.Rejected -> call.respondText(
-                        result.reason,
-                        status = if (result.reason.contains("large")) {
-                            HttpStatusCode.PayloadTooLarge
-                        } else {
-                            HttpStatusCode.UnprocessableEntity
-                        },
-                    )
-                    WriteResult.ReadOnly ->
-                        call.respondText("Read-only library", status = HttpStatusCode.Forbidden)
+                call.respondTo(store.put(path, content, ifMatch, mustNotExist), path) { meta ->
+                    journal.record(path, meta.etag)
+                    call.response.header(HttpHeaders.ETag, meta.etag)
+                    call.respond(EtagResponse(meta.etag))
                 }
             }
 
@@ -237,29 +216,35 @@ fun Route.syncApiV1(
                     )
                     return@delete
                 }
-                when (val result = store.delete(path, ifMatch)) {
-                    is WriteResult.Written -> {
-                        journal.record(path, etag = null, deleted = true)
-                        call.respond(HttpStatusCode.NoContent)
-                    }
-                    is WriteResult.Conflict -> {
-                        call.response.header(HttpHeaders.ETag, result.current.etag)
-                        call.respondText(
-                            "Conflict: the file changed on the server",
-                            status = HttpStatusCode.Conflict,
-                        )
-                    }
-                    WriteResult.NotFound ->
-                        call.respondText("Not found: $path", status = HttpStatusCode.NotFound)
-                    is WriteResult.Rejected ->
-                        call.respondText(result.reason, status = HttpStatusCode.UnprocessableEntity)
-                    WriteResult.ReadOnly ->
-                        call.respondText("Read-only library", status = HttpStatusCode.Forbidden)
+                call.respondTo(store.delete(path, ifMatch), path) {
+                    journal.record(path, etag = null, deleted = true)
+                    call.respond(HttpStatusCode.NoContent)
                 }
             }
         }
     }
 }
 
-private fun io.ktor.server.application.ApplicationCall.pathSegments(): String =
+/** [written] when the write happened; a save and a delete that did not come back the same way. */
+private suspend fun ApplicationCall.respondTo(result: WriteResult, path: String, written: suspend (FileMeta) -> Unit) {
+    when (result) {
+        is WriteResult.Written -> written(result.meta)
+        // 409, not 412: the versions can still be merged, so the client should fetch and try again
+        // rather than treat this as a failed precondition.
+        is WriteResult.Conflict -> {
+            response.header(HttpHeaders.ETag, result.current.etag)
+            respondText("Conflict: the file changed on the server", status = HttpStatusCode.Conflict)
+        }
+        WriteResult.NotFound -> respondText("Not found: $path", status = HttpStatusCode.NotFound)
+        WriteResult.Invalid -> respondText("invalid path", status = HttpStatusCode.UnprocessableEntity)
+        WriteResult.TooLarge -> respondText("file too large", status = HttpStatusCode.PayloadTooLarge)
+        is WriteResult.Failed -> {
+            application.log.error("Could not change $path", result.cause)
+            respondText("Could not change $path on the server; its log says why.", status = HttpStatusCode.InternalServerError)
+        }
+        WriteResult.ReadOnly -> respondText("Read-only library", status = HttpStatusCode.Forbidden)
+    }
+}
+
+private fun ApplicationCall.pathSegments(): String =
     parameters.getAll("path")?.joinToString("/").orEmpty()

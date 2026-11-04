@@ -31,7 +31,13 @@ sealed interface WriteResult {
 
     data object NotFound : WriteResult
 
-    data class Rejected(val reason: String) : WriteResult
+    /** The path is not a note of the library. Asking again would not help. */
+    data object Invalid : WriteResult
+
+    data object TooLarge : WriteResult
+
+    /** The disk refused. [cause] is for the log: its message says where the notes are on this computer. */
+    data class Failed(val cause: Exception) : WriteResult
 
     data object ReadOnly : WriteResult
 }
@@ -116,11 +122,11 @@ class FileStore(
      */
     fun write(path: String, content: String, expectedEtag: String?): WriteResult {
         if (readOnly) return WriteResult.ReadOnly
-        val file = resolve(path) ?: return WriteResult.Rejected("invalid path")
+        val file = resolve(path) ?: return WriteResult.Invalid
         if (!file.isRegularFile()) return WriteResult.NotFound
 
         val bytes = content.encodeToByteArray()
-        if (bytes.size > MAX_BYTES) return WriteResult.Rejected("file too large")
+        if (bytes.size > MAX_BYTES) return WriteResult.TooLarge
 
         val current = metaOf(path, file)
         if (expectedEtag != null && current.etag != expectedEtag) return WriteResult.Conflict(current)
@@ -138,7 +144,7 @@ class FileStore(
             WriteResult.Written(metaOf(path, file))
         } catch (failure: Exception) {
             Files.deleteIfExists(temporary)
-            WriteResult.Rejected(failure.message ?: "write failed")
+            WriteResult.Failed(failure)
         }
     }
 
@@ -156,10 +162,10 @@ class FileStore(
         mustNotExist: Boolean = false,
     ): WriteResult {
         if (readOnly) return WriteResult.ReadOnly
-        val file = resolve(path) ?: return WriteResult.Rejected("invalid path")
+        val file = resolve(path) ?: return WriteResult.Invalid
 
         val bytes = content.encodeToByteArray()
-        if (bytes.size > MAX_BYTES) return WriteResult.Rejected("file too large")
+        if (bytes.size > MAX_BYTES) return WriteResult.TooLarge
 
         return synchronized(writing) {
             val exists = file.isRegularFile()
@@ -198,7 +204,7 @@ class FileStore(
                 hashes.remove(path)
                 WriteResult.Written(metaOf(path, file))
             } catch (failure: Exception) {
-                WriteResult.Rejected(failure.message ?: "write failed")
+                WriteResult.Failed(failure)
             }
         }
     }
@@ -211,7 +217,7 @@ class FileStore(
      */
     fun delete(path: String, ifMatch: String?): WriteResult {
         if (readOnly) return WriteResult.ReadOnly
-        val file = resolve(path) ?: return WriteResult.Rejected("invalid path")
+        val file = resolve(path) ?: return WriteResult.Invalid
         return synchronized(writing) {
             if (!file.isRegularFile()) return WriteResult.NotFound
 
@@ -226,7 +232,7 @@ class FileStore(
                 hashes.remove(path)
                 WriteResult.Written(current)
             } catch (failure: Exception) {
-                WriteResult.Rejected(failure.message ?: "delete failed")
+                WriteResult.Failed(failure)
             }
         }
     }
