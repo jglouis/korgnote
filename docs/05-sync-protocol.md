@@ -42,7 +42,14 @@ folder that exists, so a note cannot be created through a folder linked in from 
 capped at 32 MB. `list` goes through the same check, so a symlink leading outside is not listed: it
 could not be fetched, and a phone would keep trying. This store's own temporary files may go while the
 walk is on its way to them. Anything else it cannot read, or finds gone, fails the listing with a `500`:
-it may only have been renamed, and a note left out would be taken for deleted.
+it may only have been renamed, and a note left out would be taken for deleted. A rename beside a folder
+too big to be read in one go can also hide both names from a walk, or show it both, with no error, so
+the tree is walked until a walk has lost nothing the one before it listed, and the listing fails with a
+`500` after six that have. New paths do not count against a walk, so a big checkout or a first upload
+does not fail listings, and for a moment a listing can hold both the old name and the new: a path too
+many is gone at the next delta, where a path too few would be a note deleted. This is not proof against
+everything: beside a folder that big, a folder renamed back and forth every millisecond or so can still
+be missed by two walks in a row.
 
 A path that leaves the manifest this way is, to a phone, a note deleted on the server. A clean copy goes
 at the next complete manifest. A copy with an unsent edit is kept and pushed as a new note, which the

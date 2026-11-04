@@ -412,6 +412,51 @@ class FileStoreTest {
     }
 
     /**
+     * Too many names to read in one go, so a rename between two reads can hide both names from the walk,
+     * and nothing fails: a complete manifest without the folder's notes. One rename, at a random moment
+     * of one listing, as a person would do it. Both names at once are allowed: nothing is taken for
+     * deleted, and the next delta settles it.
+     */
+    @Test
+    fun aRenameBesideABigFolderDuringAListingLosesNoNotes() {
+        repeat(3_000) { writeFile("note-$it-with-a-title-of-a-realistic-length.org", "* n\n") }
+        repeat(20) { writeFile("projects/m$it.org", "* m\n") }
+        var listingNanos = kotlin.system.measureNanoTime { store.list() }
+        var forward = true
+        repeat(50) {
+            val (from, to) = if (forward) "projects" to "archive" else "archive" to "projects"
+            forward = !forward
+            val renameAt = System.nanoTime() + kotlin.random.Random.nextLong(listingNanos)
+            val renamer = kotlin.concurrent.thread {
+                while (System.nanoTime() < renameAt) Thread.onSpinWait()
+                java.nio.file.Files.move(root.resolve(from), root.resolve(to))
+            }
+            val started = System.nanoTime()
+            val listed = runCatching { store.list() }.getOrNull()
+            listingNanos = System.nanoTime() - started
+            renamer.join()
+            if (listed != null) assertTrue(listed.size >= 3_020, "only ${listed.size} of 3020 listed")
+        }
+    }
+
+    /** Waiting for walks to agree would fail every listing for as long as the notes kept coming. */
+    @Test
+    fun notesArrivingDuringAListingDoNotFailIt() {
+        repeat(500) { writeFile("note-$it.org", "* n\n") }
+        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+        val arrivals = kotlin.concurrent.thread {
+            var n = 0
+            while (!stop.get()) store.put("new-${n++}.org", "* new\n", ifMatch = null)
+        }
+        try {
+            repeat(5) { assertTrue(store.list().size >= 500) }
+        } finally {
+            stop.set(true)
+            arrivals.join()
+        }
+    }
+
+    /**
      * Left out of a complete manifest, the note would be taken for deleted, and go from every phone.
      * So what cannot be read fails the listing, as a server that cannot say.
      */

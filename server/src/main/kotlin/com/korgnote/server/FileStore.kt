@@ -101,9 +101,27 @@ class FileStore(
      * that says nothing about the notes. Anything else that stops a read fails the whole list. A note
      * or folder gone may only have been renamed, to a name the walk will not see, and left out of a
      * complete manifest, a note is taken for deleted and goes from every phone.
+     *
+     * A rename can also go unnoticed: a folder too big to be read in one go can hide both names from
+     * the walk, or show it both, with no error. So the tree is walked until a walk has lost nothing the
+     * one before it listed, as one rename can only spoil the walk it lands in. Notes that are new do not
+     * count against it: a big checkout or first upload would fail every listing while it lasted, and a
+     * path too many is a stale name for a moment, where a path too few is a note deleted. Notes that keep
+     * going fail the list.
      */
     fun list(): List<FileMeta> {
         if (!root.exists() || !root.isDirectory()) return emptyList()
+        var previous = walk().map { it.path }
+        repeat(MAX_WALKS - 1) {
+            val latest = walk()
+            val paths = latest.mapTo(HashSet()) { it.path }
+            if (paths.containsAll(previous)) return latest
+            previous = latest.map { it.path }
+        }
+        throw IOException("The notes kept going during $MAX_WALKS walks")
+    }
+
+    private fun walk(): List<FileMeta> {
         val rootReal = root.toRealPath()
         val found = mutableListOf<FileMeta>()
         Files.walkFileTree(root, object : SimpleFileVisitor<Path>() {
@@ -326,5 +344,8 @@ class FileStore(
         /** FAT keeps two seconds, ext3 and HFS+ one; anything finer is safe under this too. */
         const val TIMESTAMP_GRAIN_MILLIS = 2_000L
         const val MAX_BYTES = 32 * 1024 * 1024
+
+        /** One rename can take three: one before it, the one it lands in, and one after it. */
+        const val MAX_WALKS = 6
     }
 }
