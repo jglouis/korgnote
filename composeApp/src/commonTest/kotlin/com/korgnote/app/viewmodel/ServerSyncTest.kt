@@ -30,6 +30,7 @@ class ServerSyncTest {
     private val api = FakeSyncApi()
     private val store = DocumentStore(InMemoryReplicaStorage())
     private var replicaShown = 0
+    private val notesShown = mutableListOf<Set<String>>()
     private var message: String? = null
 
     private var clock = Instant.fromEpochSeconds(1_800_000_000)
@@ -43,6 +44,10 @@ class ServerSyncTest {
         backgroundScope,
         SyncEngine(store, api),
         onReplicaChanged = { replicaShown++ },
+        onNotesChanged = {
+            replicaShown++
+            notesShown += it
+        },
         showMessage = { message = it },
         now = { clock },
         background = object : BackgroundSync {
@@ -57,6 +62,21 @@ class ServerSyncTest {
     private fun TestScope.after(millis: Long) {
         advanceTimeBy(millis.milliseconds)
         runCurrent()
+    }
+
+    /** A burst of files, shown one by one, read every note for each. */
+    @Test
+    fun aBurstOnTheStreamIsShownOnce() = runTest {
+        for (name in listOf("a.org", "b.org", "c.org")) {
+            api.files[name] = "* $name\n"
+            api.pending += name to false
+        }
+        api.holdStream = true
+
+        serverSync().watch()
+        runCurrent()
+
+        assertEquals(listOf(setOf("a.org", "b.org", "c.org")), notesShown)
     }
 
     @Test

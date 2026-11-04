@@ -16,6 +16,7 @@ import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOptions
+import com.korgnote.common.org.agenda.ClockedSpan
 import com.korgnote.common.org.agenda.agendaEntries
 import com.korgnote.common.org.agenda.clockedSpans
 import kotlinx.coroutines.CoroutineScope
@@ -44,6 +45,11 @@ class NoteAgenda(
     /** When the notes last matched where they are kept, for the widgets to say how fresh they are. */
     private val lastSynced: () -> Instant? = { null },
 ) {
+    /** What [build] last found in each note, for the text it found it in. */
+    private var perNote: Map<String, Dated> = emptyMap()
+
+    private class Dated(val text: String, val entries: List<AgendaEntry>, val clocks: List<ClockedSpan>)
+
     /** Every dated entry in the notes, which the calendar asks for a day at a time. */
     var index by mutableStateOf(build(library.texts(), library.fallbackKeywords))
         private set
@@ -59,14 +65,25 @@ class NoteAgenda(
     }
 
     /**
-     * The index of [texts], read with [keywords] where a note declares none. Touches no state, so
-     * it can be built on any thread.
+     * The index of [texts], read with [keywords] where a note declares none. Touches nothing the
+     * screen reads, so it can be built on any thread, one at a time. A note whose text has not changed
+     * is not scanned again: a sync usually brings one note.
      *
      * Rebuilt with everything else derived from the notes. Today is read here, so the index a day
      * old still carries over to the right day once anything changes.
      */
-    fun build(texts: Map<String, String>, keywords: OrgTodoConfig): AgendaIndex =
-        AgendaIndex(agendaEntries(texts, keywords), AgendaOptions(today = today()), clockedSpans(texts, keywords))
+    fun build(texts: Map<String, String>, keywords: OrgTodoConfig): AgendaIndex {
+        val dated = texts.mapValues { (path, text) ->
+            perNote[path]?.takeIf { it.text == text }
+                ?: Dated(text, agendaEntries(path, text, keywords), clockedSpans(path, text, keywords))
+        }
+        perNote = dated
+        return AgendaIndex(
+            dated.keys.sorted().flatMap { dated.getValue(it).entries },
+            AgendaOptions(today = today()),
+            dated.values.flatMap { it.clocks },
+        )
+    }
 
     /** Opens the file an agenda entry comes from, at its heading. */
     fun openEntry(entry: AgendaEntry) = open(entry.file, entry.headingOffset)

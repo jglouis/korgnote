@@ -1,5 +1,6 @@
 package com.korgnote.app.viewmodel
 
+import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.app.widgets.AgendaWidgets
 import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.replica.DocumentStore
@@ -16,6 +17,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertSame
 import kotlin.test.assertNotNull
 import kotlin.time.Instant
 
@@ -85,5 +87,18 @@ class AgendaWidgetsTest {
         viewModel.changes.saveCurrentFile()
 
         assertEquals(listOf("Design review", "Lunch"), handedOver.last().first.map { it.title })
+    }
+
+    /** A sync usually brings one note: the others' entries are not looked for again. */
+    @Test
+    fun aNoteThatDidNotChangeIsNotScannedAgain() = runTest {
+        val store = DocumentStore(InMemoryReplicaStorage())
+        val viewModel = NotesViewModel(SyncEngine(store, FakeSyncApi()), store)
+        val first = viewModel.agenda.build(mapOf("a.org" to "* One\n<2026-11-01 Sun>\n", "b.org" to "* Two\n<2026-11-02 Mon>\n"), DEFAULT_TODO_KEYWORDS)
+
+        val second = viewModel.agenda.build(mapOf("a.org" to "* One\n<2026-11-01 Sun>\n", "b.org" to "* Three\n<2026-11-02 Mon>\n"), DEFAULT_TODO_KEYWORDS)
+
+        assertSame(first.entries.single { it.file == "a.org" }, second.entries.single { it.file == "a.org" })
+        assertEquals("Three", second.entries.single { it.file == "b.org" }.title)
     }
 }

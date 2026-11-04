@@ -68,6 +68,39 @@ class NoteLibraryTest {
         assertEquals("SHIPPED Release", library.headingOf("b.org").title)
     }
 
+    @Test
+    fun aReloadOfOneNoteReadsOnlyThatNote() = runTest {
+        val storage = StallingReplicaStorage(InMemoryReplicaStorage(mapOf("a.org" to "* A\n", "b.org" to "* B\n")))
+        val store = DocumentStore(storage)
+        val library = NoteLibrary(store)
+        val here = StandardTestDispatcher(testScheduler)
+        library.reload(parseOn = here)
+        val a = library["a.org"]
+        store.save("b.org", "* B, edited\n")
+        store.save("c.org", "* C\n")
+        storage.read.clear()
+
+        library.reload(parseOn = here, only = setOf("b.org"))
+
+        assertEquals(setOf("b.org", "c.org"), storage.read.toSet(), "the one asked for, and one not read yet")
+        assertSame(a, library["a.org"])
+        assertEquals("* B, edited\n", library["b.org"]?.text)
+        assertEquals("* C\n", library["c.org"]?.text)
+    }
+
+    @Test
+    fun aReloadOfOneNoteDropsANoteGoneFromTheReplica() = runTest {
+        val store = DocumentStore(InMemoryReplicaStorage(mapOf("a.org" to "* A\n", "b.org" to "* B\n")))
+        val library = NoteLibrary(store)
+        val here = StandardTestDispatcher(testScheduler)
+        library.reload(parseOn = here)
+        store.removeLocally("b.org")
+
+        library.reload(parseOn = here, only = setOf("b.org"))
+
+        assertEquals(setOf("a.org"), library.documents.keys)
+    }
+
     /** A tick lands while a reload is reading: the text read just before it must not undo it. */
     @Test
     fun aNoteChangedDuringAReloadKeepsTheChange() = runTest {

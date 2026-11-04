@@ -15,6 +15,7 @@ import korgnote.composeapp.generated.resources.vm_server_unreachable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -23,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.compose.resources.getString
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -37,6 +39,8 @@ class ServerSync(
     private val sync: SyncEngine,
     /** Shows whatever the replica now holds; run after anything that may have changed it. */
     private val onReplicaChanged: suspend () -> Unit,
+    /** [onReplicaChanged] when it is known which notes changed: the change stream says. */
+    private val onNotesChanged: suspend (Set<String>) -> Unit = { onReplicaChanged() },
     /** Shows a message to the user; an empty one clears it. */
     private val showMessage: (String) -> Unit,
     private val now: () -> Instant = { Clock.System.now() },
@@ -143,10 +147,7 @@ class ServerSync(
             var backoff = 1.seconds
             while (isActive) {
                 try {
-                    sync.watch {
-                        lastSynced = now()
-                        onReplicaChanged()
-                    }
+                    followStream()
                     // A clean end means the server closed the stream; reconnect promptly.
                     backoff = 1.seconds
                 } catch (t: Throwable) {
@@ -164,6 +165,30 @@ class ServerSync(
                 catchUp("Catch-up sync")
             }
         }
+    }
+
+    /**
+     * Pulls what the stream says changed, showing it as it goes: the first change at once, and those
+     * that come while that is shown, or within [STREAM_PAUSE] of it, as one. A burst of files shown
+     * one by one read every note for each. Returns when the stream ends, with everything shown.
+     */
+    private suspend fun followStream() = coroutineScope {
+        val changed = mutableSetOf<String>()
+        val arrived = Channel<Unit>(Channel.CONFLATED)
+        launch {
+            for (signal in arrived) {
+                val paths = changed.toSet()
+                changed.clear()
+                onNotesChanged(paths)
+                delay(STREAM_PAUSE)
+            }
+        }
+        sync.watch { path ->
+            lastSynced = now()
+            changed += path
+            arrived.trySend(Unit)
+        }
+        arrived.close()
     }
 
     /**
@@ -260,6 +285,10 @@ class ServerSync(
         return true
     }
 
+    private companion object {
+        /** Long enough to take the files of one save-all together, short enough not to be noticed. */
+        val STREAM_PAUSE = 300.milliseconds
+    }
 }
 
 /** Why the server could not be reached, in the words of the app's language. */

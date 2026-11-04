@@ -18,6 +18,9 @@ class StallingReplicaStorage(
     private val reads = mutableMapOf<String, MutableList<Stall>>()
     private val writes = mutableMapOf<String, MutableList<Stall>>()
 
+    /** Every note read, in order, for a test to count. */
+    val read = mutableListOf<String>()
+
     /** The read of [path] after the next [skipping] waits until the result is completed. */
     fun stallRead(path: String, skipping: Int = 0): CompletableDeferred<Unit> =
         Stall(skipping).also { reads.getOrPut(path) { mutableListOf() } += it }.gate
@@ -27,6 +30,7 @@ class StallingReplicaStorage(
         Stall(0).also { writes.getOrPut(path) { mutableListOf() } += it }.gate
 
     override suspend fun read(path: String): String? {
+        read += path
         val text = files.read(path)
         reads[path].awaitTurn()
         return text

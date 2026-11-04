@@ -173,7 +173,7 @@ class NotesViewModel(
         server = { server },
         refresh = ::rebuildDerived,
         refreshSoon = ::refreshDerivedViewsSoon,
-        showReplica = ::showFromReplica,
+        showReplica = { showFromReplica() },
         showMessage = ::showMessage,
     )
 
@@ -192,7 +192,7 @@ class NotesViewModel(
         newId,
         scope = viewModelScope,
         reload = { reloadLibrary() },
-        showReplica = ::showFromReplica,
+        showReplica = { showFromReplica() },
         open = { path -> onFileSelected(path) },
         openAndWait = ::openAndWait,
         refreshSoon = ::refreshDerivedViewsSoon,
@@ -269,9 +269,16 @@ class NotesViewModel(
 
     /** Where the notes are kept, kept in step with the screen: the server, or the folder. */
     val server: NotesSync = if (folder != null) {
-        FolderSync(viewModelScope, folder, onReplicaChanged = ::showFromReplica, showMessage = ::showMessage)
+        FolderSync(viewModelScope, folder, onReplicaChanged = { showFromReplica() }, showMessage = ::showMessage)
     } else {
-        ServerSync(viewModelScope, sync, onReplicaChanged = ::showFromReplica, showMessage = ::showMessage, background = backgroundSync)
+        ServerSync(
+            viewModelScope,
+            sync,
+            onReplicaChanged = { showFromReplica() },
+            onNotesChanged = { showFromReplica(it) },
+            showMessage = ::showMessage,
+            background = backgroundSync,
+        )
     }
 
     /**
@@ -405,14 +412,17 @@ class NotesViewModel(
     }
 
     /** Reads the notes again. A change on its way to the replica would otherwise be read as it was before it. */
-    private suspend fun reloadLibrary() {
+    private suspend fun reloadLibrary(only: Set<String>? = null) {
         changes.whenWritten()
-        library.reload(parseOn = background)
+        library.reload(parseOn = background, only = only)
     }
 
     /** Rebuilds everything the UI shows out of the replica. Returns once everything is shown. */
-    private suspend fun showFromReplica() {
-        reloadLibrary()
+    private suspend fun showFromReplica() = showFromReplica(changed = null)
+
+    /** [showFromReplica], when it is known which notes [changed]: only those are read again. */
+    private suspend fun showFromReplica(changed: Set<String>?) {
+        reloadLibrary(changed)
         rebuildDerived()
 
         // The open note may be gone: deleted here, or on another device. With nothing open — at

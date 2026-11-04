@@ -81,14 +81,15 @@ class NoteLibrary(private val store: DocumentStore) {
     val fallbackKeywords: OrgTodoConfig get() = DEFAULT_TODO_KEYWORDS
 
     /**
-     * Rereads every note from the replica, on [parseOn]. A note whose text has not changed keeps its
-     * parse: a sync usually brings one note, and parsing all of them again took seconds on a phone,
-     * with the screen frozen while the main thread did it.
+     * Rereads the notes from the replica, on [parseOn]: every one, or with [only] just those, and any
+     * not read yet. A note whose text has not changed keeps its parse: a sync usually brings one note,
+     * and parsing all of them again took seconds on a phone, with the screen frozen while the main
+     * thread did it.
      *
      * Each note's headings are read with its own keywords, or with [fallbackKeywords] when it
      * declares none.
      */
-    suspend fun reload(parseOn: CoroutineDispatcher = Dispatchers.Default) = reloading.withLock {
+    suspend fun reload(parseOn: CoroutineDispatcher = Dispatchers.Default, only: Set<String>? = null) = reloading.withLock {
         val changedMeanwhile = mutableMapOf<String, OrgDocument>()
         changedDuringReload = changedMeanwhile
         try {
@@ -96,9 +97,16 @@ class NoteLibrary(private val store: DocumentStore) {
             val paths = store.paths()
             val fallback = fallbackKeywords
             val fresh = withContext(parseOn) {
-                val texts = buildMap { for (path in paths) store.read(path)?.let { put(path, it) } }
-                texts.mapValues { (path, text) ->
-                    previous[path]?.takeIf { it.text == text }?.readWith(fallback) ?: text.toOrgDocument(fallback)
+                buildMap {
+                    for (path in paths) {
+                        val kept = previous[path]
+                        if (only != null && path !in only && kept != null) {
+                            put(path, kept)
+                        } else {
+                            val text = store.read(path) ?: continue
+                            put(path, kept?.takeIf { it.text == text }?.readWith(fallback) ?: text.toOrgDocument(fallback))
+                        }
+                    }
                 }
             }
             parsed.clear()
