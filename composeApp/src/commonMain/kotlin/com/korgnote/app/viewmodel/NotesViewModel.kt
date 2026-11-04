@@ -76,7 +76,6 @@ import korgnote.composeapp.generated.resources.vm_note_exists
 import korgnote.composeapp.generated.resources.vm_note_title_needed
 import korgnote.composeapp.generated.resources.vm_table_changed
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -199,6 +198,7 @@ class NotesViewModel(
 
     /** What changes a note's text. */
     val changes: NoteChanges = NoteChanges(
+        viewModelScope,
         store,
         library,
         note,
@@ -510,7 +510,7 @@ class NotesViewModel(
      * Marking a repeating entry done repeats it, as Org does: it goes back to its first keyword and
      * its dates move on to the next occurrence.
      */
-    fun setTodoAt(offsetInDocument: Int, keyword: String?, scope: CoroutineScope? = null) {
+    fun setTodoAt(offsetInDocument: Int, keyword: String?) {
         val document = note.content.toOrgDocument(library.fallbackKeywords)
         val heading = document.nodeAt<OrgSection>(offsetInDocument) ?: return
         // A keyword with `@` wants a note: the change waits for it, as Org's note buffer does.
@@ -523,7 +523,7 @@ class NotesViewModel(
             stateNoteCompletion.reset()
             return
         }
-        changes.changeTodoStateAt(heading.range.first, keyword, noteText = null, scope)
+        changes.changeTodoStateAt(heading.range.first, keyword)
     }
 
     /** The keywords of the note at [path]: its own `#+TODO:`, or what the notes declare. */
@@ -539,7 +539,7 @@ class NotesViewModel(
     fun setTodo(path: String, headingOffset: Int, keyword: String?) {
         if (path == note.path) {
             if (refuseWhileEditing()) return
-            setTodoAt(headingOffset, keyword, viewModelScope)
+            setTodoAt(headingOffset, keyword)
             return
         }
         val document = library[path] ?: return
@@ -549,7 +549,7 @@ class NotesViewModel(
             if (refuseWhileEditing()) return
             viewModelScope.launch {
                 openAndWait(path)
-                if (note.path == path) setTodoAt(headingOffset, keyword, viewModelScope)
+                if (note.path == path) setTodoAt(headingOffset, keyword)
             }
             return
         }
@@ -591,7 +591,7 @@ class NotesViewModel(
     }
 
     /** Changes the keyword [pendingStateNote] waits on, logging what was written. */
-    fun saveStateNote(scope: CoroutineScope? = null) {
+    fun saveStateNote() {
         val pending = pendingStateNote ?: return
         pendingStateNote = null
         stateNoteCompletion.reset()
@@ -601,7 +601,7 @@ class NotesViewModel(
             viewModelScope.launch { showMessage(getString(Res.string.vm_edit_conflict)) }
             return
         }
-        changes.changeTodoStateAt(pending.offset, pending.keyword, stateNoteDraft.text, scope)
+        changes.changeTodoStateAt(pending.offset, pending.keyword, stateNoteDraft.text)
     }
 
     /** Drops the change [pendingStateNote] waits on: the keyword stays as it was. */

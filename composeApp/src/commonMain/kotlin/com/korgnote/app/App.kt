@@ -61,6 +61,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
@@ -311,7 +312,9 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
             onDismiss = done,
             onSave = { request ->
                 done()
-                scope.launch {
+                // The sheet is closed by now, and what was typed in it is only here: turning the
+                // phone, which ends what the screen launched, must not take it.
+                vm.viewModelScope.launch {
                     queue.add(request)
                     vm.fileCaptures()
                 }
@@ -840,7 +843,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                             onValueChange = { vm.onStateNoteChanged(it) },
                             completion = vm.stateNoteCompletion,
                             todoKeywords = vm.todoKeywords,
-                            onSave = { vm.saveStateNote(scope) },
+                            onSave = { vm.saveStateNote() },
                             onCancel = { vm.cancelStateNote() },
                         )
                         vm.stateNoteCompletion.pendingDatePicker?.let {
@@ -934,7 +937,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                             }
                                         },
                                         onRefileSection = { index -> refiling = index to vm.refileTargets(index) },
-                                        onSetPriority = { offset, priority -> vm.changes.setPriorityAt(offset, priority, scope) },
+                                        onSetPriority = { offset, priority -> vm.changes.setPriorityAt(offset, priority) },
                                         onClockIn = { vm.clockInAt(it) },
                                         onClockOut = { vm.clockOutAt(it) },
                                         onCancelClock = { vm.cancelClockAt(it) },
@@ -948,9 +951,9 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
                                         onRestored = { vm.note.onRestored() },
                                         revealElementIndex = vm.note.revealElementIndex,
                                         onRevealed = { vm.note.onRevealed() },
-                                        onToggleCheckbox = { offset -> vm.changes.toggleCheckboxAt(offset, scope) },
-                                        onToggleTimestamp = { offset -> vm.changes.toggleTimestampAt(offset, scope) },
-                                        onSetTodo = { offset, keyword -> vm.setTodoAt(offset, keyword, scope) },
+                                        onToggleCheckbox = { offset -> vm.changes.toggleCheckboxAt(offset) },
+                                        onToggleTimestamp = { offset -> vm.changes.toggleTimestampAt(offset) },
+                                        onSetTodo = { offset, keyword -> vm.setTodoAt(offset, keyword) },
                                         onEditTable = { vm.beginTableEdit(it) },
                                         backlinks = vm.links.backlinks,
                                         onOpenBacklink = { vm.links.openBacklink(it) },

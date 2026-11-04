@@ -43,9 +43,9 @@ class PriorityTest {
         viewModel.server.load()
         viewModel.onFileSelected(path)
 
-        viewModel.changes.setPriorityAt(0, OrgPriority.of("A"), this)
+        viewModel.changes.setPriorityAt(0, OrgPriority.of("A"))
         // Where the second heading is now: the first one's cookie moved it.
-        viewModel.changes.setPriorityAt(viewModel.note.content.indexOf("* TODO [#B]"), null, this)
+        viewModel.changes.setPriorityAt(viewModel.note.content.indexOf("* TODO [#B]"), null)
 
         // The push is launched in this scope; let it run before looking at what the server has.
         advanceUntilIdle()

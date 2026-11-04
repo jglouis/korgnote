@@ -23,6 +23,11 @@ import kotlinx.datetime.LocalDateTime
  * the screen in step and passes the change on to where the notes are kept.
  */
 class NoteChanges(
+    /**
+     * Where writes run: the view model's, which outlives the screen. Turning the phone cancels what
+     * the screen launched, and a change it has shown by then must still reach the replica.
+     */
+    private val scope: CoroutineScope,
     private val store: DocumentStore,
     private val library: NoteLibrary,
     private val note: OpenNote,
@@ -46,6 +51,10 @@ class NoteChanges(
      */
     suspend fun saveCurrentFile() {
         val path = note.path ?: return
+        scope.launch { save(path) }.join()
+    }
+
+    private suspend fun save(path: String) {
         // A heading's `[2/5]` counts what is under it, which the edit may have changed — and only
         // those over the edit: the rest of the note is saved as it was.
         // And a clock edited by hand sums its stamps again, as `C-c C-c` on its line would.
@@ -64,7 +73,7 @@ class NoteChanges(
      * above it changes. The edit itself is a range replacement, so every other character in the file
      * — blank lines, trailing whitespace, formatting — is left exactly as it was on disk.
      */
-    fun toggleCheckboxAt(offsetInDocument: Int, scope: CoroutineScope? = null) = changeOpenNote(scope) { document ->
+    fun toggleCheckboxAt(offsetInDocument: Int) = changeOpenNote { document ->
         document.nodeAt<OrgCheckboxItem>(offsetInDocument)?.let { document.tickAsOrgDoes(it).withStatistics(since = document) }
     }
 
@@ -72,7 +81,7 @@ class NoteChanges(
      * Makes the keyword of the heading at [offsetInDocument] [keyword], or none when that is null,
      * with what Org logs of it, here [noteText]: saved and pushed as [toggleCheckboxAt] saves a tick.
      */
-    fun changeTodoStateAt(offsetInDocument: Int, keyword: String?, noteText: String?, scope: CoroutineScope?) = changeOpenNote(scope) { document ->
+    fun changeTodoStateAt(offsetInDocument: Int, keyword: String?, noteText: String? = null) = changeOpenNote { document ->
         document.nodeAt<OrgSection>(offsetInDocument)?.let { heading ->
             document.changeTodoState(heading, keyword, now(), todoKeywords(), noteText).withStatistics(since = document)
         }
@@ -83,7 +92,7 @@ class NoteChanges(
      * is not, saved and pushed as [toggleCheckboxAt] saves a tick. The calendar follows at once: an
      * active date is in it and an inactive one is not.
      */
-    fun toggleTimestampAt(offsetInDocument: Int, scope: CoroutineScope? = null) = changeOpenNote(scope, refreshAtOnce = true) { document ->
+    fun toggleTimestampAt(offsetInDocument: Int) = changeOpenNote(refreshAtOnce = true) { document ->
         document.text.withTimestampToggledAt(offsetInDocument)?.toOrgDocument(library.fallbackKeywords)
     }
 
@@ -91,19 +100,19 @@ class NoteChanges(
      * Sets the priority of the heading at [offsetInDocument] — `[#A]` — or removes it when
      * [priority] is null, as Org's `C-c ,` does; saved and pushed as a keyword is.
      */
-    fun setPriorityAt(offsetInDocument: Int, priority: OrgPriority?, scope: CoroutineScope? = null) = changeOpenNote(scope) { document ->
+    fun setPriorityAt(offsetInDocument: Int, priority: OrgPriority?) = changeOpenNote { document ->
         document.nodeAt<OrgSection>(offsetInDocument)?.let { document.setPriority(it, priority) }
     }
 
     /**
-     * [edit] made to the open note, on screen and in the library at once; written, then pushed, in
-     * [scope]. Null from [edit], or the same text, is nothing to do.
+     * [edit] made to the open note, on screen and in the library at once; written, then pushed,
+     * behind that. Null from [edit], or the same text, is nothing to do.
      *
      * Nothing is rebuilt from every note now unless [refreshAtOnce] asks: the scans held a tick, the
      * keyword menu and the note dialog's Save up for a second on a phone. The note shows the change
      * at once, and the calendar follows a moment later.
      */
-    private fun changeOpenNote(scope: CoroutineScope?, refreshAtOnce: Boolean = false, edit: (OrgDocument) -> OrgDocument?) {
+    private fun changeOpenNote(refreshAtOnce: Boolean = false, edit: (OrgDocument) -> OrgDocument?) {
         val path = note.path ?: return
         val document = note.content.toOrgDocument(library.fallbackKeywords)
         val updated = edit(document) ?: return
@@ -112,7 +121,7 @@ class NoteChanges(
         library.put(path, updated)
         if (refreshAtOnce) refresh() else refreshSoon()
         // A failure leaves the file dirty for the next cycle rather than losing the change.
-        scope?.launch { server().push(writeFirst = { store.save(path, note.content) }) }
+        scope.launch { server().push(writeFirst = { store.save(path, note.content) }) }
     }
 
     /**

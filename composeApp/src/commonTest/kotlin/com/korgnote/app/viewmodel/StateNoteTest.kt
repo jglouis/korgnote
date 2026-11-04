@@ -62,14 +62,14 @@ class StateNoteTest {
     @Test
     fun aNoteIsAskedForAndLoggedUnderTheStateLine() = runTest {
         open()
-        viewModel.setTodoAt(heading, "WAIT", this)
+        viewModel.setTodoAt(heading, "WAIT")
 
         val pending = assertNotNull(viewModel.pendingStateNote, "the change waits for its note")
         assertEquals("WAIT", pending.keyword)
         assertEquals(text, viewModel.note.content, "nothing changed yet")
 
         viewModel.onStateNoteChanged(TextFieldValue("Waiting for his quote."))
-        viewModel.saveStateNote(this)
+        viewModel.saveStateNote()
         advanceUntilIdle()
 
         assertNull(viewModel.pendingStateNote)
@@ -83,7 +83,7 @@ class StateNoteTest {
     @Test
     fun cancellingLeavesTheKeywordAsItWas() = runTest {
         open()
-        viewModel.setTodoAt(heading, "CANCELED", this)
+        viewModel.setTodoAt(heading, "CANCELED")
         viewModel.onStateNoteChanged(TextFieldValue("Not needed."))
         viewModel.cancelStateNote()
         advanceUntilIdle()
@@ -95,7 +95,7 @@ class StateNoteTest {
     @Test
     fun aTimeStampNeedsNoNote() = runTest {
         open()
-        viewModel.setTodoAt(heading, "DOING", this)
+        viewModel.setTodoAt(heading, "DOING")
 
         assertNull(viewModel.pendingStateNote)
         assertEquals(
