@@ -7,8 +7,11 @@ import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.agenda.orgTimestamps
 import com.korgnote.common.org.agenda.parseOrgTimestamp
+import com.korgnote.common.org.edit.STATISTICS_COOKIE
 import com.korgnote.common.org.edit.nodeAt
+import com.korgnote.common.org.edit.orgLinkOf
 import com.korgnote.common.org.edit.toggledTimestamp
+import com.korgnote.common.org.link.descriptionOf
 import com.korgnote.common.org.link.relativeNotePath
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
@@ -176,7 +179,7 @@ private fun linkItems(prefix: String, lineStart: Int, cursor: Int, ctx: Completi
             val target = ctx.noteIds[path]?.let { "id:$it" } ?: "file:${relativeNotePath(path, ctx.currentPath)}"
             CompletionItem(
                 label = path,
-                insert = "[[$target][$title]]",
+                insert = orgLinkOf(target, descriptionOf(title)),
                 replace = replace,
                 kind = CompletionItem.Kind.LINK,
             )
@@ -186,13 +189,23 @@ private fun linkItems(prefix: String, lineStart: Int, cursor: Int, ctx: Completi
         .map { heading ->
             CompletionItem(
                 label = "*$heading",
-                insert = "[[*$heading]]",
+                insert = "[[*${headingLinkTarget(heading)}]]",
                 replace = replace,
                 kind = CompletionItem.Kind.LINK,
             )
         }
     return paths + headings
 }
+
+/**
+ * What a `[[*…]]` link to the heading titled [title] names: the title without its statistics cookies,
+ * which change as the boxes do and which following the link ignores anyway. Not [orgLinkOf], whose
+ * `%5B` for a bracket would no longer read as the title.
+ */
+private fun headingLinkTarget(title: String): String =
+    STATISTICS_COOKIE.replace(title, "").split(WHITESPACE).filter { it.isNotEmpty() }.joinToString(" ")
+
+private val WHITESPACE = Regex("\\s+")
 
 /** `<s`, `<q`, `<e` at the start of a line: Org's `org-tempo` block templates. */
 private fun templateItems(prefix: String, lineStart: Int, cursor: Int): List<CompletionItem>? {

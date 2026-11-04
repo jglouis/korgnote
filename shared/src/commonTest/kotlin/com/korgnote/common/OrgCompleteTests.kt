@@ -1,5 +1,6 @@
 package com.korgnote.common
 
+import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.complete.CompletionContext
 import com.korgnote.common.org.complete.CompletionItem
@@ -8,6 +9,8 @@ import com.korgnote.common.org.complete.complete
 import com.korgnote.common.org.complete.restamp
 import com.korgnote.common.org.complete.restampRange
 import com.korgnote.common.org.complete.shiftedEnd
+import com.korgnote.common.org.link.OrgLinkIndex
+import com.korgnote.common.org.link.OrgLinkResolution
 import com.korgnote.common.org.toOrgDocument
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
@@ -484,5 +487,32 @@ class OrgCompleteTests {
     @Test
     fun aTagTheHeadingAlreadyHasIsNotOfferedAgain() {
         assertEquals(listOf(":home:", ":wishlist:"), completeAt("* Call :work:‸").map { it.label })
+    }
+
+    /** A bracket in a note's title would end the link early, and `OrgSyntax.link` would not read it. */
+    @Test
+    fun aNoteTitleWithBracketsStillMakesALink() {
+        val withTitle = ctx.copy(
+            noteIds = mapOf("notes/groceries.org" to "x"),
+            noteTitles = mapOf("notes/groceries.org" to "Notes [draft]"),
+        )
+        val insert = completeAt("See [[groc‸", withTitle).single().insert
+        assertEquals("[[id:x][Notes (draft)]]", insert)
+        assertEquals(insert, OrgSyntax.link.matchEntire(insert)?.value)
+    }
+
+    /** A heading's cookie changes with its boxes, and following a link ignores it anyway. */
+    @Test
+    fun aHeadingsCookieStaysOutOfItsLinkAndTheLinkStillLands() {
+        val withCookie = ctx.copy(headings = listOf("Tasks [1/3]"))
+        val item = completeAt("See [[task‸", withCookie).single()
+        assertEquals("*Tasks [1/3]", item.label)
+        assertEquals("[[*Tasks]]", item.insert)
+
+        val target = OrgSyntax.link.matchEntire(item.insert)!!.groupValues[1]
+        assertEquals(
+            OrgLinkResolution.Note("a.org", 0),
+            OrgLinkIndex(mapOf("a.org" to "* Tasks [1/3]\n")).resolve(target, from = "a.org"),
+        )
     }
 }
