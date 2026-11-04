@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import java.nio.file.Files
@@ -75,9 +76,20 @@ class NotesWatcherTest {
         awaitChange(before, "sub2/b.org") { it.path == "sub2/b.org" && !it.deleted }
         awaitChange(before, "deletion of sub/b.org") { it.path == "sub/b.org" && it.deleted }
 
+        // The watches are built just after the rename is journaled, and an edit in between waits for
+        // the walk: so edit until one is heard, which only a watch on the new folder can do in time.
         val after = journal.generation
-        root.resolve("sub2/b.org").appendText("* edited in its new place\n")
-        awaitChange(after, "edit of sub2/b.org") { it.path == "sub2/b.org" && !it.deleted }
+        val editing = launch(Dispatchers.IO) {
+            while (true) {
+                root.resolve("sub2/b.org").appendText("* edited in its new place\n")
+                delay(2.seconds)
+            }
+        }
+        try {
+            awaitChange(after, "edit of sub2/b.org") { it.path == "sub2/b.org" && !it.deleted }
+        } finally {
+            editing.cancel()
+        }
     }
 
     @Test
