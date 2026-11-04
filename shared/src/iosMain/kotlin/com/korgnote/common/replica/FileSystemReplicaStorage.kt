@@ -130,16 +130,20 @@ class FileSystemReplicaStorage(root: String) : ReplicaStorage {
 
     /**
      * What an earlier version left: both spellings on record, for one file, so one note listed twice.
-     * It goes by the spelling nearly every server has, with any edit made under the other. Generation 0
-     * asks for a complete manifest, which brings the other back if this server really does hold both.
-     * Here and not in [readMeta]'s callers, as it costs a look at every name: once per decoding.
+     * Only a complete manifest says which the server has, and the next could be a long way off, so
+     * generation 0 asks for one: it takes away the spelling the server does not have. Both stay until
+     * then, as a spelling with no record would be fetched again, over the one file, if it is really there.
+     * An edit moves to the spelling nearly every server has, as a server that has only that one refuses
+     * the other as a new note. Here and not in [readMeta]'s callers, as it looks at every name.
      */
     private fun ReplicaMeta.withBothSpellingsSettled(): ReplicaMeta {
-        val extra = files.values.filter { accentsTogether(it.path).let { name -> name != it.path && name in files } }
-        if (extra.isEmpty()) return this
-        val edited = extra.filter { it.dirty }.mapNotNull { files[accentsTogether(it.path)] }
-            .associate { it.path to it.copy(dirty = true, deleted = false) }
-        return copy(generation = 0, files = files - extra.map { it.path }.toSet() + edited)
+        val apart = files.values.filter { accentsTogether(it.path).let { name -> name != it.path && name in files } }
+        if (apart.isEmpty()) return this
+        val edited = apart.filter { it.dirty }.flatMap { record ->
+            val together = files.getValue(accentsTogether(record.path))
+            listOf(record.path to record.copy(dirty = false), together.path to together.copy(dirty = true, deleted = false))
+        }
+        return copy(generation = 0, files = files + edited)
     }
 
     /** Null when there is no `meta.json`, or its attributes cannot be read. */

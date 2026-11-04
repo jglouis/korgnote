@@ -192,6 +192,7 @@ class ReplicaNamesIosTest {
         assertEquals(null, store.read(together))
     }
 
+    /** Once its first sync has settled which spelling is real: until then it is listed twice. */
     @Test
     fun aNoteDeletedHereGoesFromAPhoneUpgradedWithBothSpellings() = runTest {
         val root = newRoot()
@@ -202,9 +203,11 @@ class ReplicaNamesIosTest {
             ReplicaMeta(100, mapOf(together to FileMeta(together, etag), apart to FileMeta(apart, etag))),
         )
         val store = DocumentStore(FileSystemReplicaStorage(root))
+        val engine = SyncEngine(store, server)
+        engine.sync()
 
-        store.delete(store.paths().first())
-        SyncEngine(store, server).sync()
+        store.delete(store.paths().single())
+        engine.sync()
 
         assertEquals(emptyList(), store.paths())
         assertEquals(emptySet(), server.files.keys)
@@ -241,6 +244,47 @@ class ReplicaNamesIosTest {
         assertEquals(emptyList(), server.pushed)
         assertEquals(setOf(together, apart), server.files.keys)
         assertEquals(setOf(together, apart), afterRestart.records().keys)
+    }
+
+    /**
+     * The one file must not go back to the other spelling's text: what the server holds under the
+     * name edited would look reverted here, and the next edit made from it would replace that.
+     */
+    @Test
+    fun anEditToOneOfTwoSpellingsTheServerHoldsSurvivesARestart() = runTest {
+        val root = newRoot()
+        val server = Server(together).apply { files[apart] = "* Note\n" }
+        val store = DocumentStore(FileSystemReplicaStorage(root))
+        val engine = SyncEngine(store, server)
+        engine.sync()
+        store.save(together, "* Note\nedited\n")
+        engine.sync()
+
+        val afterRestart = DocumentStore(FileSystemReplicaStorage(root))
+        SyncEngine(afterRestart, server).sync()
+
+        assertEquals("* Note\nedited\n", afterRestart.read(together))
+        assertEquals("* Note\nedited\n", server.files[together])
+        assertEquals("* Note\n", server.files[apart])
+    }
+
+    /** What an earlier version leaves on a server on Linux, with an edit it made under the spelling it listed. */
+    @Test
+    fun anEditMadeUnderTheOtherSpellingStaysOnThePhoneWhenTheServerHoldsBoth() = runTest {
+        val root = newRoot()
+        val server = Server(together).apply { files[apart] = "* Note\n" }
+        FileSystemReplicaStorage(root).write(apart, "* Note\nedited on the old version\n")
+        val etag = "e-${"* Note\n".hashCode()}"
+        FileSystemReplicaStorage(root).writeMeta(
+            ReplicaMeta(100, mapOf(together to FileMeta(together, etag), apart to FileMeta(apart, etag, dirty = true))),
+        )
+        val store = DocumentStore(FileSystemReplicaStorage(root))
+
+        SyncEngine(store, server).sync()
+
+        assertEquals("* Note\nedited on the old version\n", store.read(together))
+        assertEquals("* Note\nedited on the old version\n", server.files[together])
+        assertTrue(store.dirtyPaths().isEmpty())
     }
 
     /** Deleting one of them leaves the other, whose text is the same file here. */
