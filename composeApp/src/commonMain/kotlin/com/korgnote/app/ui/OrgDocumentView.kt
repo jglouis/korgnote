@@ -179,7 +179,7 @@ fun OrgDocumentView(
     revealElementIndex: Int? = null,
     onRevealed: () -> Unit = {},
     /**
-     * The file's TODO keywords: its own `#+TODO:`, or what the notes declare when it has none.
+     * The file's TODO keywords: its own `#+TODO:`, or Org's own when it has none.
      * Each element is rendered from its own slice, which does not contain the declaration, so
      * this is the only way a `FINISHED` heading far below it can know it is finished.
      */

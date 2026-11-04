@@ -517,10 +517,6 @@ private fun ProgressPill(progress: Progress, percent: Boolean) {
 /** The heading's own `:LOCATION:` property, or null when it has none. */
 internal fun OrgSection.location(): String? = property("LOCATION")?.takeIf { it.isNotEmpty() }
 
-/**
- * The keywords a heading can move to, in the order the file declares them: the not-done ones, then
- * the done ones, then none at all. The current one is checked, and picking it changes nothing.
- */
 /** The file's priorities, most important first, then none; the heading's own is ticked. */
 @Composable
 fun PriorityMenu(
@@ -551,6 +547,10 @@ fun PriorityMenu(
     }
 }
 
+/**
+ * The keywords a heading can move to, in the order the file declares them: the not-done ones, then
+ * the done ones, then none at all. The current one is checked, and picking it changes nothing.
+ */
 @Composable
 private fun TodoKeywordMenu(
     expanded: Boolean,

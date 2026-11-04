@@ -248,7 +248,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
     // The conflict copy being compared with its note.
     var comparingCopy by remember { mutableStateOf<String?>(null) }
     // Whose version a note in conflict holds, for the banner and the comparison to say.
-    val keptSide = if (source is NotesSource.Folder) "folder" else "server"
+    val keptSide = if (source is NotesSource.Folder) KeptSide.FOLDER else KeptSide.SERVER
     // Opens or starts today's daily, from the drawer.
     val openToday = {
         scope.launch {

@@ -160,7 +160,7 @@ fun ConflictBanner(
     onUseCopy: () -> Unit,
     modifier: Modifier = Modifier,
     /** Whose version the note holds: the server's, or the folder's when the notes are a folder. */
-    keptSide: String = "server",
+    keptSide: KeptSide = KeptSide.SERVER,
 ) {
     val (original, copy, viewingCopy, moreCopies) = conflict
     val side = keptSideName(keptSide)
@@ -222,7 +222,7 @@ fun ConflictCompareDialog(
     onApply: (List<ChunkChoice>) -> Unit,
     onDismiss: () -> Unit,
     /** As in [ConflictBanner]. */
-    keptSide: String = "server",
+    keptSide: KeptSide = KeptSide.SERVER,
     /** Why the last apply was refused, if it was. */
     error: String? = null,
 ) {
@@ -383,7 +383,14 @@ private fun DiffText(text: String, background: Color?, kept: Boolean) {
     )
 }
 
-/** `server` or `folder`, as [ConflictBanner]'s `keptSide` names them, in the app's language. */
+/** Whose version a note in conflict holds: where the notes are kept. */
+enum class KeptSide { SERVER, FOLDER }
+
+/** The [KeptSide] in the app's language. */
 @Composable
-private fun keptSideName(keptSide: String): String =
-    stringResource(if (keptSide == "folder") Res.string.notes_conflict_side_folder else Res.string.notes_conflict_side_server)
+private fun keptSideName(keptSide: KeptSide): String = stringResource(
+    when (keptSide) {
+        KeptSide.SERVER -> Res.string.notes_conflict_side_server
+        KeptSide.FOLDER -> Res.string.notes_conflict_side_folder
+    },
+)

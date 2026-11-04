@@ -282,7 +282,7 @@ class CalendarActions(
     val clockOut: (file: String, headingOffset: Int) -> Unit,
     /** Opens the note at a clocked heading, as a tap on an entry opens its note. */
     val open: (file: String, headingOffset: Int) -> Unit,
-    /** The keywords of the note at [file]: its own `#+TODO:`, or what the notes declare. */
+    /** The keywords of the note at [file]: its own `#+TODO:`, or Org's own when it declares none. */
     val keywords: (file: String) -> OrgTodoConfig,
     /** Sets the heading's keyword, or clears it for null, as the note's keyword menu does. */
     val setTodo: (file: String, headingOffset: Int, keyword: String?) -> Unit,
