@@ -59,12 +59,12 @@ class CheckboxTest {
         val (viewModel, _) = openedNote()
         assertEquals("- [ ] Milk", viewModel.search.results.single().lineText)
 
-        viewModel.toggleCheckboxAt(text.indexOf("- [ ] Milk"), this)
+        viewModel.changes.toggleCheckboxAt(text.indexOf("- [ ] Milk"), this)
 
         assertTrue(viewModel.note.content.contains("- [X] Milk"))
         assertEquals("- [ ] Milk", viewModel.search.results.single().lineText, "not yet: a tick may follow")
 
-        viewModel.toggleCheckboxAt(text.indexOf("- [ ] Bread"), this)
+        viewModel.changes.toggleCheckboxAt(text.indexOf("- [ ] Bread"), this)
         advanceTimeBy(NotesViewModel.DERIVED_REFRESH_PAUSE / 2)
         assertEquals("- [ ] Milk", viewModel.search.results.single().lineText, "the second tick put it off")
 
@@ -76,7 +76,7 @@ class CheckboxTest {
     fun aTickReachesTheServer() = runTest {
         val (viewModel, server) = openedNote()
 
-        viewModel.toggleCheckboxAt(text.indexOf("- [ ] Milk"), this)
+        viewModel.changes.toggleCheckboxAt(text.indexOf("- [ ] Milk"), this)
         advanceUntilIdle()
 
         assertTrue(server.files.getValue(path).contains("- [X] Milk"))
@@ -86,8 +86,8 @@ class CheckboxTest {
     fun aSaveMeanwhileRefreshesAtOnceAndNothingIsLeftPending() = runTest {
         val (viewModel, _) = openedNote()
 
-        viewModel.toggleCheckboxAt(text.indexOf("- [ ] Milk"), this)
-        viewModel.saveCurrentFile()
+        viewModel.changes.toggleCheckboxAt(text.indexOf("- [ ] Milk"), this)
+        viewModel.changes.saveCurrentFile()
 
         assertEquals("- [X] Milk", viewModel.search.results.single().lineText)
     }

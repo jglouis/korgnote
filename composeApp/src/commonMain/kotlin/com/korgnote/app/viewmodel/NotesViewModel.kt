@@ -20,7 +20,6 @@ import com.korgnote.app.capture.CaptureFiler
 import com.korgnote.app.data.SavedSearch
 import com.korgnote.app.data.ReadingPlace
 import com.korgnote.common.fs.NotePaths
-import com.korgnote.common.org.OrgCheckboxItem
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTable
@@ -41,8 +40,6 @@ import com.korgnote.common.org.edit.changeTodoState
 import com.korgnote.common.org.edit.fileKeywordsOf
 import com.korgnote.common.org.edit.withFileKeywords
 import com.korgnote.common.org.edit.nodeAt
-import com.korgnote.common.org.edit.tickAsOrgDoes
-import com.korgnote.common.org.edit.withTimestampToggledAt
 import com.korgnote.common.org.link.LinkTarget
 import com.korgnote.common.org.link.linkTargetsOf
 import com.korgnote.common.org.link.withFileId
@@ -57,7 +54,6 @@ import com.korgnote.common.org.edit.setEffort
 import com.korgnote.common.org.edit.clockIn
 import com.korgnote.common.org.edit.clockOut
 import com.korgnote.common.org.edit.runningClocks
-import com.korgnote.common.org.edit.updateClockDurations
 import com.korgnote.common.org.template.dailyFileName
 import com.korgnote.common.org.template.dailyTitle
 import com.korgnote.common.org.template.newNoteText
@@ -96,8 +92,6 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
-import com.korgnote.common.org.edit.setPriority
-import com.korgnote.common.org.OrgPriority
 import com.korgnote.common.org.LogKind
 import com.korgnote.common.org.edit.stateChangeLog
 import com.korgnote.common.org.todoLoggingOf
@@ -108,10 +102,10 @@ import korgnote.composeapp.generated.resources.vm_reschedule_moved
  * The app's notes, and everything shown about them.
  *
  * Each concern is its own state holder — [library], [note], [folds], [pins], [editor],
- * [completion], [search], [savedSearches], [links], [files], [agenda], [server] — and the UI talks to them directly. What stays here is what
+ * [completion], [search], [savedSearches], [links], [files], [agenda], [server], [changes] — and the UI talks to them directly. What stays here is what
  * crosses them: opening a note, which every one of them follows; rebuilding what is derived from the
- * notes when they change; and the operations that change the notes as files — saving, creating,
- * renaming, deleting, and settling a conflict between a note and its copy.
+ * notes when they change; and the operations that change the notes as files — creating, renaming,
+ * deleting, and settling a conflict between a note and its copy.
  */
 class NotesViewModel(
     sync: SyncEngine,
@@ -203,11 +197,25 @@ class NotesViewModel(
     /** The clocks running in the notes, for the bar that shows them on every tab. */
     val clocks: NoteClocks = NoteClocks(library, clockNotifier)
 
+    /** What changes a note's text. */
+    val changes: NoteChanges = NoteChanges(
+        store,
+        library,
+        note,
+        clocks,
+        now,
+        todoKeywords = { todoKeywords },
+        // Read when something is pushed, by which time [server] is there.
+        server = { server },
+        refresh = ::refreshDerivedViews,
+        refreshSoon = ::refreshDerivedViewsSoon,
+    )
+
     val editor: ElementEditor = ElementEditor(
         note,
         folds,
         showMessage = ::showMessage,
-        save = ::saveCurrentFile,
+        save = { changes.saveCurrentFile() },
         draftMoved = { completion.onDraftChanged() },
         editEnded = { completion.reset() },
     )
@@ -495,47 +503,6 @@ class NotesViewModel(
     // --- Changing the notes ---
 
     /**
-     * Writes the open note to the replica, then tries to push.
-     *
-     * The local write cannot fail on a network problem, so an edit is never lost to one. If the
-     * push fails the file simply stays dirty and the next sync carries it.
-     */
-    suspend fun saveCurrentFile() {
-        val path = note.path ?: return
-        // A heading's `[2/5]` counts what is under it, which the edit may have changed — and only
-        // those over the edit: the rest of the note is saved as it was.
-        // And a clock edited by hand sums its stamps again, as `C-c C-c` on its line would.
-        val before = store.read(path)
-        note.content = updateClockDurations(updateStatisticsCookies(note.content, todoKeywords, before = before), before)
-        store.save(path, note.content)
-        library.put(path, note.content.toOrgDocument(library.fallbackKeywords))
-        refreshDerivedViews()
-        server.push()
-    }
-
-    /**
-     * Ticks the checkbox whose source contains [offsetInDocument].
-     *
-     * The offset identifies the node rather than counting boxes: an ordinal shifts whenever anything
-     * above it changes. The edit itself is a range replacement, so every other character in the file
-     * — blank lines, trailing whitespace, formatting — is left exactly as it was on disk.
-     */
-    fun toggleCheckboxAt(offsetInDocument: Int, scope: CoroutineScope? = null) {
-        val file = note.path ?: return
-        val document = note.content.toOrgDocument(library.fallbackKeywords)
-        val item = document.nodeAt<OrgCheckboxItem>(offsetInDocument) ?: return
-        val updated = document.tickAsOrgDoes(item).withStatistics(since = document)
-        note.content = updated.text
-        library.put(file, updated)
-        // Not now: the box should flip the moment it is tapped.
-        refreshDerivedViewsSoon()
-
-        // Written locally in the coroutine, then pushed; a failure leaves the file dirty for the
-        // next cycle rather than losing the toggle.
-        scope?.launch { server.push(writeFirst = { store.save(file, note.content) }) }
-    }
-
-    /**
      * Sets the keyword of the heading at [offsetInDocument], or clears it when [keyword] is null, as
      * [toggleCheckboxAt] ticks a checkbox: the file is saved and pushed the same way.
      *
@@ -556,7 +523,7 @@ class NotesViewModel(
             stateNoteCompletion.reset()
             return
         }
-        applyTodoState(heading.range.first, keyword, note = null, scope)
+        changes.changeTodoStateAt(heading.range.first, keyword, noteText = null, scope)
     }
 
     /** The keywords of the note at [path]: its own `#+TODO:`, or what the notes declare. */
@@ -588,9 +555,9 @@ class NotesViewModel(
         }
         val at = now()
         viewModelScope.launch {
-            changeNote(path) { doc ->
+            changes.changeNote(path) { doc ->
                 val target = doc.nodeAt<OrgSection>(headingOffset) ?: return@changeNote doc
-                doc.changeTodoState(target, keyword, at, keywords).withStatistics(since = doc)
+                with(changes) { doc.changeTodoState(target, keyword, at, keywords).withStatistics(since = doc) }
             }
         }
     }
@@ -610,7 +577,7 @@ class NotesViewModel(
         val range = entry.stamp.range
         viewModelScope.launch {
             var moved = false
-            changeNote(path) { doc ->
+            changes.changeNote(path) { doc ->
                 val written = doc.text.takeIf { !range.isEmpty() && range.last < it.length }?.substring(range)
                 val stamp = written?.let(::parseOrgTimestamp)
                 if (stamp == null || stamp.copy(range = IntRange.EMPTY) != entry.stamp.copy(range = IntRange.EMPTY)) {
@@ -634,62 +601,13 @@ class NotesViewModel(
             viewModelScope.launch { showMessage(getString(Res.string.vm_edit_conflict)) }
             return
         }
-        applyTodoState(pending.offset, pending.keyword, stateNoteDraft.text, scope)
+        changes.changeTodoStateAt(pending.offset, pending.keyword, stateNoteDraft.text, scope)
     }
 
     /** Drops the change [pendingStateNote] waits on: the keyword stays as it was. */
     fun cancelStateNote() {
         pendingStateNote = null
         stateNoteCompletion.reset()
-    }
-
-    private fun applyTodoState(offsetInDocument: Int, keyword: String?, note: String?, scope: CoroutineScope?) {
-        val file = this.note.path ?: return
-        val document = this.note.content.toOrgDocument(library.fallbackKeywords)
-        val heading = document.nodeAt<OrgSection>(offsetInDocument) ?: return
-        val updated = document.changeTodoState(heading, keyword, now(), todoKeywords, note).withStatistics(since = document)
-        if (updated.text == document.text) return
-        this.note.content = updated.text
-        library.put(file, updated)
-        // Away from the main thread, as a tick is: scanning every note for the links, the agenda and
-        // the search held the keyword menu, and the note dialog's Save, up for a second on a phone.
-        // The note shows the change at once; the calendar follows a moment later.
-        refreshDerivedViewsSoon()
-
-        scope?.launch { server.push(writeFirst = { store.save(file, this@NotesViewModel.note.content) }) }
-    }
-
-    /**
-     * Makes the stamp that begins at [offsetInDocument] inactive when it is active and active when it
-     * is not, saved and pushed as [toggleCheckboxAt] saves a tick. The calendar follows at once: an
-     * active date is in it and an inactive one is not.
-     */
-    fun toggleTimestampAt(offsetInDocument: Int, scope: CoroutineScope? = null) {
-        val file = note.path ?: return
-        val updated = note.content.withTimestampToggledAt(offsetInDocument) ?: return
-        note.content = updated
-        library.put(file, updated.toOrgDocument(library.fallbackKeywords))
-        refreshDerivedViews()
-
-        scope?.launch { server.push(writeFirst = { store.save(file, note.content) }) }
-    }
-
-    /**
-     * Sets the priority of the heading at [offsetInDocument] — `[#A]` — or removes it when
-     * [priority] is null, as Org's `C-c ,` does; saved and pushed as [setTodoAt] saves a keyword.
-     */
-    fun setPriorityAt(offsetInDocument: Int, priority: OrgPriority?, scope: CoroutineScope? = null) {
-        val file = note.path ?: return
-        val document = note.content.toOrgDocument(library.fallbackKeywords)
-        val heading = document.nodeAt<OrgSection>(offsetInDocument) ?: return
-        val updated = document.setPriority(heading, priority)
-        if (updated.text == document.text) return
-        note.content = updated.text
-        library.put(file, updated)
-        // As a keyword is: the corpus-wide scans away from the main thread, so the menu closes at once.
-        refreshDerivedViewsSoon()
-
-        scope?.launch { server.push(writeFirst = { store.save(file, note.content) }) }
     }
 
     // --- Clocking ---
@@ -714,8 +632,8 @@ class NotesViewModel(
         val offsetInDocument = headingOffset
         val at = now()
         viewModelScope.launch {
-            for (other in clocks.running.filter { it.path != path }) changeNote(other.path) { it.withClock(other) { doc, h -> doc.clockOut(h, at) } }
-            changeNote(path) { doc ->
+            for (other in clocks.running.filter { it.path != path }) changes.changeNote(other.path) { it.withClock(other) { doc, h -> doc.clockOut(h, at) } }
+            changes.changeNote(path) { doc ->
                 val heading = doc.nodeAt<OrgSection>(offsetInDocument) ?: return@changeNote doc
                 var start = heading.range.first
                 var updated = doc.clockIn(heading, at)
@@ -746,7 +664,7 @@ class NotesViewModel(
     fun clockOut(clock: ClockRunning, at: LocalDateTime? = null) {
         if (clock.path == note.path && refuseWhileEditing()) return
         val end = at ?: now()
-        viewModelScope.launch { changeNote(clock.path) { it.withClock(clock) { doc, h -> doc.clockOut(h, end) } } }
+        viewModelScope.launch { changes.changeNote(clock.path) { it.withClock(clock) { doc, h -> doc.clockOut(h, end) } } }
     }
 
     /** The clock running on the heading at [headingOffset] of the note at [path], if one is. */
@@ -756,14 +674,14 @@ class NotesViewModel(
         /** Removes [clock], wherever it runs. */
     fun cancelClock(clock: ClockRunning) {
         if (clock.path == note.path && refuseWhileEditing()) return
-        viewModelScope.launch { changeNote(clock.path) { it.withClock(clock) { doc, h -> doc.cancelClock(h) } } }
+        viewModelScope.launch { changes.changeNote(clock.path) { it.withClock(clock) { doc, h -> doc.cancelClock(h) } } }
     }
 
     private fun changeHeading(offsetInDocument: Int, change: (OrgDocument, OrgSection) -> OrgDocument) {
         val path = note.path ?: return
         if (refuseWhileEditing()) return
         viewModelScope.launch {
-            changeNote(path) { doc -> doc.nodeAt<OrgSection>(offsetInDocument)?.let { change(doc, it) } ?: doc }
+            changes.changeNote(path) { doc -> doc.nodeAt<OrgSection>(offsetInDocument)?.let { change(doc, it) } ?: doc }
         }
     }
 
@@ -783,29 +701,6 @@ class NotesViewModel(
         val heading = nodeAt<OrgSection>(found.headingStart) ?: return this
         return change(this, heading)
     }
-
-    /**
-     * [change] made to the note at [path] — the open one as it stands on screen, or another as the
-     * replica has it — then saved and pushed as a keyword change is.
-     */
-    private suspend fun changeNote(path: String, change: (OrgDocument) -> OrgDocument) {
-        val open = path == note.path
-        val before = if (open) note.content.toOrgDocument(library.fallbackKeywords) else library[path] ?: return
-        val updated = change(before)
-        if (updated.text == before.text) return
-        library.put(path, updated)
-        if (open) note.content = updated.text
-        clocks.refresh()
-        refreshDerivedViewsSoon()
-        server.push(writeFirst = { store.save(path, updated.text) })
-    }
-
-    /**
-     * This document with the statistics cookies over what changed [since] counting what is now
-     * under them, as Org updates them.
-     */
-    private fun OrgDocument.withStatistics(since: OrgDocument): OrgDocument =
-        updateStatisticsCookies(text, todoKeywords, before = since.text).let { if (it == text) this else it.toOrgDocument(todoFallback) }
 
     /**
      * Every note and heading a link can go to, for the heading-link picker: the open note as it
@@ -986,7 +881,7 @@ class NotesViewModel(
         val updated = withFileKeywords(note.content, keywords)
         if (updated == note.content) return
         note.content = updated
-        saveCurrentFile()
+        changes.saveCurrentFile()
     }
 
     /**
@@ -1039,7 +934,7 @@ class NotesViewModel(
             return
         }
         note.content = replaceOrgTable(content, edit.range, grid)
-        saveCurrentFile()
+        changes.saveCurrentFile()
     }
 
     /** Where a note titled [title] would be created, or null when the title makes no file name. */

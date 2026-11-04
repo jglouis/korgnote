@@ -86,7 +86,7 @@ class CalendarNavigationTest {
         viewModel.onFileSelected(other)
 
         viewModel.note.content = otherText.replace("* TODO Delta", "* TODO Delta\nSCHEDULED: <2026-09-25 Fri>")
-        viewModel.saveCurrentFile()
+        viewModel.changes.saveCurrentFile()
 
         assertTrue(viewModel.agenda.index.on(sep25).any { it.entry.title == "Delta" })
     }

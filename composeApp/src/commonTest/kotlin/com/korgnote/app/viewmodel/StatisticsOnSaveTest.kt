@@ -61,7 +61,7 @@ class StatisticsOnSaveTest {
         val viewModel = openedNote()
 
         viewModel.note.content = text.replace("** TODO Dig", "** DONE Dig")
-        viewModel.saveCurrentFile()
+        viewModel.changes.saveCurrentFile()
 
         assertEquals(
             text.replace("** TODO Dig", "** DONE Dig").replace("[0/1]", "[1/1]"),

@@ -55,13 +55,13 @@ class TimestampToggleTest {
         val (viewModel, server) = openedNote()
         assertTrue(viewModel.agenda.index.on(sep25).isEmpty())
 
-        viewModel.toggleTimestampAt(text.indexOf('['), this)
+        viewModel.changes.toggleTimestampAt(text.indexOf('['), this)
         advanceUntilIdle()
         assertTrue("Visit booked for <2026-09-25 Fri 10:00>." in viewModel.note.content, viewModel.note.content)
         assertEquals("Called the plumber", viewModel.agenda.index.on(sep25).single().entry.title)
         assertTrue("<2026-09-25 Fri 10:00>" in server.files.getValue(path))
 
-        viewModel.toggleTimestampAt(text.indexOf('['), this)
+        viewModel.changes.toggleTimestampAt(text.indexOf('['), this)
         advanceUntilIdle()
         assertEquals(text, viewModel.note.content)
         assertTrue(viewModel.agenda.index.on(sep25).isEmpty())
@@ -70,7 +70,7 @@ class TimestampToggleTest {
     @Test
     fun anOffsetWithNoStampChangesNothing() = runTest {
         val (viewModel, _) = openedNote()
-        viewModel.toggleTimestampAt(text.indexOf("Visit"), this)
+        viewModel.changes.toggleTimestampAt(text.indexOf("Visit"), this)
         assertEquals(text, viewModel.note.content)
     }
 }

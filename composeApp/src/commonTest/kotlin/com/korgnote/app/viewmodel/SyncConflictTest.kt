@@ -50,13 +50,13 @@ class SyncConflictTest {
         api.files[path] = original.replace("body two", "body two, from Emacs!")
 
         vm.note.content = original.replace("body one", "body one, from the phone")
-        vm.saveCurrentFile()
+        vm.changes.saveCurrentFile()
 
         assertTrue(vm.note.content.contains("from Emacs"), vm.note.content)
         assertTrue(vm.note.content.contains("from the phone"), vm.note.content)
 
         vm.note.content = vm.note.content.replace("TODO Second", "DONE Second")
-        vm.saveCurrentFile()
+        vm.changes.saveCurrentFile()
         assertTrue(api.files[path]!!.contains("from Emacs"), "the Emacs edit survives the next save")
     }
 
@@ -66,7 +66,7 @@ class SyncConflictTest {
         api.files[path] = original.replace("TODO First", "WAITING First")
 
         vm.note.content = original.replace("TODO First", "DONE First")
-        vm.saveCurrentFile()
+        vm.changes.saveCurrentFile()
 
         assertEquals(original.replace("TODO First", "WAITING First"), vm.note.content)
         assertTrue(vm.lastErrorMessage.contains("server's version is kept"), vm.lastErrorMessage)
@@ -82,7 +82,7 @@ class SyncConflictTest {
         vm.server.load()
         api.files[path] = theirs
         vm.note.content = mine
-        vm.saveCurrentFile()
+        vm.changes.saveCurrentFile()
         vm.server.pushQuietly()
     }
 

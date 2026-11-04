@@ -129,7 +129,7 @@ class HeadingLinkTest {
         viewModel.editor.commit()
         assertTrue(viewModel.note.content.contains("* Later [0/2]\n"), "the save fills it in")
 
-        viewModel.toggleCheckboxAt(viewModel.note.content.indexOf("- [ ] one"), this)
+        viewModel.changes.toggleCheckboxAt(viewModel.note.content.indexOf("- [ ] one"), this)
         advanceUntilIdle()
 
         assertTrue(viewModel.note.content.contains("* Later [1/2]\n- [X] one\n"))

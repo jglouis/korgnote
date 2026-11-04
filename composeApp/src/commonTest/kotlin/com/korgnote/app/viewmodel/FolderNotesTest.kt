@@ -75,7 +75,7 @@ class FolderNotesTest {
         vm.server.load()
         vm.note.content = "* DONE Call the bank\n"
 
-        vm.saveCurrentFile()
+        vm.changes.saveCurrentFile()
 
         assertEquals("* DONE Call the bank\n", folder.files["inbox.org"]?.first)
     }
@@ -96,7 +96,7 @@ class FolderNotesTest {
         folder.writeOutside("inbox.org", "* TODO Call the bank, from the laptop\n")
         vm.note.content = "* DONE Call the bank\n"
 
-        vm.saveCurrentFile()
+        vm.changes.saveCurrentFile()
 
         assertEquals("* TODO Call the bank, from the laptop\n", folder.files["inbox.org"]?.first)
         assertEquals(listOf("inbox.sync-conflict-20261029-120000.org"), vm.library.conflicts["inbox.org"])
@@ -111,7 +111,7 @@ class FolderNotesTest {
         folder.reachable = false
         vm.note.content = "* DONE Call the bank\n"
 
-        vm.saveCurrentFile()
+        vm.changes.saveCurrentFile()
         assertNotNull(vm.server.unreachable)
 
         folder.reachable = true
