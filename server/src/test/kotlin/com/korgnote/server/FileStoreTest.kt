@@ -343,8 +343,6 @@ class FileStoreTest {
                 while (!stop.get()) {
                     round++
                     store.put("w$writer.org", "* round $round\n", ifMatch = null)
-                    // A note can go on the way as well as a temporary file.
-                    if (round % 10 == 0) store.delete("w$writer.org", ifMatch = null)
                 }
             }
         }
@@ -353,6 +351,35 @@ class FileStoreTest {
         } finally {
             stop.set(true)
             writers.forEach { it.join() }
+        }
+    }
+
+    /**
+     * The walk reads the old name and finds it gone, and the new one was never in what it read. Going
+     * on would list a complete library without those notes, and every phone would delete them.
+     */
+    @Test
+    fun aFolderRenamedDuringAListingFailsItRatherThanLosingItsNotes() {
+        repeat(30) { writeFile("top$it.org", "* top\n") }
+        repeat(40) { folder -> repeat(5) { writeFile("d$folder/n$it.org", "* n\n") } }
+        repeat(20) { writeFile("mover-a/m$it.org", "* m\n") }
+        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+        val renamer = kotlin.concurrent.thread {
+            var a = true
+            while (!stop.get()) {
+                val (from, to) = if (a) "mover-a" to "mover-b" else "mover-b" to "mover-a"
+                java.nio.file.Files.move(root.resolve(from), root.resolve(to))
+                a = !a
+            }
+        }
+        try {
+            repeat(1_000) {
+                val listed = runCatching { store.list() }.getOrNull() ?: return@repeat
+                assertEquals(250, listed.size)
+            }
+        } finally {
+            stop.set(true)
+            renamer.join()
         }
     }
 

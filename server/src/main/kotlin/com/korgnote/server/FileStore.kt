@@ -91,36 +91,33 @@ class FileStore(
      */
     private val writing = Any()
 
+    private fun Path.isOurTemporaryFile(): Boolean =
+        fileName.toString().let { it.startsWith(TEMPORARY_PREFIX) && it.endsWith(TEMPORARY_SUFFIX) }
+
     /**
      * Every note currently on disk, in path order.
      *
-     * What has gone by the time the walk reaches it is simply not there, and this store's own writes
-     * leave temporary files that do so. Anything else that stops a read fails the whole list: left out
-     * of a complete manifest, a note is taken for deleted and goes from every phone.
+     * This store's own writes leave temporary files that go while the walk is on its way to them, and
+     * that says nothing about the notes. Anything else that stops a read fails the whole list. A note
+     * or folder gone may only have been renamed, to a name the walk will not see, and left out of a
+     * complete manifest, a note is taken for deleted and goes from every phone.
      */
     fun list(): List<FileMeta> {
         if (!root.exists() || !root.isDirectory()) return emptyList()
         val found = mutableListOf<FileMeta>()
         Files.walkFileTree(root, object : SimpleFileVisitor<Path>() {
             override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
-                try {
-                    if (file.isRegularFile()) {
-                        val path = relativePathOf(file)
-                        // Through [resolve], so that what is listed can also be fetched: a link to a
-                        // file outside the root cannot, and a phone would keep trying.
-                        if (resolve(path) != null) found += metaOf(path, file)
-                    }
-                } catch (_: NoSuchFileException) {
-                    // Gone since the folder was read.
+                if (attrs.isRegularFile || file.isRegularFile()) {
+                    val path = relativePathOf(file)
+                    // Through [resolve], so that what is listed can also be fetched: a link to a
+                    // file outside the root cannot, and a phone would keep trying.
+                    if (resolve(path) != null) found += metaOf(path, file)
                 }
                 return FileVisitResult.CONTINUE
             }
 
             override fun visitFileFailed(file: Path, exc: IOException): FileVisitResult =
-                if (exc is NoSuchFileException) FileVisitResult.CONTINUE else throw exc
-
-            override fun postVisitDirectory(dir: Path, exc: IOException?): FileVisitResult =
-                if (exc == null || exc is NoSuchFileException) FileVisitResult.CONTINUE else throw exc
+                if (exc is NoSuchFileException && file.isOurTemporaryFile()) FileVisitResult.CONTINUE else throw exc
         })
         return found.sortedBy { it.path }
     }
@@ -178,7 +175,7 @@ class FileStore(
 
             try {
                 Files.createDirectories(file.parent)
-                val temporary = Files.createTempFile(file.parent, ".korgnote", ".tmp")
+                val temporary = Files.createTempFile(file.parent, TEMPORARY_PREFIX, TEMPORARY_SUFFIX)
                 try {
                     Files.write(temporary, bytes)
                     keepPermissions(temporary, replacing = file.takeIf { exists })
@@ -312,6 +309,8 @@ class FileStore(
     }
 
     private companion object {
+        private const val TEMPORARY_PREFIX = ".korgnote"
+        private const val TEMPORARY_SUFFIX = ".tmp"
         const val ETAG_HEX_DIGITS = 32
 
         /** FAT keeps two seconds, ext3 and HFS+ one; anything finer is safe under this too. */
