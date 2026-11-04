@@ -401,7 +401,7 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
         var refused by remember(copy) { mutableStateOf(false) }
         if (comparison == null) {
             // Settled meanwhile, here or on another device.
-            comparingCopy = null
+            LaunchedEffect(Unit) { comparingCopy = null }
         } else {
             val moved = stringResource(Res.string.notes_conflict_moved)
             ConflictCompareDialog(

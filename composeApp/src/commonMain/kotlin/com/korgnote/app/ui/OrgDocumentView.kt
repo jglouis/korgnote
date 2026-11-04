@@ -447,7 +447,7 @@ fun OrgDocumentView(
     confirmingDelete?.let { index ->
         val element = elements.getOrNull(index)
         if (element == null || onDeleteSection == null) {
-            confirmingDelete = null
+            LaunchedEffect(Unit) { confirmingDelete = null }
         } else {
             DeleteSectionDialog(
                 title = element.title,
