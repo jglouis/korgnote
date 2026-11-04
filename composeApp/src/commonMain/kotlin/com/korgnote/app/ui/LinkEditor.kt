@@ -211,8 +211,11 @@ fun LinkEditorDialog(
 /** An address typed as `example.com/page` is a web one; anything with a scheme of its own keeps it. */
 internal fun withScheme(address: String): String {
     val a = address.trim()
-    return if (OrgSyntax.linkScheme.containsMatchIn(a) || '.' !in a.substringBefore('/')) a else "https://$a"
+    return if (TYPED_SCHEME.containsMatchIn(a) || '.' !in a.substringBefore('/')) a else "https://$a"
 }
+
+/** A scheme may hold dots, as `org.foo.app:open` does; what follows the colon in `example.com:8080` is a port. */
+private val TYPED_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*:(?!\\d+(?:[/?#]|$))")
 
 /** The `file:`, or `file+sys:`, that [target] is written with, in the case it is written in; else nothing. */
 private fun filePrefixOf(target: String): String =
