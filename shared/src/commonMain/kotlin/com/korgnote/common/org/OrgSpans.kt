@@ -79,21 +79,16 @@ fun orgSpans(text: String): List<OrgSpan> {
  * thread the state itself. [copy] lets it snapshot the state before and after each line, so only the
  * lines that actually changed need rescanning.
  */
-class OrgLineState {
+data class OrgLineState(
     /** The block currently open, lowercased, or null outside one. */
-    var blockType: String? = null
-
+    var blockType: String? = null,
     /** Whether the scan is inside a drawer. */
-    var inDrawer: Boolean = false
-
+    var inDrawer: Boolean = false,
     /** The language of the src block currently open, when it is one that is highlighted. */
-    var srcLanguage: String? = null
-
+    var srcLanguage: String? = null,
     /** Where that language's lexer stopped — inside a string, a comment or a heredoc — or null. */
-    var codeState: String? = null
-
-    fun copy(): OrgLineState = OrgLineState().also { it.restoreFrom(this) }
-
+    var codeState: String? = null,
+) {
     /** Resets this state to [other], so a cached line can be resumed from its recorded start. */
     fun restoreFrom(other: OrgLineState) {
         blockType = other.blockType
@@ -101,17 +96,6 @@ class OrgLineState {
         srcLanguage = other.srcLanguage
         codeState = other.codeState
     }
-
-    override fun equals(other: Any?) =
-        other is OrgLineState && other.blockType == blockType && other.inDrawer == inDrawer &&
-            other.srcLanguage == srcLanguage && other.codeState == codeState
-
-    override fun hashCode() =
-        ((31 * (blockType?.hashCode() ?: 0) + inDrawer.hashCode()) * 31 + (srcLanguage?.hashCode() ?: 0)) * 31 +
-            (codeState?.hashCode() ?: 0)
-
-    override fun toString() =
-        "OrgLineState(blockType=$blockType, inDrawer=$inDrawer, srcLanguage=$srcLanguage, codeState=$codeState)"
 }
 
 /**
