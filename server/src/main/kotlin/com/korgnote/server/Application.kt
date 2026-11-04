@@ -14,7 +14,6 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import java.io.File
-import java.nio.file.Paths
 
 fun main() {
     val config = ServerConfig.fromEnvironment()
@@ -25,7 +24,6 @@ fun main() {
         pairing = PairingDetails(identity.serverId, config.serverName, identity.fingerprint, config.advertisedPort, config.advertisedAddresses),
         thisComputer = containerGateway(),
     )
-    fun isSet(name: String) = System.getenv(name)?.trim()?.lowercase() in setOf("1", "true", "yes")
     embeddedServer(
         Netty,
         configure = {
@@ -47,31 +45,16 @@ fun main() {
         log.info(config.describe())
         // Said at startup, where whoever started the container looks, not only when a phone fails.
         access.pairing?.missingAddressAdvice()?.let { log.warn("No address to pair phones with. $it") }
-        module(
-            access,
-            watchFiles = true,
-            requireNotesDir = isSet(REQUIRE_NOTES_DIR_VARIABLE),
-            serveWebClient = !isSet(DISABLE_WEB_VARIABLE),
-        )
+        module(config.openStore(log), access, watchFiles = true, webClient = config.findWebClient(log))
     }.start(wait = true)
 }
-
-/** Serve the API only, even when a web client build is present (the container ships one). */
-const val DISABLE_WEB_VARIABLE = "KORGNOTE_DISABLE_WEB"
-
-/**
- * Set by the container image: a missing or unwritable notes directory stops the server. In a
- * container, serving an empty library instead would hide a typo in the volume path, or a UID that
- * cannot write to the mount, behind a server that looks healthy.
- */
-const val REQUIRE_NOTES_DIR_VARIABLE = "KORGNOTE_REQUIRE_NOTES_DIR"
-
 
 /**
  * [access] defaults to this computer only, with no network side, because that is what the test host
  * wants; `main` passes the paired devices and the secure port.
  */
 fun Application.module(
+    store: FileStore,
     access: ServerAccess = ServerAccess.localOnly(),
     /**
      * Whether to watch the notes directory for external edits.
@@ -81,10 +64,8 @@ fun Application.module(
      * themselves. `main` turns it on.
      */
     watchFiles: Boolean = false,
-    /** Fail when the notes directory is missing or unwritable; see [REQUIRE_NOTES_DIR_VARIABLE]. */
-    requireNotesDir: Boolean = false,
-    /** Serve the wasm client at `/` when a build of it is found; see [DISABLE_WEB_VARIABLE]. */
-    serveWebClient: Boolean = true,
+    /** The build of the wasm client to serve at `/`; see [ServerConfig.findWebClient]. */
+    webClient: File? = null,
 ) {
     install(ContentNegotiation) { json() }
 
@@ -111,70 +92,6 @@ fun Application.module(
         )
     }
 
-    fun resolvePath(path: String): File {
-        var expanded = when {
-            path.startsWith("~/") -> {
-                val home = System.getProperty("user.home")
-                path.replaceFirst("~/", home + File.separator)
-            }
-            path.startsWith("~") -> {
-                val home = System.getProperty("user.home")
-                path.replaceFirst("~", home)
-            }
-            else -> path
-        }
-
-        // Also handle Windows environment variables if present in the string
-        if (expanded.contains("%")) {
-            expanded = expanded.replace(Regex("%([^%]+)%")) { match ->
-                val varName = match.groupValues[1]
-                System.getenv(varName) ?: match.value
-            }
-        }
-
-        return File(expanded)
-    }
-
-    val notesDirOverride = System.getProperty("notes.dir")?.trim().takeUnless { it.isNullOrEmpty() }
-        ?: System.getenv("NOTES_DIR")?.trim().takeUnless { it.isNullOrEmpty() }
-        ?: "notes" // Default to a 'notes' directory in the current working directory
-
-    /**
-     * The notes directory; an empty, read-only library when it does not exist.
-     *
-     * Built once, but it reads the disk on every request rather than caching contents — see
-     * [FileStore].
-     */
-    fun openStore(): FileStore {
-        val notesDir = resolvePath(notesDirOverride)
-        if (requireNotesDir) {
-            check(notesDir.isDirectory) {
-                "Notes directory '${notesDir.absolutePath}' does not exist and $REQUIRE_NOTES_DIR_VARIABLE is set. " +
-                    "Is the volume mounted?"
-            }
-            // Write a file rather than ask canWrite(): through Docker Desktop's file sharing a
-            // directory can report itself writable and still refuse the write.
-            val writable = runCatching {
-                File.createTempFile(".korgnote-write-check", null, notesDir).delete()
-            }.isSuccess
-            check(writable) {
-                "Notes directory '${notesDir.absolutePath}' is not writable by this user. " +
-                    "Run as the UID/GID that owns it."
-            }
-        }
-        if (notesDir.exists() && notesDir.isDirectory) {
-            log.info("Serving .org files from ${notesDir.absolutePath}")
-            return FileStore(notesDir.toPath())
-        }
-        log.warn(
-            "Notes directory '${notesDir.absolutePath}' not found: serving an empty library, read-only and unwatched. " +
-                "Create it, or set NOTES_DIR, and restart the server.",
-        )
-        return FileStore(notesDir.toPath(), readOnly = true)
-    }
-
-    val store = openStore()
-
     // The generation counter the sync API hands out, and the watcher that keeps it honest about
     // edits the server did not make itself.
     val journal = ChangeJournal()
@@ -184,36 +101,8 @@ fun Application.module(
     monitor.subscribe(ApplicationStopping) { watcher?.stop() }
 
     routing {
-        // Robust resolver for the WASM app output directory (Option A)
-        fun wasmCandidates(): List<File> {
-            val override = System.getProperty("wasm.dir")?.trim().takeUnless { it.isNullOrEmpty() }
-                ?: System.getenv("WASM_DIR")?.trim().takeUnless { it.isNullOrEmpty() }
-
-            val paths = mutableListOf<String>()
-            if (override != null) paths += override
-
-            // Project-root relative (works if working dir is repo root)
-            paths += listOf(
-                "composeApp/build/dist/wasmJs/productionExecutable",
-                "composeApp/build/dist/wasmJs/developmentExecutable"
-            )
-            // Server-module relative (works if working dir is repoRoot/server)
-            paths += listOf(
-                "../composeApp/build/dist/wasmJs/productionExecutable",
-                "../composeApp/build/dist/wasmJs/developmentExecutable"
-            )
-
-            return paths.map { Paths.get(it).toFile() }
-        }
-
-        val wasmOut = if (serveWebClient) wasmCandidates().firstOrNull { it.exists() } else null
-        println(
-            "Working dir: ${System.getProperty("user.dir")} | Using WASM dir: " +
-                (wasmOut?.absolutePath ?: if (serveWebClient) "<not found>" else "<disabled by $DISABLE_WEB_VARIABLE>")
-        )
-
-        if (wasmOut != null) {
-            staticFiles("/", wasmOut, index = "index.html")
+        if (webClient != null) {
+            staticFiles("/", webClient, index = "index.html")
         }
 
         get("/favicon.png") {
@@ -225,7 +114,7 @@ fun Application.module(
 
         // API endpoints kept under /api to avoid collision with index.html routing
         // Serve index.html at root when WASM output exists; otherwise fall back to legacy greeting
-        if (wasmOut == null) {
+        if (webClient == null) {
             get("/") {
                 call.respondText("Ktor: ${Greeting().greet()}")
             }
@@ -252,48 +141,3 @@ suspend fun RoutingContext.respondFavIcon() {
         call.respondBytes(bytes, contentType = ContentType.Image.PNG)
     }
 }
-/**
- * Why [call] may not go on, as a status and a sentence; null when it may.
- *
- * Over TLS, only the sync API answers, and only to a paired device's token — pairing itself
- * excepted, which is how a device gets one. The plain port answers this computer only, which its
- * loopback binding already ensures; a browser on this computer is held to it as well, since any page
- * it has open could otherwise send requests here: the `Host` must name this computer, which stops a
- * page reaching it through a name of its own (DNS rebinding), and a change must come from a page of
- * this server's own, which stops one changing notes from another site.
- */
-internal fun refusalOf(call: ApplicationCall, access: ServerAccess): Pair<HttpStatusCode, String>? {
-    val path = call.request.path()
-    if (access.securePort != null && call.request.local.localPort == access.securePort) {
-        if (path == "/api/pair") return null
-        // What may be reached, not what may not: this is the path as it was sent, while routing ignores
-        // empty segments and decodes the rest, so `/api//local/` and `/api/%6Cocal/` reach `/api/local/`.
-        if (!path.startsWith("/api/v1/")) {
-            return HttpStatusCode.NotFound to "Not found. The web client and the Devices page are on the computer the server runs on."
-        }
-        val token = call.request.header(HttpHeaders.Authorization)?.removePrefix("Bearer ")?.trim()
-        return if (token.isNullOrEmpty() || access.devices.authenticate(token) == null) {
-            HttpStatusCode.Unauthorized to "This device is not paired, or was revoked. Pair it again from the Devices page."
-        } else {
-            null
-        }
-    }
-    // Where the connection comes from, which the caller cannot write, before what it says about
-    // itself: in a container this port listens on every interface inside, and another container on
-    // the same network could otherwise claim to be localhost.
-    if (!connectsFromThisComputer(call.request.local.remoteAddress, access.thisComputer)) {
-        return HttpStatusCode.Forbidden to "This port serves the computer the server runs on only."
-    }
-    if (!namesThisComputer(call.request.host())) {
-        return HttpStatusCode.Forbidden to "This port serves the computer the server runs on, by the name localhost."
-    }
-    val method = call.request.httpMethod
-    if (method != HttpMethod.Get && method != HttpMethod.Head && method != HttpMethod.Options) {
-        val origin = call.request.header(HttpHeaders.Origin)?.let { runCatching { Url(it) }.getOrNull() ?: Url("null://") }
-        if (origin != null && !(origin.host.equals(call.request.host(), ignoreCase = true) && origin.port == call.request.port())) {
-            return HttpStatusCode.Forbidden to "Changes are accepted from this server's own pages only."
-        }
-    }
-    return null
-}
-

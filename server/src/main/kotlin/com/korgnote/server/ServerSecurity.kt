@@ -2,6 +2,18 @@ package com.korgnote.server
 
 import com.korgnote.common.SERVER_PORT
 import com.korgnote.common.pairing.SECURE_PORT
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.Url
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.plugins.origin
+import io.ktor.server.request.header
+import io.ktor.server.request.host
+import io.ktor.server.request.httpMethod
+import io.ktor.server.request.path
+import io.ktor.server.request.port
+import org.slf4j.Logger
 import java.io.File
 import java.net.Inet4Address
 import java.net.InetAddress
@@ -16,6 +28,8 @@ import java.net.NetworkInterface
  * publishes it on the host's loopback only, and a connection from anywhere but the host is refused
  * by its address ([ServerAccess.thisComputer]). The secure one ([httpsPort]) is for the network: TLS
  * with the server's own certificate, and nothing but the sync API, for paired devices only.
+ *
+ * And what it serves: the notes in [notesDir], and the web client it finds with [findWebClient].
  */
 data class ServerConfig(
     val httpHost: String = LOOPBACK,
@@ -31,11 +45,70 @@ data class ServerConfig(
     val advertisedAddresses: List<String> = emptyList(),
     /** A `KORGNOTE_TOKEN` left over from before pairing, which is now ignored; worth a line in the log. */
     val leftoverToken: Boolean = false,
+    val notesDir: File = File(DEFAULT_NOTES_DIR),
+    /** Stop when [notesDir] is missing or cannot be written to; see [REQUIRE_NOTES_DIR_VARIABLE]. */
+    val requireNotesDir: Boolean = false,
+    /** Where to look for the web client before the places a Gradle build leaves it. */
+    val webClientDir: String? = null,
+    /** False to serve the API only; see [DISABLE_WEB_VARIABLE]. */
+    val serveWebClient: Boolean = true,
 ) {
     fun describe(): String =
         "Paired devices: https on $httpsHost:$httpsPort. This computer only: http on $httpHost:$httpPort " +
             "(web client, desktop app, and the Devices page at /devices). State in ${stateDir.absolutePath}." +
             if (leftoverToken) " $TOKEN_VARIABLE is set but no longer used: pair devices on the Devices page instead." else ""
+
+    /**
+     * The notes directory; an empty, read-only library when it does not exist.
+     *
+     * Built once, but it reads the disk on every request rather than caching contents — see
+     * [FileStore].
+     */
+    fun openStore(log: Logger): FileStore {
+        if (requireNotesDir) {
+            check(notesDir.isDirectory) {
+                "Notes directory '${notesDir.absolutePath}' does not exist and $REQUIRE_NOTES_DIR_VARIABLE is set. " +
+                    "Is the volume mounted?"
+            }
+            // Write a file rather than ask canWrite(): through Docker Desktop's file sharing a
+            // directory can report itself writable and still refuse the write.
+            val writable = runCatching {
+                File.createTempFile(".korgnote-write-check", null, notesDir).delete()
+            }.isSuccess
+            check(writable) {
+                "Notes directory '${notesDir.absolutePath}' is not writable by this user. " +
+                    "Run as the UID/GID that owns it."
+            }
+        }
+        if (notesDir.isDirectory) {
+            log.info("Serving .org files from ${notesDir.absolutePath}")
+            return FileStore(notesDir.toPath())
+        }
+        log.warn(
+            "Notes directory '${notesDir.absolutePath}' not found: serving an empty library, read-only and unwatched. " +
+                "Create it, or set $NOTES_DIR_VARIABLE, and restart the server.",
+        )
+        return FileStore(notesDir.toPath(), readOnly = true)
+    }
+
+    /** The build of the web client to serve at `/`, if it should be served and one can be found. */
+    fun findWebClient(log: Logger): File? {
+        if (!serveWebClient) {
+            log.info("Not serving the web client: $DISABLE_WEB_VARIABLE is set")
+            return null
+        }
+        // The repository root and `server/`, which is what the working directory is under Gradle.
+        val built = listOf("composeApp", "../composeApp").flatMap { module ->
+            listOf("$module/build/dist/wasmJs/productionExecutable", "$module/build/dist/wasmJs/developmentExecutable")
+        }
+        val found = (listOfNotNull(webClientDir) + built).map(::File).firstOrNull { it.exists() }
+        if (found != null) {
+            log.info("Serving the web client from ${found.absolutePath}")
+        } else {
+            log.info("No web client to serve, looking from ${System.getProperty("user.dir")}")
+        }
+        return found
+    }
 
     companion object {
         const val LOOPBACK = "127.0.0.1"
@@ -49,9 +122,32 @@ data class ServerConfig(
         const val SERVER_NAME_VARIABLE = "KORGNOTE_SERVER_NAME"
         const val ADDRESSES_VARIABLE = "KORGNOTE_ADVERTISED_ADDRESSES"
         const val TOKEN_VARIABLE = "KORGNOTE_TOKEN"
+        const val NOTES_DIR_VARIABLE = "NOTES_DIR"
+        const val NOTES_DIR_PROPERTY = "notes.dir"
+        const val WEB_DIR_VARIABLE = "WASM_DIR"
+        const val WEB_DIR_PROPERTY = "wasm.dir"
 
-        fun fromEnvironment(read: (String) -> String? = System::getenv): ServerConfig {
+        /** Serve the API only, even when a web client build is present (the container ships one). */
+        const val DISABLE_WEB_VARIABLE = "KORGNOTE_DISABLE_WEB"
+
+        /**
+         * Set by the container image: a missing or unwritable notes directory stops the server. In a
+         * container, serving an empty library instead would hide a typo in the volume path, or a UID
+         * that cannot write to the mount, behind a server that looks healthy.
+         */
+        const val REQUIRE_NOTES_DIR_VARIABLE = "KORGNOTE_REQUIRE_NOTES_DIR"
+
+        private const val DEFAULT_NOTES_DIR = "notes"
+
+        /** What is set by a system property, `-Dnotes.dir=…`, wins over the environment. */
+        fun fromEnvironment(
+            property: (String) -> String? = System::getProperty,
+            read: (String) -> String? = System::getenv,
+        ): ServerConfig {
             fun value(name: String) = read(name)?.trim()?.takeIf { it.isNotEmpty() }
+            fun propertyValue(name: String) = property(name)?.trim()?.takeIf { it.isNotEmpty() }
+            fun isSet(name: String) = value(name)?.lowercase() in setOf("1", "true", "yes")
+            fun expanded(path: String) = expandPath(path, read)
             val defaults = ServerConfig()
             val httpsPort = value(HTTPS_PORT_VARIABLE)?.toIntOrNull() ?: defaults.httpsPort
             return ServerConfig(
@@ -59,15 +155,26 @@ data class ServerConfig(
                 httpPort = value(PORT_VARIABLE)?.toIntOrNull() ?: defaults.httpPort,
                 httpsPort = httpsPort,
                 advertisedPort = value(ADVERTISED_PORT_VARIABLE)?.toIntOrNull() ?: httpsPort,
-                stateDir = value(STATE_DIR_VARIABLE)?.let { File(expandHome(it)) } ?: defaults.stateDir,
+                stateDir = value(STATE_DIR_VARIABLE)?.let { File(expanded(it)) } ?: defaults.stateDir,
                 serverName = value(SERVER_NAME_VARIABLE) ?: defaults.serverName,
                 advertisedAddresses = value(ADDRESSES_VARIABLE)?.split(',', ' ')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty(),
                 leftoverToken = value(TOKEN_VARIABLE) != null,
+                notesDir = File(expanded(propertyValue(NOTES_DIR_PROPERTY) ?: value(NOTES_DIR_VARIABLE) ?: DEFAULT_NOTES_DIR)),
+                requireNotesDir = isSet(REQUIRE_NOTES_DIR_VARIABLE),
+                webClientDir = propertyValue(WEB_DIR_PROPERTY) ?: value(WEB_DIR_VARIABLE),
+                serveWebClient = !isSet(DISABLE_WEB_VARIABLE),
             )
         }
 
-        private fun expandHome(path: String) =
-            if (path == "~" || path.startsWith("~/")) System.getProperty("user.home") + path.removePrefix("~") else path
+        /** `~` at the start of [path], and any Windows-style `%NAME%` that [read] knows. */
+        private fun expandPath(path: String, read: (String) -> String?): String {
+            val fromHome = if (path == "~" || path.startsWith("~/") || path.startsWith("~\\")) {
+                System.getProperty("user.home") + path.removePrefix("~")
+            } else {
+                path
+            }
+            return fromHome.replace(Regex("%([^%]+)%")) { read(it.groupValues[1]) ?: it.value }
+        }
     }
 }
 
@@ -199,3 +306,49 @@ internal fun containerGateway(): Set<String> {
     val routes = runCatching { File("/proc/net/route").readText() }.getOrNull() ?: return emptySet()
     return setOfNotNull(defaultGateway(routes))
 }
+
+/**
+ * Why [call] may not go on, as a status and a sentence; null when it may.
+ *
+ * Over TLS, only the sync API answers, and only to a paired device's token — pairing itself
+ * excepted, which is how a device gets one. The plain port answers this computer only, which its
+ * loopback binding already ensures; a browser on this computer is held to it as well, since any page
+ * it has open could otherwise send requests here: the `Host` must name this computer, which stops a
+ * page reaching it through a name of its own (DNS rebinding), and a change must come from a page of
+ * this server's own, which stops one changing notes from another site.
+ */
+internal fun refusalOf(call: ApplicationCall, access: ServerAccess): Pair<HttpStatusCode, String>? {
+    val path = call.request.path()
+    if (access.securePort != null && call.request.local.localPort == access.securePort) {
+        if (path == "/api/pair") return null
+        // What may be reached, not what may not: this is the path as it was sent, while routing ignores
+        // empty segments and decodes the rest, so `/api//local/` and `/api/%6Cocal/` reach `/api/local/`.
+        if (!path.startsWith("/api/v1/")) {
+            return HttpStatusCode.NotFound to "Not found. The web client and the Devices page are on the computer the server runs on."
+        }
+        val token = call.request.header(HttpHeaders.Authorization)?.removePrefix("Bearer ")?.trim()
+        return if (token.isNullOrEmpty() || access.devices.authenticate(token) == null) {
+            HttpStatusCode.Unauthorized to "This device is not paired, or was revoked. Pair it again from the Devices page."
+        } else {
+            null
+        }
+    }
+    // Where the connection comes from, which the caller cannot write, before what it says about
+    // itself: in a container this port listens on every interface inside, and another container on
+    // the same network could otherwise claim to be localhost.
+    if (!connectsFromThisComputer(call.request.local.remoteAddress, access.thisComputer)) {
+        return HttpStatusCode.Forbidden to "This port serves the computer the server runs on only."
+    }
+    if (!namesThisComputer(call.request.host())) {
+        return HttpStatusCode.Forbidden to "This port serves the computer the server runs on, by the name localhost."
+    }
+    val method = call.request.httpMethod
+    if (method != HttpMethod.Get && method != HttpMethod.Head && method != HttpMethod.Options) {
+        val origin = call.request.header(HttpHeaders.Origin)?.let { runCatching { Url(it) }.getOrNull() ?: Url("null://") }
+        if (origin != null && !(origin.host.equals(call.request.host(), ignoreCase = true) && origin.port == call.request.port())) {
+            return HttpStatusCode.Forbidden to "Changes are accepted from this server's own pages only."
+        }
+    }
+    return null
+}
+

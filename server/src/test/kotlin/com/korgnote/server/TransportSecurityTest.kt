@@ -38,9 +38,12 @@ class TransportSecurityTest {
     private val devices = DeviceRegistry(file = null, now = { clock }, newToken = { "token-${++tokens}" }, newCode = { "code-${++codes}" })
     private val details = PairingDetails("server-1", "Laptop", "ab".repeat(32), 8443, listOf("192.168.1.20"))
 
-    private fun ApplicationTestBuilder.asDevices() = application { module(ServerAccess(devices, securePort = 80, pairing = details)) }
+    /** Who may reach what is the point here, not what they find. */
+    private val noNotes = FileStore(java.nio.file.Path.of("temp_no_notes_here"), readOnly = true)
 
-    private fun ApplicationTestBuilder.asThisComputer() = application { module(ServerAccess(devices, securePort = 8443, pairing = details)) }
+    private fun ApplicationTestBuilder.asDevices() = application { module(noNotes, ServerAccess(devices, securePort = 80, pairing = details)) }
+
+    private fun ApplicationTestBuilder.asThisComputer() = application { module(noNotes, ServerAccess(devices, securePort = 8443, pairing = details)) }
 
     private suspend fun ApplicationTestBuilder.pair(code: String, name: String = "Phone", replaces: String? = null, replacesToken: String? = null) =
         client.post("/api/pair") {
@@ -268,6 +271,52 @@ class TransportSecurityTest {
         }
         assertEquals(listOf("192.168.1.20", "10.0.0.5"), config.advertisedAddresses)
         assertEquals(9443, config.advertisedPort)
+    }
+
+    @Test
+    fun aSystemPropertyWinsOverTheEnvironment() {
+        val environment = mapOf(ServerConfig.NOTES_DIR_VARIABLE to "from-env", ServerConfig.WEB_DIR_VARIABLE to "web-from-env")
+        val properties = mapOf(ServerConfig.NOTES_DIR_PROPERTY to "from-property", ServerConfig.WEB_DIR_PROPERTY to "web-from-property")
+
+        val both = ServerConfig.fromEnvironment(properties::get, environment::get)
+        assertEquals("from-property", both.notesDir.path)
+        assertEquals("web-from-property", both.webClientDir)
+
+        val envOnly = ServerConfig.fromEnvironment({ null }, environment::get)
+        assertEquals("from-env", envOnly.notesDir.path)
+        assertEquals("web-from-env", envOnly.webClientDir)
+
+        val neither = ServerConfig.fromEnvironment({ null }, { null })
+        assertEquals("notes", neither.notesDir.path)
+        assertEquals(null, neither.webClientDir)
+    }
+
+    @Test
+    fun aSwitchIsSetByAnyOfItsWords() {
+        for (word in listOf("1", "true", "YES", " yes ")) {
+            val config = ServerConfig.fromEnvironment({ null }) {
+                if (it == ServerConfig.REQUIRE_NOTES_DIR_VARIABLE || it == ServerConfig.DISABLE_WEB_VARIABLE) word else null
+            }
+            assertTrue(config.requireNotesDir, word)
+            assertFalse(config.serveWebClient, word)
+        }
+        val off = ServerConfig.fromEnvironment({ null }) { "0" }
+        assertFalse(off.requireNotesDir)
+        assertTrue(off.serveWebClient)
+    }
+
+    @Test
+    fun aHomeInThePathOfAFolderIsExpanded() {
+        val home = System.getProperty("user.home")
+        val config = ServerConfig.fromEnvironment({ null }) {
+            when (it) {
+                ServerConfig.NOTES_DIR_VARIABLE -> "~/my-notes"
+                ServerConfig.STATE_DIR_VARIABLE -> "~/my-state"
+                else -> null
+            }
+        }
+        assertEquals("$home/my-notes", config.notesDir.path)
+        assertEquals("$home/my-state", config.stateDir.path)
     }
 
     @Test

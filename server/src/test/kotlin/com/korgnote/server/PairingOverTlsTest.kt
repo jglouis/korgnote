@@ -61,7 +61,7 @@ class PairingOverTlsTest {
             }
         },
     ) {
-        module(ServerAccess(devices, securePort = httpsPort, pairing = PairingDetails(identity.serverId, "Laptop", identity.fingerprint, httpsPort, emptyList())))
+        module(FileStore(stateDir.toPath().resolve("notes"), readOnly = true), ServerAccess(devices, securePort = httpsPort, pairing = PairingDetails(identity.serverId, "Laptop", identity.fingerprint, httpsPort, emptyList())))
     }.start(wait = false)
 
     @AfterTest

@@ -3,73 +3,56 @@ package com.korgnote.server
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.server.application.log
 import io.ktor.server.testing.*
 import java.io.File
 import kotlin.test.*
 
 class ApplicationTest {
 
+    /** The sample notes, which are test resources and do not ship. */
+    private val samples get() = FileStore(File(javaClass.classLoader.getResource("org/")!!.toURI()).toPath())
+
     @Test
     fun testRoot() = testApplication {
         application {
-            module()
+            module(samples)
         }
         val response = client.get("/")
         assertEquals(HttpStatusCode.OK, response.status)
     }
 
-    /** The sample notes, which are test resources and do not ship. */
-    private fun withSamples(block: () -> Unit) {
-        System.setProperty("notes.dir", File(javaClass.classLoader.getResource("org/")!!.toURI()).path)
-        try {
-            block()
-        } finally {
-            System.clearProperty("notes.dir")
+    @Test
+    fun testOrgTree() = testApplication {
+        application {
+            module(samples)
         }
+        val response = client.get("/api/v1/manifest")
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.bodyAsText()
+        // Should contain some of our resource files in the tree
+        assertTrue(body.contains("notes.org"))
+        assertTrue(body.contains("inbox.org"))
     }
 
     @Test
-    fun testOrgTree() = withSamples {
-        testApplication {
-            application {
-                module()
-            }
-            val response = client.get("/api/v1/manifest")
-            assertEquals(HttpStatusCode.OK, response.status)
-            val body = response.bodyAsText()
-            // Should contain some of our resource files in the tree
-            assertTrue(body.contains("notes.org"))
-            assertTrue(body.contains("inbox.org"))
+    fun testContent() = testApplication {
+        application {
+            module(samples)
         }
-    }
-
-    @Test
-    fun testContent() = withSamples {
-        testApplication {
-            application {
-                module()
-            }
-            val response = client.get("/api/v1/files/notes.org")
-            assertEquals(HttpStatusCode.OK, response.status)
-        }
+        val response = client.get("/api/v1/files/notes.org")
+        assertEquals(HttpStatusCode.OK, response.status)
     }
 
     /** Nothing to fall back on: an empty library, which a phone's edits are not written into. */
     @Test
-    fun aMissingNotesDirectoryIsAnEmptyLibrary() {
-        System.setProperty("notes.dir", "temp_notes_does_not_exist")
-        try {
-            testApplication {
-                application { module() }
-                val manifest = client.get("/api/v1/manifest")
-                assertEquals(HttpStatusCode.OK, manifest.status)
-                assertTrue(manifest.bodyAsText().contains("\"entries\":[]"), manifest.bodyAsText())
-                assertEquals(HttpStatusCode.Forbidden, client.put("/api/v1/files/a.org") { setBody("* a\n") }.status)
-                assertFalse(File("temp_notes_does_not_exist").exists())
-            }
-        } finally {
-            System.clearProperty("notes.dir")
-        }
+    fun aMissingNotesDirectoryIsAnEmptyLibrary() = testApplication {
+        application { module(ServerConfig(notesDir = File("temp_notes_does_not_exist")).openStore(log)) }
+        val manifest = client.get("/api/v1/manifest")
+        assertEquals(HttpStatusCode.OK, manifest.status)
+        assertTrue(manifest.bodyAsText().contains("\"entries\":[]"), manifest.bodyAsText())
+        assertEquals(HttpStatusCode.Forbidden, client.put("/api/v1/files/a.org") { setBody("* a\n") }.status)
+        assertFalse(File("temp_notes_does_not_exist").exists())
     }
 
     @Test
@@ -82,11 +65,9 @@ class ApplicationTest {
             File(tempDir, "root.org").writeText("* Root")
             File(subDir, "leaf.org").writeText("* Leaf")
 
-            System.setProperty("notes.dir", tempDir.path)
-
             testApplication {
                 application {
-                    module()
+                    module(FileStore(tempDir.toPath()))
                 }
                 val response = client.get("/api/v1/manifest")
                 assertEquals(HttpStatusCode.OK, response.status)
@@ -100,7 +81,6 @@ class ApplicationTest {
                 assertEquals("* Leaf", contentResponse.bodyAsText())
             }
         } finally {
-            System.clearProperty("notes.dir")
             tempDir.deleteRecursively()
         }
     }
@@ -113,11 +93,9 @@ class ApplicationTest {
             val file = File(tempDir, "save.org")
             file.writeText("* Initial")
 
-            System.setProperty("notes.dir", tempDir.path)
-
             testApplication {
                 application {
-                    module()
+                    module(FileStore(tempDir.toPath()))
                 }
                 
                 val newContent = "* Updated Content"
@@ -133,7 +111,6 @@ class ApplicationTest {
                 assertEquals(newContent, getResponse.bodyAsText())
             }
         } finally {
-            System.clearProperty("notes.dir")
             tempDir.deleteRecursively()
         }
     }
@@ -146,18 +123,17 @@ class ApplicationTest {
         try {
             File(tempDir, "test.org").writeText("* Tilde")
             
-            System.setProperty("notes.dir", "~/temp_notes_tilde_test")
+            val config = ServerConfig.fromEnvironment({ if (it == ServerConfig.NOTES_DIR_PROPERTY) "~/temp_notes_tilde_test" else null }, { null })
 
             testApplication {
                 application {
-                    module()
+                    module(config.openStore(log))
                 }
                 val response = client.get("/api/v1/manifest")
                 assertEquals(HttpStatusCode.OK, response.status)
                 assertTrue(response.bodyAsText().contains("test.org"))
             }
         } finally {
-            System.clearProperty("notes.dir")
             tempDir.deleteRecursively()
         }
     }
@@ -175,18 +151,18 @@ class ApplicationTest {
             // Use %USERPROFILE% if on Windows, otherwise $HOME won't be expanded by my current simple logic
             // But the user specifically mentioned %HOMEPATH%, so let's test that style.
             val varToTest = if (System.getenv("USERPROFILE") != null) "USERPROFILE" else "HOME"
-            System.setProperty("notes.dir", "%$varToTest%/temp_notes_env_test")
+            val path = "%$varToTest%/temp_notes_env_test"
+            val config = ServerConfig.fromEnvironment({ if (it == ServerConfig.NOTES_DIR_PROPERTY) path else null }, System::getenv)
 
             testApplication {
                 application {
-                    module()
+                    module(config.openStore(log))
                 }
                 val response = client.get("/api/v1/manifest")
                 assertEquals(HttpStatusCode.OK, response.status)
                 assertTrue(response.bodyAsText().contains("env.org"))
             }
         } finally {
-            System.clearProperty("notes.dir")
             tempDir.deleteRecursively()
         }
     }
@@ -196,18 +172,14 @@ class ApplicationTest {
     /** A mistyped volume path must stop the server, not quietly serve an empty library. */
     @Test
     fun aRequiredNotesDirectoryThatIsMissingFailsStartup() {
-        System.setProperty("notes.dir", "temp_notes_does_not_exist")
-        try {
-            val failure = assertFails {
-                testApplication {
-                    application { module(requireNotesDir = true) }
-                    startApplication()
-                }
+        val config = ServerConfig(notesDir = File("temp_notes_does_not_exist"), requireNotesDir = true)
+        val failure = assertFails {
+            testApplication {
+                application { module(config.openStore(log)) }
+                startApplication()
             }
-            assertTrue(failure.message.orEmpty().contains("does not exist"), failure.message)
-        } finally {
-            System.clearProperty("notes.dir")
         }
+        assertTrue(failure.message.orEmpty().contains("does not exist"), failure.message)
     }
 
     @Test
@@ -215,17 +187,16 @@ class ApplicationTest {
         val tempDir = File("temp_notes_read_only")
         tempDir.mkdirs()
         tempDir.setWritable(false)
-        System.setProperty("notes.dir", tempDir.path)
+        val config = ServerConfig(notesDir = tempDir, requireNotesDir = true)
         try {
             val failure = assertFails {
                 testApplication {
-                    application { module(requireNotesDir = true) }
+                    application { module(config.openStore(log)) }
                     startApplication()
                 }
             }
             assertTrue(failure.message.orEmpty().contains("not writable"), failure.message)
         } finally {
-            System.clearProperty("notes.dir")
             tempDir.setWritable(true)
             tempDir.deleteRecursively()
         }
@@ -236,49 +207,50 @@ class ApplicationTest {
         val tempDir = File("temp_notes_required")
         tempDir.mkdirs()
         File(tempDir, "only.org").writeText("* Only")
-        System.setProperty("notes.dir", tempDir.path)
+        val config = ServerConfig(notesDir = tempDir, requireNotesDir = true)
         try {
             testApplication {
-                application { module(requireNotesDir = true) }
+                application { module(config.openStore(log)) }
                 val body = client.get("/api/v1/manifest").bodyAsText()
                 assertTrue(body.contains("only.org"))
                 assertFalse(body.contains("inbox.org"), "the samples must not be mixed in")
             }
         } finally {
-            System.clearProperty("notes.dir")
             tempDir.deleteRecursively()
         }
     }
 
     // --- KORGNOTE_DISABLE_WEB ---
 
+    private val noNotes get() = FileStore(java.nio.file.Path.of("temp_no_notes_here"), readOnly = true)
+
     @Test
-    fun theWebClientIsServedAtTheRootWhenPresent() = withWebClient {
+    fun theWebClientIsServedAtTheRootWhenPresent() = withWebClient { webDir ->
+        val config = ServerConfig(webClientDir = webDir.path)
         testApplication {
-            application { module() }
+            application { module(noNotes, webClient = config.findWebClient(log)) }
             assertTrue(client.get("/").bodyAsText().contains("web client"))
         }
     }
 
     @Test
-    fun theWebClientCanBeTurnedOff() = withWebClient {
+    fun theWebClientCanBeTurnedOff() = withWebClient { webDir ->
+        val config = ServerConfig(webClientDir = webDir.path, serveWebClient = false)
         testApplication {
-            application { module(serveWebClient = false) }
+            application { module(noNotes, webClient = config.findWebClient(log)) }
             val body = client.get("/").bodyAsText()
             assertFalse(body.contains("web client"))
             assertTrue(body.startsWith("Ktor:"))
         }
     }
 
-    private fun withWebClient(block: () -> Unit) {
+    private fun withWebClient(block: (File) -> Unit) {
         val webDir = File("temp_web_client")
         webDir.mkdirs()
         File(webDir, "index.html").writeText("<html>web client</html>")
-        System.setProperty("wasm.dir", webDir.path)
         try {
-            block()
+            block(webDir)
         } finally {
-            System.clearProperty("wasm.dir")
             webDir.deleteRecursively()
         }
     }

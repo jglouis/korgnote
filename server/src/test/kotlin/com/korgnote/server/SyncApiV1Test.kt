@@ -56,8 +56,7 @@ class SyncApiV1Test {
     fun cleanUp() = roots.forEach { it.deleteRecursively() }
 
     private fun ApplicationTestBuilder.serve(dir: File) {
-        System.setProperty("notes.dir", dir.absolutePath)
-        application { module(ServerAccess.localOnly()) }
+        application { module(FileStore(dir.toPath()), ServerAccess.localOnly()) }
     }
 
     @Test

@@ -27,7 +27,7 @@ class PairingAddressTest {
     private val nowhere = PairingDetails("server-1", "Laptop", "ab".repeat(32), 8443, emptyList(), interfaces = { emptyList() })
 
     private fun ApplicationTestBuilder.asThisComputer(details: PairingDetails = nowhere) =
-        application { module(ServerAccess(devices, securePort = 8443, pairing = details)) }
+        application { module(FileStore(java.nio.file.Path.of("temp_no_notes_here"), readOnly = true), ServerAccess(devices, securePort = 8443, pairing = details)) }
 
     @Test
     fun theDevicesPageSaysWhenItKnowsNoAddress() = testApplication {

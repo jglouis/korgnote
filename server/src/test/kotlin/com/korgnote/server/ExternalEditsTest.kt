@@ -29,12 +29,10 @@ class ExternalEditsTest {
     @BeforeTest
     fun setUp() {
         notesDir.mkdirs()
-        System.setProperty("notes.dir", notesDir.path)
     }
 
     @AfterTest
     fun tearDown() {
-        System.clearProperty("notes.dir")
         notesDir.deleteRecursively()
     }
 
@@ -42,7 +40,7 @@ class ExternalEditsTest {
     fun anEditMadeOutsideTheServerIsVisibleOnTheNextRequest() = testApplication {
         val file = File(notesDir, "inbox.org")
         file.writeText("* TODO before\n")
-        application { module() }
+        application { module(FileStore(notesDir.toPath())) }
 
         assertEquals("* TODO before\n", client.get("/api/v1/files/inbox.org").bodyAsText())
 
@@ -54,7 +52,7 @@ class ExternalEditsTest {
     @Test
     fun aFileCreatedOutsideTheServerAppearsInTheTree() = testApplication {
         File(notesDir, "first.org").writeText("* one\n")
-        application { module() }
+        application { module(FileStore(notesDir.toPath())) }
 
         assertTrue(client.get("/api/v1/manifest").bodyAsText().contains("first.org"))
 
@@ -69,7 +67,7 @@ class ExternalEditsTest {
     @Test
     fun aFileCreatedOutsideTheServerAppearsInOrgContent() = testApplication {
         File(notesDir, "first.org").writeText("* one\n")
-        application { module() }
+        application { module(FileStore(notesDir.toPath())) }
         client.get("/api/v1/bundle")
 
         File(notesDir, "second.org").writeText("* two\n")
@@ -81,7 +79,7 @@ class ExternalEditsTest {
     fun savingDoesNotOverwriteAnEditTheClientNeverSaw() = testApplication {
         val file = File(notesDir, "inbox.org")
         file.writeText("* TODO before\n")
-        application { module() }
+        application { module(FileStore(notesDir.toPath())) }
 
         // The client reads the file, keeping the version it was given...
         val etag = client.get("/api/v1/files/inbox.org").headers[HttpHeaders.ETag]!!
@@ -105,7 +103,7 @@ class ExternalEditsTest {
     fun savingAgainAfterRereadingSucceeds() = testApplication {
         val file = File(notesDir, "inbox.org")
         file.writeText("* TODO before\n")
-        application { module() }
+        application { module(FileStore(notesDir.toPath())) }
 
         val stale = client.get("/api/v1/files/inbox.org").headers[HttpHeaders.ETag]!!
         file.writeText("* TODO edited in Emacs\n")
@@ -132,7 +130,7 @@ class ExternalEditsTest {
     fun readsCarryAnEtagAndSavesCanUseIt() = testApplication {
         val file = File(notesDir, "inbox.org")
         file.writeText("* TODO before\n")
-        application { module() }
+        application { module(FileStore(notesDir.toPath())) }
 
         val read = client.get("/api/v1/files/inbox.org")
         val etag = read.headers[HttpHeaders.ETag]
@@ -158,7 +156,7 @@ class ExternalEditsTest {
         File(notesDir, "inbox.org").writeText("* TODO one\n")
         val outside = File(notesDir.parentFile, "outside_secret.org")
         outside.writeText("private\n")
-        application { module() }
+        application { module(FileStore(notesDir.toPath())) }
 
         try {
             val response = client.post("/api/v1/files/../outside_secret.org") { setBody("clobbered\n") }

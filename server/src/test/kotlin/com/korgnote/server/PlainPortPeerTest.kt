@@ -31,14 +31,13 @@ class PlainPortPeerTest {
 
     private val notes = Files.createTempDirectory("korgnote-peer").toFile().also {
         File(it, "a.org").writeText("* A\n")
-        System.setProperty("notes.dir", it.absolutePath)
     }
     private val port = ServerSocket(0).use { it.localPort }
     private val server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration> = embeddedServer(
         Netty,
         configure = { connector { host = "0.0.0.0"; port = this@PlainPortPeerTest.port } },
     ) {
-        module(ServerAccess.localOnly())
+        module(FileStore(notes.toPath()), ServerAccess.localOnly())
     }.start(wait = false)
 
     @AfterTest
