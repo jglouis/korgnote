@@ -242,7 +242,7 @@ virtualisation, since T12a came back as Cost A and per-element editing removed d
 concern. **Closed by T22:** read↔edit scroll mapping and a debounced, cancellable re-parse existed only
 for the whole-file editor, and went with it, as did viewport-scoped styling. The per-line cache and
 metric-neutral styling remain, for the element editor. Lazy reading mode took first composition of the
-largest real file from 234 ms to 38 ms ([09](09-element-editing.md#known-gaps)).
+largest real file from 234 ms to 38 ms ([09](09-element-editing.md#what-reading-mode-costs)).
 
 ### T13 · Completion
 **A strip, not a popup.** The design sketched a floating popup for desktop and a strip for phones.

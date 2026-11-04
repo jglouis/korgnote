@@ -101,7 +101,7 @@ making the edited text small.
 ### Reading mode at scale
 
 Read mode is a single `LazyColumn` keyed by element, so only what is on screen composes: first
-composition of the largest real file went from 234 ms to 38 ms ([09](09-element-editing.md#known-gaps)).
+composition of the largest real file went from 234 ms to 38 ms ([09](09-element-editing.md#what-reading-mode-costs)).
 
 The constraint that shaped it is worth keeping in mind for any screen like it: **a `LazyColumn`
 cannot live inside a `Modifier.verticalScroll` column**, which is how `App.kt` was structured. The
@@ -296,7 +296,7 @@ real cost there: **it was rendering, not filtering.** `FileTree` was a `LazyColu
 item with the whole recursive tree inside it, so laziness bought nothing and all 366 rows composed
 on every rebuild — and its expansion state was keyed by folder *object identity*, which a rebuilt
 tree invalidates, so each keystroke also re-opened every folder and restarted every animation. The
-reading-mode problem of [09](09-element-editing.md#known-gaps), in a second place, with the same
+reading-mode problem of [09](09-element-editing.md#what-reading-mode-costs), in a second place, with the same
 fix: the tree is flattened into `visibleRows` — a pure function, so the nesting rules are testable
 now that they are a list rather than a shape made of composables — and drawn as real lazy items,
 keyed by path. Paths survive a rebuild; object identities do not.

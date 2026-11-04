@@ -1,7 +1,5 @@
 # 09 — Element editing
 
-**Status: built and in use.** This document describes what exists, not a plan.
-
 Reading mode is the only surface. Each element — a heading with its own body — can be edited
 in place, and editing one is a text replacement over that element's character range. There is no
 whole-file editor: T22 retired it once the long-press menu could restructure a note.
@@ -73,15 +71,17 @@ moved:
 - Only a change to the same lines is still refused, and the editor stays open with a message.
 - Discarding shows the newer note.
 
-Covered by `EditRebaseTest`.
+Covered by `EditRebaseTest`. A change that is not an open edit — a tick, a keyword, a save itself — is
+merged with what the replica holds when it lands; what becomes of one that cannot be is in
+[05](05-sync-protocol.md#a-change-landing-on-what-came-in).
 
 ### The splitter and the parser agree
 
 The splitter must find headings exactly where `toOrgDocument` finds sections. If the two disagreed,
 the range offered for editing would not be the range written back, which corrupts a file.
 
-They now share Org's own rule. `isHeadingLine` is `OrgSyntax.heading` — stars, then whitespace — so
-`*bold* text` at the start of a line is a paragraph. And the splitter treats blocks and drawers as
+They share Org's own rule. `isHeadingLine` is `OrgSyntax.heading` — stars, then a space — so
+`*bold* text` at the start of a line is a paragraph, and so is `*\tTitle`. And the splitter treats blocks and drawers as
 opaque, as the parser does: a `* ` line inside `#+BEGIN_SRC` is code, and a heading closes a drawer
 that was never ended. This replaced an earlier compromise, in which both took any line starting with
 `*` for a heading: consistent, but wrong, and `*bold* text` became a heading in reading mode.
@@ -92,7 +92,8 @@ future grammar change cannot silently break the splice.
 
 ## The surface
 
-`composeApp/…/ui/OrgDocumentView.kt`
+`composeApp/…/ui/OrgDocumentView.kt`, with the editor in `OrgElementEditor.kt` and the menu in
+`ElementMenu.kt`.
 
 Each element is parsed and rendered **from its own slice** of the text rather than from a single
 parse of the document. That costs a little extra parsing and buys the property the screen depends
@@ -101,15 +102,17 @@ on: every rendered element knows the range it came from.
 | Interaction | Effect |
 |---|---|
 | Tap an element | Opens it in an inline editor, in place |
-| Long-press an element | A menu: *Add heading below*, *Add sub-heading*, *Move up*, *Move down*, *Promote*, *Demote*, *Delete heading* |
+| Long-press an element | A menu: *Add heading below*, *Add sub-heading*, *Clock in* (or *Clock out* and *Cancel clock*), *Set effort…*, then a line to make each stamp active or inactive, *Move up*, *Move down*, *Promote*, *Demote*, *Refile…*, *Priority…*, *Delete heading*. The preamble offers only what applies to it: *Add heading* and its stamps. Clocking and effort are in [11](11-clocking.md) |
 | *Add heading below* | Inserts a sibling of the same level after the element's **whole subtree**, and opens it |
 | *Add sub-heading* | Inserts a child one level deeper directly under the element's own body (its first child), and opens it |
 | *Delete heading* | After a confirmation that counts the sub-headings, removes the heading, its body and its whole subtree (`org-cut-subtree`), and saves |
 | *Move up* / *Move down* | Swaps the heading's whole subtree with its previous or next sibling (`org-move-subtree-up`/`-down`), and saves. Disabled where there is no sibling that way |
 | *Promote* / *Demote* | Adds or removes a star on every heading in the subtree (`org-promote-subtree`/`org-demote-subtree`), and saves. *Promote* is disabled at level 1 |
-| Tap a link into the notes | Opens its target — see [08 T21](08-roadmap.md#t21--following-links-between-notes---done); the back arrow returns |
+| Tap a link into the notes | Opens its target — see [Links between notes](#links-between-notes); the back arrow returns |
 | *Linked from* at the end | Every link elsewhere that leads to this note; tapping one opens it at the link |
-| Tap a heading's TODO keyword | A menu of the file's keywords; picking one changes it, logs the change under the heading, and saves. Marking a repeating entry done repeats it — see [Repeated tasks](#repeated-tasks) |
+| Tap a heading's TODO keyword | A menu of the file's keywords; picking one changes it, logs what the file asks for — see [State changes](#state-changes-and-what-they-log) — and saves. Marking a repeating entry done repeats it — see [Repeated tasks](#repeated-tasks). Holding it opens the long-press menu, as holding the rest of the heading does |
+| Tap a heading's `[#A]`, or *Priority…* | A menu of the file's priorities — see [Priorities](#priorities) |
+| *Refile…* | Moves the heading and its subtree under another heading or note — see [Refile](#refile) |
 | Tap a checkbox | Ticks it as Org does, and saves — see [Checkboxes and cookies](#checkboxes-and-cookies) |
 | Tap a table | Opens it in a grid editor — see [Tables](#tables) |
 | Chevron on a heading | Folds or unfolds the heading's subtree — see [Folding](#folding) |
@@ -143,8 +146,8 @@ another element is open in the editor, whose position the cut would move.
 
 *Move*, *Promote* and *Demote* are what the whole-file editor used to be kept for. Like delete, they
 act on the whole subtree, are refused while an element is open in the editor, and change nothing but
-the text they move or the stars they rewrite. A move never leaves the parent — there is no refile —
-and keeps a missing final newline missing. Folds go with the headings, by index, since restarring
+the text they move or the stars they rewrite. A move never leaves the parent, which is what
+[*Refile…*](#refile) is for, and keeps a missing final newline missing. Folds go with the headings, by index, since restarring
 changes the heading lines they are otherwise keyed by. A moved heading that leaves the screen is
 scrolled back into view.
 
@@ -207,7 +210,8 @@ active stamp, does what Org's `org-auto-repeat-maybe` does with its default sett
 - **The keyword goes back** to the first keyword of the `#+TODO:` sequence the done keyword is in,
   or to the entry's `REPEAT_TO_STATE` property when that names a keyword.
 - **The completion is recorded** as Emacs records it: `:LAST_REPEAT: [stamp]` in the property drawer
-  (created when there is none), and the usual `- State "DONE" from "TODO"` note.
+  (created when there is none), and the usual `- State "DONE" from "TODO"` line, unless the file says
+  `nologrepeat`; with `lognoterepeat`, a note is asked for under it.
 
 Only the menu repeats. Typing `DONE` into a heading in the editor is a text edit and is left as
 typed, as in Org. A `+0d` repeater, or `+1h` on a stamp without a time, does not repeat, and the
@@ -215,9 +219,90 @@ change is an ordinary one. A month on from the 31st lands on the month's last da
 into the next month instead. Covered by the *Repeated tasks* tests in `OrgEditTests` and by
 `ElementEditingTest`.
 
+### State changes and what they log
+
+A keyword change records what the file asks for and nothing more, as Org's `C-c C-t` does
+(`changeTodoState`, with the settings read by `todoLoggingOf`, `shared/…/org/TodoLogging.kt`):
+
+- `!` on the keyword entered, as in `DONE(d!)`, or `/!` on the one left, as in `WAIT(w@/!)`, writes
+  `- State "WAIT"       from "TODO"       [2026-10-24 Sat 14:30]`. Without a setting, nothing is logged.
+- `@` asks for a note. The change waits for it (`StateNotes`, `StateNoteDialog.kt`), in a field with the
+  element editor's suggestions, as Org's note buffer does; the note goes under the state line, and
+  cancelling leaves the keyword as it was. From the calendar, a keyword that asks for one opens its note
+  first.
+- `#+STARTUP: logdone` stamps an entry `CLOSED:` when it becomes done, and `lognotedone` adds a closing
+  note when the keyword records nothing itself. While anything is tracked, an entry that is not done any
+  more loses its `CLOSED:` stamp.
+- `#+STARTUP: logdrawer`, or a `:LOGBOOK:` already there, puts the lines in the drawer. They go after the
+  planning line and the property drawer, newest first.
+
+Clearing the keyword records nothing. The `:LOGGING:` property, which changes this for one subtree, is not
+read. Covered by `TodoLoggingTests`, `StateNoteTest` and `AppStateNoteTest`.
+
+### Priorities
+
+A tap on a heading's `[#A]`, or *Priority…* in the long-press menu, opens a menu of the file's range, the
+most important first, then none (`PriorityMenu` in `OrgText.kt`). `setPriority` writes the cookie or takes
+it out, as `C-c ,` does. The range is the file's `#+PRIORITIES:` line, numbers up to 64 included, or Org's
+`A`, `B`, `C` (`prioritiesOf`, `shared/…/org/OrgPriorities.kt`); a heading without a cookie counts as the
+default, which is how the agenda orders a day ([07](07-calendar-agenda.md#agenda-engine)). Covered by
+`OrgPrioritiesTests`, `PriorityTest` and `AppPriorityTest`.
+
+### Refile
+
+*Refile…* in the long-press menu is `C-c C-w`: a search of every note and heading (`refileTargets`, leaving
+out the heading itself and what is under it), and the heading goes with its body and sub-headings after
+what is already under the target, one level below it, or to the end of a note as a top-level heading
+(`shared/…/org/OrgRefile.kt`). The blank lines around it stay where they are, and nothing else in either
+note is touched.
+
+Within a note it is one restructuring, like a move. Into another, that note is written first
+(`NoteChanges.refile`, `ElementEditor.moveSectionOut`), so a move cut short leaves the heading in both places
+rather than in neither, and says so; a target gone by then moves nothing. The target's statistics cookies
+are counted again. Refused while an element is open in the editor. Covered by `OrgRefileTests` and
+`RefileTest`.
+
+### Links between notes
+
+In reading mode, and in the calendar and search, which draw the same inline text, a tap on a link into the
+notes opens its target at the right element; web links go to the browser, and `kbd:` and other types say
+why they lead nowhere here. A back arrow in the top bar returns to where the link was tapped. Every note
+ends with *Linked from (N)*, each entry opening its source at the link. The rules are in
+`shared/…/org/link/OrgLinks.kt`:
+
+- `id:` → the heading or file whose drawer declares that `:ID:`; the first declaration wins, as it does in
+  Emacs when an id is duplicated.
+- `file:` → relative to the linking note, as Org reads it; failing that, the longest tail of the path
+  that names a note, so Emacs paths like `~/org-roam/daily/x.org` work. `::*Heading`, `::#custom-id`,
+  `::line` and fuzzy searches land inside; a search that no longer matches still opens the note and says
+  so, as Org does.
+- `*Heading`, `#custom-id` and plain `[[text]]` (`<<target>>`, `#+NAME:`, then a heading) resolve within
+  the note. Headings compare without keyword, priority, cookies, tags or case.
+- `doi:` opens at `https://doi.org/`, as Org's `org-link-doi-server-url` does.
+- An abbreviation the linking note declares, `#+LINK: gh https://github.com/%s`, stands for what it expands
+  to: the part after the colon replaces `%s`, or `%h` URL-encoded, or is appended, as
+  `org-link-expand-abbrev` does. Expanded once, and one that runs Emacs Lisp, `%(…)`, is not followed.
+
+A link to a file that is not a note opens through Settings → *File links*, and is written back through it
+([08](08-roadmap.md#t26--linked-files), [08](08-roadmap.md#t28--links-without-syntax)).
+
+### Resuming
+
+The app opens on the tab it was left on, and on the note last read, where it was left in it. Every note
+opened again with no place asked for — from the drawer, a pin, a rename — goes back to where it was left,
+not to its top; a jump (a link, a search hit, an agenda entry, Back) still goes where it was asked and lights
+it. The calendar's tab opens on the view and period it was left in, after a relaunch the same day; a later
+day opens on today, in that view. A note's scroll is not reset when another tab is looked at.
+
+`ReadingPlaces` keeps, per device, the 50 notes last read, each by the offset of the element at the top of
+the screen and the pixels scrolled into it (`ReadingPlace`). An offset rather than an element index, since a
+heading added far above moves every index below it. The tab and the calendar's view are `LastScreen`, kept by
+the shell. Why it reports every frame and stores when scrolling stops is in
+[08](08-roadmap.md#t42--resume-where-the-app-was-left-162). Covered by `ReadingPlacesTest` and `AppResumeTest`.
+
 ### Checkboxes and cookies
 
-A tapped checkbox goes through `toggleCheckboxAt` and `tickAsOrgDoes` (`shared/…/org/edit/OrgEdit.kt`).
+A tapped checkbox goes through `changes.toggleCheckboxAt` and `tickAsOrgDoes` (`shared/…/org/edit/OrgEdit.kt`).
 Ticking a box ticks or unticks every box under it, and every box above it then says what its
 children say — `[X]` when all are ticked, `[ ]` when none are, `[-]` when some are — as Org's
 `C-c C-c` leaves them. Org would put a parent straight back to what its children say, so a tap there
@@ -282,53 +367,38 @@ Covered by `TableEditTest`, `TableFormulaEditTest`, `TableCalcTest`, `CalcNumber
   with it. Two surfaces meant every editor decision was taken twice or forgotten once.
 - **Scroll position across read/edit no longer matters** — you never transition between two
   full-document renderings, so there is nothing to preserve.
-- **Capture is now within reach**: adding a heading from a template into a designated inbox is a
-  small extension of `withNewOrgElement`.
 
-## Known gaps
+## What reading mode costs
 
-- ~~Reading mode renders every element eagerly~~ **Fixed.** `OrgDocumentView` is a `LazyColumn`, so
-  opening a document composes only what is on screen. Measured warm on desktop JVM against the real
-  notes directory, biggest file 60 515 chars / 283 elements:
+`OrgDocumentView` is a `LazyColumn`, so opening a document composes only what is on screen. Measured warm
+on desktop JVM against the real notes directory, biggest file 60 515 chars / 283 elements:
 
-  | reading mode | first composition |
-  |---|---|
-  | eager `Column` (every element) | 234 ms |
-  | `LazyColumn` (visible elements) | 38 ms |
-  | empty document (framework floor) | 7 ms |
+| reading mode | first composition |
+|---|---|
+| eager `Column` (every element) | 234 ms |
+| `LazyColumn` (visible elements) | 38 ms |
+| empty document (framework floor) | 7 ms |
 
-  A lazy list cannot be nested inside a vertically scrolling parent, so the screen `Column` in
-  `App.kt` gives up its own scroll while a document is being read, and keeps it for every other
-  screen. Each element gets an item even when it renders nothing, so an
-  item's index is its element's index and a scroll target needs no translation — which is also why
-  the calendar's jump uses `scrollToItem` rather than `BringIntoViewRequester`: the target is
-  normally far off screen and has not been composed yet, so there is no node to bring anywhere.
-  The same holds for the **+** FAB: its new heading sits at the end of the list, so the view
-  scrolls to whichever element is being edited when that item is not already visible.
+A lazy list cannot be nested inside a vertically scrolling parent, so the screen `Column` in `App.kt` gives
+up its own scroll while a document is being read, and keeps it for every other screen. Each element gets an
+item even when it renders nothing, so an item's index is its element's index and a scroll target needs no
+translation, which is also why the calendar's jump uses `scrollToItem` rather than `BringIntoViewRequester`:
+the target is normally far off screen and has not been composed yet, so there is no node to bring anywhere.
+The same holds for the **+** FAB: its new heading sits at the end of the list, so the view scrolls to
+whichever element is being edited when that item is not already visible.
 
-  Worth recording, because it cost time to learn: the slowness was **not** caused by T3. Measured on
-  the real corpus, every path T3 touched is negligible — the server answers `/api/org-content` in
-  33 ms for 1.26 MB, parsing all 366 files client-side costs 12 ms, and opening one file costs 14 ms
-  of parsing. Two plausible-sounding culprits were also measured and cleared: the per-element edit
-  and add affordances (removing the icons entirely changed 1449 ms to 1132 ms), and Compose
-  stability — T3 really did make `OrgNode` unstable by giving it a `var range`, which the compiler
-  report confirms, but it changed recomposition not at all (13/5/5 ms either way), because `remember`
-  hands back the same instance. Only eager composition ever mattered.
+Worth recording, because it cost time to learn: the slowness was **not** caused by T3. Measured on the real
+corpus, every path T3 touched is negligible: the server answered the old `/api/org-content` in 33 ms for
+1.26 MB, parsing all 366 files client-side costs 12 ms, and opening one file costs 14 ms of parsing. Two
+plausible-sounding culprits were also measured and cleared: the per-element edit and add affordances
+(removing the icons entirely changed 1449 ms to 1132 ms), and Compose stability. T3 really did make `OrgNode`
+unstable by giving it a `var range`, which the compiler report confirms, but it changed recomposition not at
+all (13/5/5 ms either way), because `remember` hands back the same instance. Only eager composition ever
+mattered.
 
-- ~~Creating, renaming and deleting **files** is still impossible~~ **Fixed** by T20; see
-  [05](05-sync-protocol.md#creating-renaming-and-deleting-t20).
-- The calendar's "scroll to this heading" is now exact, using the source range T3 gives every node:
-  the element containing the section's first character is the one to show. It falls back to a title
-  search when that range no longer fits the file, which happens if the file changed after the agenda
-  indexed it. This was two separate bugs, both fixed and both covered by `CalendarNavigationTest`:
+## Opening at a heading
 
-  - The lookup ran at the call site in `App.kt`, immediately after `onFileSelected` — which fetches
-    the file's text *asynchronously*. So it searched the file being left, not the one being opened.
-    It now lives in `FileTreeViewModel.onFileSelected(path, scrollToHeading)` and runs when the text
-    arrives.
-  - The match was `element.title.endsWith(section.title)`, and those two titles are not the same
-    kind of string: `OrgSection.title` has the TODO keyword and the trailing `:tags:` stripped,
-    while `OrgElement.title` keeps both. Any heading carrying a tag therefore never matched, and
-    `Review` would happily match `Final Review`. Heading lines are now split by one shared
-    `orgHeadingOf`, used by both the parser and this lookup, so the two cannot drift again — the
-    smallest instance of the "one grammar" idea behind T6.
+The calendar opens an entry at `headingOffset`, through `NotesViewModel.onFileSelected(path, scrollToOffset)`:
+the element containing that offset is the one to show, the same lookup a search hit uses. It is resolved
+there, when the text arrives, because the text loads asynchronously, and resolved at the call site it read
+whichever file was open before. Covered by `CalendarNavigationTest`.
