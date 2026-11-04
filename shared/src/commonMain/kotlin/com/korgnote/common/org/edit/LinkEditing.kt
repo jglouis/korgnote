@@ -103,7 +103,7 @@ fun pastedLink(before: String, selectionStart: Int, selectionEnd: Int, after: St
     val lineBefore = prefix.substring(lineStart)
     if (OrgSyntax.keyword.containsMatchIn(lineBefore) || OrgSyntax.property.containsMatchIn(lineBefore)) return null
     if (lineBefore.endsWith("<") || lineBefore.lastIndexOf("[[") > lineBefore.lastIndexOf("]]")) return null
-    if (insideBlock(prefix.substring(0, lineStart))) return null
+    if (OrgSyntax.blockLeftOpenBy(prefix.substring(0, lineStart)) != null) return null
 
     val selected = before.substring(from, to)
     val description = if ('\n' in selected) "" else selected
@@ -111,16 +111,6 @@ fun pastedLink(before: String, selectionStart: Int, selectionEnd: Int, after: St
     val trail = inserted.substring(lead.length + address.length)
     val link = orgLinkOf(address, description)
     return CompletionResult(prefix + lead + link + trail + suffix, prefix.length + lead.length + link.length)
-}
-
-/** Whether the lines in [text] leave a `#+BEGIN_` block open. */
-private fun insideBlock(text: String): Boolean {
-    var open = false
-    for (line in text.lineSequence()) {
-        if (!open && OrgSyntax.blockBegin.containsMatchIn(line)) open = true
-        else if (open && OrgSyntax.blockEnd.containsMatchIn(line)) open = false
-    }
-    return open
 }
 
 private val WEB_ADDRESS = Regex("^(?:https?|ftp)://\\S+$|^mailto:\\S+$", RegexOption.IGNORE_CASE)

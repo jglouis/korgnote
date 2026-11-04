@@ -139,4 +139,11 @@ class LinkEditingTest {
             paste("#+BEGIN_SRC sh\nls\n#+END_SRC\n|", "https://example.com"),
         )
     }
+
+    /** Only a block's own end closes it, as the parser has it; an address pasted here stays bare. */
+    @Test
+    fun anotherBlocksEndDoesNotEndABlockForAPaste() {
+        val before = "#+BEGIN_SRC sh\n#+END_QUOTE\n"
+        assertNull(pastedLink(before, before.length, before.length, before + "https://x.org"))
+    }
 }

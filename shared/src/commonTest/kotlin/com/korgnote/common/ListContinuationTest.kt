@@ -90,4 +90,10 @@ class ListContinuationTest {
         assertEquals("|", enter("3. [@5] |"))
         assertEquals("- [@5] x\n- |", enter("- [@5] x|"))
     }
+
+    /** Only a block's own end closes it, as the parser has it; this is still code. */
+    @Test
+    fun anotherBlocksEndDoesNotEndAVerbatimBlock() {
+        assertNull(enter("#+BEGIN_SRC yaml\n#+END_QUOTE\n- foo|\n#+END_SRC"))
+    }
 }

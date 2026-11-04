@@ -25,7 +25,7 @@ fun continueList(before: String, caret: Int, after: String): CompletionResult? {
     val rest = before.substring(caret).substringBefore('\n')
     val item = OrgSyntax.listItem.find(line) ?: return null
     // In a source or example block the text is code: a `- ` in YAML is not an Org list.
-    if (insideVerbatimBlock(before.substring(0, lineStart))) return null
+    if (OrgSyntax.blockLeftOpenBy(before.substring(0, lineStart))?.uppercase() in VERBATIM_BLOCKS) return null
     val indent = item.groupValues[1]
     val bullet = item.groupValues[2]
     val box = item.groupValues[4]
@@ -58,16 +58,3 @@ private fun nextBullet(bullet: String, counter: Int?): String {
 
 /** Blocks whose body Org reads as it is, not as Org: lists in them are someone else's syntax. */
 private val VERBATIM_BLOCKS = setOf("SRC", "EXAMPLE", "EXPORT", "COMMENT")
-
-/** Whether the lines in [text] leave a verbatim block open. */
-private fun insideVerbatimBlock(text: String): Boolean {
-    var open: String? = null
-    for (line in text.lineSequence()) {
-        if (open == null) {
-            open = OrgSyntax.blockBegin.find(line)?.groupValues?.get(1)?.uppercase()
-        } else if (OrgSyntax.blockEnd.containsMatchIn(line)) {
-            open = null
-        }
-    }
-    return open in VERBATIM_BLOCKS
-}

@@ -28,6 +28,17 @@ object OrgSyntax {
         return name.isEmpty() || name.equals(type, ignoreCase = true)
     }
 
+    /** The type of the block the lines in [text] leave open, as written, or null when they leave none. */
+    fun blockLeftOpenBy(text: String): String? {
+        var open: String? = null
+        for (line in text.lineSequence()) {
+            val type = open
+            if (type == null) open = blockBegin.find(line)?.groupValues?.get(1)
+            else if (closesBlock(line, type)) open = null
+        }
+        return open
+    }
+
     val keyword = Regex("^\\s*#\\+")
     val comment = Regex("^\\s*#(\\s|$)")
     val drawerBegin = Regex("^\\s*:[A-Za-z0-9_-]+:\\s*$")
