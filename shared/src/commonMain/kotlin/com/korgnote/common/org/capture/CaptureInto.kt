@@ -5,6 +5,7 @@ import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.edit.PlanningKind
+import com.korgnote.common.org.edit.orgLinkOf
 import com.korgnote.common.org.edit.setPlanning
 import com.korgnote.common.org.edit.setProperty
 import com.korgnote.common.org.link.LinkTarget
@@ -100,10 +101,7 @@ fun captureInto(file: String, heading: HeadingRef, captured: Captured, additions
     }
     val lines = buildList {
         if (additions.time) captured.range?.let { add(it) }
-        if (additions.link) captured.link?.let { link ->
-            val title = captured.title.replace('[', '(').replace(']', ')').trim()
-            add(if (title.isEmpty() || title == link) "- [[$link]]" else "- [[$link][$title]]")
-        }
+        if (additions.link) captured.link?.let { add("- " + orgLinkOf(it, captured.title)) }
         if (additions.text) {
             // A title the user typed for words is words too; a page's title is already its link's.
             val words = if (captured.link == null && captured.title.isNotBlank()) {

@@ -2,6 +2,7 @@ package com.korgnote.common.org.capture
 
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.complete.orgStamp
+import com.korgnote.common.org.edit.orgLinkOf
 import kotlinx.datetime.LocalDateTime
 
 /** An entry ready to file: its text, and where the caret goes in it when it is edited first. */
@@ -35,10 +36,7 @@ fun renderCapture(
     now: LocalDateTime,
     prompts: Map<String, String> = emptyMap(),
 ): RenderedCapture {
-    val annotation = captured.link?.let { link ->
-        val title = captured.title.replace('[', '(').replace(']', ')')
-        if (title.isBlank()) "[[$link]]" else "[[$link][$title]]"
-    }
+    val annotation = captured.link?.let { orgLinkOf(it, captured.title) }
     val lines = mutableListOf<String>()
     for (line in entry.lines()) {
         val out = StringBuilder()

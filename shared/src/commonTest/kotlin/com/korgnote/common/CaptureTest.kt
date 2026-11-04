@@ -1,5 +1,6 @@
 package com.korgnote.common
 
+import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.capture.CalendarEvent
 import com.korgnote.common.org.capture.CaptureLink
 import com.korgnote.common.org.capture.EventTime
@@ -565,6 +566,29 @@ class CaptureTest {
         assertEquals(
             "* NEXT2 test\n- [[https://x.org][X]]\n",
             captureInto("* NEXT2 test\n", HeadingRef("a.org", title = "test"), Captured(title = "X", link = "https://x.org"), HeadingAdditions(link = true)),
+        )
+    }
+
+    /** A bracket in a shared address would end the link early, and leave text no one can follow. */
+    @Test
+    fun aLinkWithBracketsInItsAddressIsStillALink() {
+        val shared = Captured(title = "Page", link = "https://x/a[1]")
+        assertEquals("* [[https://x/a%5B1%5D][Page]]\n", renderCapture("* %a", shared, now).text)
+        assertEquals(
+            "* H\n- [[https://x/a%5B1%5D][Page]]\n",
+            captureInto("* H\n", HeadingRef("a.org", title = "H"), shared, HeadingAdditions(link = true)),
+        )
+        assertEquals("https://x/a%5B1%5D", OrgSyntax.link.find(renderCapture("* %a", shared, now).text)?.groupValues?.get(1))
+    }
+
+    /** With nothing to add to the address, the template and the heading both write it once. */
+    @Test
+    fun aTitleThatIsTheAddressIsWrittenOnce() {
+        val shared = Captured(title = "https://x.org", link = "https://x.org")
+        assertEquals("* [[https://x.org]]\n", renderCapture("* %a", shared, now).text)
+        assertEquals(
+            "* H\n- [[https://x.org]]\n",
+            captureInto("* H\n", HeadingRef("a.org", title = "H"), shared, HeadingAdditions(link = true)),
         )
     }
 }
