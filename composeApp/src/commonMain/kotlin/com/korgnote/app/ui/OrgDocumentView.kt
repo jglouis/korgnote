@@ -29,6 +29,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -224,10 +225,6 @@ fun OrgDocumentView(
     val guideColor = MaterialTheme.colorScheme.outlineVariant
     // The heading a delete is waiting to be confirmed for.
     var confirmingDelete by remember { mutableStateOf<Int?>(null) }
-    /** The heading whose priority is being chosen from its long-press menu, by element index. */
-    var choosingPriority by remember { mutableStateOf<Int?>(null) }
-    /** The heading whose effort is being set from its long-press menu, by element index. */
-    var choosingEffort by remember { mutableStateOf<Int?>(null) }
     val priorities = remember(text) { prioritiesOf(text) }
     // The element a jump just landed on — a link, a search hit, an agenda entry, Back — lit for a
     // moment so the eye finds it among its neighbours. A new [Landing] each time, so landing on
@@ -307,7 +304,16 @@ fun OrgDocumentView(
                         elements.subtreeEnd(index) > index + 1 ||
                             slice.substringAfter('\n', "").isNotBlank()
                         )
-                    var menuOpen by remember { mutableStateOf(false) }
+                    // The heading this item holds now, whatever its keyword, priority or body. An item is
+                    // its index, so a heading added above hands the item to a neighbour, and what was open
+                    // on the last one closes rather than landing on this one. The title is all there is to
+                    // tell them by: a neighbour of the same name is taken for the same heading.
+                    val heading = remember(slice, todoKeywords) {
+                        if (element.isPreamble) null else orgHeadingOf(slice.substringBefore('\n'), todoKeywords).title
+                    }
+                    var menuOpen by remember(heading) { mutableStateOf(false) }
+                    var choosingPriority by remember(heading) { mutableStateOf(false) }
+                    var choosingEffort by remember(heading) { mutableStateOf(false) }
                     val clocks = remember(text, elements, index) { elementClocks(text, elements, index) }
                     Row(
                         modifier = Modifier
@@ -340,6 +346,7 @@ fun OrgDocumentView(
                                 }
                             }
                             CompositionLocalProvider(LocalPriorityEditing provides priorityEditing) {
+                            key(heading) {
                             OrgText(
                                 content = document,
                                 todoKeywords = todoKeywords,
@@ -356,6 +363,7 @@ fun OrgDocumentView(
                                     { table -> edit(element.start + table.range.first) }
                                 },
                             )
+                            }
                             }
                             // Only what is shown: a folded heading's body is not there to be changed.
                             val stamps = remember(shown) { shown.toggleableTimestamps().take(MAX_MENU_STAMPS) }
@@ -379,28 +387,28 @@ fun OrgDocumentView(
                                     ?.let { shift -> { shift(index, -1) } },
                                 onDemote = onShiftSection?.let { shift -> { shift(index, 1) } },
                                 onRefile = onRefileSection?.let { refile -> { refile(index) } },
-                                onPriority = onSetPriority?.let { { choosingPriority = index } },
+                                onPriority = onSetPriority?.let { { choosingPriority = true } },
                                 onClockIn = onClockIn?.takeIf { clocks?.running != true }?.let { clock -> { clock(element.start) } },
                                 onClockOut = onClockOut?.takeIf { clocks?.running == true }?.let { clock -> { clock(element.start) } },
                                 onCancelClock = onCancelClock?.takeIf { clocks?.running == true }?.let { cancel -> { cancel(element.start) } },
-                                onEffort = onSetEffort?.let { { choosingEffort = index } },
+                                onEffort = onSetEffort?.let { { choosingEffort = true } },
                             )
-                            if (choosingEffort == index && onSetEffort != null) {
+                            if (choosingEffort && onSetEffort != null) {
                                 EffortDialog(
                                     current = remember(slice) { effortIn(slice) },
-                                    onPick = { minutes -> choosingEffort = null; onSetEffort(element.start, minutes) },
-                                    onDismiss = { choosingEffort = null },
+                                    onPick = { minutes -> choosingEffort = false; onSetEffort(element.start, minutes) },
+                                    onDismiss = { choosingEffort = false },
                                 )
                             }
                             // From the long-press menu: the same choices as a tap on the cookie, for
                             // a heading that has none yet to tap.
-                            if (choosingPriority == index && onSetPriority != null) {
+                            if (choosingPriority && onSetPriority != null) {
                                 PriorityMenu(
                                     expanded = true,
                                     current = orgHeadingOf(slice.substringBefore('\n'), todoKeywords).priority,
                                     priorities = priorities,
-                                    onPick = { priority -> choosingPriority = null; onSetPriority(element.start, priority) },
-                                    onDismiss = { choosingPriority = null },
+                                    onPick = { priority -> choosingPriority = false; onSetPriority(element.start, priority) },
+                                    onDismiss = { choosingPriority = false },
                                 )
                             }
                         }
