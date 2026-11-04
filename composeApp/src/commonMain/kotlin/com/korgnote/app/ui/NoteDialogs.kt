@@ -20,13 +20,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -81,8 +79,7 @@ fun NewNoteDialog(
     var title by remember { mutableStateOf("") }
     var tagsText by remember { mutableStateOf(TextFieldValue("")) }
     val path = pathFor(title)
-    val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focus.requestFocus() }
+    val focus = rememberAutoFocus()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -260,8 +257,7 @@ fun RenameNoteDialog(
         mutableStateOf(TextFieldValue(path, TextRange(nameStart, path.removeSuffix(".org").length)))
     }
     val target = NotePaths.normalize(value.text)
-    val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focus.requestFocus() }
+    val focus = rememberAutoFocus()
 
     AlertDialog(
         onDismissRequest = onDismiss,

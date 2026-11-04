@@ -37,7 +37,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -872,8 +871,7 @@ internal fun OrgElementEditor(
         TextStyle(fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface)
     )
 
-    val focusRequester = remember(elementKey) { FocusRequester() }
-    LaunchedEffect(elementKey) { focusRequester.requestFocus() }
+    val focusRequester = rememberAutoFocus(elementKey)
 
     // A fully controlled field: the text *and the caret* come from above. The caret has to live
     // there because the suggestions computed from it are shown on a strip pinned to the screen,
