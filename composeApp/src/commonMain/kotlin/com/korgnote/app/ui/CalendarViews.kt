@@ -49,6 +49,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
@@ -682,7 +683,9 @@ fun TimeGridView(
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             allDay.single().forEach {
-                                EventChip(it, today, keywordColors.of(it.entry), onOpen = { onOpen(it) })
+                                key(it.entry.file, it.entry.stamp.range.first, it.time) {
+                                    EventChip(it, today, keywordColors.of(it.entry), onOpen = { onOpen(it) })
+                                }
                             }
                         }
                     }
@@ -820,49 +823,52 @@ private fun DayColumn(
 
         for (block in layout.events) {
             val occurrence = block.occurrence
-            val accent = occurrence.entry.kind.accent()
-            val keywordColor = keywordColors.of(occurrence.entry)
-            val width = maxWidth / block.columns
-            val height = hourHeight * (block.endMinute - block.startMinute) / 60
-            // The time under the title where there is room for both, rather than half of it cut off:
-            // where a block sits on the grid already says roughly when it is.
-            val time = occurrence.timeLabel()?.takeIf { height - 4.dp >= titleLine + timeLine }
-            // As many lines of title as the block is tall, less its time; a long meeting in a
-            // narrow column is otherwise two lines of title and a long empty block under them.
-            val lines = ((height - 4.dp - (if (time != null) timeLine else 0.dp)) / titleLine).toInt().coerceAtLeast(1)
-            val inset = if (compact) 1.dp else 3.dp
-            var menu by remember { mutableStateOf(false) }
-            Column(
-                Modifier
-                    .offset(x = width * block.column, y = hourHeight * block.startMinute / 60)
-                    .width(width)
-                    .height(height)
-                    .padding(1.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    // Opaque, so the hour lines do not run through the text.
-                    .background(MaterialTheme.colorScheme.surface)
-                    .background(accent.copy(alpha = 0.18f))
-                    .keywordEdge(keywordColor)
-                    .openOrMenu({ onOpen(occurrence) }) { menu = true }
-                    .dimmedIfDone(occurrence)
-                    .padding(
-                        start = (if (keywordColor != null) KEYWORD_EDGE else 0.dp) + inset,
-                        end = inset,
-                        top = 1.dp,
-                        bottom = 1.dp,
-                    ),
-            ) {
-                EntryMenu(occurrence.entry.file, occurrence.entry.headingOffset, occurrence.entry.todo, menu, onDismiss = { menu = false }, entry = occurrence.entry)
-                Text(
-                    occurrence.headline(keywordColor = keywordColor, titleOnly = compact),
-                    modifier = Modifier.keywordDescription(occurrence, compact),
-                    style = titleStyle,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = lines,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                time?.let {
-                    Text(it, fontSize = TIME_LABEL_SIZE, lineHeight = TIME_LABEL_LINE, color = accent, maxLines = 1)
+            // By entry, not by place: what is open on a block stays with it when a sync adds one before it.
+            key(occurrence.entry.file, occurrence.entry.stamp.range.first, occurrence.time) {
+                val accent = occurrence.entry.kind.accent()
+                val keywordColor = keywordColors.of(occurrence.entry)
+                val width = maxWidth / block.columns
+                val height = hourHeight * (block.endMinute - block.startMinute) / 60
+                // The time under the title where there is room for both, rather than half of it cut off:
+                // where a block sits on the grid already says roughly when it is.
+                val time = occurrence.timeLabel()?.takeIf { height - 4.dp >= titleLine + timeLine }
+                // As many lines of title as the block is tall, less its time; a long meeting in a
+                // narrow column is otherwise two lines of title and a long empty block under them.
+                val lines = ((height - 4.dp - (if (time != null) timeLine else 0.dp)) / titleLine).toInt().coerceAtLeast(1)
+                val inset = if (compact) 1.dp else 3.dp
+                var menu by remember { mutableStateOf(false) }
+                Column(
+                    Modifier
+                        .offset(x = width * block.column, y = hourHeight * block.startMinute / 60)
+                        .width(width)
+                        .height(height)
+                        .padding(1.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        // Opaque, so the hour lines do not run through the text.
+                        .background(MaterialTheme.colorScheme.surface)
+                        .background(accent.copy(alpha = 0.18f))
+                        .keywordEdge(keywordColor)
+                        .openOrMenu({ onOpen(occurrence) }) { menu = true }
+                        .dimmedIfDone(occurrence)
+                        .padding(
+                            start = (if (keywordColor != null) KEYWORD_EDGE else 0.dp) + inset,
+                            end = inset,
+                            top = 1.dp,
+                            bottom = 1.dp,
+                        ),
+                ) {
+                    EntryMenu(occurrence.entry.file, occurrence.entry.headingOffset, occurrence.entry.todo, menu, onDismiss = { menu = false }, entry = occurrence.entry)
+                    Text(
+                        occurrence.headline(keywordColor = keywordColor, titleOnly = compact),
+                        modifier = Modifier.keywordDescription(occurrence, compact),
+                        style = titleStyle,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = lines,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    time?.let {
+                        Text(it, fontSize = TIME_LABEL_SIZE, lineHeight = TIME_LABEL_LINE, color = accent, maxLines = 1)
+                    }
                 }
             }
         }
@@ -961,7 +967,9 @@ private fun WeekAllDay(
                     // A day with little on it lets each title take a second line.
                     val lines = if (singles.size <= 2) 2 else 1
                     singles.take(limit).forEach {
-                        EventChip(it, today, keywordColors.of(it.entry), onOpen = { onOpen(it) }, compact = true, maxLines = lines)
+                        key(it.entry.file, it.entry.stamp.range.first, it.time) {
+                            EventChip(it, today, keywordColors.of(it.entry), onOpen = { onOpen(it) }, compact = true, maxLines = lines)
+                        }
                     }
                     if (hidden > 0) {
                         Text(
@@ -1216,8 +1224,10 @@ private fun MonthWeek(
                     val lines = if (singles.size <= 2) 3 else 2
                     val shown = singles.take(fits)
                     shown.forEach {
-                        Spacer(Modifier.height(1.dp))
-                        EventChip(it, today, keywordColors.of(it.entry), onOpen = { onDayClick(date) }, compact = true, maxLines = lines)
+                        key(it.entry.file, it.entry.stamp.range.first, it.time) {
+                            Spacer(Modifier.height(1.dp))
+                            EventChip(it, today, keywordColors.of(it.entry), onOpen = { onDayClick(date) }, compact = true, maxLines = lines)
+                        }
                     }
                     val hidden = rest - shown.size
                     if (hidden > 0) {
