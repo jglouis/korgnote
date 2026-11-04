@@ -384,6 +384,34 @@ class FileStoreTest {
     }
 
     /**
+     * The walk has seen the note, and it goes before the walk has finished with it. With nothing left
+     * in the folder to fail on, leaving it out gives a complete manifest one note short.
+     */
+    @Test
+    fun aNoteRenamedDuringAListingFailsItRatherThanBeingLeftOut() {
+        repeat(70) { writeFile("n$it.org", "* n\n") }
+        writeFile("mover-a.org", "* m\n")
+        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+        val renamer = kotlin.concurrent.thread {
+            var a = true
+            while (!stop.get()) {
+                val (from, to) = if (a) "mover-a.org" to "mover-b.org" else "mover-b.org" to "mover-a.org"
+                java.nio.file.Files.move(root.resolve(from), root.resolve(to))
+                a = !a
+            }
+        }
+        try {
+            repeat(2_000) {
+                val listed = runCatching { store.list() }.getOrNull() ?: return@repeat
+                assertEquals(71, listed.size)
+            }
+        } finally {
+            stop.set(true)
+            renamer.join()
+        }
+    }
+
+    /**
      * Left out of a complete manifest, the note would be taken for deleted, and go from every phone.
      * So what cannot be read fails the listing, as a server that cannot say.
      */

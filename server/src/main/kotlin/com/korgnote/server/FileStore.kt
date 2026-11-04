@@ -104,14 +104,19 @@ class FileStore(
      */
     fun list(): List<FileMeta> {
         if (!root.exists() || !root.isDirectory()) return emptyList()
+        val rootReal = root.toRealPath()
         val found = mutableListOf<FileMeta>()
         Files.walkFileTree(root, object : SimpleFileVisitor<Path>() {
             override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
                 if (attrs.isRegularFile || file.isRegularFile()) {
                     val path = relativePathOf(file)
-                    // Through [resolve], so that what is listed can also be fetched: a link to a
-                    // file outside the root cannot, and a phone would keep trying.
-                    if (resolve(path) != null) found += metaOf(path, file)
+                    // The same check as [resolve], so that what is listed can also be fetched: a link
+                    // to a file outside the root cannot, and a phone would keep trying. But not
+                    // [resolve] itself, whose null also means a file that went just now, which here
+                    // has to fail the listing and not leave the note out.
+                    if (candidateFor(path) != null && file.toRealPath().startsWith(rootReal)) {
+                        found += metaOf(path, file)
+                    }
                 }
                 return FileVisitResult.CONTINUE
             }
@@ -292,20 +297,25 @@ class FileStore(
      * remove that accident.
      */
     private fun resolve(path: String): Path? {
-        if (path.isBlank()) return null
-        val segments = path.split('/')
-        if (segments.any { it.isBlank() || it == "." || it == ".." || it.contains('\\') }) return null
-        if (!isLibraryPath(path)) return null
-
-        val candidate = runCatching { root.resolve(path).normalize() }.getOrNull() ?: return null
+        val candidate = candidateFor(path) ?: return null
         val rootReal = runCatching { root.toRealPath() }.getOrElse { root.normalize() }
-        if (!candidate.normalize().startsWith(root.normalize())) return null
         // Through links, the file — or, for a new one, the nearest folder it would be made in — must
         // still be inside the root: a folder linked in from elsewhere is not part of the library.
         val existing = generateSequence(candidate) { it.parent }.firstOrNull { it.exists() } ?: return null
         val existingReal = runCatching { existing.toRealPath() }.getOrNull() ?: return null
         if (!existingReal.startsWith(rootReal)) return null
         return candidate
+    }
+
+    /** Where [path] would be in [root] going by its name alone, or null when no note can be called that. */
+    private fun candidateFor(path: String): Path? {
+        if (path.isBlank()) return null
+        val segments = path.split('/')
+        if (segments.any { it.isBlank() || it == "." || it == ".." || it.contains('\\') }) return null
+        if (!isLibraryPath(path)) return null
+
+        val candidate = runCatching { root.resolve(path).normalize() }.getOrNull() ?: return null
+        return candidate.takeIf { it.startsWith(root.normalize()) }
     }
 
     private companion object {
