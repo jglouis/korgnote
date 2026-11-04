@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -62,9 +63,7 @@ class NotesWatcherTest {
         root.resolve("sub").deleteRecursively()
         awaitChange(before, "deletion of sub/b.org") { it.path == "sub/b.org" && it.deleted }
 
-        val after = journal.generation
-        root.resolve("a.org").appendText("* edited after the folder went\n")
-        awaitChange(after, "edit of a.org") { it.path == "a.org" && !it.deleted }
+        editUntilHeard("a.org")
     }
 
     @Test
@@ -76,20 +75,7 @@ class NotesWatcherTest {
         awaitChange(before, "sub2/b.org") { it.path == "sub2/b.org" && !it.deleted }
         awaitChange(before, "deletion of sub/b.org") { it.path == "sub/b.org" && it.deleted }
 
-        // The watches are built just after the rename is journaled, and an edit in between waits for
-        // the walk: so edit until one is heard, which only a watch on the new folder can do in time.
-        val after = journal.generation
-        val editing = launch(Dispatchers.IO) {
-            while (true) {
-                root.resolve("sub2/b.org").appendText("* edited in its new place\n")
-                delay(2.seconds)
-            }
-        }
-        try {
-            awaitChange(after, "edit of sub2/b.org") { it.path == "sub2/b.org" && !it.deleted }
-        } finally {
-            editing.cancel()
-        }
+        editUntilHeard("sub2/b.org")
     }
 
     @Test
@@ -204,6 +190,25 @@ class NotesWatcherTest {
             }
         }
         assertNotNull(seen, "the watcher never started watching")
+    }
+
+    /**
+     * The watches are built just after a change to the folders is journaled, and an edit in between
+     * waits for the one-minute walk: so edit until one is heard, which only a watch can do in time.
+     */
+    private suspend fun editUntilHeard(path: String) = coroutineScope {
+        val after = journal.generation
+        val editing = launch(Dispatchers.IO) {
+            while (true) {
+                root.resolve(path).appendText("* edited\n")
+                delay(2.seconds)
+            }
+        }
+        try {
+            awaitChange(after, "edit of $path") { it.path == path && !it.deleted }
+        } finally {
+            editing.cancel()
+        }
     }
 
     private suspend fun awaitChange(since: Long, what: String, matches: (ChangeEntry) -> Boolean) {
