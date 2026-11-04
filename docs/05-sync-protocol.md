@@ -439,6 +439,11 @@ What cannot be merged depends on what it was:
   the replica holds is shown. It can simply be made again.
 - **A note deleted under the change.** A save brings the note back, since it holds what was typed, and
   says so. A tick cannot: there is nothing to tick.
+- **A save with nothing read to merge with**, the placeholder that stands in for a note until its text
+  arrives, never replaces the note: what was typed goes beside it, as a conflict copy.
+
+A tick or a keyword is refused outright while a heading is being added, which is on screen and nowhere
+else: written then, the empty heading would reach the replica.
 
 Org files merge well in practice: edits usually land under different headings, and a
 line-level diff3 resolves those without help. ~200 lines of pure Kotlin, and the most

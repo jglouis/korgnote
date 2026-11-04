@@ -30,6 +30,11 @@ This is the only status list; the rules for keeping it are in the [docs README](
 - **A note in a dot-file.** `.plan.org` is in no dot-folder, so the server lists and serves it and it
   reaches a phone, while the folder and WebDAV sources leave dot-files out (`isListedNotePath`). The
   same file is a note through one source and not through another.
+- **A dirty note in a dot-folder cannot sync.** The server refuses the path with a 422, so a phone with
+  an unsent edit to a note it kept from before that rule, or one renamed into `.foo/`, reports it as
+  failed every cycle. The text stays on the phone; nothing tells the person why.
+- **A first sync over the bundle's 8 MB cap writes what the bundle held only after the fetches**, so a
+  kill partway downloads those notes again. It converges, at the cost of the bandwidth.
 - **`todoKeywordsOf` still reads `#+TODO:` inside blocks**, where `todoLoggingOf` and `orgNoteTitle`
   know a block's text is not the note's.
 - **`* Foo [x] bar` completes to a dead link.** A `[[*…]]` link keeps the title's brackets
