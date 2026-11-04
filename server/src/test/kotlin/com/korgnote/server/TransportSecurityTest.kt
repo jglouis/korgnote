@@ -117,6 +117,38 @@ class TransportSecurityTest {
         assertEquals(HttpStatusCode.NotFound, client.post("/api/local/pairing").status)
     }
 
+    /**
+     * Routing ignores empty segments and decodes the rest, so these reach the same route as
+     * `/api/local/pairing`. A paired device has no business making pairing codes, and with `addresses`
+     * it would change where the next QR code sends a phone.
+     */
+    @Test
+    fun overTlsTheLocalApiCannotBeReachedByAnotherSpelling() = testApplication {
+        asDevices()
+        val token = Json.decodeFromString<PairResponse>(pair(devices.newPairingCode()).bodyAsText()).token
+        val spellings = listOf(
+            "/api/local/pairing", "/api//local/pairing", "/api/%6Cocal/pairing", "/%61pi/local/pairing",
+            "/api/v1/../local/pairing", "/api/v1/%2e%2e/local/pairing",
+        )
+        for (path in spellings) {
+            val response = client.post("$path?addresses=6.6.6.6&format=link") { header(HttpHeaders.Authorization, "Bearer $token") }
+            assertEquals(HttpStatusCode.NotFound, response.status, path)
+        }
+        assertEquals(emptyList(), details.lastAddresses)
+    }
+
+    /** Only what a phone uses is there at all, with or without a token. */
+    @Test
+    fun overTlsAPairedDeviceReachesTheSyncApiAndPairingOnly() = testApplication {
+        asDevices()
+        val token = Json.decodeFromString<PairResponse>(pair(devices.newPairingCode()).bodyAsText()).token
+        val authorized: io.ktor.client.request.HttpRequestBuilder.() -> Unit = { header(HttpHeaders.Authorization, "Bearer $token") }
+        assertEquals(HttpStatusCode.OK, client.get("/api/v1/manifest", authorized).status)
+        assertEquals(HttpStatusCode.OK, client.get("/api/v1/bundle", authorized).status)
+        assertEquals(HttpStatusCode.NotFound, client.get("/api/", authorized).status)
+        assertEquals(HttpStatusCode.NotFound, client.get("/api/").status)
+    }
+
     // --- The plain port: this computer only ---
 
     @Test

@@ -280,7 +280,9 @@ internal fun refusalOf(call: ApplicationCall, access: ServerAccess): Pair<HttpSt
     val path = call.request.path()
     if (access.securePort != null && call.request.local.localPort == access.securePort) {
         if (path == "/api/pair") return null
-        if (!path.startsWith("/api/") || path.startsWith("/api/local/")) {
+        // What may be reached, not what may not: this is the path as it was sent, while routing ignores
+        // empty segments and decodes the rest, so `/api//local/` and `/api/%6Cocal/` reach `/api/local/`.
+        if (!path.startsWith("/api/v1/")) {
             return HttpStatusCode.NotFound to "Not found. The web client and the Devices page are on the computer the server runs on."
         }
         val token = call.request.header(HttpHeaders.Authorization)?.removePrefix("Bearer ")?.trim()
