@@ -2,6 +2,7 @@ package com.korgnote.common.org.link
 
 import com.korgnote.common.index.NoteFacts
 import com.korgnote.common.index.factsOf
+import com.korgnote.common.org.everyMatch
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.OrgTodoConfig
@@ -87,10 +88,10 @@ class OrgLinkIndex(
         /** Each `<<target>>`, and then each `#+NAME:`, normalised, with where it is: the first wins. */
         val named: Map<String, Int> by lazy {
             buildMap {
-                for (m in OrgSyntax.target.findAll(text)) {
+                for (m in OrgSyntax.target.everyMatch(text)) {
                     if (m.groupValues[1].length == m.groupValues[3].length) getOrPut(m.groupValues[2].normalised()) { m.range.first }
                 }
-                for (m in NAME_KEYWORD.findAll(text)) getOrPut(m.groupValues[1].normalised()) { m.range.first }
+                for (m in NAME_KEYWORD.everyMatch(text)) getOrPut(m.groupValues[1].normalised()) { m.range.first }
             }
         }
     }
@@ -239,7 +240,7 @@ class OrgLinkIndex(
         val text = textOf(path) ?: return OrgLinkResolution.NotFound(link)
         val offset = when {
             search.startsWith("*") -> anchorsIn(text).headings[search.substring(1).normalised()]
-            search.startsWith("#") -> CUSTOM_ID.findAll(text)
+            search.startsWith("#") -> CUSTOM_ID.everyMatch(text)
                 .firstOrNull { it.groupValues[1] == search.substring(1).trim() }?.range?.first
             search.all { it.isDigit() } && search.isNotEmpty() -> lineOffset(text, search.toInt())
             else -> anchorsIn(text).let { it.named[search.normalised()] ?: it.headings[search.normalised()] }

@@ -7,6 +7,7 @@ import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.agenda.AgendaEntry
+import com.korgnote.common.org.everyMatch
 import com.korgnote.common.org.agenda.ClockedSpan
 import com.korgnote.common.org.agenda.agendaEntries
 import com.korgnote.common.org.agenda.clockedSpans
@@ -212,13 +213,13 @@ private val LINK_KEYWORD = Regex("(?im)^[ \\t]*#\\+LINK:[ \\t]+(\\S+)[ \\t]+(\\S
 private fun abbreviationsIn(text: String): Map<String, String> {
     if (!text.contains("#+LINK:", ignoreCase = true)) return emptyMap()
     val declared = mutableMapOf<String, String>()
-    for (m in LINK_KEYWORD.findAll(text)) declared.getOrPut(m.groupValues[1]) { m.groupValues[2] }
+    for (m in LINK_KEYWORD.everyMatch(text)) declared.getOrPut(m.groupValues[1]) { m.groupValues[2] }
     return declared
 }
 
 private fun declaredIdsIn(text: String): List<DeclaredId> {
     if (!text.contains(":ID:", ignoreCase = true)) return emptyList()
-    return OrgSyntax.idProperty.findAll(text).map { DeclaredId(it.groupValues[1], it.range.first) }.toList()
+    return OrgSyntax.idProperty.everyMatch(text).map { DeclaredId(it.groupValues[1], it.range.first) }.toList()
 }
 
 /**
@@ -236,7 +237,7 @@ private fun linksIn(path: String, text: String, abbreviations: Map<String, Strin
     // The links come in document order, so the element each is in only ever moves on.
     var at = -1
     val found = ArrayList<NoteLink>()
-    for (m in OrgSyntax.link.findAll(text)) {
+    for (m in OrgSyntax.link.everyMatch(text)) {
         val target = m.groupValues[1].trim()
         val scheme = OrgSyntax.linkSchemeOf(target)
         val withinNote = when {
