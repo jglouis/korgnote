@@ -262,11 +262,11 @@ class NotesViewModel(
      * Completion for a field of its own, such as a cell of the table editor: what the element
      * editor draws on — this note's headings, every note's paths and tags — over [draft], with an
      * accepted suggestion written back through [replaceDraft]. Its material is gathered now, once,
-     * for a field that is open for a few moments.
+     * for a field that is open for a few moments, so it does not wait for the note's parse to arrive.
      */
     fun completionFor(draft: () -> TextFieldValue?, replaceDraft: (TextFieldValue) -> Unit): CompletionController =
         CompletionController(library, note, links, today, draft, replaceDraft, author = { noteTemplate().author })
-            .also { it.refreshContext() }
+            .also { it.refreshContext(parseIfNeeded = true) }
 
     /** What the link form and the link picker do with the element being edited. */
     val linkForm: LinkForm = LinkForm(library, note, editor, completion, changes, newId, refreshSoon = ::refreshDerivedViewsSoon, server = { server }, showMessage = ::showMessage)

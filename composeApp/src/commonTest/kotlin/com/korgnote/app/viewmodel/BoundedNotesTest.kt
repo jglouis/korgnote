@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -57,6 +58,21 @@ class BoundedNotesTest {
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
 
+    /**
+     * Until [said] holds: the words of a message come from the app's resources, on a thread of their own. A test
+     * that ended first would leave them to arrive with no main dispatcher, and fail whichever test runs next.
+     */
+    private suspend fun TestScope.untilSaid(said: () -> Boolean) {
+        while (!said()) {
+            withContext(Dispatchers.Default) { delay(5.milliseconds) }
+            runCurrent()
+        }
+        advanceUntilIdle()
+    }
+
+    /** Why [vm]'s open note will not open has been looked up and shown, its second line being the reason. */
+    private suspend fun TestScope.untilRefusalIsSaid(vm: NotesViewModel) = untilSaid { vm.note.content.lines().getOrNull(1)?.isNotEmpty() == true }
+
     /** A folder in which zbig.org takes until [gate] says so to read, and [failing] cannot be read at all. */
     private class SlowFolder(private val files: Map<String, Pair<String, FileStamp>>, private val gated: Boolean = true) : NoteFolder {
         val gate = CompletableDeferred<Unit>()
@@ -79,9 +95,10 @@ class BoundedNotesTest {
     /** Work sent here stays half done until this test says. */
     private class HeldDispatcher : CoroutineDispatcher() {
         private val held = ArrayDeque<Runnable>()
+        var holding = true
 
         override fun dispatch(context: CoroutineContext, block: Runnable) {
-            held.addLast(block)
+            if (holding) held.addLast(block) else block.run()
         }
 
         fun release() {
@@ -357,27 +374,55 @@ class BoundedNotesTest {
     /** So many megabytes at hand would hold up the screen: they are gone through away from it. */
     @Test
     fun aLotInMemoryIsNotSearchedOnTheSpot() = runTest {
-        val long = "* Heading\nfindme\n" + "x".repeat(9 * 1024 * 1024) + "\n"
-        val storage = storageOf(mapOf("long.org" to long, "short.org" to "* Other\nfindme too\n"))
+        val files = mapOf("long.org" to "* Heading\nfindme\n" + "x".repeat(1_000) + "\n", "short.org" to "* Other\nfindme too\n")
         val background = StandardTestDispatcher(testScheduler)
-        val store = DocumentStore(storage)
+        val library = library(storageOf(files), NoteBudgets.of(heap = 1L shl 30))
+        library.reload(parseOn = background)
+        assertEquals(files.keys, library.atHand().keys)
+        val search = NoteSearch(this, library, open = { _, _ -> }, background = background, searchedAtOnce = 100)
+
+        search.run("findme")
+        assertEquals(emptyList(), search.results, "none of it was done here")
+        assertTrue(search.searching)
+
+        advanceUntilIdle()
+        assertEquals(files.keys, search.results.map { it.path }.toSet())
+        assertFalse(search.searching)
+    }
+
+    /**
+     * A table's cell gathers what it offers once, as its dialog opens, which can be while the note is still
+     * being parsed: what it offers must not be missing the note's headings for as long as it is open.
+     */
+    @Test
+    fun aFieldOpenedBeforeTheParseArrivesStillOffersTheHeadings() = runTest {
+        val path = "work.org"
+        val held = HeldDispatcher()
+        val store = DocumentStore(storageOf(mapOf(path to "* Garden\n")))
         val vm = NotesViewModel(
-            SyncEngine(store, FakeSyncApi()),
-            store,
-            background = background,
-            noteBudgets = NoteBudgets.of(heap = 1L shl 30),
+            SyncEngine(store, FakeSyncApi()), store,
+            background = held,
+            noteIndex = NoteIndex(budgets = nothingFits), noteBudgets = nothingFits,
         )
+        // Only what opening the note parses is held back.
+        held.holding = false
         vm.server.load()
         advanceUntilIdle()
-        assertEquals(setOf("long.org", "short.org"), vm.library.atHand().keys)
+        vm.note.close()
+        vm.library.keepAtHand(null)
+        vm.library.letGo()
+        held.holding = true
 
-        vm.search.run("findme")
-        assertEquals(emptyList(), vm.search.results, "none of it was done here")
-        assertTrue(vm.search.searching)
+        vm.onFileSelected(path)
+        runCurrent()
+        assertNull(vm.library.parsedAtHand(path), "the parse has not arrived")
 
+        val field = vm.completionFor(draft = { null }, replaceDraft = {})
+
+        assertEquals(listOf("Garden"), field.context.headings)
+        held.holding = false
+        held.release()
         advanceUntilIdle()
-        assertEquals(setOf("long.org", "short.org"), vm.search.results.map { it.path }.toSet())
-        assertFalse(vm.search.searching)
     }
 
     /** Another letter typed stops the reading: the old search must not go on reading, nor land. */
@@ -469,6 +514,7 @@ class BoundedNotesTest {
 
         vm.onFileSelected("zbig.org")
         advanceUntilIdle()
+        untilRefusalIsSaid(vm)
 
         assertEquals(emptyList(), storage.read)
         assertFalse("xxx" in vm.note.content)
@@ -493,11 +539,7 @@ class BoundedNotesTest {
         storage.write("work.org", moved)
 
         vm.stateNotes.setTodo(other.file, other.headingOffset, "DONE")
-        while (vm.lastErrorMessage.isEmpty()) {
-            withContext(Dispatchers.Default) { delay(5.milliseconds) }
-            runCurrent()
-        }
-        advanceUntilIdle()
+        untilSaid { vm.lastErrorMessage.isNotEmpty() }
 
         assertEquals(moved, storage.read("work.org"), "nothing was changed")
         assertTrue(vm.lastErrorMessage.isNotEmpty(), "and it says so")
@@ -531,6 +573,7 @@ class BoundedNotesTest {
 
         vm.onFileSelected("n12.org")
         advanceUntilIdle()
+        untilRefusalIsSaid(vm)
 
         assertFalse("Note 1\n" in vm.note.content, "the other note is not shown as this one: ${vm.note.content}")
         assertTrue(vm.note.refused)
@@ -781,6 +824,7 @@ class BoundedNotesTest {
         folder.failing += "n12.org"
         vm.onFileSelected("n12.org")
         advanceUntilIdle()
+        untilRefusalIsSaid(vm)
         assertTrue(vm.note.refused)
 
         folder.failing.clear()
@@ -812,7 +856,7 @@ class BoundedNotesTest {
         vm.note.replicaText = moved
 
         vm.stateNotes.setTodo(other.file, other.headingOffset, "DONE")
-        advanceUntilIdle()
+        untilSaid { vm.lastErrorMessage.isNotEmpty() }
 
         assertEquals(moved, vm.note.content, "no heading changed on an offset from another text")
     }
@@ -852,11 +896,7 @@ class BoundedNotesTest {
         storage.write("work.org", moved)
 
         vm.clockActions.clockIn(other.file, other.headingOffset)
-        while (vm.lastErrorMessage.isEmpty()) {
-            withContext(Dispatchers.Default) { delay(5.milliseconds) }
-            runCurrent()
-        }
-        advanceUntilIdle()
+        untilSaid { vm.lastErrorMessage.isNotEmpty() }
 
         assertEquals(moved, storage.read("work.org"), "no clock on another heading")
     }
@@ -877,11 +917,7 @@ class BoundedNotesTest {
         vm.note.replicaText = moved
 
         vm.clockActions.clockIn(other.file, other.headingOffset)
-        while (vm.lastErrorMessage.isEmpty()) {
-            withContext(Dispatchers.Default) { delay(5.milliseconds) }
-            runCurrent()
-        }
-        advanceUntilIdle()
+        untilSaid { vm.lastErrorMessage.isNotEmpty() }
 
         assertEquals(moved, vm.note.content, "no clock on another heading")
     }

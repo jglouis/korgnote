@@ -20,6 +20,7 @@ import com.korgnote.common.org.complete.restamp
 import com.korgnote.common.org.edit.DraftInsert
 import com.korgnote.common.org.edit.TableGrid
 import com.korgnote.common.org.edit.allNodes
+import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.org.edit.fitsIn
 import com.korgnote.common.org.edit.insertInto
 import com.korgnote.common.org.edit.insertTable
@@ -194,8 +195,8 @@ class CompletionController(
         refreshSuggestions()
     }
 
-    fun refreshContext() {
-        context = forOpenNote(context.copy(knownTags = tagsByUse(), knownLocations = locationsByUse()))
+    fun refreshContext(parseIfNeeded: Boolean = false) {
+        context = forOpenNote(context.copy(knownTags = tagsByUse(), knownLocations = locationsByUse()), parseIfNeeded)
     }
 
     /**
@@ -208,10 +209,12 @@ class CompletionController(
     }
 
     /** [base] for the open note as it now is, what it knows of every note left as it is. */
-    private fun forOpenNote(base: CompletionContext): CompletionContext {
+    private fun forOpenNote(base: CompletionContext, parseIfNeeded: Boolean = false): CompletionContext {
         val path = note.path
         // Once its text has arrived; until then what is known about it says as much as matters.
-        val document = path?.let { library.parsedAtHand(it) }
+        val document = path?.let { open ->
+            library.parsedAtHand(open) ?: if (parseIfNeeded) (library.textAtHand(open) ?: note.replicaText)?.toOrgDocument() else null
+        }
         return base.copy(
             todoKeywords = document?.let { todoKeywordsOf(it.text, DEFAULT_TODO_KEYWORDS) }
                 ?: path?.let { library.facts[it]?.keywords }

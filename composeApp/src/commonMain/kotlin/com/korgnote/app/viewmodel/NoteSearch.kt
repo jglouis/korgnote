@@ -35,6 +35,8 @@ class NoteSearch(
     private val open: (path: String, offset: Int) -> Unit,
     /** Where notes that had to be read are gone through. */
     private val background: CoroutineDispatcher = Dispatchers.Default,
+    /** How many characters in memory are searched on the spot; see [refreshSearch]. */
+    private val searchedAtOnce: Long = SEARCHED_AT_ONCE,
 ) {
     // --- Filtering the file tree ---
 
@@ -154,7 +156,7 @@ class NoteSearch(
         searching = false
         val parsed = SearchQuery.parse(query)
         val atHand = library.atHand()
-        val quick = atHand.values.sumOf { it.length.toLong() } <= SEARCHED_AT_ONCE
+        val quick = atHand.values.sumOf { it.length.toLong() } <= searchedAtOnce
         // A note too big to read has no text to go through, but it can still be found by its name.
         val named = library.tooLarge().flatMap { searchOrgFile(it, "", parsed, DEFAULT_SEARCH_LIMIT, DEFAULT_TODO_KEYWORDS) }
         val first = (if (quick) searchOrg(atHand, parsed, fallback = DEFAULT_TODO_KEYWORDS) else emptyList()) + named
@@ -208,7 +210,7 @@ class NoteSearch(
     }
 
     private companion object {
-        /** How many characters in memory are searched on the spot; see [refreshSearch]. */
+        /** A few megabytes take a fraction of a second, even on a slow phone. */
         const val SEARCHED_AT_ONCE = 8L * 1024 * 1024
 
         /**
