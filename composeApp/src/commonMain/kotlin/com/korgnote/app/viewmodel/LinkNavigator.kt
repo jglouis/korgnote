@@ -3,11 +3,11 @@ package com.korgnote.app.viewmodel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.korgnote.common.index.NoteFacts
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.link.OrgBacklink
 import com.korgnote.common.org.link.OrgLinkIndex
 import com.korgnote.common.org.link.OrgLinkResolution
-import com.korgnote.common.org.orgNoteTitle
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.vm_link_emacs_only
 import korgnote.composeapp.generated.resources.vm_link_file_beside_notes
@@ -16,6 +16,7 @@ import korgnote.composeapp.generated.resources.vm_link_no_app
 import korgnote.composeapp.generated.resources.vm_link_not_found
 import korgnote.composeapp.generated.resources.vm_link_open_in_browser
 import korgnote.composeapp.generated.resources.vm_link_search_missed
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.getString
@@ -36,7 +37,7 @@ class LinkNavigator(
     private val beforeGoingBack: () -> Unit,
 ) {
     /** Resolves links against the notes as last read; rebuilt whenever they change. */
-    private var index = OrgLinkIndex(emptyMap())
+    private var index = OrgLinkIndex(emptyMap<String, NoteFacts>(), library::textAtHand)
 
     /** Each note's own `:ID:` and `#+TITLE:`, which completion writes links with. */
     var noteIds: Map<String, String> = emptyMap()
@@ -57,13 +58,13 @@ class LinkNavigator(
     }
 
     /**
-     * Everything [show] takes from the notes. Built from a copy of their text and touching no
-     * state, so it can be built on any thread.
+     * Everything [show] takes from the notes. Built from what is known about them and touching no
+     * state, so it can be built on any thread. [textOf] is only asked when a link is followed.
      */
-    class Tables(texts: Map<String, String>) {
-        val index = OrgLinkIndex(texts)
-        val noteIds = texts.keys.mapNotNull { path -> index.fileIdOf(path)?.let { path to it } }.toMap()
-        val noteTitles = texts.mapNotNull { (path, text) -> orgNoteTitle(text)?.let { path to it } }.toMap()
+    class Tables(facts: Map<String, NoteFacts>, textOf: (String) -> String?) {
+        val index = OrgLinkIndex(facts, textOf)
+        val noteIds = facts.mapNotNull { (path, note) -> note.fileId?.let { path to it } }.toMap()
+        val noteTitles = facts.mapNotNull { (path, note) -> note.title?.let { path to it } }.toMap()
 
         init {
             // Every note's backlinks are found in one pass, on the first ask. Ask now, so that pass
@@ -106,7 +107,27 @@ class LinkNavigator(
         // With no note open, as when a link in the calendar is tapped at launch, a relative link
         // is read from the top of the notes.
         val from = note.path
-        return when (val resolved = index.resolve(target, from.orEmpty())) {
+        // A link that searches in a note has it read first, when it has to be.
+        val searched = index.noteSearchedBy(target, from.orEmpty())
+        if (searched != null && library.textAtHand(searched) == null) {
+            scope.launch {
+                val text = try {
+                    library.text(searched)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    println("[DEBUG_LOG][LinkNavigator] Reading $searched failed: $t")
+                    null
+                }
+                go(index.resolve(target, from.orEmpty()) { path -> if (path == searched) text else library.textAtHand(path) }, target, from)
+            }
+            return true
+        }
+        return go(index.resolve(target, from.orEmpty()), target, from)
+    }
+
+    private fun go(resolved: OrgLinkResolution, target: String, from: String?): Boolean {
+        return when (resolved) {
             is OrgLinkResolution.Note -> {
                 from?.let { rememberHere(it) }
                 open(resolved.path, resolved.offset)

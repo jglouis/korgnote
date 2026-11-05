@@ -20,15 +20,21 @@ import com.korgnote.app.data.SavedSearch
 import com.korgnote.app.data.ReadingPlace
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.link.LinkTarget
-import com.korgnote.common.org.link.linkTargetsOf
+import com.korgnote.common.index.NoteBudgets
+import com.korgnote.common.index.NoteIndex
+import com.korgnote.common.org.link.linkTargetsFrom
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.FolderNoteStorage
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.vm_finish_editing_first
+import korgnote.composeapp.generated.resources.vm_note_too_large
+import korgnote.composeapp.generated.resources.vm_note_unreadable
+import korgnote.composeapp.generated.resources.vm_notes_no_room
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -39,6 +45,8 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import org.jetbrains.compose.resources.getPluralString
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
@@ -114,6 +122,10 @@ class NotesViewModel(
     private val captures: CaptureFiler? = null,
     /** Where a running clock shows outside the app: Android's ongoing notification, or nowhere. */
     clockNotifier: ClockNotifier = NoClockNotifier,
+    /** How much of the notes this device can keep in memory. */
+    noteBudgets: NoteBudgets = NoteBudgets.forThisDevice(),
+    /** What is known about the notes without reading them, and where it is kept between runs. */
+    noteIndex: NoteIndex = NoteIndex(budgets = noteBudgets),
 ) : ViewModel() {
 
     /** The one message line: why something could not be done, or what was done instead. */
@@ -130,7 +142,7 @@ class NotesViewModel(
 
     private fun open(path: String, offset: Int?) = onFileSelected(path, scrollToOffset = offset)
 
-    val library: NoteLibrary = NoteLibrary(store)
+    val library: NoteLibrary = NoteLibrary(store, noteIndex, noteBudgets, background)
 
     val note: OpenNote = OpenNote()
 
@@ -192,7 +204,10 @@ class NotesViewModel(
         noteTemplate,
         newId,
         scope = viewModelScope,
-        reload = { reloadLibrary() },
+        reload = {
+            reloadLibrary()
+            scanInBackground()
+        },
         showReplica = { showFromReplica() },
         open = { path -> onFileSelected(path) },
         openAndWait = ::openAndWait,
@@ -256,7 +271,7 @@ class NotesViewModel(
     /** What the link form and the link picker do with the element being edited. */
     val linkForm: LinkForm = LinkForm(library, note, editor, completion, changes, newId, refreshSoon = ::refreshDerivedViewsSoon, server = { server }, showMessage = ::showMessage)
 
-    val search: NoteSearch = NoteSearch(viewModelScope, library, open = ::open)
+    val search: NoteSearch = NoteSearch(viewModelScope, library, open = ::open, background = background)
 
     val savedSearches: SavedSearches = SavedSearches(savedSearches, saveSavedSearches)
 
@@ -331,6 +346,7 @@ class NotesViewModel(
         // Where the note being left was left, while its text is still the one on screen.
         places.saveReadingPlace()
         note.beginOpening(path, hasText)
+        library.keepAtHand(path)
         if (hasText) places.opened(path)
         links.onOpened()
         // This file's `#+TODO:` keywords and headings are part of what completion offers.
@@ -344,8 +360,28 @@ class NotesViewModel(
      */
     private suspend fun finishOpening(path: String, scrollToOffset: Int?) {
         changes.whenWritten()
+        if (library.isTooLarge(path)) {
+            refuseToOpen(path, Res.string.vm_note_too_large)
+            return
+        }
         val shown = note.content
-        val raw = store.read(path)
+        val raw = try {
+            library.read(path)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            // Bigger than there is room for right now, most likely: not worth losing the app for.
+            println("[DEBUG_LOG][NotesViewModel] Opening $path failed: $t")
+            refuseToOpen(path, Res.string.vm_note_too_large)
+            return
+        }
+        if (raw == null && note.path == path) {
+            note.loading = false
+            // What is on screen is the note before this one, which must not pass for this one. A note
+            // already open keeps its text: it was deleted elsewhere, which an edit can still bring back.
+            if (note.replicaText == null && path in library) refuseToOpen(path, Res.string.vm_note_unreadable)
+            return
+        }
         if (note.path == path && raw != null) {
             // A change made to it while that was read is newer than what was read.
             val current = note.content != shown || changes.isWriting(path)
@@ -358,6 +394,24 @@ class NotesViewModel(
             }
             index?.let { folds.unfoldAncestorsOf(it, includingItself = true) }
         }
+        if (raw == null) return
+        // Only now, and away from the screen: showing a note takes its text alone, and parsing it is
+        // for what edits it. Until then what is known about it says which keywords it has.
+        try {
+            library.document(path)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            println("[DEBUG_LOG][NotesViewModel] Parsing $path failed: $t")
+        }
+        if (note.path == path) completion.onNoteOpened()
+    }
+
+    /** Says [path] will not open: at once that it is not there, and then why, once that is looked up. */
+    private suspend fun refuseToOpen(path: String, reason: StringResource) {
+        if (note.path == path) note.refuse(path, "")
+        val why = getString(reason)
+        if (note.path == path) note.refuse(path, why)
     }
 
     // --- Keeping everything in step with the notes ---
@@ -374,18 +428,22 @@ class NotesViewModel(
      * seconds on a slow phone, and a tick long enough to be felt. One at a time, each from the notes
      * as they are when its turn comes, so that an older rebuild cannot land after a newer one.
      */
-    private suspend fun rebuildDerived() = rebuilding.withLock {
+    private suspend fun rebuildDerived() = rebuildDerived(searchAgain = true)
+
+    /** [rebuildDerived], leaving out the search when more of what it would find is on its way. */
+    private suspend fun rebuildDerived(searchAgain: Boolean) = rebuilding.withLock {
         // This one is up to date; one put off would only redo it.
         pendingRefresh?.cancel()
         pendingRefresh = null
+        library.catchUp()
         // Read here, on the main thread; what is built from them reads nothing else.
-        val texts = library.texts()
-        val linkTables = withContext(background) { LinkNavigator.Tables(texts) }
-        val agendaIndex = withContext(background) { agenda.build(texts) }
+        val facts = library.factsToShow()
+        val linkTables = withContext(background) { LinkNavigator.Tables(facts, library::textAtHand) }
+        val agendaIndex = withContext(background) { agenda.build(facts) }
         // Links first: completion offers the ids and titles they collect.
         links.show(linkTables)
         agenda.show(agendaIndex)
-        search.refresh()
+        if (searchAgain) search.refresh()
         completion.refreshContext()
         clocks.refresh()
     }
@@ -412,9 +470,47 @@ class NotesViewModel(
 
     /** Reads the notes again. A change on its way to the replica would otherwise be read as it was before it. */
     private suspend fun reloadLibrary(only: Set<String>? = null) {
+        val landed = library.savesSoFar
         changes.whenWritten()
-        library.reload(parseOn = background, only = only)
+        library.list(only, landed)
+        // A few notes are read before anything is shown, as is everything else about them. Enough of
+        // them to take a while are not waited for: the notes can be used meanwhile.
+        if (library.bytesToScan() <= SCAN_WAITED_FOR) library.scan()
     }
+
+    /** Scanning the notes that moved, and reading what there is room for, away from everything else. */
+    private var scanning: Job? = null
+
+    /**
+     * Brings what is known about the notes up to date with their files, and fills memory with as many
+     * as fit, so that a search finds them there. A big library's first scan takes minutes, during which
+     * the notes can be read and searched, and the calendar fills up as it goes.
+     */
+    private fun scanInBackground() {
+        scanning?.cancel()
+        scanning = viewModelScope.launch {
+            try {
+                val found = library.bytesToScan() > 0
+                library.scan { rebuildDerived(searchAgain = false) }
+                if (found) rebuildDerived()
+                library.fillUp()
+                val left = library.noRoomFor
+                if (left > 0 && left != toldNoRoomFor) {
+                    toldNoRoomFor = left
+                    showMessage(getPluralString(Res.plurals.vm_notes_no_room, left, left))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                // Out of memory on the way, or a file that went: none of it is worth losing the app for,
+                // and what is not known yet is looked for again the next time.
+                println("[DEBUG_LOG][NotesViewModel] Scanning the notes failed: $t")
+            }
+        }
+    }
+
+    /** How many notes the user was last told there is no room for. */
+    private var toldNoRoomFor = 0
 
     /** Rebuilds everything the UI shows out of the replica. Returns once everything is shown. */
     private suspend fun showFromReplica() = showFromReplica(changed = null)
@@ -427,14 +523,16 @@ class NotesViewModel(
         // The open note may be gone: deleted here, or on another device. With nothing open — at
         // launch, say — the note last read opens, where it was left; failing that the first pinned
         // note, since it was pinned to be at hand.
-        val current = note.path?.takeIf { it in library }
-        if (current == null && note.path != null && editor.editingIndex != null && !editor.isUntouched) {
+        val current = note.path?.takeIf { it in library && !library.isTooLarge(it) }
+        if (current == null && note.path?.let { it in library } == true) {
+            // Too big to read, as it says: there is nothing to bring up to date.
+        } else if (current == null && note.path != null && editor.editingIndex != null && !editor.isUntouched) {
             // Except under an edit with changes: what was typed is not lost to a deletion made
             // elsewhere. It stays open, for its save to bring the note back or its discard to end it.
         } else if (current == null) {
             note.path = null
             if (editor.editingIndex != null) editor.cancel()
-            val first = places.lastRead { it in library } ?: pins.shown.firstOrNull() ?: library.documents.keys.minOrNull()
+            val first = places.lastRead { it in library } ?: pins.shown.firstOrNull() ?: library.paths.minOrNull()
             if (first != null) onFileSelected(first) else note.close()
         } else {
             val shown = note.content
@@ -452,17 +550,19 @@ class NotesViewModel(
                 if (note.content == shown && !changes.isWriting(current)) {
                     note.content = fresh
                     note.replicaText = fresh
+                    note.readAfterAll()
                 }
             }
         }
         agenda.onNotesShown()
+        scanInBackground()
     }
 
     /** The filer captures go through, with these notes' templates and inbox; null where nothing captures. */
     val captureFiler: CaptureFiler? get() = captures
 
     /** Every note and heading a capture can go to, from the notes the app has read already. */
-    fun captureDestinations(): List<LinkTarget> = captures?.destinationsAmong(linkTargetsOf(library.documents)).orEmpty()
+    fun captureDestinations(): List<LinkTarget> = captures?.destinationsAmong(linkTargetsFrom(library.facts)).orEmpty()
 
     /** The notes captures are filed into: the ones on screen. */
     val captureStore: DocumentStore get() = store
@@ -475,10 +575,24 @@ class NotesViewModel(
     suspend fun fileCaptures() {
         val filer = captures ?: return
         // Only for what reads them, and not before the notes are read: it would be told there are none.
-        if (library.loaded && filer.offersHeadings) filer.offerHeadings(linkTargetsOf(library.documents))
+        if (library.loaded && filer.offersHeadings) filer.offerHeadings(linkTargetsFrom(library.facts))
         if (filer.fileWaiting(store).isEmpty()) return
         showFromReplica()
         server.pushQuietly()
+    }
+
+    /** What was known from the last run is on screen as soon as it can be, before anything is read. */
+    init {
+        viewModelScope.launch {
+            library.loadDated()
+            if (library.facts.isNotEmpty()) {
+                val facts = library.factsToShow()
+                agenda.show(withContext(background) { agenda.build(facts) })
+                clocks.refresh()
+            }
+            library.loadIndex()
+            if (library.facts.isNotEmpty()) rebuildDerived(searchAgain = false)
+        }
     }
 
     internal companion object {
@@ -488,5 +602,8 @@ class NotesViewModel(
          * time anyone switches to it.
          */
         val DERIVED_REFRESH_PAUSE = 600.milliseconds
+
+        /** The most bytes of notes to read before showing any of them; see [showFromReplica]. */
+        const val SCAN_WAITED_FOR = 8L * 1024 * 1024
     }
 }

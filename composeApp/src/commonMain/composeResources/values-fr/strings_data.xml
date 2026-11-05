@@ -1,4 +1,10 @@
 <resources>
+    <string name="vm_note_unreadable">Cette note ne peut pas être lue pour le moment.</string>
+    <string name="vm_note_too_large">Cette note est trop volumineuse pour être ouverte sur cet appareil.</string>
+    <plurals name="vm_notes_no_room">
+        <item quantity="one">%1$d note dépasse ce que cet appareil peut suivre : elle s’ouvre et reste cherchable, mais ses dates et ses liens sont laissés de côté.</item>
+        <item quantity="other">%1$d notes dépassent ce que cet appareil peut suivre : elles s’ouvrent et restent cherchables, mais leurs dates et leurs liens sont laissés de côté.</item>
+    </plurals>
     <string name="vm_edit_conflict">Cette partie de la note a aussi changé ailleurs pendant que vous la modifiiez ; rien n’a été enregistré.</string>
     <string name="vm_kept_beside">Modifié aussi ailleurs : %1$s. Cette version est conservée ; la vôtre est enregistrée à côté dans une copie .sync-conflict-.</string>
     <string name="vm_note_brought_back">%1$s a été supprimé ailleurs. L’enregistrement de votre modification l’a rétabli.</string>

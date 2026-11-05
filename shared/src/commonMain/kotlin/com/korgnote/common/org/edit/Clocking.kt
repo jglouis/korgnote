@@ -1,5 +1,6 @@
 package com.korgnote.common.org.edit
 
+import kotlinx.serialization.Serializable
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgDrawer
 import com.korgnote.common.org.OrgPlanning
@@ -42,6 +43,7 @@ data class OrgClock(
 }
 
 /** A clock running somewhere in a document: on which heading, by where it starts, and since when. */
+@Serializable
 data class RunningClock(val headingStart: Int, val title: String, val start: LocalDateTime)
 
 /** The clocks in [heading]'s own entry — its line up to its first sub-heading — newest first, as written. */
@@ -60,6 +62,7 @@ fun OrgDocument.runningClocks(): List<RunningClock> =
     }
 
 /** A heading clocked before, by where it starts, and when its last clock stopped. */
+@Serializable
 data class LastClocked(val headingStart: Int, val title: String, val end: LocalDateTime)
 
 /**

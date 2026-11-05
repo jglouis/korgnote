@@ -1,8 +1,10 @@
 package com.korgnote.app.di
 
 import android.content.Context
+import com.korgnote.app.capture.NoteIndexFiles
 import com.korgnote.app.files.NoteFolderAccess
 import com.korgnote.app.files.SafNoteFolder
+import com.korgnote.common.index.FileNoteIndexFile
 import com.korgnote.common.replica.FileSystemReplicaStorage
 import com.korgnote.common.replica.ReplicaStorage
 import org.koin.core.module.Module
@@ -20,6 +22,8 @@ fun Module.androidReplica(context: Context) {
     single<ReplicaStorage> { FileSystemReplicaStorage(File(context.filesDir, "KorgNote")) }
     // The WebDAV sync's, beside it and never mixed with it.
     single<ReplicaStorage>(WEBDAV) { FileSystemReplicaStorage(File(context.filesDir, "KorgNote-webdav")) }
+    // Out of backups, as they are: it says what is in the notes, and a scan makes it again.
+    single<NoteIndexFiles> { NoteIndexFiles { name -> FileNoteIndexFile(File(context.noBackupFilesDir, "note-index/$name")) } }
 }
 
 /** Binds how a notes folder in shared storage is reached, for the same reason as [androidReplica]. */

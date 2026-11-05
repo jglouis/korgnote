@@ -1,13 +1,19 @@
 package com.korgnote.app.notifications
 
+import com.korgnote.common.index.NoteIndex
 import com.korgnote.common.org.agenda.AgendaEntry
-import com.korgnote.common.org.agenda.agendaEntries
 import com.korgnote.common.replica.DocumentStore
 import kotlinx.datetime.LocalDateTime
 
-/** Every dated entry in the notes as [store] now holds them, each read with its own keywords, as the app reads them. */
-suspend fun agendaOf(store: DocumentStore): List<AgendaEntry> =
-    agendaEntries(store.paths().mapNotNull { path -> store.read(path)?.let { path to it } }.toMap())
+/**
+ * Every dated entry in the notes as [store] now holds them, each read with its own keywords, as the app
+ * reads them. Reads only what moved since [index] last looked, and holds none of it.
+ */
+suspend fun agendaOf(store: DocumentStore, index: NoteIndex = NoteIndex()): List<AgendaEntry> {
+    index.refresh(store)
+    val facts = index.facts
+    return facts.keys.sorted().flatMap { facts.getValue(it).agenda }
+}
 
 /**
  * Plans reminders from [entries], for a sync made with the app closed: a meeting typed in on another

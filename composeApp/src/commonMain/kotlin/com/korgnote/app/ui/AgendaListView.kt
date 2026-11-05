@@ -45,6 +45,7 @@ import korgnote.composeapp.generated.resources.cal_clocked_period
 import korgnote.composeapp.generated.resources.cal_clocked_report
 import korgnote.composeapp.generated.resources.cal_clocked_total
 import korgnote.composeapp.generated.resources.cal_nothing_planned
+import korgnote.composeapp.generated.resources.cal_still_reading
 import korgnote.composeapp.generated.resources.cal_overdue
 import korgnote.composeapp.generated.resources.cal_today
 import kotlinx.datetime.LocalDate
@@ -67,6 +68,8 @@ fun AgendaListView(
     showDone: Boolean,
     onOpen: (AgendaOccurrence) -> Unit,
     modifier: Modifier = Modifier,
+    /** Whether a day with nothing on it may yet have something, the notes still being read. */
+    stillReading: Boolean = false,
     /** What a running clock counts to in the report; the start of [today] when not given. */
     now: LocalDateTime = LocalDateTime(today, LocalTime(0, 0)),
 ) {
@@ -98,7 +101,7 @@ fun AgendaListView(
             if (section.occurrences.isEmpty()) {
                 item(key = "empty-${section.date}") {
                     Text(
-                        stringResource(Res.string.cal_nothing_planned),
+                        stringResource(if (stillReading) Res.string.cal_still_reading else Res.string.cal_nothing_planned),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),

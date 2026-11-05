@@ -1,5 +1,7 @@
 package com.korgnote.app
 
+import com.korgnote.app.capture.NoteIndexFiles
+import com.korgnote.common.index.FileNoteIndexFile
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import com.korgnote.app.data.PersistentSettingsRepository
@@ -16,6 +18,9 @@ fun main() {
     val desktopModule = module {
         single<SettingsRepository> { PersistentSettingsRepository() }
         single<ReplicaStorage> { FileSystemReplicaStorage(defaultDesktopReplicaRoot()) }
+        single<NoteIndexFiles> {
+            NoteIndexFiles { name -> FileNoteIndexFile(java.io.File(defaultDesktopReplicaRoot().parentFile, "note-index/$name")) }
+        }
         single<FileOpener> { DesktopFileOpener }
     }
     initKoin(extraModules = listOf(desktopModule))

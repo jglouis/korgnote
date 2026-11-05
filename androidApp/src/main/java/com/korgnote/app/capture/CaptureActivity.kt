@@ -1,5 +1,6 @@
 package com.korgnote.app.capture
 
+import com.korgnote.app.capture.noteIndexFor
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -53,6 +54,7 @@ class CaptureActivity : ComponentActivity() {
                         shared = shared,
                         store = store,
                         filer = filer,
+                        destinations = { filer.destinations(store, koin.noteIndexFor(source)) },
                         calendar = koin.getOrNull<DeviceCalendar>(),
                         startWithCalendar = intent.action == CaptureShortcut.ACTION_EVENT,
                         onDismiss = ::finish,

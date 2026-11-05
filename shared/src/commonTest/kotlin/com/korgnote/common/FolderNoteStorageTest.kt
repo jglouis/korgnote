@@ -20,6 +20,8 @@ private class FakeFolder(vararg files: Pair<String, String>) : NoteFolder {
     val files = files.associate { (path, text) -> path to (text to nextStamp(text)) }.toMutableMap()
     var reads = 0
     var reachable = true
+    var failWritesOf: (String) -> Boolean = { false }
+    val failReadsOf = mutableSetOf<String>()
 
     private fun nextStamp(text: String) = FileStamp(++clock, text.length.toLong())
 
@@ -39,12 +41,14 @@ private class FakeFolder(vararg files: Pair<String, String>) : NoteFolder {
 
     override suspend fun read(path: String): String? {
         check()
+        if (path in failReadsOf) throw IllegalStateException("cannot be read")
         reads++
         return files[path]?.first
     }
 
     override suspend fun write(path: String, content: String): FileStamp {
         check()
+        if (failWritesOf(path)) throw IllegalStateException("cannot be written")
         return nextStamp(content).also { files[path] = content to it }
     }
 
@@ -62,6 +66,9 @@ private class FakeFolder(vararg files: Pair<String, String>) : NoteFolder {
 class FolderNoteStorageTest {
 
     private fun storage(folder: FakeFolder) = FolderNoteStorage(folder) { "20261029-120000" }
+
+    /** One whose texts never stay: how every note is, in a library much bigger than memory. */
+    private fun forgetful(folder: FakeFolder) = FolderNoteStorage(folder, textBudget = 0) { "20261029-120000" }
 
     @Test
     fun theFolderIsListedAndEachNoteReadOnce() = runTest {
@@ -83,11 +90,135 @@ class FolderNoteStorageTest {
         storage.list()
         folder.writeOutside("b.org", "* B, edited\n")
 
+        val before = folder.reads
+
         storage.rescan()
 
-        assertEquals(4, folder.reads)
+        assertEquals(before, folder.reads, "looking takes no reading")
         assertEquals("* B, edited\n", storage.read("b.org"))
-        assertEquals(4, folder.reads)
+        assertEquals("* B, edited\n", storage.read("b.org"))
+        assertEquals(before + 1, folder.reads, "read when asked for, and once")
+    }
+
+    /** Syncthing writing a file back as it was moves its stamp: telling takes only what it held. */
+    @Test
+    fun aFileWrittenBackUnchangedIsNoConflictEvenWithItsTextGone() = runTest {
+        val folder = FakeFolder("a.org" to "* A\n", "b.org" to "* B\n")
+        val storage = forgetful(folder)
+        assertEquals("* A\n", storage.read("a.org"))
+        folder.writeOutside("a.org", "* A\n")
+
+        storage.write("a.org", "* A, edited\n")
+
+        assertEquals(emptyList(), storage.takeConflicts())
+        assertEquals("* A, edited\n", folder.files.getValue("a.org").first)
+        assertEquals(setOf("a.org", "b.org"), folder.files.keys)
+    }
+
+    /** The copy could not be written: the next try must find the same change, and not save over it. */
+    @Test
+    fun aConflictCopyThatCouldNotBeWrittenIsTriedAgainAndNothingIsOverwritten() = runTest {
+        val folder = FakeFolder("a.org" to "* A\n")
+        val storage = forgetful(folder)
+        assertEquals("* A\n", storage.read("a.org"))
+        folder.writeOutside("a.org", "* A, by another app\n")
+        folder.failWritesOf = { "conflict" in it }
+
+        storage.write("a.org", "* A, edited here\n")
+
+        assertEquals("* A, by another app\n", folder.files.getValue("a.org").first)
+        assertEquals(emptyList(), storage.takeConflicts(), "nothing has come of it yet")
+
+        folder.failWritesOf = { false }
+        storage.rescan()
+
+        assertEquals("* A, by another app\n", folder.files.getValue("a.org").first, "still not overwritten")
+        assertEquals(setOf("* A, by another app\n", "* A, edited here\n"), folder.files.values.map { it.first }.toSet())
+        assertEquals(listOf("a.org"), storage.takeConflicts())
+    }
+
+    /** It moved and cannot be read, as with a cloud file offline: that is not the same as not having changed. */
+    @Test
+    fun aFileThatMovedAndCannotBeReadIsNotSavedOver() = runTest {
+        val folder = FakeFolder("a.org" to "* A\n")
+        val storage = forgetful(folder)
+        assertEquals("* A\n", storage.read("a.org"))
+        folder.writeOutside("a.org", "* A, by another app\n")
+        folder.failReadsOf += "a.org"
+
+        storage.write("a.org", "* A, edited here\n")
+
+        assertEquals("* A, by another app\n", folder.files.getValue("a.org").first)
+
+        folder.failReadsOf.clear()
+        storage.rescan()
+
+        assertEquals("* A, by another app\n", folder.files.getValue("a.org").first)
+        assertEquals(listOf("a.org"), storage.takeConflicts())
+    }
+
+    /** Never reached, with a save waiting: that one save is not all there is. */
+    @Test
+    fun aFolderNeverListedSaysNothingOfWhatIsInIt() = runTest {
+        val folder = FakeFolder("a.org" to "* A\n")
+        val storage = storage(folder)
+        folder.reachable = false
+
+        storage.write("new.org", "* New\n")
+
+        assertEquals(null, storage.stamps())
+    }
+
+    /** The whole point of the conflict copy, which must survive the text not being kept. */
+    @Test
+    fun aFileChangedOutsideStillGoesToAConflictCopyWithItsTextGone() = runTest {
+        val folder = FakeFolder("a.org" to "* A\n")
+        val storage = forgetful(folder)
+        assertEquals("* A\n", storage.read("a.org"))
+        folder.writeOutside("a.org", "* A, by another app\n")
+
+        storage.write("a.org", "* A, edited here\n")
+
+        assertEquals(listOf("a.org"), storage.takeConflicts())
+        assertEquals("* A, by another app\n", folder.files.getValue("a.org").first, "not overwritten")
+        assertEquals(setOf("* A, by another app\n", "* A, edited here\n"), folder.files.values.map { it.first }.toSet())
+    }
+
+    @Test
+    fun aListingReadsNoNotes() = runTest {
+        val folder = FakeFolder("a.org" to "* A\n", "b.org" to "* B\n")
+        val storage = storage(folder)
+
+        assertEquals(setOf("a.org", "b.org"), storage.stamps()?.keys)
+        storage.rescan()
+
+        assertEquals(0, folder.reads)
+    }
+
+    @Test
+    fun severalAreReadAtOnceAndKept() = runTest {
+        val folder = FakeFolder("a.org" to "* A\n", "b.org" to "* B\n", "c.org" to "* C\n")
+        val storage = storage(folder)
+
+        assertEquals(mapOf("a.org" to "* A\n", "b.org" to "* B\n"), storage.readSeveral(listOf("a.org", "b.org", "gone.org")))
+        assertEquals(2, folder.reads)
+        assertEquals("* A\n", storage.read("a.org"))
+        assertEquals(2, folder.reads, "kept")
+    }
+
+    /** A save not written yet is what the note holds, wherever it is asked for from. */
+    @Test
+    fun aSaveTheFolderRefusedIsWhatIsRead() = runTest {
+        val folder = FakeFolder("a.org" to "* A\n")
+        val storage = forgetful(folder)
+        assertEquals("* A\n", storage.read("a.org"))
+        folder.reachable = false
+
+        storage.write("a.org", "* Not written yet\n")
+
+        assertEquals("* Not written yet\n", storage.read("a.org"))
+        assertEquals(mapOf("a.org" to "* Not written yet\n"), storage.readSeveral(listOf("a.org")))
+        assertTrue("a.org" in storage.stamps().orEmpty())
     }
 
     @Test

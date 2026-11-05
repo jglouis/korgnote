@@ -49,6 +49,21 @@ interface ReplicaStorage {
     suspend fun list(): List<String>
 
     suspend fun read(path: String): String?
+
+    /**
+     * Every note with how its file looks now, enough to tell that it changed since without reading
+     * it. What does not have files to look at makes do with the text's hash. Null when the notes cannot
+     * be reached to tell, which says nothing about whether there are any.
+     */
+    suspend fun stamps(): Map<String, FileStamp>? =
+        list().mapNotNull { path -> read(path)?.let { path to FileStamp(contentHash(it), it.length.toLong()) } }.toMap()
+
+    /**
+     * The texts of [paths], those that can be read as they now are: at once, where that is quicker than
+     * in turn. Unlike [read], never what was last seen of a file that cannot be reached.
+     */
+    suspend fun readSeveral(paths: List<String>): Map<String, String> =
+        paths.mapNotNull { path -> read(path)?.let { path to it } }.toMap()
     suspend fun write(path: String, content: String)
     suspend fun delete(path: String)
 
@@ -59,6 +74,15 @@ interface ReplicaStorage {
 
     suspend fun readMeta(): ReplicaMeta
     suspend fun writeMeta(meta: ReplicaMeta)
+}
+
+/** A 64-bit hash of [text] (FNV-1a), to tell later whether a text is the one it was. */
+fun contentHash(text: String): Long {
+    var hash = -3750763034362895579L
+    for (char in text) {
+        hash = (hash xor char.code.toLong()) * 1099511628211L
+    }
+    return hash
 }
 
 /** Rejects paths that would escape the replica directory or are not relative. */

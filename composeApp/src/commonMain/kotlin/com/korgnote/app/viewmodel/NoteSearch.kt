@@ -7,11 +7,20 @@ import androidx.compose.runtime.setValue
 import com.korgnote.common.fs.File
 import com.korgnote.common.fs.Folder
 import com.korgnote.common.org.search.SearchHit
+import com.korgnote.common.org.search.DEFAULT_SEARCH_LIMIT
+import com.korgnote.common.org.search.SearchQuery
 import com.korgnote.common.org.search.searchOrg
+import com.korgnote.common.org.search.searchOrgFile
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -24,6 +33,8 @@ class NoteSearch(
     private val library: NoteLibrary,
     /** Opens a note at a character offset in it. */
     private val open: (path: String, offset: Int) -> Unit,
+    /** Where notes that had to be read are gone through. */
+    private val background: CoroutineDispatcher = Dispatchers.Default,
 ) {
     // --- Filtering the file tree ---
 
@@ -79,6 +90,10 @@ class NoteSearch(
     var results by mutableStateOf<List<SearchHit>>(emptyList())
         private set
 
+    /** Whether more results may still come, from notes being read; see [refreshSearch]. */
+    var searching by mutableStateOf(false)
+        private set
+
     /**
      * Records what was typed and searches once the typing stops.
      *
@@ -93,6 +108,8 @@ class NoteSearch(
     fun onQueryChanged(query: String) {
         this.query = query
         searchJob?.cancel()
+        reading?.cancel()
+        searching = false
         if (query.isBlank()) {
             results = emptyList()
             return
@@ -109,6 +126,8 @@ class NoteSearch(
      */
     fun run(query: String) {
         searchJob?.cancel()
+        reading?.cancel()
+        searching = false
         this.query = query
         if (query.isBlank()) results = emptyList() else refreshSearch()
     }
@@ -116,15 +135,65 @@ class NoteSearch(
     /** In flight or pending; a new keystroke cancels it rather than queueing another. */
     private var searchJob: Job? = null
 
+    /** Going through the notes that had to be read; a new search cancels it. */
+    private var reading: Job? = null
+
     /**
-     * Runs the search over text already in memory.
+     * Runs the search over the text in memory, then over the rest as it is read.
      *
-     * Synchronous on purpose: this is a linear scan of a few megabytes, which is milliseconds, and
-     * a coroutine would only make the results arrive a frame after the keystroke that asked for
-     * them. If a corpus ever makes this visible, the fix is an index, not a thread.
+     * A few megabytes in memory are scanned there and then, on purpose: that takes milliseconds, and a
+     * coroutine would only make the results arrive a frame after the keystroke that asked for them.
+     * With every note at hand, as it is for a library that fits, that is all there is.
+     *
+     * Past that, on the main thread it would hold up the screen. So what is in memory goes first, away
+     * from it, and then the notes that have to be read, a few at a time and let go of again; what they
+     * hold comes in below as it is found.
      */
     private fun refreshSearch() {
-        results = searchOrg(library.texts(), query, fallback = DEFAULT_TODO_KEYWORDS)
+        reading?.cancel()
+        searching = false
+        val parsed = SearchQuery.parse(query)
+        val atHand = library.atHand()
+        val quick = atHand.values.sumOf { it.length.toLong() } <= SEARCHED_AT_ONCE
+        val first = if (quick) searchOrg(atHand, parsed, fallback = DEFAULT_TODO_KEYWORDS) else emptyList()
+        // Results already on screen stay until there are some, rather than flicker away: see [onQueryChanged].
+        if (quick) results = first
+        if (first.size >= DEFAULT_SEARCH_LIMIT || parsed.isEmpty) return
+        val rest = (if (quick) emptyList() else atHand.keys.sorted()) + library.notAtHand()
+        if (rest.isEmpty()) return
+        searching = true
+        reading = scope.launch {
+            var found = first
+            try {
+                for (group in library.inGroups(rest)) {
+                    val hits = try {
+                        val texts = group.mapNotNull { path -> atHand[path]?.let { path to it } }.toMap() +
+                            library.readThrough(group.filter { it !in atHand })
+                        withContext(background) {
+                            texts.keys.sorted().flatMap { path ->
+                                searchOrgFile(path, texts.getValue(path), parsed, DEFAULT_SEARCH_LIMIT, DEFAULT_TODO_KEYWORDS)
+                            }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (t: Throwable) {
+                        // Too much for this device together, say: the others can still be gone through.
+                        println("[DEBUG_LOG][NoteSearch] Going through $group failed: $t")
+                        continue
+                    }
+                    if (hits.isNotEmpty()) {
+                        found = (found + hits).take(DEFAULT_SEARCH_LIMIT)
+                        results = found
+                    }
+                    if (found.size >= DEFAULT_SEARCH_LIMIT) break
+                }
+                // Nothing at all, after all: what was on screen was for the search before.
+                if (found.isEmpty()) results = emptyList()
+            } finally {
+                // A later search has taken over when this one was cancelled.
+                if (currentCoroutineContext().isActive) searching = false
+            }
+        }
     }
 
     /** Opens the file a result is in, at the element containing it. */
@@ -137,6 +206,9 @@ class NoteSearch(
     }
 
     private companion object {
+        /** How many characters in memory are searched on the spot; see [refreshSearch]. */
+        const val SEARCHED_AT_ONCE = 8L * 1024 * 1024
+
         /**
          * How long the typing has to stop before the corpus is scanned.
          *

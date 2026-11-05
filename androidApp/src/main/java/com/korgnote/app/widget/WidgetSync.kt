@@ -1,5 +1,7 @@
 package com.korgnote.app.widget
 
+import com.korgnote.app.capture.noteIndexFor
+import com.korgnote.common.index.NoteIndex
 import android.content.Context
 import androidx.glance.GlanceId
 import androidx.glance.action.ActionParameters
@@ -83,7 +85,7 @@ suspend fun syncInBackground(context: Context): String? {
     val synced = syncNotes(context)
     WidgetStore.setProblem(context, synced.problem)
     synced.store?.let { store ->
-        val entries = agendaOf(store)
+        val entries = agendaOf(store, synced.index ?: NoteIndex())
         WidgetStore.save(context, entries, synced.at)
         planReminders(entries)
     }
@@ -104,7 +106,7 @@ suspend fun syncAndRedraw(context: Context) {
 }
 
 /** The notes after a sync: where they are kept now, when it got through, and what stopped it if not. */
-private class SyncedNotes(val store: DocumentStore?, val at: Instant?, val problem: String?)
+private class SyncedNotes(val store: DocumentStore?, val at: Instant?, val problem: String?, val index: NoteIndex? = null)
 
 /** Reminders from [entries], worded in the app's language. */
 private suspend fun planReminders(entries: List<AgendaEntry>) {
@@ -155,5 +157,5 @@ private suspend fun syncNotes(context: Context): SyncedNotes {
             if (backend.storage.problem == null) synced = Clock.System.now() else problem = WidgetStore.PROBLEM_FOLDER
         }
     }
-    return SyncedNotes(backend.store, synced, problem)
+    return SyncedNotes(backend.store, synced, problem, koin.noteIndexFor(source))
 }

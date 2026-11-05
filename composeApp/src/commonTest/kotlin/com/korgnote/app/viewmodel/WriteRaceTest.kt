@@ -154,11 +154,11 @@ class WriteRaceTest {
             withContext(Dispatchers.Default) { delay(5.milliseconds) }
             runCurrent()
         }
-        assertEquals(textA.replace("[ ]", "[X]"), viewModel.library[a]?.text, "the library while it waits")
+        assertEquals(textA.replace("[ ]", "[X]"), viewModel.library.text(a), "the library while it waits")
         disk.complete(Unit)
         advanceUntilIdle()
 
-        assertEquals(textA.replace("[ ]", "[X]"), viewModel.library[a]?.text)
+        assertEquals(textA.replace("[ ]", "[X]"), viewModel.library.text(a))
         assertEquals(textA.replace("[ ]", "[X]"), viewModel.note.content)
     }
 

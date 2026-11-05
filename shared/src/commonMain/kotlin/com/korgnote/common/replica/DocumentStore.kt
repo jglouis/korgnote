@@ -22,6 +22,12 @@ class DocumentStore(private val storage: ReplicaStorage) {
 
     suspend fun read(path: String): String? = storage.read(path)
 
+    /** Every note with how its file looks now: see [ReplicaStorage.stamps]. */
+    suspend fun stamps(): Map<String, FileStamp>? = storage.stamps()
+
+    /** The texts of [paths], those that can be read: see [ReplicaStorage.readSeveral]. */
+    suspend fun readSeveral(paths: List<String>): Map<String, String> = storage.readSeveral(paths)
+
     /** True when [path] has local changes that have not reached the server. */
     suspend fun isDirty(path: String): Boolean = storage.readMeta().files[path]?.dirty == true
 

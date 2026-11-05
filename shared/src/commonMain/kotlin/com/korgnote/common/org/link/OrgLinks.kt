@@ -1,5 +1,7 @@
 package com.korgnote.common.org.link
 
+import com.korgnote.common.index.NoteFacts
+import com.korgnote.common.index.factsOf
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.orgElements
 import com.korgnote.common.org.OrgTodoConfig
@@ -48,17 +50,22 @@ data class OrgBacklink(
  * - `#custom-id` — the heading whose `:CUSTOM_ID:` it is.
  * - plain `[[text]]` — Org's fuzzy link: a `<<text>>` target, a `#+NAME:`, then a heading.
  *
- * Built from the notes' text each time the notes change, and held for no longer: an index kept
- * across saves is a thing to keep correct (G7), and a scan of this corpus is cheap. The `:ID:`
- * table is the one thing computed ahead, because every `id:` link and every backlink needs it.
+ * Built from each note's [NoteFacts] each time the notes change, so it holds no note's text. The
+ * `:ID:` table is the one thing computed ahead, because every `id:` link and every backlink needs it.
  */
-class OrgLinkIndex(private val notes: Map<String, String>) {
+class OrgLinkIndex(
+    /** What is known of each note: all that a link needs, unless it searches inside one. */
+    private val facts: Map<String, NoteFacts>,
+    /** A note's text, if it is at hand, for a link that searches inside it. See [noteSearchedBy]. */
+    private val textOf: (String) -> String?,
+) {
+    /** The index of [notes], every text at hand. */
+    constructor(notes: Map<String, String>) : this(notes.mapValues { (path, text) -> factsOf(path, text) }, notes::get)
+
     /** The keywords [text]'s headings are read with, so that a title is the title Org sees. */
     private fun keywordsOf(text: String): OrgTodoConfig = todoKeywordsOf(text, DEFAULT_TODO_KEYWORDS)
 
-    /** What a search may land on in each note, read from it only when one first looks there. */
-    private val anchors: Map<String, Anchors> = notes.mapValues { (_, text) -> Anchors(text) }
-
+    /** What a search may land on in a note, read from it only when one first looks there. */
     private inner class Anchors(private val text: String) {
         /** Every way a heading can be named, normalised, with where it starts: the first heading wins. */
         val headings: Map<String, Int> by lazy {
@@ -88,38 +95,45 @@ class OrgLinkIndex(private val notes: Map<String, String>) {
         }
     }
 
-    /** Each note's `#+LINK:` abbreviations, for the notes that declare any. */
-    private val abbreviations: Map<String, Map<String, String>> by lazy {
-        buildMap {
-            for ((path, text) in notes) {
-                if (!text.contains("#+LINK:", ignoreCase = true)) continue
-                val declared = mutableMapOf<String, String>()
-                // The first declaration of a key wins.
-                for (m in LINK_KEYWORD.findAll(text)) declared.getOrPut(m.groupValues[1]) { m.groupValues[2] }
-                put(path, declared)
-            }
-        }
-    }
+    /** The anchors last looked in: a note with many links would otherwise be gone through for each. */
+    private var lastAnchors: Pair<String, Anchors>? = null
+
+    private fun anchorsIn(text: String): Anchors =
+        lastAnchors?.takeIf { it.first === text }?.second ?: Anchors(text).also { lastAnchors = text to it }
 
     /** `:ID:` value → where it is declared. */
     private val ids: Map<String, OrgLinkResolution.Note> by lazy {
         buildMap {
-            for ((path, text) in notes) {
-                if (!text.contains(":ID:", ignoreCase = true)) continue
-                for (m in OrgSyntax.idProperty.findAll(text)) {
+            for (path in facts.keys.sorted()) {
+                for (declared in facts.getValue(path).ids) {
                     // The first declaration wins, as it does in Emacs when an id is duplicated.
-                    val id = m.groupValues[1]
-                    if (id !in this) put(id, OrgLinkResolution.Note(path, m.range.first))
+                    if (declared.id !in this) put(declared.id, OrgLinkResolution.Note(path, declared.offset))
                 }
             }
         }
     }
 
-    fun resolve(link: String, from: String): OrgLinkResolution {
+    /**
+     * The note whose text [resolve] looks into for [link], if it does: most links name a note and are
+     * settled without reading it, but one that searches in it needs it read first.
+     */
+    fun noteSearchedBy(link: String, from: String): String? {
+        var asked: String? = null
+        resolve(link, from) { path ->
+            asked = path
+            null
+        }
+        return asked
+    }
+
+    fun resolve(link: String, from: String): OrgLinkResolution = resolve(link, from, textOf)
+
+    /** Where [link], written in [from], leads, the text of a note it searches in coming from [text]. */
+    fun resolve(link: String, from: String, text: (String) -> String?): OrgLinkResolution {
         val written = link.trim()
         // An abbreviation the linking note declares, `#+LINK: gh https://github.com/%s`, stands for
         // the link it expands to. Expanded once: what it gives is resolved as written.
-        val target = abbreviations[from]?.let { expandAbbreviation(written, it) } ?: written
+        val target = facts[from]?.abbreviations?.takeIf { it.isNotEmpty() }?.let { expandAbbreviation(written, it) } ?: written
         val scheme = OrgSyntax.linkSchemeOf(target)
         return when {
             // Org's own `doi:` link, which it opens at the DOI resolver.
@@ -128,14 +142,14 @@ class OrgLinkIndex(private val notes: Map<String, String>) {
             scheme == "id" -> {
                 val (id, search) = splitSearch(target.substringAfter(':'))
                 val declared = ids[id.trim()] ?: return OrgLinkResolution.NotFound(link)
-                if (search == null) declared else searchIn(declared.path, search, link)
+                if (search == null) declared else searchIn(declared.path, search, link, text)
             }
 
             scheme in OrgSyntax.fileLinkSchemes -> {
                 val (path, search) = splitSearch(target.substringAfter(':'))
                 if (!path.endsWith(".org")) return OrgLinkResolution.NotANote(link)
                 val note = notePathFor(path, from) ?: return OrgLinkResolution.NotFound(link)
-                if (search == null) OrgLinkResolution.Note(note, null) else searchIn(note, search, link)
+                if (search == null) OrgLinkResolution.Note(note, null) else searchIn(note, search, link, text)
                     .let { if (it is OrgLinkResolution.NotFound) OrgLinkResolution.Note(note, null, search) else it }
             }
 
@@ -149,7 +163,7 @@ class OrgLinkIndex(private val notes: Map<String, String>) {
                 notePathFor(target, from)?.let { OrgLinkResolution.Note(it, null) }
                     ?: OrgLinkResolution.NotFound(link)
             }
-            else -> searchIn(from, target, link)
+            else -> searchIn(from, target, link, text)
         }
     }
 
@@ -166,20 +180,10 @@ class OrgLinkIndex(private val notes: Map<String, String>) {
      */
     private val allBacklinks: Map<String, List<OrgBacklink>> by lazy {
         val found = mutableMapOf<String, MutableList<OrgBacklink>>()
-        for (source in notes.keys.sorted()) {
-            val text = notes.getValue(source)
-            if (!text.contains("[[")) continue
-            val elements by lazy { text.orgElements() }
-            val keywords by lazy { keywordsOf(text) }
-            // The links come in document order, so the element each is in only ever moves on.
-            var at = -1
-            for (m in OrgSyntax.link.findAll(text)) {
-                val target = targetPathOf(m.groupValues[1], from = source) ?: continue
-                while (at + 1 < elements.size && elements[at + 1].start <= m.range.first) at++
-                val element = elements.getOrNull(at)
-                val context = element?.takeUnless { it.isPreamble }?.let { orgHeadingOf(it.title.prependStars(), keywords).title }
-                    ?: source
-                found.getOrPut(target) { mutableListOf() } += OrgBacklink(source, m.range.first, context)
+        for (source in facts.keys.sorted()) {
+            for (link in facts.getValue(source).links) {
+                val target = if (link.withinNote) source else targetPathOf(link.target, from = source) ?: continue
+                found.getOrPut(target) { mutableListOf() } += OrgBacklink(source, link.offset, link.context ?: source)
             }
         }
         found
@@ -195,20 +199,14 @@ class OrgLinkIndex(private val notes: Map<String, String>) {
             "id" -> ids[splitSearch(target.substringAfter(':')).first.trim()]?.path
             in OrgSyntax.fileLinkSchemes -> splitSearch(target.substringAfter(':')).first
                 .takeIf { it.endsWith(".org") }?.let { notePathFor(it, from) }
-            null -> if (target.isBarePath()) {
-                target.takeIf { it.endsWith(".org") }?.let { notePathFor(it, from) }
-            } else {
-                // Into the same note; only when it finds something there, or every stray `[[x]]`
-                // would list the note as linking to itself.
-                from.takeIf { resolve(target, from) is OrgLinkResolution.Note }
-            }
+            null -> target.takeIf { it.isBarePath() && it.endsWith(".org") }?.let { notePathFor(it, from) }
             else -> null
         }
     }
 
     /** The `:ID:` the note declares for itself, above its first heading, if it has one. */
     fun fileIdOf(path: String): String? {
-        return fileIdIn(notes[path] ?: return null)
+        return facts[path]?.fileId
     }
 
     /**
@@ -223,27 +221,28 @@ class OrgLinkIndex(private val notes: Map<String, String>) {
         val absolute = path.startsWith("/") || path.startsWith("~")
         if (!absolute) {
             val folder = from.substringBeforeLast('/', "")
-            normalise(if (folder.isEmpty()) path else "$folder/$path")?.let { if (it in notes) return it }
+            normalise(if (folder.isEmpty()) path else "$folder/$path")?.let { if (it in facts) return it }
         }
         val segments = path.split('/').filter { it.isNotEmpty() && it != "." && it != "~" }
         for (k in segments.size downTo 1) {
             val tail = segments.takeLast(k)
             if (".." in tail) break
             val candidate = tail.joinToString("/")
-            if (candidate in notes) return candidate
+            if (candidate in facts) return candidate
         }
         return null
     }
 
     /** Where [search] lands in [path]: a heading, a custom id, a target, a name, or a line. */
-    private fun searchIn(path: String, search: String, link: String): OrgLinkResolution {
-        val text = notes[path] ?: return OrgLinkResolution.NotFound(link)
+    private fun searchIn(path: String, search: String, link: String, textOf: (String) -> String?): OrgLinkResolution {
+        if (path !in facts) return OrgLinkResolution.NotFound(link)
+        val text = textOf(path) ?: return OrgLinkResolution.NotFound(link)
         val offset = when {
-            search.startsWith("*") -> anchors.getValue(path).headings[search.substring(1).normalised()]
+            search.startsWith("*") -> anchorsIn(text).headings[search.substring(1).normalised()]
             search.startsWith("#") -> CUSTOM_ID.findAll(text)
                 .firstOrNull { it.groupValues[1] == search.substring(1).trim() }?.range?.first
             search.all { it.isDigit() } && search.isNotEmpty() -> lineOffset(text, search.toInt())
-            else -> anchors.getValue(path).let { it.named[search.normalised()] ?: it.headings[search.normalised()] }
+            else -> anchorsIn(text).let { it.named[search.normalised()] ?: it.headings[search.normalised()] }
         }
         return if (offset == null) OrgLinkResolution.NotFound(link) else OrgLinkResolution.Note(path, offset)
     }
@@ -262,9 +261,6 @@ class OrgLinkIndex(private val notes: Map<String, String>) {
     private companion object {
         /** `org-link-doi-server-url`. */
         const val DOI_RESOLVER = "https://doi.org/"
-
-        /** A `#+LINK:` line: the abbreviation, then what it expands to. */
-        val LINK_KEYWORD = Regex("(?im)^[ \\t]*#\\+LINK:[ \\t]+(\\S+)[ \\t]+(\\S.*?)[ \\t]*$")
 
         /**
          * [target] expanded by one of [declared], as `org-link-expand-abbrev` does: the
@@ -326,8 +322,6 @@ class OrgLinkIndex(private val notes: Map<String, String>) {
         fun String.isBarePath(): Boolean =
             startsWith("/") || startsWith("~") || startsWith("./") || startsWith("../")
 
-        /** [com.korgnote.common.org.OrgElement.title] has had its stars removed already. */
-        fun String.prependStars(): String = "* $this"
     }
 }
 

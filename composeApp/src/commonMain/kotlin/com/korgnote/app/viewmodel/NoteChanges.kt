@@ -23,7 +23,8 @@ import com.korgnote.common.org.edit.updateStatisticsCookies
 import com.korgnote.common.org.edit.withFileKeywords
 import com.korgnote.common.org.edit.withTimestampToggledAt
 import com.korgnote.common.org.link.LinkTarget
-import com.korgnote.common.org.link.linkTargetsOf
+import com.korgnote.common.index.pickerFactsOf
+import com.korgnote.common.org.link.linkTargetsFrom
 import com.korgnote.common.org.toOrgDocument
 import com.korgnote.common.org.todoKeywordsOf
 import com.korgnote.common.org.withOrgSubtreeFiled
@@ -207,7 +208,7 @@ class NoteChanges(
         val range = entry.stamp.range
         scope.launch {
             var moved = false
-            changeNote(path) { doc ->
+            changeNote(path, byOffset = false) { doc ->
                 val written = doc.text.takeIf { !range.isEmpty() && range.last < it.length }?.substring(range)
                 val stamp = written?.let(::parseOrgTimestamp)
                 if (stamp == null || stamp.copy(range = IntRange.EMPTY) != entry.stamp.copy(range = IntRange.EMPTY)) {
@@ -245,12 +246,45 @@ class NoteChanges(
     /**
      * [change] made to the note at [path], on the text the person was looking at — the open one as it
      * stands on screen, or another as the library has it — then saved and pushed as a keyword change is.
+     *
+     * @param byOffset whether [change] goes by an offset from what the calendar shows, which is refused if
+     * the note has moved on. One that makes sure of its place some other way, by a title or a stamp, is not.
      */
-    suspend fun changeNote(path: String, change: (OrgDocument) -> OrgDocument) {
+    /**
+     * The note at [path] to make a change on, when what the change is about still holds in it. Its text
+     * may have had to be read and have moved on since it was shown, leaving the place to change
+     * somewhere else, or another heading in its place: it is refused then, with nothing lost, and what
+     * is shown brought up to date.
+     */
+    suspend fun documentToChange(path: String): OrgDocument? {
+        val text = textToChange(path) ?: return null
+        return library.document(path).takeIf { it?.text == text }
+    }
+
+    private suspend fun textToChange(path: String): String? {
+        val text = library.text(path) ?: return null
+        return text.takeUnless { hasMoved(path, it) }
+    }
+
+    /**
+     * Whether [text], what [path] now holds, is no longer what is on screen, as far as an offset from there
+     * goes. If so it says that the change was not made, with what is shown brought up to date.
+     */
+    suspend fun hasMoved(path: String, text: String): Boolean {
+        if (library.isAsShown(path, text)) return false
+        library.catchUpWith(path, text)
+        // Before anything else can be tapped, or the next tap would go by the same offset.
+        refresh()
+        showMessage(getString(Res.string.vm_edit_conflict))
+        return true
+    }
+
+    suspend fun changeNote(path: String, byOffset: Boolean = true, change: (OrgDocument) -> OrgDocument) {
         val made = if (path == note.path) {
+            if (byOffset && note.replicaText != null && hasMoved(path, note.content)) return
             changeOnScreen(path, change) ?: return
         } else {
-            val before = library[path] ?: return
+            val before = (if (byOffset) documentToChange(path) else library.document(path)) ?: return
             val updated = change(before)
             if (updated.text == before.text) return
             library.put(path, updated)
@@ -267,7 +301,7 @@ class NoteChanges(
      * with. Pushing is left to the caller, whose own change may go with it.
      */
     suspend fun writeOtherNote(path: String, edit: (String) -> String?): Boolean {
-        val before = library[path]?.text ?: return false
+        val before = textToChange(path) ?: return false
         val updated = edit(before) ?: return false
         if (updated == before) return true
         library.put(path, updated.toOrgDocument())
@@ -292,10 +326,10 @@ class NoteChanges(
      */
     fun refileTargets(index: Int): List<LinkTarget> {
         val path = note.path
-        val documents = library.documents.toMutableMap()
-        path?.let { documents[it] = note.content.toOrgDocument() }
+        val facts = library.facts.toMutableMap()
+        path?.let { facts[it] = pickerFactsOf(note.content) }
         val cut = note.content.cutOrgSubtree(index)
-        return linkTargetsOf(documents).filter { target ->
+        return linkTargetsFrom(facts).filter { target ->
             val offset = target.offset
             val inside = cut != null && target.path == path && offset != null && offset in cut.start until cut.end
             !inside && (target.isNote || target.title.isNotBlank())
@@ -415,7 +449,10 @@ class NoteChanges(
                 repeat(WRITE_ATTEMPTS) {
                     val current = store.read(path)
                     if (current == null) {
-                        if (!bringBack) return@withLock null
+                        // Listed but not read, and made on nothing that was: it says nothing about this
+                        // note, which may only be out of reach. Kept beside it, by whoever asked. A note
+                        // that was never written is different: saving it is how it comes to be.
+                        if (!bringBack || (base == null && path in library.paths)) return@withLock null
                         store.save(path, text)
                         return@withLock text
                     }

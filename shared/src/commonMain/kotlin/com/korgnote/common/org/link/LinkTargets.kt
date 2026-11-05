@@ -1,5 +1,6 @@
 package com.korgnote.common.org.link
 
+import com.korgnote.common.index.NoteFacts
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgSyntax
@@ -49,6 +50,20 @@ fun linkTargetsOf(notes: Map<String, OrgDocument>): List<LinkTarget> = buildList
             }
         }
         walk(document.children.filterIsInstance<OrgSection>(), emptyList())
+    }
+}
+
+/** [linkTargetsOf] from what is known of each note, for which its text need not be at hand. */
+fun linkTargetsFrom(notes: Map<String, NoteFacts>): List<LinkTarget> = buildList {
+    for ((path, facts) in notes.entries.sortedBy { it.key }) {
+        val noteTitle = facts.title ?: path.substringAfterLast('/').removeSuffix(".org")
+        add(LinkTarget(path, noteTitle, emptyList(), noteTitle, offset = null, id = facts.fileId))
+        val outline = ArrayList<String>()
+        for (heading in facts.headings) {
+            while (outline.size > heading.depth) outline.removeAt(outline.lastIndex)
+            add(LinkTarget(path, noteTitle, outline.toList(), heading.title, heading.offset, heading.id))
+            outline.add(heading.title)
+        }
     }
 }
 

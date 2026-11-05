@@ -1,5 +1,7 @@
 package com.korgnote.app
 
+import androidx.compose.runtime.produceState
+import com.korgnote.app.viewmodel.ConflictComparison
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -124,9 +126,14 @@ internal fun NotesAppState.NotesDialogs() {
         )
         is NoteDialog.ComparingCopy -> {
             // Worked out again whenever a note's text changes, so the chunks are always the current ones.
-            val comparison = remember(open.copy, vm.library.revision) { vm.noteFiles.conflictComparison(open.copy) }
+            val compared by produceState<Pair<Boolean, ConflictComparison?>>(false to null, open.copy, vm.library.revision) {
+                value = true to vm.noteFiles.conflictComparison(open.copy)
+            }
+            val comparison = compared.second
             var refused by remember(open.copy) { mutableStateOf(false) }
-            if (comparison == null) {
+            if (!compared.first) {
+                // Being read: both notes may have to be.
+            } else if (comparison == null) {
                 // Settled meanwhile, here or on another device.
                 LaunchedEffect(Unit) { close(open) }
             } else {

@@ -1,5 +1,6 @@
 package com.korgnote.common.org
 
+import kotlinx.serialization.Serializable
 /**
  * A node in an org document.
  *
@@ -870,6 +871,7 @@ private val numericCellRegex = Regex("^[-+]?(\\d+([.,]\\d*)?|[.,]\\d+)([eE][-+]?
 fun String.isNumeric(): Boolean = isNotEmpty() && numericCellRegex.matches(this)
 
 /** The TODO keywords a file declares: those still to do, and those that mark an entry done. */
+@Serializable
 data class OrgTodoConfig(val todo: Set<String>, val done: Set<String>)
 
 /** What Org assumes when a document names no workflow of its own. */

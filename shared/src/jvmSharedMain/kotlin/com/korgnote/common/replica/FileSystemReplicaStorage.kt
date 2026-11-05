@@ -45,6 +45,13 @@ class FileSystemReplicaStorage(root: File) : ReplicaStorage {
             .toList()
     }
 
+    override suspend fun stamps(): Map<String, FileStamp>? = withContext(Dispatchers.IO) {
+        if (!notesDir.isDirectory) return@withContext emptyMap()
+        notesDir.walkTopDown()
+            .filter { it.isFile && it.extension == "org" }
+            .associate { it.relativeTo(notesDir).invariantSeparatorsPath to FileStamp(it.lastModified(), it.length()) }
+    }
+
     override suspend fun read(path: String): String? = withContext(Dispatchers.IO) {
         fileFor(notesDir, path).takeIf { it.isFile }?.readText()
     }

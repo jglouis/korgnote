@@ -40,7 +40,7 @@ class ClockActions(
         if (path == note.path && changes.refuseWhileEditing()) return
         val at = now()
         scope.launch {
-            for (other in clocks.running.filter { it.path != path }) changes.changeNote(other.path) { it.withClock(other) { doc, h -> doc.clockOut(h, at) } }
+            for (other in clocks.running.filter { it.path != path }) changes.changeNote(other.path, byOffset = false) { it.withClock(other) { doc, h -> doc.clockOut(h, at) } }
             changes.changeNote(path) { doc ->
                 val heading = doc.nodeAt<OrgSection>(headingOffset) ?: return@changeNote doc
                 var start = heading.range.first
@@ -72,7 +72,7 @@ class ClockActions(
     fun clockOut(clock: ClockRunning, at: LocalDateTime? = null) {
         if (clock.path == note.path && changes.refuseWhileEditing()) return
         val end = at ?: now()
-        scope.launch { changes.changeNote(clock.path) { it.withClock(clock) { doc, h -> doc.clockOut(h, end) } } }
+        scope.launch { changes.changeNote(clock.path, byOffset = false) { it.withClock(clock) { doc, h -> doc.clockOut(h, end) } } }
     }
 
     /** The clock running on the heading at [headingOffset] of the note at [path], if one is. */
@@ -82,14 +82,14 @@ class ClockActions(
     /** Removes [clock], wherever it runs. */
     fun cancelClock(clock: ClockRunning) {
         if (clock.path == note.path && changes.refuseWhileEditing()) return
-        scope.launch { changes.changeNote(clock.path) { it.withClock(clock) { doc, h -> doc.cancelClock(h) } } }
+        scope.launch { changes.changeNote(clock.path, byOffset = false) { it.withClock(clock) { doc, h -> doc.cancelClock(h) } } }
     }
 
     private fun changeHeading(offsetInDocument: Int, change: (OrgDocument, OrgSection) -> OrgDocument) {
         val path = note.path ?: return
         if (changes.refuseWhileEditing()) return
         scope.launch {
-            changes.changeNote(path) { doc -> doc.nodeAt<OrgSection>(offsetInDocument)?.let { change(doc, it) } ?: doc }
+            changes.changeNote(path, byOffset = false) { doc -> doc.nodeAt<OrgSection>(offsetInDocument)?.let { change(doc, it) } ?: doc }
         }
     }
 }

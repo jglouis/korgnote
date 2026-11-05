@@ -6,11 +6,15 @@ import com.korgnote.app.data.chosenNotesSource
 import com.korgnote.app.di.WEBDAV
 import com.korgnote.app.di.conflictTimestamp
 import com.korgnote.app.files.NoteFolderAccess
+import com.korgnote.common.index.NoNoteIndexFile
+import com.korgnote.common.index.NoteIndex
+import com.korgnote.common.index.NoteIndexFile
 import com.korgnote.common.org.capture.CaptureLink
 import com.korgnote.common.org.capture.captureLinkOf
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.FolderNoteStorage
 import com.korgnote.common.replica.SyncEngine
+import com.korgnote.common.replica.contentHash
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.koin.core.Koin
@@ -52,8 +56,17 @@ sealed interface NotesBackend {
 fun Koin.backendFor(source: NotesSource): NotesBackend = when (source) {
     NotesSource.Server -> NotesBackend.Replica(get()) { get() }
     NotesSource.WebDav -> NotesBackend.Replica(get(WEBDAV)) { get(WEBDAV) }
-    is NotesSource.Folder -> NotesBackend.Folder(FolderNoteStorage(get<NoteFolderAccess>().open(source.location), ::conflictTimestamp))
+    is NotesSource.Folder -> NotesBackend.Folder(FolderNoteStorage(get<NoteFolderAccess>().open(source.location), timestamp = ::conflictTimestamp))
 }
+
+/** Where each source's [NoteIndex] is kept between runs, on the platforms with somewhere to keep it. */
+fun interface NoteIndexFiles {
+    fun forSource(name: String): NoteIndexFile
+}
+
+/** What is known about [source]'s notes without reading them. */
+fun Koin.noteIndexFor(source: NotesSource): NoteIndex =
+    NoteIndex(getOrNull<NoteIndexFiles>()?.forSource(contentHash(source.encode()).toULong().toString(16)) ?: NoNoteIndexFile)
 
 /** The notes [source] keeps, as a store to file captures into. */
 fun Koin.notesStore(source: NotesSource): DocumentStore = backendFor(source).store

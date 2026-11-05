@@ -109,6 +109,8 @@ fun CalendarScreen(
     onViewChanged: (CalendarMode, LocalDate) -> Unit = { _, _ -> },
     now: LocalDateTime? = null,
     headerActions: @Composable () -> Unit = {},
+    /** Whether the notes are still being read, so that a day with nothing on it may yet have something. */
+    stillReading: Boolean = false,
     /** What a long-press on an entry does to its heading — its clock, its keyword — and opening clocked time. */
     actions: CalendarActions? = null,
 ) = CompositionLocalProvider(LocalCalendarActions provides actions) {
@@ -193,6 +195,7 @@ fun CalendarScreen(
                 val open = { occurrence: AgendaOccurrence -> onOpenEntry(occurrence.entry) }
                 when (calendarMode) {
                     CalendarMode.Agenda -> AgendaListView(
+                        stillReading = stillReading,
                         agenda = agendaToday,
                         from = aDate,
                         today = today,

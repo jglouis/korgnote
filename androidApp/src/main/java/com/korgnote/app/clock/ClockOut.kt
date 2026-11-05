@@ -1,5 +1,7 @@
 package com.korgnote.app.clock
 
+import com.korgnote.app.capture.noteIndexFor
+import com.korgnote.common.index.NoteIndex
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -14,7 +16,7 @@ import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.data.chosenNotesSource
 import com.korgnote.app.notifications.AndroidClockNotifier
 import com.korgnote.app.viewmodel.ClockRunning
-import com.korgnote.app.viewmodel.runningClocksIn
+import com.korgnote.app.viewmodel.runningClocksFrom
 import com.korgnote.app.viewmodel.withClock
 import com.korgnote.app.widget.WidgetIntents
 import com.korgnote.app.widget.syncAndRedraw
@@ -75,23 +77,24 @@ class ClockOutWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val koin = KoinPlatform.getKoin()
         val source = koin.get<SettingsRepository>().chosenNotesSource() ?: return Result.success()
         val store = koin.notesStore(source)
+        val index = koin.noteIndexFor(source)
         store.read(path)?.let { text ->
             val stopped = text.toOrgDocument().withClock(ClockRunning(path, 0, title, start)) { doc, heading -> doc.clockOut(heading, at) }
             if (stopped.text != text) store.save(path, stopped.text)
         }
         // At once, rather than after the sync: the tap should take the notification away.
-        clockNotifier(applicationContext).post(runningIn(store))
+        clockNotifier(applicationContext).post(runningIn(store, index))
         syncAndRedraw(applicationContext)
         // A clock started elsewhere may have come in with the sync.
-        clockNotifier(applicationContext).post(runningIn(store))
+        clockNotifier(applicationContext).post(runningIn(store, index))
         return Result.success()
     }
 
     /** The clocks running in [store]'s notes, newest first, as the app lists them. */
-    private suspend fun runningIn(store: DocumentStore): List<ClockRunning> =
-        runningClocksIn(
-            store.paths().mapNotNull { path -> store.read(path)?.takeIf { "CLOCK:" in it }?.let { path to it.toOrgDocument() } }.toMap(),
-        )
+    private suspend fun runningIn(store: DocumentStore, index: NoteIndex): List<ClockRunning> {
+        index.refresh(store)
+        return runningClocksFrom(index.facts)
+    }
 
     companion object {
         private const val KEY_PATH = "path"

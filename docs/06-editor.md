@@ -37,7 +37,7 @@ per typing pause, cancelling what it supersedes, as the search box does with a c
 **Chunk and `yield()`**: work that is genuinely long can yield between chunks so that frames render on wasm,
 turning a 400 ms freeze into a progressive update; nothing has needed it yet. **Real parallelism where it
 exists**: on the JVM, Android and iOS `Dispatchers.Default` is a real thread pool, so corpus-wide work runs
-off the main thread (`NotesViewModel.rebuildDerived`, `NoteLibrary.reload`), and the same code degrades to
+off the main thread (`NotesViewModel.rebuildDerived`, `NoteLibrary.scan`), and the same code degrades to
 cooperative interleaving on wasm instead of breaking. The wins themselves came from doing less.
 
 ## Editor surface

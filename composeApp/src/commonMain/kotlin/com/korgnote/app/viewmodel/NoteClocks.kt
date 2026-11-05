@@ -3,8 +3,8 @@ package com.korgnote.app.viewmodel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.korgnote.common.index.NoteFacts
 import com.korgnote.common.org.OrgDocument
-import com.korgnote.common.org.edit.lastClocked
 import com.korgnote.common.org.edit.runningClocks
 import kotlinx.datetime.LocalDateTime
 
@@ -35,6 +35,12 @@ fun runningClocksIn(documents: Map<String, OrgDocument>): List<ClockRunning> =
         doc.runningClocks().map { ClockRunning(path, it.headingStart, it.title, it.start) }
     }.sortedWith(compareByDescending<ClockRunning> { it.start }.thenBy { it.path })
 
+/** [runningClocksIn], from what is known about the notes: no text needs reading. */
+fun runningClocksFrom(facts: Map<String, NoteFacts>): List<ClockRunning> =
+    facts.flatMap { (path, note) ->
+        note.running.map { ClockRunning(path, it.headingStart, it.title, it.start) }
+    }.sortedWith(compareByDescending<ClockRunning> { it.start }.thenBy { it.path })
+
 /**
  * The clocks running across the notes, read from the notes themselves: a running clock is an open
  * `CLOCK:` line, so one started in Emacs, or on another device, shows here once it has synced.
@@ -58,13 +64,13 @@ class NoteClocks(
     var recent: List<ClockRecent> by mutableStateOf(emptyList())
         private set
 
-    /** Reads the clocks again from the notes as they stand; cheap, since few notes hold any. */
+    /** Reads the clocks again from what is known about the notes as they stand. */
     fun refresh() {
-        val clocked = library.documents.filter { (_, doc) -> doc.text.contains("CLOCK:") }
-        val found = runningClocksIn(clocked)
+        val facts = library.facts
+        val found = runningClocksFrom(facts)
         val runningOn = found.map { it.path to it.headingStart }.toSet()
-        recent = clocked.flatMap { (path, doc) ->
-            doc.lastClocked().map { ClockRecent(path, it.headingStart, it.title, it.end) }
+        recent = facts.flatMap { (path, note) ->
+            note.lastClocked.map { ClockRecent(path, it.headingStart, it.title, it.end) }
         }.filter { (it.path to it.headingStart) !in runningOn }
             .sortedWith(compareByDescending<ClockRecent> { it.end }.thenBy { it.path })
             .take(RECENT_CLOCKS)

@@ -48,7 +48,8 @@ internal fun NotesAppState.StatusIcons() {
     } else {
         ServerStatusIcon(
             unreachable = vm.server.unreachable,
-            syncing = vm.server.syncing,
+            // Reading a big library takes a while, and what the calendar shows is not complete until then.
+            syncing = vm.server.syncing || vm.library.leftToScan > 0,
             lastSynced = vm.server.lastSynced,
             onRetry = { scope.launch { vm.server.retry() } },
         )

@@ -116,17 +116,4 @@ class AgendaWidgetsTest {
         assertEquals(1, handedOver.size)
         assertEquals(listOf(lastSynced), syncTimes)
     }
-
-    /** A sync usually brings one note: the others' entries are not looked for again. */
-    @Test
-    fun aNoteThatDidNotChangeIsNotScannedAgain() = runTest {
-        val store = DocumentStore(InMemoryReplicaStorage())
-        val viewModel = NotesViewModel(SyncEngine(store, FakeSyncApi()), store, background = UnconfinedTestDispatcher())
-        val first = viewModel.agenda.build(mapOf("a.org" to "* One\n<2026-11-01 Sun>\n", "b.org" to "* Two\n<2026-11-02 Mon>\n"))
-
-        val second = viewModel.agenda.build(mapOf("a.org" to "* One\n<2026-11-01 Sun>\n", "b.org" to "* Three\n<2026-11-02 Mon>\n"))
-
-        assertSame(first.entries.single { it.file == "a.org" }, second.entries.single { it.file == "a.org" })
-        assertEquals("Three", second.entries.single { it.file == "b.org" }.title)
-    }
 }

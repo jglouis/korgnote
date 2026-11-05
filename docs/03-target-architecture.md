@@ -124,9 +124,38 @@ for its own computer only ([05](05-sync-protocol.md#auth)). The server does not 
 | Last-synced base copy | client only | needed for three-way merge; never uploaded |
 | Dirty/queued-for-push flags | client only | survives restart on native, so an offline edit is never lost; on web it lives for the page session, with each save pushed at once to keep the window short |
 | ETag / content hash | server computes, device caches | the sync currency |
+| Facts about each note | device, on disk and in memory, out of backups | derived, disposable: see [below](#notes-that-do-not-fit-in-memory) |
 | Parse trees, agenda index | device, in memory | derived, disposable, rebuilt from text. A burst of change-stream events is shown as one, rereading only the paths they name ([05](05-sync-protocol.md#triggers)) |
 | Settings, and the paired server (id, addresses, certificate fingerprint, device token) | device | the token is sealed on Android (Keystore), iOS (Keychain) and desktop (a key in the system's keyring); the web client cannot pair |
 | Paired devices, certificate, server id | server, in `KORGNOTE_STATE_DIR` | only a hash of each device's token is kept |
+
+## Notes that do not fit in memory
+
+How many notes there are, and how big, is unknown: `~/org` may be a shopping list, or a quarter of a
+gigabyte of generated logs. So nothing depends on them all fitting in memory, and what is kept is sized from
+what the device gives the app (`NoteBudgets`), not from the notes. Each use of the notes gets what it needs:
+
+- **The calendar, pickers, completion, clocks and backlinks read only `NoteFacts`**, one small record per
+  note, never a text. `NoteIndex` keeps them on disk with the `FileStamp` each was worked out from, so only
+  a note whose file moved is read again. What is dated is kept apart from the rest and read first, which is
+  what makes the calendar ready when the app opens, whatever the size of the notes.
+- **Reading a note reads it**, with `NoteLibrary` keeping the texts and the parses last used in two
+  `SizedCache`s. The open note always stays. A library that fits is read into them whole in the background,
+  and from then on behaves as if there were no limit.
+- **Search goes through what is at hand and then reads the rest**, a few notes at a time and letting go of
+  them, showing what it finds as it goes; a new search cancels it. A few megabytes at hand are searched on
+  the spot, so a library that fits answers in one step.
+- **A scan is one note at a time, smallest first, and survives what it cannot read.** It is interrupted and
+  taken up again as often as it has to be, its progress being saved as it goes.
+
+Three limits stand in the way of the rest. A file bigger than `NoteBudgets.maxNoteBytes` is listed and says it
+cannot open. Past `NoteBudgets.facts` a note has no facts, which the app says, and can still be opened and
+searched. A failure reading or scanning one note leaves that note out until the next run.
+
+An offset from the facts is only good in the text they came from, so an edit made away from the open note, as
+from the calendar, checks `NoteFacts.isFrom` against what is on screen. With the text kept since, what came in
+is merged as ever. With it read for the edit, what came in is in it, and the offset may be on another heading:
+the edit is refused and the screen brought up to date.
 
 ## Consequences worth stating
 

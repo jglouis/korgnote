@@ -12,12 +12,10 @@ import com.korgnote.app.notifications.planReminders
 import com.korgnote.app.notifications.reminderWords
 import com.korgnote.app.widgets.AgendaWidgets
 import com.korgnote.app.widgets.NoAgendaWidgets
+import com.korgnote.common.index.NoteFacts
 import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOptions
-import com.korgnote.common.org.agenda.ClockedSpan
-import com.korgnote.common.org.agenda.agendaEntries
-import com.korgnote.common.org.agenda.clockedSpans
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -45,17 +43,16 @@ class NoteAgenda(
     /** When the notes last matched where they are kept, for the widgets to say how fresh they are. */
     private val lastSynced: () -> Instant? = { null },
 ) {
-    /** What [build] last found in each note, for the text it found it in. */
-    private var perNote: Map<String, Dated> = emptyMap()
-
-    private class Dated(val text: String, val entries: List<AgendaEntry>, val clocks: List<ClockedSpan>)
-
-    /** Every dated entry in the notes, which the calendar asks for a day at a time. */
-    var index by mutableStateOf(build(library.texts()))
+    /**
+     * Every dated entry in the notes, which the calendar asks for a day at a time. All of it comes from
+     * what is known about the notes, which needs none of their text: it is there as soon as the app
+     * opens, however many notes there are.
+     */
+    var index by mutableStateOf(build(library.facts))
         private set
 
     /** Rebuilds the index from the notes as they now are, and plans reminders from it. */
-    fun refresh() = show(build(library.texts()))
+    fun refresh() = show(build(library.facts))
 
     /** [refresh], with the index already built by [build]: away from the main thread, say. */
     fun show(built: AgendaIndex) {
@@ -65,23 +62,18 @@ class NoteAgenda(
     }
 
     /**
-     * The index of [texts]. Touches nothing the
-     * screen reads, so it can be built on any thread, one at a time. A note whose text has not changed
-     * is not scanned again: a sync usually brings one note.
+     * The index of what is known about the notes. Touches nothing the screen reads, so it can be built
+     * on any thread.
      *
      * Rebuilt with everything else derived from the notes. Today is read here, so the index a day
      * old still carries over to the right day once anything changes.
      */
-    fun build(texts: Map<String, String>): AgendaIndex {
-        val dated = texts.mapValues { (path, text) ->
-            perNote[path]?.takeIf { it.text == text }
-                ?: Dated(text, agendaEntries(path, text), clockedSpans(path, text))
-        }
-        perNote = dated
+    fun build(facts: Map<String, NoteFacts>): AgendaIndex {
+        val paths = facts.keys.sorted()
         return AgendaIndex(
-            dated.keys.sorted().flatMap { dated.getValue(it).entries },
+            paths.flatMap { facts.getValue(it).agenda },
             AgendaOptions(today = today()),
-            dated.values.flatMap { it.clocks },
+            paths.flatMap { facts.getValue(it).clocked },
         )
     }
 
@@ -119,9 +111,9 @@ class NoteAgenda(
      * what moves the planning window on and drops reminders that have already fired.
      */
     fun refreshReminders() {
-        // Before the replica has been read the agenda is empty, and replacing with that would
-        // cancel every reminder the device holds until the notes arrive.
-        if (!library.loaded) return
+        // Before the notes have been read the agenda is empty or partial, and replacing with that would
+        // cancel the reminders the device holds until the notes arrive.
+        if (!library.everyNoteKnown) return
         val plan = planReminders(index.entries, now(), reminderSettings(), reminderWords)
         if (plan == plannedReminders) return
         plannedReminders = plan
@@ -157,7 +149,7 @@ class NoteAgenda(
      * reason as reminders: the empty agenda would blank every widget until they arrive.
      */
     private fun refreshWidgets() {
-        if (!library.loaded) return
+        if (!library.everyNoteKnown) return
         val entries = index.entries
         val synced = lastSynced()
         if (entries != entriesOnWidgets) {

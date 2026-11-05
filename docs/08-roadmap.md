@@ -27,6 +27,11 @@ This is the only status list; the rules for keeping it are in the [docs README](
 
 **Behaviour that falls short**
 
+- **A library much bigger than memory.** Searches are ordered what is at hand first, not by path. An edit
+  from the calendar on a note that changed elsewhere and is not at hand is refused rather than merged, and
+  works when tried again. The pickers offer a note's first thousand headings. The first scan of a big library takes
+  minutes, during which the calendar fills up and reminders wait. See
+  [03](03-target-architecture.md#notes-that-do-not-fit-in-memory).
 - **A note in a dot-file.** `.plan.org` is in no dot-folder, so the server lists and serves it and it
   reaches a phone, while the folder and WebDAV sources leave dot-files out (`isListedNotePath`). The
   same file is a note through one source and not through another.
@@ -723,3 +728,28 @@ replaces it, and when the app pauses. `OpenNote.settled` keeps a position from b
 new note while the view still shows the previous one. The tab and calendar view are `LastScreen`,
 kept by the shell. Folds are still session only.
 Covered by `ReadingPlacesTest` and `AppResumeTest`.
+
+
+### T43 · Notes that do not fit in memory
+**Landed** Issue #2: `OutOfMemoryError` on every start for someone whose `~/org` holds about 240 MB, most of it
+generated logs. Every note's text and parse tree stayed in memory: 3.5 times the library's size in ASCII, and
+5 times with accented text, since ART keeps a string with any non-ASCII character at two bytes each, so a 256 MB
+heap ended between 25 and 50 MB of accented notes. Measured on a throwaway emulator on 2026-11-04.
+`android:largeHeap` was tried and rejected: it moves the crash to a bigger library, and how big one is cannot be
+known. What replaced it is in [03](03-target-architecture.md#notes-that-do-not-fit-in-memory).
+
+Measured on a Memor 17 (Android 13, 256 MB heap, slow) on 2026-11-05, release builds, with made-up notes. The
+released 1.6.4 dies on a 240 MB library of 2,382 notes shaped like logs, at the line in the report. Now its first
+scan takes about 3 minutes with the heap peaking at 133 to 187 MB between runs, and after that the calendar is
+ready with the first frame, 1.5 s after a start; a search goes through the whole folder in about 16 s, and a start
+that reopens a 10 MB note does so at 7 s. A first sync of the same library from a server held to 162 MB in a debug
+build. At 5 MB, 178 notes, the calendar is ready at 1.5 s rather than 9 s and the heap holds 21 MB rather than
+35 MB, while a search matching nothing takes about 100 ms as it did, and switching notes 16 ms rather than 12,
+once the one scan after updating is done, at 11 s rather than 9.
+
+Reading the code cold, twice, found what the tests did not: a note listed and unreadable left the note before it
+on screen, where an edit would have been saved over it; a scan could put a note's old facts back over an edit;
+and a conflict copy that could not be written let the retry save over the other app's change, which was older than
+this work. Running the whole suite with the caches sized to nothing (`-Dkorgnote.cacheHeap=1`) found an edit from
+the calendar landing on the wrong heading. All are fixed. Each of 35 protections was then checked by breaking it
+and seeing the test meant for it fail, which also showed up a flaky test passing for four of them.

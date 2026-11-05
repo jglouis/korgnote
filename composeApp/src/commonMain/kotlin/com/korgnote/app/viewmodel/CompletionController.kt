@@ -7,7 +7,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import com.korgnote.common.org.OrgDocument
-import com.korgnote.common.org.OrgDrawer
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.agenda.OrgTimestamp
@@ -24,7 +23,6 @@ import com.korgnote.common.org.edit.allNodes
 import com.korgnote.common.org.edit.fitsIn
 import com.korgnote.common.org.edit.insertInto
 import com.korgnote.common.org.edit.insertTable
-import com.korgnote.common.org.search.fileTagsOf
 import com.korgnote.common.org.todoKeywordsOf
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
@@ -212,10 +210,13 @@ class CompletionController(
     /** [base] for the open note as it now is, what it knows of every note left as it is. */
     private fun forOpenNote(base: CompletionContext): CompletionContext {
         val path = note.path
-        val document = path?.let { library[it] }
+        // Once its text has arrived; until then what is known about it says as much as matters.
+        val document = path?.let { library.parsedAtHand(it) }
         return base.copy(
-            todoKeywords = document?.let { todoKeywordsOf(it.text, DEFAULT_TODO_KEYWORDS) } ?: DEFAULT_TODO_KEYWORDS,
-            filePaths = library.documents.keys.sorted(),
+            todoKeywords = document?.let { todoKeywordsOf(it.text, DEFAULT_TODO_KEYWORDS) }
+                ?: path?.let { library.facts[it]?.keywords }
+                ?: DEFAULT_TODO_KEYWORDS,
+            filePaths = library.paths.sorted(),
             currentPath = path.orEmpty(),
             noteIds = links.noteIds,
             noteTitles = links.noteTitles,
@@ -228,11 +229,8 @@ class CompletionController(
     /** Every tag in the corpus, most-used first — which is the order they are worth offering in. */
     private fun tagsByUse(): List<String> {
         val counts = mutableMapOf<String, Int>()
-        for (document in library.documents.values) {
-            for (tag in fileTagsOf(document.text)) counts[tag] = (counts[tag] ?: 0) + 1
-            for (section in document.allNodes().filterIsInstance<OrgSection>()) {
-                for (tag in section.tags) counts[tag] = (counts[tag] ?: 0) + 1
-            }
+        for (note in library.facts.values) {
+            for ((tag, uses) in note.tags) counts[tag] = (counts[tag] ?: 0) + uses
         }
         return counts.entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
             .map { it.key }
@@ -241,15 +239,8 @@ class CompletionController(
     /** Every `:LOCATION:` the notes name, most-named first, as [tagsByUse] orders tags. */
     private fun locationsByUse(): List<String> {
         val counts = mutableMapOf<String, Int>()
-        for (document in library.documents.values) {
-            if (!document.text.contains(":LOCATION:", ignoreCase = true)) continue
-            for (drawer in document.allNodes().filterIsInstance<OrgDrawer>()) {
-                for ((key, value) in drawer.properties) {
-                    if (key.equals("LOCATION", ignoreCase = true) && value.isNotBlank()) {
-                        counts[value] = (counts[value] ?: 0) + 1
-                    }
-                }
-            }
+        for (note in library.facts.values) {
+            for ((place, uses) in note.locations) counts[place] = (counts[place] ?: 0) + uses
         }
         return counts.entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
             .map { it.key }

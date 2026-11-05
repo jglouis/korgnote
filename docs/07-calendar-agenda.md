@@ -4,8 +4,9 @@ Addresses G6 and defect D7: a calendar with a real engine underneath, and the vi
 without losing what org-agenda does.
 
 `shared/…/org/agenda/` parses every stamp (`OrgTimestamp.kt`) and expands entries into occurrences
-(`Agenda.kt`). The app keeps an `AgendaIndex`, rebuilt when the notes change, and the calendar tab draws
-agenda, day, week and month views from it. Reminders are planned from the same entries (`Reminders.kt`),
+(`Agenda.kt`). The app keeps an `AgendaIndex`, rebuilt when the notes change from what is known about them without their
+text ([03](03-target-architecture.md#notes-that-do-not-fit-in-memory)), and the calendar tab draws agenda, day,
+week and month views from it, starting from what was kept from the last run. Reminders are planned from the same entries (`Reminders.kt`),
 and two Android widgets draw them on the home screen. What is not built is noted where it applies.
 
 ## Timestamp model (`shared/org/agenda`)
@@ -112,7 +113,9 @@ Expansion rules, each a unit test:
   suggestions with the caret on it ([06](06-editor.md)).
 
 The result is an `AgendaIndex` in the client, rebuilt whenever the replica changes, which decouples the
-calendar from raw `OrgPlanning` nodes. A `COMMENT` heading and what is tagged `:ARCHIVE:` are left out, as
+calendar from raw `OrgPlanning` nodes and from the notes' text. While the notes are still being read for the
+first time, a day with nothing on it says so rather than that nothing is planned, and reminders and widgets
+are left as they are until every note has been read: a plan made from a part of them would cancel the rest. A `COMMENT` heading and what is tagged `:ARCHIVE:` are left out, as
 in Org's.
 
 The index is built as of one day, but the calendar keeps its own clock, ticking each minute, and

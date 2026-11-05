@@ -1,5 +1,6 @@
 package com.korgnote.app
 
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -86,7 +87,11 @@ fun App() {
 @Composable
 private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSource: () -> Unit) {
     val vm = koinViewModel<NotesViewModel>(key = "notes:${source.encode()}") { parametersOf(source) }
-    rememberNotesAppState(source, vm, koinInject<SettingsRepository>()).NotesShell(choice, onChangeSource)
+    rememberNotesAppState(source, vm, koinInject<SettingsRepository>()).NotesShell(choice) {
+        // Stays alive behind the next source's: it should not stay in the way of those notes.
+        vm.library.letGo()
+        onChangeSource()
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -289,6 +294,7 @@ private fun NotesAppState.NotesShell(choice: NotesSourceChoice, onChangeSource: 
                     ) {
                         when (selectedScreen) {
                             BottomItem.FILE -> {
+                                if (vm.note.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
                                 // A note in conflict, or one of its copies, says so until it is settled.
                                 conflictShown(vm.note.path, vm.library.conflicts)?.let { conflict ->
                                     ConflictBanner(
@@ -365,6 +371,7 @@ private fun NotesAppState.NotesShell(choice: NotesSourceChoice, onChangeSource: 
                                     modifier = Modifier.fillMaxSize(),
                                     query = vm.search.query,
                                     results = vm.search.results,
+                                    searching = vm.search.searching,
                                     onQueryChange = { vm.search.onQueryChanged(it) },
                                     onOpen = { hit ->
                                         // Same shape as the calendar's jump: the view model resolves
@@ -393,6 +400,7 @@ private fun NotesAppState.NotesShell(choice: NotesSourceChoice, onChangeSource: 
                                 CalendarScreen(
                                     modifier = Modifier.fillMaxSize(),
                                     agenda = vm.agenda.index,
+                                    stillReading = vm.library.stillReading,
                                     initialMode = calendarTarget?.mode,
                                     initialAnchorDate = calendarTarget?.date,
                                     onViewChanged = { mode, date -> calendarView = CalendarTarget(mode, date) },

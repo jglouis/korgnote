@@ -96,6 +96,7 @@ class ElementEditor(
     }
 
     fun beginEdit(index: Int) {
+        if (note.refused) return
         val element = note.content.orgElements().getOrNull(index) ?: return
         val text = element.sliceOf(note.content)
         textBeforeInsertion = null
@@ -131,6 +132,7 @@ class ElementEditor(
     }
 
     private fun insertAndEdit(at: Int, level: Int) {
+        if (note.refused) return
         val previousText = note.content
         val insertion = previousText.withNewOrgElement(at, level)
         val elements = insertion.text.orgElements()

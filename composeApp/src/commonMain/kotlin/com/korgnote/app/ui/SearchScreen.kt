@@ -1,5 +1,6 @@
 package com.korgnote.app.ui
 
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -60,6 +61,8 @@ fun SearchScreen(
     query: String,
     results: List<SearchHit>,
     onQueryChange: (String) -> Unit,
+    /** Whether more results may still come, from notes being read. */
+    searching: Boolean = false,
     onOpen: (SearchHit) -> Unit,
     modifier: Modifier = Modifier,
     /** Whether [query] is one of the saved searches, which the field's bookmark shows. */
@@ -106,9 +109,12 @@ fun SearchScreen(
             actions()
         }
         Spacer(Modifier.height(8.dp))
+        if (searching) LinearProgressIndicator(Modifier.fillMaxWidth())
 
         when {
             query.isBlank() -> Hint(stringResource(Res.string.notes_search_hint))
+
+            results.isEmpty() && searching -> Unit
 
             results.isEmpty() -> Hint(stringResource(Res.string.notes_search_nothing, query))
 

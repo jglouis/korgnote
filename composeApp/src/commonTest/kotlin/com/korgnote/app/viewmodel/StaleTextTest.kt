@@ -91,7 +91,7 @@ class StaleTextTest {
         advanceUntilIdle()
 
         assertEquals(emacs.replace("* TODO Report", "* DONE Report"), api.files[work])
-        assertEquals(emacs.replace("* TODO Report", "* DONE Report"), viewModel.library[work]?.text)
+        assertEquals(emacs.replace("* TODO Report", "* DONE Report"), viewModel.library.text(work))
     }
 
     /** The calendar's offset is into the text it read: the keyword goes on the heading it showed. */
@@ -131,7 +131,7 @@ class StaleTextTest {
 
         assertEquals(emacs, api.files[work])
         assertEquals(emacs, store.read(work))
-        assertEquals(emacs, viewModel.library[work]?.text, "the library shows what the replica holds")
+        assertEquals(emacs, viewModel.library.text(work), "the library shows what the replica holds")
         assertTrue(viewModel.lastErrorMessage.contains("also changed elsewhere"), viewModel.lastErrorMessage)
     }
 
@@ -180,7 +180,7 @@ class StaleTextTest {
         assertEquals(both, api.files[open])
         assertEquals(both, store.read(open))
         assertEquals(both, viewModel.note.content)
-        assertEquals(both, viewModel.library[open]?.text)
+        assertEquals(both, viewModel.library.text(open))
     }
 
     @Test

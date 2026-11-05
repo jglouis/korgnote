@@ -1,5 +1,6 @@
 package com.korgnote.app.capture
 
+import com.korgnote.common.index.NoteIndex
 import com.korgnote.app.data.NoteTemplateSettings
 import com.korgnote.common.fs.NotePaths
 import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
@@ -20,7 +21,7 @@ import com.korgnote.common.org.capture.fileCapture
 import com.korgnote.common.org.template.newNoteText
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.org.link.LinkTarget
-import com.korgnote.common.org.link.linkTargetsOf
+import com.korgnote.common.org.link.linkTargetsFrom
 import com.korgnote.common.org.toOrgDocument
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -55,11 +56,11 @@ class CaptureFiler(
 ) {
     /**
      * Every heading in [store]'s notes, to choose one to capture into: what the sheet offers when the
-     * app's own notes are not at hand. A corpus' worth of parsing, so off the main thread.
+     * app's own notes are not at hand. Reads only what moved since [index] last looked, and holds none of it.
      */
-    suspend fun destinations(store: DocumentStore): List<LinkTarget> = withContext(Dispatchers.Default) {
-        val texts = store.paths().filter { it.endsWith(".org") }.mapNotNull { path -> store.read(path)?.let { path to it } }.toMap()
-        destinationsAmong(linkTargetsOf(texts.mapValues { (_, text) -> text.toOrgDocument(DEFAULT_TODO_KEYWORDS) }))
+    suspend fun destinations(store: DocumentStore, index: NoteIndex = NoteIndex()): List<LinkTarget> {
+        index.refresh(store)
+        return destinationsAmong(linkTargetsFrom(index.facts))
     }
 
     /** Where a capture can go among [targets]: every note and heading with a name. */

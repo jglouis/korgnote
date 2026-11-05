@@ -1,5 +1,7 @@
 package com.korgnote.app
 
+import com.korgnote.app.capture.NoteIndexFiles
+import com.korgnote.common.index.FileNoteIndexFile
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.Modifier
@@ -42,6 +44,7 @@ fun MainViewController(): UIViewController {
     val iosModule = module {
         single<SettingsRepository> { PersistentSettingsRepository() }
         single<ReplicaStorage> { FileSystemReplicaStorage(replica) }
+        single<NoteIndexFiles> { NoteIndexFiles { name -> FileNoteIndexFile("${replica.substringBeforeLast('/')}/note-index/$name") } }
         // The WebDAV sync's, beside it and never mixed with it.
         single<ReplicaStorage>(WEBDAV) { FileSystemReplicaStorage(webDavReplica) }
         single<NotificationScheduler> { IosNotificationScheduler() }

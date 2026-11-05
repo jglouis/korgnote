@@ -15,6 +15,7 @@ import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.vm_not_a_note_path
 import korgnote.composeapp.generated.resources.vm_note_exists
 import korgnote.composeapp.generated.resources.vm_note_title_needed
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
@@ -176,10 +177,16 @@ class NoteFiles(
      * How [copy] differs from its note, chunk by chunk, with the two texts the chunks were cut from;
      * null when it is no copy of a note here.
      */
-    fun conflictComparison(copy: String): ConflictComparison? {
+    suspend fun conflictComparison(copy: String): ConflictComparison? {
         val original = conflictOriginalOf(copy) ?: return null
-        val note = library[original]?.text ?: return null
-        val copied = library[copy]?.text ?: return null
+        val (note, copied) = try {
+            (library.text(original) ?: return null) to (library.text(copy) ?: return null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            println("[DEBUG_LOG][NoteFiles] Reading $copy to compare failed: $t")
+            return null
+        }
         return ConflictComparison(original, copy, note, copied, conflictChunks(note, copied))
     }
 

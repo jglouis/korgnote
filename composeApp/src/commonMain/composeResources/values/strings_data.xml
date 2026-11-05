@@ -1,5 +1,11 @@
 <resources>
     <!-- Messages from the view models: the message line, and what an open note says. -->
+    <string name="vm_note_unreadable">This note cannot be read right now.</string>
+    <string name="vm_note_too_large">This note is too big to open on this device.</string>
+    <plurals name="vm_notes_no_room">
+        <item quantity="one">%1$d note is too much for this device to keep track of: it opens and can be searched, but its dates and links are left out.</item>
+        <item quantity="other">%1$d notes are too much for this device to keep track of: they open and can be searched, but their dates and links are left out.</item>
+    </plurals>
     <string name="vm_edit_conflict">This part of the note also changed elsewhere while you were editing it; nothing was written.</string>
     <string name="vm_kept_beside">%1$s also changed elsewhere. That version is kept; yours is saved beside it as a .sync-conflict- copy.</string>
     <string name="vm_note_brought_back">%1$s was deleted elsewhere. Saving your edit has brought it back.</string>

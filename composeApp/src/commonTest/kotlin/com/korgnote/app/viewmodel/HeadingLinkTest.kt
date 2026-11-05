@@ -92,7 +92,7 @@ class HeadingLinkTest {
         assertTrue(viewModel.editor.draft.endsWith("[[id:new-1][Step one]]"))
         val withId = "** Step one\n:PROPERTIES:\n:ID:       new-1\n:END:\n"
         assertTrue(server.files.getValue(other).contains(withId), "written and pushed")
-        assertTrue(viewModel.library[other]!!.text.contains(withId))
+        assertTrue(viewModel.library.text(other)!!.contains(withId))
     }
 
     @Test

@@ -29,6 +29,10 @@ class StallingReplicaStorage(
     fun stallWrite(path: String): CompletableDeferred<Unit> =
         Stall(0).also { writes.getOrPut(path) { mutableListOf() } += it }.gate
 
+    /** Each by [read], so that it is seen, and stalled, however the notes are asked for. */
+    override suspend fun readSeveral(paths: List<String>): Map<String, String> =
+        paths.mapNotNull { path -> read(path)?.let { path to it } }.toMap()
+
     override suspend fun read(path: String): String? {
         read += path
         val text = files.read(path)

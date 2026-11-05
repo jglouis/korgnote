@@ -78,9 +78,18 @@ class OpenNote {
         revealElementIndex = null
     }
 
+    /**
+     * Whether the note is being read: the reading view still shows the note before it, if any, and
+     * says so. Quick from most places, and a moment for a big note in a folder.
+     */
+    var loading by mutableStateOf(false)
+        internal set
+
     /** The part of opening [path] that needs no text; a placeholder stands in when there is none. */
     internal fun beginOpening(path: String, hasText: Boolean) {
         label = "Selected: $path"
+        loading = hasText
+        refused = false
         if (path != this.path || !hasText) replicaText = null
         this.path = path
         scrollToElementIndex = null
@@ -96,6 +105,8 @@ class OpenNote {
      * With no such element, the note goes back to [place], where it was left, or to its top.
      */
     internal fun show(text: String, scrollToOffset: Int?, place: ReadingPlace? = null, fromReplica: String? = text): Int? {
+        loading = false
+        refused = false
         content = text
         replicaText = fromReplica
         scrollToElementIndex = scrollToOffset?.let { text.elementIndexOfOffset(it) }
@@ -106,8 +117,29 @@ class OpenNote {
         return scrollToElementIndex
     }
 
+    /**
+     * Whether what is shown is no note's text but why it will not open, which nothing may be saved from.
+     */
+    var refused by mutableStateOf(false)
+        private set
+
+    /** [path] will not open, as the [message] says: too big for this device to hold, or out of reach. */
+    internal fun refuse(path: String, message: String) {
+        loading = false
+        refused = true
+        replicaText = null
+        content = "* $path\n$message"
+    }
+
+    /** The note that would not open could be read after all, and its text is what is now shown. */
+    internal fun readAfterAll() {
+        refused = false
+    }
+
     /** Nothing open, because there is nothing to open. */
     internal fun close() {
+        loading = false
+        refused = false
         path = null
         content = ""
         replicaText = null

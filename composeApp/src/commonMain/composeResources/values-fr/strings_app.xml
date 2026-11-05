@@ -29,6 +29,7 @@
     <string name="cal_change_deadline">Modifier l’échéance…</string>
     <string name="cal_change_date">Modifier la date…</string>
     <string name="cal_overdue">En retard</string>
+    <string name="cal_still_reading">Lecture de vos notes en cours…</string>
     <string name="cal_nothing_planned">Rien de prévu</string>
     <string name="cal_clocked_report">Temps chronométré</string>
     <string name="cal_clocked_period">Du %1$s au %2$s</string>

@@ -1,5 +1,6 @@
 package com.korgnote.common.org.agenda
 
+import kotlinx.serialization.Serializable
 import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
 import com.korgnote.common.org.OrgSection
 import com.korgnote.common.org.OrgTodoConfig
@@ -18,6 +19,7 @@ import kotlinx.datetime.toInstant
  * A stretch of time clocked on a heading — one `CLOCK:` line — for the calendar, which draws it in
  * the hours it took, and its report, which sums it. Emacs's agenda shows the same in its log mode.
  */
+@Serializable
 data class ClockedSpan(
     val file: String,
     /** Where the heading starts: the app opens the note there, as for an agenda entry. */

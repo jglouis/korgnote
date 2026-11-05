@@ -7,11 +7,11 @@ import com.korgnote.common.org.edit.linkAt
 import com.korgnote.common.org.edit.orgLinkOf
 import com.korgnote.common.org.edit.withLink
 import com.korgnote.common.org.link.LinkTarget
-import com.korgnote.common.org.link.linkTargetsOf
+import com.korgnote.common.index.pickerFactsOf
+import com.korgnote.common.org.link.linkTargetsFrom
 import com.korgnote.common.org.link.withFileId
 import com.korgnote.common.org.link.withHeadingId
 import com.korgnote.common.org.orgElements
-import com.korgnote.common.org.toOrgDocument
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.vm_edit_conflict
 import org.jetbrains.compose.resources.getString
@@ -41,9 +41,9 @@ class LinkForm(
      * left out as a whole, and so is a heading with no title yet, such as the one just added.
      */
     fun linkTargets(): List<LinkTarget> {
-        val documents = library.documents.toMutableMap()
-        note.path?.let { documents[it] = note.content.toOrgDocument() }
-        return linkTargetsOf(documents).filter { target ->
+        val facts = library.facts.toMutableMap()
+        note.path?.let { facts[it] = pickerFactsOf(note.content) }
+        return linkTargetsFrom(facts).filter { target ->
             !(target.isNote && target.path == note.path) && target.title.isNotBlank()
         }
     }

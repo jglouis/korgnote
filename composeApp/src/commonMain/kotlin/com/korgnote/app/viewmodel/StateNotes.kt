@@ -98,7 +98,7 @@ class StateNotes(
 
     /** The keywords of the note at [path]: its own `#+TODO:`, or Org's own when it declares none. */
     fun keywordsOf(path: String): OrgTodoConfig =
-        if (path == note.path) todoKeywords() else library[path]?.todoKeywords ?: DEFAULT_TODO_KEYWORDS
+        if (path == note.path) todoKeywords() else library.facts[path]?.keywords ?: DEFAULT_TODO_KEYWORDS
 
     /**
      * [setTodoAt] for the heading at [headingOffset] of the note at [path], open or not: from the
@@ -109,22 +109,25 @@ class StateNotes(
     fun setTodo(path: String, headingOffset: Int, keyword: String?) {
         if (path == note.path) {
             if (changes.refuseWhileEditing()) return
-            setTodoAt(headingOffset, keyword)
-            return
-        }
-        val document = library[path] ?: return
-        val heading = document.nodeAt<OrgSection>(headingOffset) ?: return
-        val keywords = document.todoKeywords
-        if (keyword != null && document.stateChangeLog(heading, keyword, keywords) == LogKind.Note) {
-            if (changes.refuseWhileEditing()) return
-            scope.launch {
-                openAndWait(path)
-                if (note.path == path) setTodoAt(headingOffset, keyword)
+            if (note.replicaText == null || library.isAsShown(path, note.content)) {
+                setTodoAt(headingOffset, keyword)
+            } else {
+                // Come in since the calendar was drawn: its offset may be on another heading now.
+                scope.launch { changes.hasMoved(path, note.content) }
             }
             return
         }
         val at = now()
         scope.launch {
+            val document = changes.documentToChange(path) ?: return@launch
+            val heading = document.nodeAt<OrgSection>(headingOffset) ?: return@launch
+            val keywords = document.todoKeywords
+            if (keyword != null && document.stateChangeLog(heading, keyword, keywords) == LogKind.Note) {
+                if (changes.refuseWhileEditing()) return@launch
+                openAndWait(path)
+                if (note.path == path) setTodoAt(headingOffset, keyword)
+                return@launch
+            }
             changes.changeNote(path) { doc ->
                 val target = doc.nodeAt<OrgSection>(headingOffset) ?: return@changeNote doc
                 doc.changeTodoState(target, keyword, at, keywords).withStatistics(keywords, since = doc)

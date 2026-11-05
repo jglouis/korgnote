@@ -34,6 +34,7 @@ import org.koin.core.module.Module
 import org.koin.core.qualifier.Qualifier
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
+import com.korgnote.app.capture.noteIndexFor
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.ReplicaStorage
 import com.korgnote.common.replica.SyncApi
@@ -120,6 +121,7 @@ val appModule = module {
             fileOpener = getOrNull<FileOpener>() ?: NoFileOpener,
             folder = (backend as? NotesBackend.Folder)?.storage,
             captures = get(),
+            noteIndex = getKoin().noteIndexFor(source),
         )
     }
 }

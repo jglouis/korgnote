@@ -1,10 +1,13 @@
 package com.korgnote.common.replica
 
+import kotlinx.serialization.Serializable
+
 /**
  * What a note file looked like when it was listed: enough to tell that it changed since, without
  * reading it. Neither a phone's shared storage nor iOS's Files says when a file changes, so this is
  * how an edit made by Syncthing, Dropbox or Emacs is noticed.
  */
+@Serializable
 data class FileStamp(val modified: Long, val size: Long)
 
 /** A note file in a [NoteFolder], by its path relative to the folder. */

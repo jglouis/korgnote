@@ -31,6 +31,7 @@
     <string name="cal_change_deadline">Change deadline…</string>
     <string name="cal_change_date">Change date…</string>
     <string name="cal_overdue">Overdue</string>
+    <string name="cal_still_reading">Still reading your notes…</string>
     <string name="cal_nothing_planned">Nothing planned</string>
     <!-- Time clocked, Org's CLOCK lines: the agenda's report under the days, and a block on the hour grid. -->
     <string name="cal_clocked_report">Time clocked</string>

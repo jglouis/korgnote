@@ -77,6 +77,24 @@ class FileSystemReplicaStorage(root: String) : ReplicaStorage {
         found.sorted()
     }
 
+    /** From each file's attributes, as [list] finds the files: no note is read. */
+    override suspend fun stamps(): Map<String, FileStamp>? = withContext(Dispatchers.IO) {
+        val enumerator = manager.enumeratorAtPath(notesDir) ?: return@withContext emptyMap()
+        val recorded = readMeta().files.keys.groupBy(::accentsTogether)
+        val found = mutableMapOf<String, FileStamp>()
+        while (true) {
+            val next = enumerator.nextObject() as? String ?: break
+            if (!next.endsWith(".org")) continue
+            val attributes = manager.attributesOfItemAtPath("$notesDir/$next", error = null) ?: continue
+            val modified = attributes[NSFileModificationDate] as? NSDate ?: continue
+            val size = attributes[NSFileSize] as? NSNumber ?: continue
+            val stamp = FileStamp((modified.timeIntervalSince1970 * 1_000_000).toLong(), size.longLongValue)
+            val name = accentsTogether(next)
+            for (path in recorded[name] ?: listOf(name)) found[path] = stamp
+        }
+        found
+    }
+
     private fun accentsTogether(path: String): String = NSString.create(string = path).precomposedStringWithCanonicalMapping
 
     /**
