@@ -24,69 +24,48 @@ phone: your notes are your calendar, and there is no separate one to keep in syn
 
 - **Notes and calendar, linked.** Tap a `SCHEDULED` or `DEADLINE` date to open that day in the
   calendar; tap a calendar entry to jump to its heading.
-- **Agenda and calendar views.** The agenda shows what's coming, with overdue tasks on top. Day,
-  week and month views give you the overview; pinch to zoom the hour grid. Hold an entry to reschedule
-  it; tap the period at the top to go to any date.
+- **Fast.** Optimized syncing, indexing and searching of your notes, even on a large corpus.
 - **Notifications.** A reminder before each timed entry, and an optional morning digest of the
   day's agenda.
 - **Home-screen widgets** on Android: agenda and month.
-- **Your files stay yours.** The app reads and writes plain `.org` files and nothing else. An edit
-  rewrites only what you changed and leaves the rest of the file as it was, so Emacs, org-roam and
-  git keep working on your notes.
-- **Notes.** Headings, TODO keywords, priorities, tags, checkboxes, tables, drawers and code blocks.
-- **Editing.** Tap a heading to edit it, with suggestions above the keyboard for keywords, tags,
-  dates and links. Long-press it to move, promote, demote or delete it, or to refile it under a
-  heading in any note, as Org's `C-c C-w` does.
-- **Tasks.** Change TODO states and priorities from a menu. A change is logged as each keyword
-  asks in `#+TODO:` — `!` a time stamp, `@` a note, written in a dialog with the editor's
-  suggestions. Repeating tasks move to their next date when done. The agenda puts the most
-  important first, within a time.
-- **Clocking.** Clock in and out as in Emacs: `CLOCK:` lines in `:LOGBOOK:`, totals against `:Effort:`,
-  a bar for the running clock, with an ongoing notification on Android, and clocked time in the day and
-  week views and the agenda's report.
+- **Your files are the source of truth.** The app reads and writes plain `.org` files and nothing else.
+- **Org Syntax support.** Headings, TODO keywords, priorities, tags, checkboxes, tables, drawers and
+  code blocks.
+- **Easy editing.** Tap a heading to edit it, with org syntax suggestions (TODO, timestamp, checkboxes, etc.).
+- **Handle tasks.** Toggle TODO state by tapping the keyword in file view, to long press in
+  agenda/calendar view.
+- **Clocking.** Clock in and out as in Emacs: `CLOCK:` lines in `:LOGBOOK:`, totals against `:Effort:`.
 - **Tables.** Edit them as a grid. `#+TBLFM` formulas are computed the same way as in Emacs.
 - **Links.** `id:`, `file:`, `doi:`, headings, custom IDs and `#+LINK:` abbreviations, with backlinks.
-  New notes and daily notes are made the way org-roam makes them. On Android and the desktop,
-  `[[file:~/…]]` links to other files open too, through **Settings → File links**.
+  New notes and daily notes have org-roam ids.
 - **Capture.** Share a link, selected text or a Google Maps place from any app to KorgNote, or pick
-  an event from your phone's calendar, Google Calendar's included. It goes to your inbox, another
-  note, or under a heading, in one step. `korgnote://capture` links do the same, for bookmarklets and
-  Shortcuts.
+  an event from your phone's calendar, Google Calendar's included.
 - **Search** by words and tags, save searches by name, and pin the notes you use most.
 - **Works offline.** Take notes and schedule tasks anywhere; they sync when the app can reach your
   notes again. Reminders, the digest and the widgets come from the phone itself, so they work with
   no network.
-- **Conflicts settled by you.** With the server or WebDAV, what two devices changed in different places
-  is merged. Where a note can't be merged, the other version is kept beside it, and *Compare* goes through
-  the differences one at a time.
-- **Reopens where you left.** The tab, the note and the place in it, and the calendar's view.
-- **In English and French,** with a dark theme that follows the system.
+- **Conflicts settled by you.** Handle merge conflicts within the app itself.
 
-### What it doesn't do yet
+### What it doesn't do
 
-KorgNote reads the parts of Org that notes and an agenda need. Anything it doesn't understand is
-kept exactly as written and shown as plain text, so your files are never changed by it.
+There are no plans to integrate the following for the moment. KorgNote will never be a perfect
+replica of Emacs Org mode. That's not the goal. We won't for instance parse Elisp configs. This is
+just not worth the effort.
 
-- **Clock tables and column view.** `#+BEGIN: clocktable` blocks show as written and aren't regenerated;
-  the calendar's clock report covers what a clock table shows.
-- **Archiving.** Nothing moves a heading to an archive. `:ARCHIVE:` and `COMMENT` subtrees are
-  left out of the agenda.
+- **Clock tables and column view.** `#+BEGIN: clocktable` blocks just shows as written.
+- **Archiving.**
 - **Agenda queries.** Search takes words, tags (with `#+TAGS:` groups), `todo:` and `priority:`.
   Org's match syntax (`+work-boss/NEXT`), property searches and custom agenda views are not there.
 - **Diary dates.** `<%%(diary-float t 4 3)>` and other diary expressions don't appear in the agenda.
 - **Some structure.** Multi-paragraph footnotes, inline tasks, and `#+STARTUP:` folding
   (`overview`, `content`).
 - **Rich text.** Inline images, LaTeX rendering, radio targets, inline footnotes, citations and
-  macros show as written. Footnote references can't be tapped yet.
+  macros show as written. Footnote references can't be tapped.
 - **Per-heading logging.** The `:LOGGING:` property, which changes logging for one subtree, isn't
   read; the file's `#+TODO:` and `#+STARTUP:` settings are.
 - **Shared settings.** `#+SETUPFILE:`, `#+PROPERTY:` and property inheritance aren't read.
 
 Out of scope: running code blocks (Babel), export and publishing.
-
-TODO keywords follow Org's rule: a file has the keywords its own `#+TODO:` lines declare, or `TODO`
-and `DONE` when it has none. A file that uses `EVENT`, `WAIT` or `FINISHED` should declare them,
-for example `#+TODO: TODO WAIT | DONE CANCELED`.
 
 ## Get started
 
