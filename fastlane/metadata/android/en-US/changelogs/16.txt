@@ -1,0 +1,6 @@
+* Fixed: the app ran out of memory on a large library.
+* The calendar is ready as soon as the app opens.
+* The app uses less memory, whatever the size of your notes.
+* Search brings in results as it finds them when notes don't all fit in memory.
+* Fixed: another app's change to a note in a folder could be overwritten.
+* The first start reads your notes once: seconds, or minutes for hundreds of MB.
