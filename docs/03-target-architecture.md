@@ -148,14 +148,18 @@ what the device gives the app (`NoteBudgets`), not from the notes. Each use of t
 - **A scan is one note at a time, smallest first, and survives what it cannot read.** It is interrupted and
   taken up again as often as it has to be, its progress being saved as it goes.
 
-Three limits stand in the way of the rest. A file bigger than `NoteBudgets.maxNoteBytes` is listed and says it
-cannot open. Past `NoteBudgets.facts` a note has no facts, which the app says, and can still be opened and
+Three limits stand in the way of the rest. A file bigger than `NoteBudgets.maxNoteBytes` is listed, can be
+found by its name, and says it cannot open. Past `NoteBudgets.facts` a note has no facts, which the app says, and can still be opened and
 searched. A failure reading or scanning one note leaves that note out until the next run.
 
 An offset from the facts is only good in the text they came from, so an edit made away from the open note, as
 from the calendar, checks `NoteFacts.isFrom` against what is on screen. With the text kept since, what came in
 is merged as ever. With it read for the edit, what came in is in it, and the offset may be on another heading:
 the edit is refused and the screen brought up to date.
+
+A note of megabytes is gone through with `everyMatch` rather than `Regex.findAll`. On Android `findAll` makes a
+matcher for each match, each holding a copy of the text outside the Java heap, where the heap's limit knows
+nothing of it.
 
 ## Consequences worth stating
 

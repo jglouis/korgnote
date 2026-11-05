@@ -155,9 +155,11 @@ class NoteSearch(
         val parsed = SearchQuery.parse(query)
         val atHand = library.atHand()
         val quick = atHand.values.sumOf { it.length.toLong() } <= SEARCHED_AT_ONCE
-        val first = if (quick) searchOrg(atHand, parsed, fallback = DEFAULT_TODO_KEYWORDS) else emptyList()
+        // A note too big to read has no text to go through, but it can still be found by its name.
+        val named = library.tooLarge().flatMap { searchOrgFile(it, "", parsed, DEFAULT_SEARCH_LIMIT, DEFAULT_TODO_KEYWORDS) }
+        val first = (if (quick) searchOrg(atHand, parsed, fallback = DEFAULT_TODO_KEYWORDS) else emptyList()) + named
         // Results already on screen stay until there are some, rather than flicker away: see [onQueryChanged].
-        if (quick) results = first
+        if (quick || named.isNotEmpty()) results = first
         if (first.size >= DEFAULT_SEARCH_LIMIT || parsed.isEmpty) return
         val rest = (if (quick) emptyList() else atHand.keys.sorted()) + library.notAtHand()
         if (rest.isEmpty()) return

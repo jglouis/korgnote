@@ -747,6 +747,15 @@ build. At 5 MB, 178 notes, the calendar is ready at 1.5 s rather than 9 s and th
 35 MB, while a search matching nothing takes about 100 ms as it did, and switching notes 16 ms rather than 12,
 once the one scan after updating is done, at 11 s rather than 9.
 
+The same library on the other platforms on 2026-11-05: on an iOS 27 simulator, whose debug build has no memory limit
+to meet, a folder and a server both work, with the calendar at about a second after the first scan; at 5 MB it is
+1 s rather than 4.9 s. WebDAV against Apache on the Memor held to the heap's limit, in a debug build. The web has
+nowhere to keep the facts, so it pulls and scans on each load: 20 s at 240 MB, and 4.4 s at 5 MB where it was 4.1 s.
+
+A stress test with a 15 MB note, just under the limit, got the app killed with its heap at 233 MB and the native heap
+at 2.3 GB. Android's `Regex.findAll` makes a matcher per match, each with its own copy of the text outside the heap.
+Going through a note with one matcher took that to under 300 MB, and the note opens in under 4 s.
+
 Reading the code cold, twice, found what the tests did not: a note listed and unreadable left the note before it
 on screen, where an edit would have been saved over it; a scan could put a note's old facts back over an edit;
 and a conflict copy that could not be written let the retry save over the other app's change, which was older than

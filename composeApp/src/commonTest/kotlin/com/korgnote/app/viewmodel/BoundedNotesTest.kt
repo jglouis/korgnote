@@ -909,6 +909,26 @@ class BoundedNotesTest {
         assertEquals(listOf("next.org"), vm.clocks.running.map { it.path })
     }
 
+    /** It cannot be read, so what is in it cannot be found; it can still be found by what it is called. */
+    @Test
+    fun aNoteTooBigToHoldIsFoundByItsNameButNotRead() = runTest {
+        val big = "* Big\nsomething inside\n" + "x".repeat(10_000) + "\n"
+        val storage = storageOf(notes + ("zbig.org" to big))
+        val vm = viewModel(storage, budgets = nothingFits.copy(maxNoteBytes = 1_000))
+        vm.server.load()
+        advanceUntilIdle()
+        storage.read.clear()
+
+        vm.search.run("zbig")
+        advanceUntilIdle()
+        assertEquals(listOf("zbig.org"), vm.search.results.map { it.path })
+
+        vm.search.run("something inside")
+        advanceUntilIdle()
+        assertEquals(emptyList(), vm.search.results)
+        assertFalse("zbig.org" in storage.read, "it is never read")
+    }
+
     /** Too much text to scan first: the screen does not wait for it. */
     @Test
     fun aBigLibraryIsNotWaitedForToBeShown() = runTest {

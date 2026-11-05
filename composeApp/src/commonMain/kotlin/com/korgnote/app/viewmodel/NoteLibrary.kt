@@ -98,6 +98,9 @@ class NoteLibrary(
     fun notAtHand(): List<String> =
         paths.filter { textAtHand(it) == null && !isTooLarge(it) }.sorted()
 
+    /** Every note too big to read: see [isTooLarge]. Search can still go by their names. */
+    fun tooLarge(): List<String> = paths.filter { isTooLarge(it) }.sorted()
+
     /** The texts of [group], read to go through and let go of again: no more than a few at a time. */
     suspend fun readThrough(group: List<String>): Map<String, String> = store.readSeveral(group)
 
