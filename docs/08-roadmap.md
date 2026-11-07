@@ -762,3 +762,16 @@ and a conflict copy that could not be written let the retry save over the other 
 this work. Running the whole suite with the caches sized to nothing (`-Dkorgnote.cacheHeap=1`) found an edit from
 the calendar landing on the wrong heading. All are fixed. Each of 35 protections was then checked by breaking it
 and seeing the test meant for it fail, which also showed up a flaky test passing for four of them.
+
+### T44 · The tour note
+**Landed** The welcome screens taught where the notes go and nothing about using the app, whose
+gestures have no labels: a tap on a heading edits it, on a keyword changes it, on a date opens the
+calendar, and a hold opens a menu. The first start now ends by offering a note, *Welcome to KorgNote*,
+whose headings each ask for one of those taps and say what it does. It is offered rather than written
+unasked, since it goes in with the person's own notes, and *Settings → Tour* opens it again later.
+**How** The words are string resources, in English and French; `tourNoteText` (`TourNote.kt`) puts
+the Org around them, so a translation cannot break the table, its formula, the heading link or the
+date, which is today's, with no time so that no reminder fires. `NoteFiles.openTour` writes it in the
+new-notes folder only when no note has its name, after the first sync, so a copy another device added
+or one half ticked through is opened, never written over. Covered by `TourNoteTest` and
+`OnboardingTest`.

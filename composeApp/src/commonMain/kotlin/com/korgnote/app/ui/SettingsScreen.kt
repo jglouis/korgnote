@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -100,6 +101,9 @@ import korgnote.composeapp.generated.resources.settings_server
 import korgnote.composeapp.generated.resources.settings_server_subtitle
 import korgnote.composeapp.generated.resources.settings_tag_colours
 import korgnote.composeapp.generated.resources.settings_tag_colours_subtitle
+import korgnote.composeapp.generated.resources.settings_tour
+import korgnote.composeapp.generated.resources.settings_tour_open
+import korgnote.composeapp.generated.resources.settings_tour_subtitle
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalTime
 import org.jetbrains.compose.resources.StringResource
@@ -130,6 +134,8 @@ fun SettingsScreen(
     onChangeNotesSource: (() -> Unit)? = null,
     /** Notifications were allowed from here, so the reminders already planned can be shown. */
     onNotificationsAllowed: () -> Unit = {},
+    /** Opens the tour note, adding it to the notes when it is not there; null to leave it out. */
+    onTour: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     var form by remember { mutableStateOf(SettingsForm()) }
@@ -202,6 +208,16 @@ fun SettingsScreen(
                     subtitle = stringResource(Res.string.settings_file_links_subtitle),
                 ) {
                     FileLinkSettings(form.fileLinks) { form = form.copy(fileLinks = it) }
+                }
+
+                if (onTour != null) {
+                    SettingsSection(
+                        icon = Icons.Filled.TouchApp,
+                        title = stringResource(Res.string.settings_tour),
+                        subtitle = stringResource(Res.string.settings_tour_subtitle),
+                    ) {
+                        OutlinedButton(onClick = onTour) { Text(stringResource(Res.string.settings_tour_open)) }
+                    }
                 }
                 // Room to scroll the last field out from under the button.
                 Spacer(Modifier.height(80.dp))

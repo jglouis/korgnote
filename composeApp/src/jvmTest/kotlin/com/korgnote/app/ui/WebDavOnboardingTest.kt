@@ -110,6 +110,7 @@ class WebDavOnboardingTest {
         onNodeWithText("Check the server").performClick()
         waitUntil { onAllNodesWithTextExist("The server can be used. No notes there yet: new notes will go there.") }
         onNodeWithText("Use this server").performClick()
+        onNodeWithText("Skip").performClick()
 
         assertEquals(listOf<NotesSource>(NotesSource.WebDav), chosen)
         assertEquals(WebDavAccount("https://cloud.example.com/notes", "me", "pw"), settings.getWebDavAccount())

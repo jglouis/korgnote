@@ -97,6 +97,21 @@ class NoteFiles(
         openNewNote(path)
     }
 
+    /**
+     * Opens the tour note ([tourNoteText]) at its top, writing it first in the new-notes folder when
+     * it is not there. One already there is only opened: it may be half ticked through, or another
+     * device added it. Returns its path, or null when [words]' title makes no file name.
+     */
+    suspend fun openTour(words: TourWords): String? {
+        val path = newNotePathFor(words.title) ?: return null
+        if (path in library || !store.create(path, tourNoteText(words, newId(), today()))) {
+            open(path)
+            return path
+        }
+        openNewNote(path, startHeading = false)
+        return path
+    }
+
     private fun headOfNewNote(title: String, tags: List<String>): String {
         val template = noteTemplate()
         return newNoteText(
@@ -118,13 +133,13 @@ class NoteFiles(
      * the server hears of it. Awaited, the two held the new-note dialog open for a sync round trip
      * and two scans of every note.
      */
-    private suspend fun openNewNote(path: String) {
+    private suspend fun openNewNote(path: String, startHeading: Boolean = true) {
         editor.cancel()
         note.path = path
         reload()
         refreshSoon()
         openAndWait(path)
-        editor.addAtEnd()
+        if (startHeading) editor.addAtEnd()
         scope.launch { server().pushQuietly() }
     }
 

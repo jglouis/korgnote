@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -101,6 +102,11 @@ import korgnote.composeapp.generated.resources.notes_onboarding_merged
 import korgnote.composeapp.generated.resources.notes_onboarding_nextcloud_address
 import korgnote.composeapp.generated.resources.notes_onboarding_no_folder
 import korgnote.composeapp.generated.resources.notes_onboarding_not_now
+import korgnote.composeapp.generated.resources.tour_add
+import korgnote.composeapp.generated.resources.tour_offer
+import korgnote.composeapp.generated.resources.tour_offer_intro
+import korgnote.composeapp.generated.resources.tour_offer_ordinary
+import korgnote.composeapp.generated.resources.tour_skip
 import korgnote.composeapp.generated.resources.notes_onboarding_pair_later
 import korgnote.composeapp.generated.resources.notes_onboarding_password
 import korgnote.composeapp.generated.resources.notes_onboarding_reminders
@@ -150,6 +156,8 @@ fun Onboarding(
     onChosen: (NotesSource) -> Unit,
     /** Goes back to the notes as they were; null on the first start, when there is nothing to go back to. */
     onCancel: (() -> Unit)?,
+    /** The tour note was asked for, on the first start's last step; [onChosen] follows at once. */
+    onTour: () -> Unit = {},
 ) {
     val repo = koinInject<SettingsRepository>()
     val pairing = remember { KoinPlatform.getKoin().getOrNull<DevicePairing>() }
@@ -163,14 +171,20 @@ fun Onboarding(
     // Chosen, waiting for the last step: kept encoded, so that it survives a rotation.
     var chosen by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // Notifications are asked about once, on the first start; from Settings the choice is all.
+    // Notifications and the tour are offered once, on the first start; from Settings the choice is all.
     fun finish(source: NotesSource) {
-        if (current == null && notifications != null && !notifications.granted) {
-            chosen = source.encode()
-            step = OnboardingStep.REMINDERS
-        } else {
+        if (current != null) {
             onChosen(source)
+            return
         }
+        chosen = source.encode()
+        step = if (notifications != null && !notifications.granted) OnboardingStep.REMINDERS else OnboardingStep.TOUR
+    }
+
+    fun done(tour: Boolean) {
+        val source = chosen?.let(NotesSource::decode) ?: return
+        if (tour) onTour()
+        onChosen(source)
     }
 
     fun back() {
@@ -180,7 +194,8 @@ fun Onboarding(
                 return
             }
             OnboardingStep.FOLDER, OnboardingStep.SERVER, OnboardingStep.WEBDAV -> OnboardingStep.CHOOSE
-            OnboardingStep.REMINDERS -> when (chosen?.let(NotesSource::decode)) {
+            // Back from the tour skips the reminders: they were answered, and asking again does nothing.
+            OnboardingStep.REMINDERS, OnboardingStep.TOUR -> when (chosen?.let(NotesSource::decode)) {
                 is NotesSource.Folder -> OnboardingStep.FOLDER
                 NotesSource.WebDav -> OnboardingStep.WEBDAV
                 else -> OnboardingStep.SERVER
@@ -239,15 +254,16 @@ fun Onboarding(
                     }
                     OnboardingStep.REMINDERS -> RemindersStep(
                         permission = notifications,
-                        onDone = { chosen?.let(NotesSource::decode)?.let(onChosen) },
+                        onDone = { step = OnboardingStep.TOUR },
                     )
+                    OnboardingStep.TOUR -> TourStep(onAdd = { done(tour = true) }, onSkip = { done(tour = false) })
                 }
             }
         }
     }
 }
 
-internal enum class OnboardingStep { CHOOSE, FOLDER, SERVER, WEBDAV, REMINDERS }
+internal enum class OnboardingStep { CHOOSE, FOLDER, SERVER, WEBDAV, REMINDERS, TOUR }
 
 @Composable
 private fun ChooseStep(changing: Boolean, onFolder: () -> Unit, onServer: () -> Unit, onWebDav: (() -> Unit)? = null) {
@@ -529,6 +545,24 @@ private fun RemindersStep(permission: PermissionAsk?, onDone: () -> Unit) {
         TextButton(onClick = onDone) { Text(stringResource(Res.string.notes_onboarding_not_now)) }
     }
     FaintHint(stringResource(Res.string.notes_onboarding_reminders_later))
+}
+
+/**
+ * The last step of the first start: a note to learn the app by tapping through it, offered rather
+ * than written unasked, since it goes in with the person's own notes.
+ */
+@Composable
+private fun TourStep(onAdd: () -> Unit, onSkip: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Icon(Icons.Filled.TouchApp, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Text(stringResource(Res.string.tour_offer), style = MaterialTheme.typography.headlineSmall)
+    }
+    Text(stringResource(Res.string.tour_offer_intro))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = onAdd) { Text(stringResource(Res.string.tour_add)) }
+        TextButton(onClick = onSkip) { Text(stringResource(Res.string.tour_skip)) }
+    }
+    FaintHint(stringResource(Res.string.tour_offer_ordinary))
 }
 
 /** Asks for the local network, which the phone forbids until asked, saying what it is wanted for. */

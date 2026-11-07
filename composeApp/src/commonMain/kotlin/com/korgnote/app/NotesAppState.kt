@@ -19,6 +19,7 @@ import com.korgnote.app.data.SettingsRepository
 import com.korgnote.app.ui.*
 import com.korgnote.app.viewmodel.LinkEdit
 import com.korgnote.app.viewmodel.NotesViewModel
+import com.korgnote.app.viewmodel.tourWords
 import kotlinx.coroutines.launch
 import com.korgnote.app.widgets.CalendarTarget
 import korgnote.composeapp.generated.resources.Res
@@ -105,6 +106,11 @@ internal class NotesAppState(
             selectedScreen = BottomItem.FILE
             drawerState.close()
         }
+    }
+
+    /** Opens the tour note, writing it first when it is not among the notes; from Settings, or the first start. */
+    suspend fun openTour() {
+        if (vm.noteFiles.openTour(tourWords()) != null) selectedScreen = BottomItem.FILE
     }
 
     fun selectTab(item: BottomItem) {

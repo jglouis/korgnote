@@ -1,0 +1,54 @@
+<resources>
+    <string name="tour_title">Bienvenue dans KorgNote</string>
+    <string name="tour_intro">Cette note montre où toucher. C’est une note ordinaire, rangée avec les autres : supprimez-la quand vous aurez fini.</string>
+
+    <string name="tour_todo_heading">Touchez TODO pour marquer ceci comme fait</string>
+    <string name="tour_todo_body">Le menu donne les mots-clés de la note. Celui que vous choisissez est écrit dans le fichier, comme Emacs l’écrirait.</string>
+
+    <string name="tour_edit_heading">Touchez ce titre pour le modifier</string>
+    <string name="tour_edit_body">Ou touchez ce texte : un titre et son texte s’ouvrent ensemble. Enregistrer et Abandonner sont au bout de la barre au-dessus du clavier. En modifiant, tapez [[ pour un lien vers une note, ou &lt; pour une date.</string>
+
+    <string name="tour_hold_heading">Maintenez ce titre pour plus d’options</string>
+    <string name="tour_hold_body">Son menu ajoute un titre en dessous ou un sous-titre, déplace celui-ci, lance le chrono, fixe une priorité, ou le reclasse sous un autre titre.</string>
+
+    <string name="tour_boxes_heading">Cochez les cases</string>
+    <string name="tour_box_1">Touchez une case</string>
+    <string name="tour_box_2">Voyez le compte changer dans le titre</string>
+    <string name="tour_box_3">Cochez-les toutes</string>
+
+    <string name="tour_calendar_heading">Retrouvez ceci dans le calendrier</string>
+    <string name="tour_calendar_body">Touchez la date ci-dessus : le calendrier s’ouvre sur ce jour, avec ce titre dedans. Touchez-le là-bas pour revenir ; maintenez-le pour le replanifier ou le marquer comme fait.</string>
+
+    <string name="tour_table_heading">Touchez le tableau</string>
+    <string name="tour_table_body">Il s’ouvre en grille, un champ par cellule. Changez un nombre, puis appuyez sur Recalculer : le total est une formule #+TBLFM, calculée comme dans Emacs.</string>
+    <string name="tour_table_fruit">Fruit</string>
+    <string name="tour_table_count">Nombre</string>
+    <string name="tour_table_apples">Pommes</string>
+    <string name="tour_table_pears">Poires</string>
+    <string name="tour_table_total">Total</string>
+
+    <string name="tour_fold_heading">Repliez ce titre</string>
+    <string name="tour_fold_body">Le chevron à côté d’un titre replie tout ce qui est en dessous.</string>
+    <string name="tour_fold_child">Caché quand le titre au-dessus est replié</string>
+
+    <string name="tour_links_heading">Suivez un lien</string>
+    <string name="tour_links_body">%1$s mène au tableau ; la flèche retour en haut vous ramène ici. %2$s s’ouvre dans le navigateur.</string>
+    <string name="tour_links_table">Ce lien</string>
+    <string name="tour_links_web">Le site d’Org mode</string>
+
+    <string name="tour_app_heading">Dans le reste de l’app</string>
+    <string name="tour_app_drawer">Le bouton ☰ en haut liste vos notes. Maintenez-en une pour l’épingler, la renommer ou la supprimer.</string>
+    <string name="tour_app_search">La recherche trouve les mots partout dans vos notes. Essayez tag:travail, todo:TODO ou priority:A.</string>
+    <string name="tour_app_calendar">Le calendrier montre vos dates par jour, par semaine ou par mois.</string>
+    <string name="tour_app_capture">Sur un téléphone, partagez un lien ou du texte depuis une autre app vers KorgNote pour le garder dans une note.</string>
+    <string name="tour_app_settings">Les Réglages contiennent les rappels, le dossier des nouvelles notes, et cette visite à nouveau.</string>
+
+    <string name="tour_offer">Apprendre en touchant</string>
+    <string name="tour_offer_intro">KorgNote peut ajouter une courte note, Bienvenue dans KorgNote, dont les titres montrent où toucher : un TODO, une case à cocher, une date, un tableau.</string>
+    <string name="tour_offer_ordinary">C’est une note ordinaire, enregistrée avec les autres. Supprimez-la quand vous aurez fini.</string>
+    <string name="tour_add">Ajouter la note de visite</string>
+    <string name="tour_skip">Passer</string>
+    <string name="settings_tour">Visite</string>
+    <string name="settings_tour_subtitle">Une note qui montre où toucher</string>
+    <string name="settings_tour_open">Ouvrir la note de visite</string>
+</resources>

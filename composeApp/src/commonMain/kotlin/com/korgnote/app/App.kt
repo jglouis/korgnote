@@ -59,6 +59,8 @@ fun App() {
         val choice = koinInject<NotesSourceChoice>()
         LaunchedEffect(choice) { choice.settle() }
         var changingSource by rememberSaveable { mutableStateOf(false) }
+        // Asked for on the welcome screens' last step, opened once the notes are first loaded.
+        var tourPending by rememberSaveable { mutableStateOf(false) }
         val source = choice.current
         // A pairing link, from the camera, while the notes are a folder or on a WebDAV server:
         // pairing is for the KorgNote server, which the welcome screens move the notes to. They
@@ -76,18 +78,27 @@ fun App() {
                     changingSource = false
                 },
                 onCancel = if (source != null) ({ changingSource = false }) else null,
+                onTour = { tourPending = true },
             )
             // Everything below starts over for another source: its notes are other notes.
-            else -> key(source) { NotesApp(source, choice, onChangeSource = { changingSource = true }) }
+            else -> key(source) {
+                NotesApp(source, choice, tour = tourPending, onTourOpened = { tourPending = false }) { changingSource = true }
+            }
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSource: () -> Unit) {
+private fun NotesApp(
+    source: NotesSource,
+    choice: NotesSourceChoice,
+    tour: Boolean,
+    onTourOpened: () -> Unit,
+    onChangeSource: () -> Unit,
+) {
     val vm = koinViewModel<NotesViewModel>(key = "notes:${source.encode()}") { parametersOf(source) }
-    rememberNotesAppState(source, vm, koinInject<SettingsRepository>()).NotesShell(choice) {
+    rememberNotesAppState(source, vm, koinInject<SettingsRepository>()).NotesShell(choice, tour, onTourOpened) {
         // Stays alive behind the next source's: it should not stay in the way of those notes.
         vm.library.letGo()
         onChangeSource()
@@ -96,12 +107,23 @@ private fun NotesApp(source: NotesSource, choice: NotesSourceChoice, onChangeSou
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NotesAppState.NotesShell(choice: NotesSourceChoice, onChangeSource: () -> Unit) {
+private fun NotesAppState.NotesShell(
+    choice: NotesSourceChoice,
+    /** The tour note was asked for on the welcome screens, and is opened once the notes are loaded. */
+    tour: Boolean,
+    onTourOpened: () -> Unit,
+    onChangeSource: () -> Unit,
+) {
     val focusManager = LocalFocusManager.current
     LaunchedEffect(Unit) { TagColors.chosen = settingsRepo.getTagColors() }
     LaunchedEffect(vm) {
         choice.active = vm.server
         vm.server.load()
+        // After the first sync, so that a tour note another device added is found and only opened.
+        if (tour) {
+            onTourOpened()
+            openTour()
+        }
         // What was captured while the app was closed — on iOS, from the share sheet — goes in now.
         vm.fileCaptures()
         // Then follow changes made elsewhere for the rest of the session.
@@ -447,6 +469,7 @@ private fun NotesAppState.NotesShell(choice: NotesSourceChoice, onChangeSource: 
                                     notesSource = source,
                                     onChangeNotesSource = onChangeSource.takeIf { offersNotesFolder },
                                     onNotificationsAllowed = vm.agenda::onNotificationsAllowed,
+                                    onTour = { scope.launch { openTour() } },
                                 )
                             }
                         }

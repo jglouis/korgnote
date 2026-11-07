@@ -54,7 +54,48 @@ class OnboardingTest {
         onNodeWithText("Connect to your computer").assertExists()
         onNodeWithText("Continue").assertExists()
         onNodeWithText("Pair later").performClick()
+        onNodeWithText("Skip").performClick()
 
+        assertEquals(listOf<NotesSource>(NotesSource.Server), chosen)
+    }
+
+    @Test
+    fun theFirstStartEndsByOfferingTheTour() = runComposeUiTest {
+        val calls = mutableListOf<String>()
+        setContent {
+            Onboarding(current = null, onChosen = { calls += "chosen $it" }, onCancel = null, onTour = { calls += "tour" })
+        }
+
+        onNodeWithText("My computer, with the KorgNote server").performClick()
+        onNodeWithText("Pair later").performClick()
+        onNodeWithText("Learn by tapping").assertExists()
+        assertEquals(emptyList(), calls)
+        onNodeWithText("Add the tour note").performClick()
+
+        // The tour first, so that it is waiting when the notes open.
+        assertEquals(listOf("tour", "chosen ${NotesSource.Server}"), calls)
+    }
+
+    @Test
+    fun backFromTheTourGoesToTheStepBefore() = runComposeUiTest {
+        setContent { Onboarding(current = null, onChosen = {}, onCancel = null) }
+
+        onNodeWithText("My computer, with the KorgNote server").performClick()
+        onNodeWithText("Pair later").performClick()
+        onNodeWithContentDescription("Back").performClick()
+
+        onNodeWithText("Connect to your computer").assertExists()
+    }
+
+    @Test
+    fun changingWhereTheNotesAreOffersNoTour() = runComposeUiTest {
+        val chosen = mutableListOf<NotesSource>()
+        setContent { Onboarding(current = NotesSource.WebDav, onChosen = { chosen += it }, onCancel = {}) }
+
+        onNodeWithText("My computer, with the KorgNote server").performClick()
+        onNodeWithText("Pair later").performClick()
+
+        onNodeWithText("Learn by tapping").assertDoesNotExist()
         assertEquals(listOf<NotesSource>(NotesSource.Server), chosen)
     }
 
