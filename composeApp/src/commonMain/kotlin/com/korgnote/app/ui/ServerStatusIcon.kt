@@ -13,6 +13,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
@@ -144,20 +145,33 @@ fun ServerStatusIcon(
  * What [ServerStatusIcon] says on a long press, written out, for Settings: that is where one goes to
  * see whether the notes are in step with the server, so the answer should not need a gesture.
  *
+ * When the last sync was comes first, on a line of its own. Why the server can't be reached comes
+ * under it, smaller and fainter: being offline is expected, the app works without the server, and
+ * the reason is only there for whoever wonders why the time is old.
+ *
  * A sync under way is only mentioned before the first one has got through: a save's push takes a
  * blink, and the line would flicker with every edit.
  */
 @Composable
 fun SyncStatusText(unreachable: String?, syncing: Boolean, lastSynced: Instant?, modifier: Modifier = Modifier) {
     val now = rememberNow(lastSynced)
-    val last = lastSynced?.let { stringResource(Res.string.notes_sync_last, syncAgeOf(it, now).sentence(), clockTime(it)) }
-    val text = when {
-        unreachable != null && !syncing -> listOfNotNull(unreachable, last).joinToString(" ")
-        last != null -> last
+    val status = when {
+        lastSynced != null -> stringResource(Res.string.notes_sync_last, syncAgeOf(lastSynced, now).sentence(), clockTime(lastSynced))
         syncing -> stringResource(Res.string.notes_sync_running)
         else -> stringResource(Res.string.settings_sync_never)
     }
-    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(modifier) {
+        Text(status, style = MaterialTheme.typography.bodySmall, color = muted)
+        if (unreachable != null && !syncing) {
+            Text(
+                unreachable,
+                style = MaterialTheme.typography.labelSmall,
+                color = muted.copy(alpha = 0.7f),
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+    }
 }
 
 /** The time now, brought up to date every [AGE_TICK] and whenever [lastSynced] changes. */

@@ -37,7 +37,27 @@ class SyncStatusTextTest {
             SyncStatusText(unreachable = "The server did not answer.", syncing = false, lastSynced = Clock.System.now() - 5.minutes)
         }
 
-        onNodeWithText("The server did not answer. Last synced 5 min ago", substring = true).assertExists()
+        // Two lines, not one sentence: the time on its own, the reason under it.
+        onNodeWithText("Last synced 5 min ago, at ", substring = true).assertExists()
+        onNodeWithText("The server did not answer.").assertExists()
+    }
+
+    @Test
+    fun anUnreachableServerNeverSyncedStillSaysSo() = runComposeUiTest {
+        setContent { SyncStatusText(unreachable = "The server did not answer.", syncing = false, lastSynced = null) }
+
+        onNodeWithText("Not synced yet.").assertExists()
+        onNodeWithText("The server did not answer.").assertExists()
+    }
+
+    @Test
+    fun aRetryUnderWayHidesTheReason() = runComposeUiTest {
+        setContent {
+            SyncStatusText(unreachable = "The server did not answer.", syncing = true, lastSynced = Clock.System.now() - 5.minutes)
+        }
+
+        onNodeWithText("Last synced 5 min ago", substring = true).assertExists()
+        onNodeWithText("The server did not answer.").assertDoesNotExist()
     }
 
     @Test
