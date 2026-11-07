@@ -67,6 +67,8 @@ just not worth the effort.
 
 Out of scope: running code blocks (Babel), export and publishing.
 
+Feature by feature, what is supported and what is not: [Org mode support](docs/org-features.md).
+
 ## Get started
 
 1. **Install the app.** On an Android phone (7.0 or later), open the

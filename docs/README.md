@@ -28,6 +28,7 @@ What is still open is in one place: the [gaps list in 08](08-roadmap.md#open-and
 | [09-element-editing.md](09-element-editing.md) | Editing one heading at a time as a range splice, the only editing surface: the menu, folding, keywords and what they log, priorities, refile, links, tables, resuming. |
 | [10-capture.md](10-capture.md) | **Built (1.5.0).** Capturing from other apps: share sheet, selected text, calendar files, `korgnote://capture`. No templates: one dialog that asks where, and shows what. |
 | [11-clocking.md](11-clocking.md) | Org's clocking: `CLOCK:` lines in the logbook, the running-clock bar, totals beside headings, clocked time in the calendar and its report, Android's ongoing notification. |
+| [org-features.md](org-features.md) | Org mode, feature by feature: what is supported, partly, shown as written, or not at all. Linked from the main README. |
 | [notes/editor-perf.md](notes/editor-perf.md) | The measurements behind the editor's performance work, and what they taught. |
 
 Documents 04–07 and 09–11 are self-contained, one per subsystem. Where the code went another way than was
