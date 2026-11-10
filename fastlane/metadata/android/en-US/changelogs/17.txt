@@ -1,0 +1,4 @@
+* A tour note shows what to tap: TODOs, headings, checkboxes, dates, tables, links.
+* It is offered at the end of the first start, and Settings → Tour opens it anytime.
+* Settings shows the last sync on its own line, and why it failed under it.
+* Fixed: a table cell's suggestions could miss the note's headings.
