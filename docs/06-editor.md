@@ -273,7 +273,8 @@ Because the client holds the whole corpus locally, search is a local problem.
   keeps only headings carrying the tag, **inherited** from parent headings and `#+FILETAGS:` the way Org
   inherits it; a tag a file's `#+TAGS:` line declares as a group also finds the headings carrying one of
   its members. `todo:NEXT` keeps headings whose own keyword is `NEXT` and `priority:A` those whose own cookie
-  is `[#A]`, neither inherited, as in Org. A term of these on its own lists the headings; with words, it
+  is `[#A]`, neither inherited, as in Org; `todo:open` keeps those whose keyword is any still to do, as Org's
+  `/!`, which is the TODO list as a search. A term of these on its own lists the headings; with words, it
   says where to look for them.
 - **Structured queries later**, mirroring the org-agenda habits worth keeping, such as `deadline:<=7d`. The
   parser already splits prefixed terms from words, so another prefix is a case in `SearchQuery.parse` and a

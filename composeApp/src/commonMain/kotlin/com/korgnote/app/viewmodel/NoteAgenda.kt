@@ -16,6 +16,7 @@ import com.korgnote.common.index.NoteFacts
 import com.korgnote.common.org.agenda.AgendaEntry
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOptions
+import com.korgnote.common.org.agenda.TodoEntry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -74,11 +75,15 @@ class NoteAgenda(
             paths.flatMap { facts.getValue(it).agenda },
             AgendaOptions(today = today()),
             paths.flatMap { facts.getValue(it).clocked },
+            paths.flatMap { facts.getValue(it).todos },
         )
     }
 
     /** Opens the file an agenda entry comes from, at its heading. */
     fun openEntry(entry: AgendaEntry) = open(entry.file, entry.headingOffset)
+
+    /** Opens the file a TODO comes from, at its heading. */
+    fun openTodo(todo: TodoEntry) = open(todo.file, todo.headingOffset)
 
     /** What reminders say, in the app's language once loaded; English until then. */
     private var reminderWords = ReminderWords()

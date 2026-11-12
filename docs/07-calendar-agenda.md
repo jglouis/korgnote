@@ -130,7 +130,7 @@ shows the new day's overdue items and warnings without the notes changing. No se
 | **Day** | all-day strip on top (scrolling past a third of the screen), hour grid with timed events as blocks, "now" line; pinch (or Ctrl and the wheel) to stretch or squeeze the hours, kept between day and week | where Google Calendar beats org-agenda |
 | **Week** | 7 columns, hour grid, and an all-day strip of three rows, ranges first, as bars, with a "+N" for the rest of a day, which opens that day; on a phone held upright the days scroll sideways, three and a bit on screen | planning the week |
 | **Month** | a grid with per-day chips: deadline vs scheduled colours, DONE de-emphasised, a multi-day range one bar across its days; each week as tall as its busiest day, scrolling when they need more than the screen | overview |
-| **Agenda list** | grouped by day, `TODO`-keyword and tag chips, overdue section on top, and the clock report under its seven days ([11](11-clocking.md#in-the-calendar)) | the closest thing to `org-agenda` |
+| **Agenda list** | a *TODOs · N* row, then an overdue section, then the days, with `TODO`-keyword and tag chips, and the clock report under its seven days ([11](11-clocking.md#in-the-calendar)) | the closest thing to `org-agenda` |
 
 Each period is a page that turns under the finger. Deadlines and scheduled items are visually distinct
 (colour and icon), DONE items dimmed, and every occurrence opens the document at `headingOffset`. In reading
@@ -142,6 +142,34 @@ configurable day start and end hours, and a drag horizon on the week.
 
 The header's period opens a date picker, to go straight to a day, a month or a year away in the
 same view. Done entries are hidden until *Show done* is switched on, in the header's ⋮ menu.
+
+**Filtering by keyword and tag**, as org-agenda's `/` narrows by tag (`AgendaFilter`, `AgendaIndex.filtered`).
+In the agenda list a tap on an entry's keyword or on one of its tag chips shows only what has it, and a
+second tap takes it away; *Filter…* in the ⋮ menu lists every keyword (still-to-do ones in declared order,
+then the rest) and every tag (most used first) to pick from. Within keywords, or within tags, one is
+enough; between the two, both are needed: `TODO` or `NEXT`, and `work`. Tags compare ignoring case,
+keywords as written. The filter narrows all four views and the TODO list; clocked time is left whole,
+being what was done. Nothing is added to the screen until a filter is on, and then only a chip per
+keyword or tag under the header, whose × removes it. Keyword colours come from the whole agenda
+(`AgendaIndex.whole`), so a filter does not recolour them. The filter and whether the TODO list is open
+are held by the app (`NotesAppState`), so opening a note from them and coming back finds them as they
+were; a date tapped elsewhere opens on its day, not the list. They do not outlive the app's process:
+nothing about what is shown is stored. Widgets and reminders ignore the filter.
+
+**The TODO list**, org-agenda's `t`: every heading whose keyword is still to do, dated or not, which the
+day views cannot show since an undated task is on no day. The agenda list's first line says how many
+there are (*TODOs · 8*, nothing when there are none), whatever the week holds, and opens them on a page
+of their own, so a busy week never pushes them out of reach; back returns to the agenda. They are grouped
+by keyword in the order the notes declare them, each group most important first, then soonest due; a
+row says when it is due (deadline before scheduled date, in red once missed). A tap on a group's keyword
+or a tag filters, a tap on a row opens its heading, and a long-press offers the clock and the keywords as
+in the agenda. The headings come from `openTodos` (`Todos.kt`), kept with each note's facts
+(`NoteFacts.todos`), which counts a note with a task as dated so the list is there as soon as the app
+opens; adding them meant a new index header, so the first start after updating reads every note once.
+Measured on 1,500 made-up notes, 12 MB with 9,700 open TODOs, on a laptop: 130 ms on top of the 640 ms
+working out every note's facts takes. Commented and archived subtrees are left out, as the agenda leaves
+them. Until the list is scrolled by hand it stays at its top, so that the row and the overdue section,
+which come in after the first frame on a cold start, are not left above it.
 
 Editing from the calendar: a long-press on an entry offers *Reschedule…* (a `SCHEDULED`),
 *Change deadline…* or *Change date…* (a stamp in the body), which opens the editor's date and time

@@ -11,6 +11,8 @@ import com.korgnote.common.org.everyMatch
 import com.korgnote.common.org.agenda.ClockedSpan
 import com.korgnote.common.org.agenda.agendaEntries
 import com.korgnote.common.org.agenda.clockedSpans
+import com.korgnote.common.org.agenda.TodoEntry
+import com.korgnote.common.org.agenda.openTodos
 import com.korgnote.common.org.edit.LastClocked
 import com.korgnote.common.org.edit.RunningClock
 import com.korgnote.common.org.edit.allNodes
@@ -58,6 +60,8 @@ data class NoteFacts(
     /** Its headings, for the pickers, in document order; at most [MAX_HEADINGS]. */
     val headings: List<HeadingFact> = emptyList(),
     val agenda: List<AgendaEntry> = emptyList(),
+    /** Its headings still to do, dated or not, for the TODO list. */
+    val todos: List<TodoEntry> = emptyList(),
     val clocked: List<ClockedSpan> = emptyList(),
     val running: List<RunningClock> = emptyList(),
     val lastClocked: List<LastClocked> = emptyList(),
@@ -83,15 +87,16 @@ data class NoteFacts(
         for ((key, value) in abbreviations) total += chars(key) + chars(value) + 48
         for (heading in headings) total += chars(heading.title) + chars(heading.id) + 32
         for (entry in agenda) total += chars(entry.title) + 240
+        for (todo in todos) total += chars(todo.title) + chars(todo.todo) + 160
         for (span in clocked) total += chars(span.title) + 120
         for (clock in running) total += chars(clock.title) + 64
         for (clock in lastClocked) total += chars(clock.title) + 64
         total
     }
 
-    /** Whether the calendar has anything to show from this note, or the clocks. */
+    /** Whether the calendar has anything to show from this note, its TODO list included, or the clocks. */
     val isDated: Boolean
-        get() = agenda.isNotEmpty() || clocked.isNotEmpty() || running.isNotEmpty() || lastClocked.isNotEmpty()
+        get() = agenda.isNotEmpty() || todos.isNotEmpty() || clocked.isNotEmpty() || running.isNotEmpty() || lastClocked.isNotEmpty()
 
     /** Whether these facts, and any offset from them, are about [text]. */
     fun isFrom(text: String): Boolean = textHash == null || textHash == contentHash(text)
@@ -181,6 +186,7 @@ fun factsOf(path: String, text: String, document: OrgDocument = text.toOrgDocume
         abbreviations = abbreviations,
         headings = headingsOf(document),
         agenda = agendaEntries(path, text),
+        todos = openTodos(path, text),
         clocked = clockedSpans(path, text),
         running = if (clocks) document.runningClocks() else emptyList(),
         lastClocked = if (clocks) document.lastClocked() else emptyList(),

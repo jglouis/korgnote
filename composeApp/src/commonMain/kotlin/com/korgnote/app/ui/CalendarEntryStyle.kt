@@ -20,7 +20,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.agenda.AgendaEntry
@@ -138,11 +142,15 @@ class KeywordColors(keywords: Collection<String>) {
         if (entry.done) return OrgColors.done
         return swatches.of(keyword, done = false)?.color()
     }
+
+    /** [keyword]'s colour as a keyword still to do, or null when the agenda has none open. */
+    fun of(keyword: String): Color? = swatches.of(keyword, done = false)?.color()
 }
 
 @Composable
-internal fun rememberKeywordColors(agenda: AgendaIndex) = remember(agenda) {
-    KeywordColors(agenda.entries.filter { !it.done }.mapNotNullTo(mutableSetOf()) { it.todo })
+internal fun rememberKeywordColors(agenda: AgendaIndex) = remember(agenda.whole) {
+    // From the whole agenda, so a filter does not move a keyword to another colour.
+    KeywordColors(agenda.whole.entries.filter { !it.done }.mapNotNullTo(mutableSetOf()) { it.todo })
 }
 
 /** A bar down the left edge in [color], under what follows; nothing for no colour. */
@@ -163,11 +171,19 @@ internal fun AgendaOccurrence.headline(
     prefix: String? = null,
     keywordColor: Color? = null,
     titleOnly: Boolean = false,
+    /** What a tap on the keyword does, when it does something of its own: narrowing the agenda to it. */
+    onKeyword: ((String) -> Unit)? = null,
 ): AnnotatedString = buildAnnotatedString {
     if (!titleOnly) {
         prefix?.let { append("$it ") }
         entry.todo?.let { todo ->
-            withStyle(SpanStyle(color = keywordColor ?: Color.Unspecified)) { append(todo) }
+            if (onKeyword != null) {
+                // Styled as the keyword, not as a link: the agenda would otherwise be underlined throughout.
+                val plain = TextLinkStyles(SpanStyle(color = keywordColor ?: Color.Unspecified, textDecoration = TextDecoration.None))
+                withLink(LinkAnnotation.Clickable(KEYWORD_LINK, styles = plain) { onKeyword(todo) }) { append(todo) }
+            } else {
+                withStyle(SpanStyle(color = keywordColor ?: Color.Unspecified)) { append(todo) }
+            }
             append(" ")
         }
         entry.priority?.let { append("[#${it.text}] ") }
@@ -175,6 +191,9 @@ internal fun AgendaOccurrence.headline(
     val title = buildOrgInlineString(entry.title, viewMode = true)
     append(AnnotatedString(title.text, title.spanStyles))
 }
+
+/** The tag of the link a keyword is drawn as where a tap on it filters by it. */
+internal const val KEYWORD_LINK = "agenda-keyword"
 
 /** The colour of clocked time, set apart from the kinds of date: work done, not work planned. */
 @Composable

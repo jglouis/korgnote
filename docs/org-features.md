@@ -98,8 +98,9 @@ lines it touches ([04](04-org-core.md#the-rule)).
 | Delays, `-2d` `--2d` | **Yes** | |
 | Habits | **Partly** | `.+2d/4d` repeats; there is no consistency graph, and `STYLE: habit` is not read. |
 | Diary sexps, `<%%(…)>` | **As text** | Not in the agenda. |
-| Agenda | **Yes** | Day, week and month views and a list, with reminders, a morning digest and Android widgets. |
-| Search, agenda queries | **Partly** | Words, `tag:`, `todo:` and `priority:`, saved by name. Not the match syntax (`+work-boss/NEXT`), property searches or custom agenda commands. |
+| Agenda | **Yes** | Day, week and month views and a list, with reminders, a morning digest and Android widgets. Narrowed by TODO keyword and tag, as `/` does. |
+| TODO list, `t` | **Yes** | Every heading still to do, dated or not, by keyword, from the top of the agenda. |
+| Search, agenda queries | **Partly** | Words, `tag:`, `todo:` (`todo:open` for any keyword still to do) and `priority:`, saved by name. Not the match syntax (`+work-boss/NEXT`), property searches or custom agenda commands. |
 | `#+CATEGORY:` | **No** | |
 | Agenda files | **No** | Every note is in the agenda. |
 

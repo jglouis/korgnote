@@ -282,7 +282,7 @@ class NoteIndex(
 
     private companion object {
         /** Change it with what [factsOf] finds, and every note is scanned again. */
-        const val HEADER = "korgnote-index-1"
+        const val HEADER = "korgnote-index-2"
 
         const val GROUP_NOTES = 8
         val PROGRESS_EVERY: Duration = 2.seconds
@@ -293,11 +293,13 @@ class NoteIndex(
         /** Without the path each entry repeats, which [load] puts back: it is most of an entry on disk. */
         fun NoteFacts.bare() = copy(
             agenda = agenda.map { it.copy(file = "") },
+            todos = todos.map { it.copy(file = "") },
             clocked = clocked.map { it.copy(file = "") },
         )
 
         fun NoteFacts.at(path: String) = copy(
             agenda = agenda.map { it.copy(file = path) },
+            todos = todos.map { it.copy(file = path) },
             clocked = clocked.map { it.copy(file = path) },
         )
     }

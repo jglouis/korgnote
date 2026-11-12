@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -598,21 +599,37 @@ private const val PRIORITY_TAG = "priority"
  * [maxLines] allows, and whatever does not fit is left out.
  */
 @Composable
-fun TagChips(tags: List<String>, modifier: Modifier = Modifier, maxLines: Int = Int.MAX_VALUE) {
+fun TagChips(
+    tags: List<String>,
+    modifier: Modifier = Modifier,
+    maxLines: Int = Int.MAX_VALUE,
+    /** What a tap on a chip does, when it does something of its own; nothing, and the tap goes to what holds them. */
+    onTag: ((String) -> Unit)? = null,
+    /** What a screen reader says a tap on [tag] does. */
+    tagClickLabel: @Composable (tag: String) -> String? = { null },
+) {
     FlowRow(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
         maxLines = maxLines,
     ) {
-        tags.forEach { OrgTagChip(it) }
+        tags.forEach { tag ->
+            val label = tagClickLabel(tag)
+            OrgTagChip(tag, onTag?.let { { it(tag) } }, label)
+        }
     }
 }
 
 @Composable
-private fun OrgTagChip(tag: String) {
+private fun OrgTagChip(tag: String, onClick: (() -> Unit)? = null, clickLabel: String? = null) {
     val color = TagColors.of(tag)
-    Surface(color = color.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
+    val shape = RoundedCornerShape(50)
+    Surface(
+        color = color.copy(alpha = 0.12f),
+        shape = shape,
+        modifier = if (onClick == null) Modifier else Modifier.clip(shape).clickable(onClickLabel = clickLabel, onClick = onClick),
+    ) {
         Text(
             text = tag,
             style = MaterialTheme.typography.labelSmall,

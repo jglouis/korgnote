@@ -1,5 +1,7 @@
 package com.korgnote.app
 
+import com.korgnote.common.org.agenda.AgendaFilter
+import com.korgnote.app.ui.AgendaFilterSaver
 import com.korgnote.common.org.link.LinkTarget
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListState
@@ -54,6 +56,10 @@ internal class NotesAppState(
     calendarView: MutableState<CalendarTarget?>,
     calendarTarget: MutableState<CalendarTarget?>,
     calendarRequests: MutableIntState,
+    /** What the calendar is narrowed to; kept here so a note opened from it comes back to it narrowed. */
+    val agendaFilter: MutableState<AgendaFilter>,
+    /** Whether the calendar shows its TODO list, kept here for the same reason. */
+    val todosOpen: MutableState<Boolean>,
 ) {
     var selectedScreen by selectedScreen
 
@@ -94,6 +100,8 @@ internal class NotesAppState(
     }
 
     fun openCalendar(target: CalendarTarget) {
+        // Asked for a day: the day, not the list over it.
+        todosOpen.value = false
         calendarTarget = target
         calendarRequests++
         selectedScreen = BottomItem.CALENDAR
@@ -163,8 +171,13 @@ internal fun rememberNotesAppState(source: NotesSource, vm: NotesViewModel, sett
     val calendarTarget = rememberSaveable(stateSaver = OptionalCalendarTargetSaver) { mutableStateOf(calendarView.value) }
     val calendarRequests = rememberSaveable { mutableIntStateOf(0) }
     val documentListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+    val agendaFilter = rememberSaveable(stateSaver = AgendaFilterSaver) { mutableStateOf(AgendaFilter.NONE) }
+    val todosOpen = rememberSaveable { mutableStateOf(false) }
     return remember(vm) {
-        NotesAppState(source, vm, settingsRepo, scope, drawerState, documentListState, selectedScreen, calendarView, calendarTarget, calendarRequests)
+        NotesAppState(
+            source, vm, settingsRepo, scope, drawerState, documentListState, selectedScreen, calendarView, calendarTarget,
+            calendarRequests, agendaFilter, todosOpen,
+        )
     }
 }
 

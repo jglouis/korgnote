@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -36,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.korgnote.common.org.agenda.AgendaFilter
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.ClockedTotal
@@ -44,6 +47,7 @@ import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.cal_clocked_period
 import korgnote.composeapp.generated.resources.cal_clocked_report
 import korgnote.composeapp.generated.resources.cal_clocked_total
+import korgnote.composeapp.generated.resources.cal_filter_by
 import korgnote.composeapp.generated.resources.cal_nothing_planned
 import korgnote.composeapp.generated.resources.cal_still_reading
 import korgnote.composeapp.generated.resources.cal_overdue
@@ -72,12 +76,30 @@ fun AgendaListView(
     stillReading: Boolean = false,
     /** What a running clock counts to in the report; the start of [today] when not given. */
     now: LocalDateTime = LocalDateTime(today, LocalTime(0, 0)),
+    /** Opens the TODO list, from the row at the top that counts them. */
+    onShowTodos: () -> Unit = {},
+    /** What the agenda is narrowed to; a tap on a keyword or a tag adds it, or takes it away. */
+    filter: AgendaFilter = AgendaFilter.NONE,
+    onFilterChange: ((AgendaFilter) -> Unit)? = null,
 ) {
     val sections = remember(agenda, from, today, showDone) { agenda.agendaList(from, AGENDA_LIST_DAYS, today, showDone) }
     val last = from.plus(AGENDA_LIST_DAYS - 1, DateTimeUnit.DAY)
     val report = remember(agenda, from, now) { agenda.clocks.report(from, last, now) }
     val keywordColors = rememberKeywordColors(agenda)
-    LazyColumn(modifier = modifier.fillMaxSize().testTag("agendaList")) {
+    // The notes come in after the list is first drawn, and a list keeps its first item where it is: the
+    // TODOs row and what is overdue, arriving above today, would start out of sight. Until the list
+    // is scrolled by hand, it stays at its top.
+    val listState = rememberLazyListState()
+    var scrolledByHand by remember { mutableStateOf(false) }
+    LaunchedEffect(listState.isScrollInProgress) { if (listState.isScrollInProgress) scrolledByHand = true }
+    LaunchedEffect(agenda.todos.isNotEmpty(), sections.firstOrNull()?.date) {
+        if (!scrolledByHand) listState.scrollToItem(0)
+    }
+    LazyColumn(state = listState, modifier = modifier.fillMaxSize().testTag("agendaList")) {
+        // One line, whatever the week holds: the list itself is a page of its own.
+        if (agenda.todos.isNotEmpty()) {
+            item(key = "todos") { TodosRow(agenda.todos.size, onShowTodos) }
+        }
         for (section in sections) {
             item(key = "header-${section.date}") {
                 val date = section.date
@@ -113,7 +135,12 @@ fun AgendaListView(
             val leading = if (section.occurrences.any { it.timeLabel() != null }) 88.dp else 24.dp
             // The time as well: a stamp repeating by the hour lands on one day several times.
             items(section.occurrences, key = { "${section.date}-${it.entry.file}-${it.entry.stamp.range.first}-${it.date}-${it.time}" }) {
-                AgendaRow(it, today, leading, keywordColors.of(it.entry), onOpen = { onOpen(it) })
+                AgendaRow(
+                    it, today, leading, keywordColors.of(it.entry),
+                    onKeyword = onFilterChange?.let { change -> { keyword: String -> change(filter.toggleKeyword(keyword)) } },
+                    onTag = onFilterChange?.let { change -> { tag: String -> change(filter.toggleTag(tag)) } },
+                    onOpen = { onOpen(it) },
+                )
             }
         }
         if (report.isNotEmpty()) {
@@ -194,11 +221,19 @@ internal fun ClockReport(report: List<ClockedTotal>, from: LocalDate, to: LocalD
 
 /** `Mon 2 Nov`, in the language the app is shown in. */
 @Composable
-private fun shortDay(date: LocalDate): String = "${date.dayOfWeek.shortName()} ${date.day} ${date.month.shortName()}"
+internal fun shortDay(date: LocalDate): String = "${date.dayOfWeek.shortName()} ${date.day} ${date.month.shortName()}"
 
 
 @Composable
-private fun AgendaRow(occurrence: AgendaOccurrence, today: LocalDate, leading: Dp, keywordColor: Color?, onOpen: () -> Unit) {
+private fun AgendaRow(
+    occurrence: AgendaOccurrence,
+    today: LocalDate,
+    leading: Dp,
+    keywordColor: Color?,
+    onKeyword: ((String) -> Unit)?,
+    onTag: ((String) -> Unit)?,
+    onOpen: () -> Unit,
+) {
     val accent = occurrence.entry.kind.accent()
     var menu by remember { mutableStateOf(false) }
     Row(
@@ -225,13 +260,19 @@ private fun AgendaRow(occurrence: AgendaOccurrence, today: LocalDate, leading: D
                 Text(it.label(), style = MaterialTheme.typography.labelSmall, color = accent, fontWeight = FontWeight.SemiBold)
             }
             Text(
-                occurrence.headline(keywordColor = keywordColor),
+                occurrence.headline(keywordColor = keywordColor, onKeyword = onKeyword),
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             if (occurrence.entry.tags.isNotEmpty()) {
-                TagChips(occurrence.entry.tags, Modifier.padding(top = 2.dp), maxLines = 1)
+                TagChips(
+                    occurrence.entry.tags,
+                    Modifier.padding(top = 2.dp),
+                    maxLines = 1,
+                    onTag = onTag,
+                    tagClickLabel = { stringResource(Res.string.cal_filter_by, it) },
+                )
             }
         }
     }

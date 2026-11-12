@@ -48,6 +48,15 @@
     <string name="cal_status_continues">En cours</string>
     <string name="cal_status_ends">Fin</string>
     <string name="cal_status_prefix">%1$s :</string>
+    <string name="cal_filter">Filtrer…</string>
+    <string name="cal_filter_title">Afficher seulement</string>
+    <string name="cal_filter_keywords">Mots-clés</string>
+    <string name="cal_filter_tags">Étiquettes</string>
+    <string name="cal_filter_clear">Effacer</string>
+    <string name="cal_filter_by">Afficher seulement %1$s</string>
+    <string name="cal_filter_remove">Ne plus filtrer par %1$s</string>
+    <string name="cal_todos">Tâches</string>
+    <string name="cal_todos_none">Rien à faire</string>
 
     <string name="remind_all_day">Toute la journée</string>
     <string name="remind_one_entry">1 entrée</string>

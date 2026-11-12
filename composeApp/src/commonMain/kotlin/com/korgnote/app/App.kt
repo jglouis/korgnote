@@ -434,6 +434,12 @@ private fun NotesAppState.NotesShell(
                                         selectedScreen = BottomItem.FILE
                                     },
                                     headerActions = statusIcons,
+                                    onOpenTodo = { todo ->
+                                        vm.agenda.openTodo(todo)
+                                        selectedScreen = BottomItem.FILE
+                                    },
+                                    filterState = agendaFilter,
+                                    todosOpenState = todosOpen,
                                     actions = remember(vm) {
                                         CalendarActions(
                                             isRunning = { file, offset -> vm.clockActions.clockRunningOn(file, offset) != null },

@@ -143,4 +143,16 @@ class OrgSmallGapsTests {
         assertEquals(listOf("Shop"), hits.map { it.breadcrumb.last() })
         assertTrue(hits.all { it.kind == SearchHit.Kind.LINE })
     }
+
+    @Test
+    fun todoOpenFindsEveryKeywordStillToDo() {
+        val notes = mapOf(
+            "a.org" to "#+TODO: TODO NEXT OPEN | DONE\n* TODO Shop :home:\n* NEXT Call\n* OPEN Ticket\n* DONE Paid\n* Notes\n",
+            "b.org" to "* TODO Read\n* DONE Read more\n",
+            "c.org" to "* Nothing to do\n",
+        )
+        assertEquals(listOf("Shop", "Call", "Ticket", "Read"), searchOrg(notes, "todo:open").map { it.breadcrumb.last() })
+        assertEquals(listOf("Shop"), searchOrg(notes, "todo:OPEN tag:home").map { it.breadcrumb.last() })
+        assertEquals(SearchQuery(open = true), SearchQuery.parse("todo:Open"))
+    }
 }

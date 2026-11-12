@@ -775,3 +775,21 @@ date, which is today's, with no time so that no reminder fires. `NoteFiles.openT
 new-notes folder only when no note has its name, after the first sync, so a copy another device added
 or one half ticked through is opened, never written over. Covered by `TourNoteTest` and
 `OnboardingTest`.
+
+### T45 · Agenda filter and TODO list
+**Why** Asked for by two users in the same week: filtering the agenda by TODO keyword or tag, and a TODO
+list like org-agenda's `t`, "the only thing missing" for one of them.
+**Landed** A tap on a keyword or tag in the agenda list, or *Filter…* in the ⋮ menu, narrows every view;
+a chip under the header says so and removes it. The agenda list opens on a *TODOs · N* row that leads to
+every heading still to do, dated or not, grouped by keyword. Search takes `todo:open`. Kept off the screen
+on purpose: no new view chip and no filter button, as the views' chips already scroll on a phone
+([07](07-calendar-agenda.md#views)).
+**Verified** `TodoListTests` (7), the `todo:open` case in `OrgSmallGapsTests`, `AgendaFilterAndTodosTest`
+(4, through `CalendarScreen`), and on the spare A52s with made-up notes from a scratch server: tag and
+keyword taps, the dialog, the week filtered, the TODO page, a note opened from it and back.
+**Found on the phone** On a cold start the TODOs row and the overdue section came in above today's
+heading after the list was first drawn, and the list kept today at the top, hiding both; it now stays at
+its top until scrolled by hand. Tapping a keyword drew it underlined, as a link: it is styled as the
+keyword.
+**Not included** Excluding a tag (`-work`), Org's options to leave scheduled or dated tasks out of the
+TODO list, and keeping the filter across restarts.

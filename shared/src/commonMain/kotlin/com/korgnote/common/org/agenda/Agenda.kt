@@ -240,7 +240,7 @@ internal inline fun forEachStampedLine(
 }
 
 /** The title as it should read in a list: a stamp in the heading is shown as the date, not as text. */
-private fun String.withoutStamps(): String =
+internal fun String.withoutStamps(): String =
     // A range's two stamps go with the `--` between them, which means nothing left on its own.
     OrgSyntax.timestamp.replace(replace(STAMP_RANGE, ""), "").replace(WHITESPACE_RUN, " ").trim()
 
@@ -455,7 +455,13 @@ class AgendaIndex(
     val options: AgendaOptions,
     /** Every clocked span in the notes, which the day and week draw and the agenda sums. */
     val clocks: List<ClockedSpan> = emptyList(),
+    /** Every heading still to do, dated or not: the TODO list. */
+    val todos: List<TodoEntry> = emptyList(),
+    private val unfiltered: AgendaIndex? = null,
 ) {
+    /** The index this one was [filtered] from, or this one: what a filter can be chosen from, and what colours keywords. */
+    val whole: AgendaIndex get() = unfiltered ?: this
+
     private val months = mutableMapOf<Int, Map<LocalDate, List<AgendaOccurrence>>>()
 
     /** Occurrences on [date], in the order [occurrences] gives. */
@@ -474,10 +480,29 @@ class AgendaIndex(
 
     /** The same entries, carried over and warned of as on [today]; this one when it already is. */
     fun asOf(today: LocalDate): AgendaIndex =
-        if (today == options.today) this else AgendaIndex(entries, options.copy(today = today), clocks)
+        if (today == options.today) this else AgendaIndex(entries, options.copy(today = today), clocks, todos, unfiltered?.asOf(today))
+
+    /**
+     * Only the entries and TODOs [filter] lets through; this one when it lets everything through.
+     * Clocked time is left whole: it is what was done, not what is planned.
+     */
+    fun filtered(filter: AgendaFilter): AgendaIndex =
+        if (filter.isEmpty) this
+        else AgendaIndex(
+            entries.filter { filter.matches(it.todo, it.tags) },
+            options,
+            clocks,
+            todos.filter { filter.matches(it.todo, it.tags) },
+            whole,
+        )
 
     companion object {
-        fun of(files: Map<String, String>, options: AgendaOptions) = AgendaIndex(agendaEntries(files), options, clockedSpans(files))
+        fun of(files: Map<String, String>, options: AgendaOptions) = AgendaIndex(
+            agendaEntries(files),
+            options,
+            clockedSpans(files),
+            files.keys.sorted().flatMap { openTodos(it, files.getValue(it)) },
+        )
         val EMPTY = AgendaIndex(emptyList(), AgendaOptions(today = LocalDate(1970, 1, 1)))
     }
 }

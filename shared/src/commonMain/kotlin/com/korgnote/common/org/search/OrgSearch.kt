@@ -21,7 +21,9 @@ import com.korgnote.common.org.OrgPriority
  * the headings carrying one of its members, as Org's tag search does.
  *
  * `todo:NEXT` keeps headings whose own TODO keyword is `NEXT`, and `priority:A` those whose own
- * cookie is `[#A]`; neither is inherited, as in Org.
+ * cookie is `[#A]`; neither is inherited, as in Org. `todo:open` keeps those whose keyword is any
+ * still to do in their file, which is the TODO list, as Org's `/!` match is; a keyword actually
+ * spelled `OPEN` is one of them when it is still to do.
  *
  * Every term must match — terms narrow, they do not widen — and matching ignores case throughout,
  * for tags and keywords as well as text.
@@ -38,11 +40,13 @@ data class SearchQuery(
     val todo: List<String> = emptyList(),
     /** The priority the heading's cookie must give. */
     val priority: List<OrgPriority> = emptyList(),
+    /** `todo:open`: the heading's keyword must be one still to do. */
+    val open: Boolean = false,
 ) {
-    val isEmpty: Boolean get() = text.isEmpty() && tags.isEmpty() && todo.isEmpty() && priority.isEmpty()
+    val isEmpty: Boolean get() = text.isEmpty() && tags.isEmpty() && todo.isEmpty() && priority.isEmpty() && !open
 
     /** True when the query asks something of the heading itself, so the text before every heading cannot match. */
-    internal val needsHeading: Boolean get() = tags.isNotEmpty() || todo.isNotEmpty() || priority.isNotEmpty()
+    internal val needsHeading: Boolean get() = tags.isNotEmpty() || todo.isNotEmpty() || priority.isNotEmpty() || open
 
     companion object {
         /** Parses user input. Anything that is not a recognised prefix is a word to find. */
@@ -51,6 +55,7 @@ data class SearchQuery(
             val tags = mutableListOf<String>()
             val todo = mutableListOf<String>()
             val priority = mutableListOf<OrgPriority>()
+            var open = false
             for (token in tokenize(input)) {
                 val tagged = tagTermsOf(token)
                 val keyword = valueAfter(token, "todo:")?.takeIf { OrgSyntax.todoKeywordDeclaration.matches(it.uppercase()) }
@@ -58,12 +63,13 @@ data class SearchQuery(
                 val cookie = valueAfter(token, "priority:")?.uppercase()?.let(OrgPriority::of)
                 when {
                     tagged != null -> tags += tagged
+                    token.equals("todo:open", ignoreCase = true) -> open = true
                     keyword != null -> todo += keyword.lowercase()
                     cookie != null -> priority += cookie
                     else -> text += token.lowercase()
                 }
             }
-            return SearchQuery(text = text, tags = tags, todo = todo, priority = priority)
+            return SearchQuery(text = text, tags = tags, todo = todo, priority = priority, open = open)
         }
 
         /** What follows [prefix] in [token], or null when it does not start with it or nothing follows. */
@@ -194,6 +200,7 @@ fun searchOrgFile(
 
     val fileTags = fileTagsOf(text)
     val keywords = todoKeywordsOf(text, fallback)
+    if (query.open && keywords.todo.none { text.contains(it) }) return hits
     val groups = tagGroupsOf(text)
     val wantedTags = query.tags.map { groups.expand(it) }
     val ancestors = mutableListOf<Heading>()
@@ -211,7 +218,8 @@ fun searchOrgFile(
         val tags = fileTags + ancestors.flatMap { it.tags }
         val carriesTags = wantedTags.all { anyOf -> tags.any { it.lowercase() in anyOf } }
         val own = ancestors.lastOrNull()?.takeIf { !element.isPreamble }
-        val hasKeyword = query.todo.all { own?.todo?.equals(it, ignoreCase = true) == true }
+        val hasKeyword = query.todo.all { own?.todo?.equals(it, ignoreCase = true) == true } &&
+            (!query.open || own?.todo in keywords.todo)
         val hasPriority = query.priority.all { own?.priority == it }
         if (carriesTags && hasKeyword && hasPriority && hits.size < limit) {
             val breadcrumb = ancestors.map { it.title }

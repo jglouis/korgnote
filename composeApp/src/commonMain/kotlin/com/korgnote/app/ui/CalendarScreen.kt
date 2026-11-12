@@ -62,7 +62,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.widgets.CalendarTarget
+import androidx.compose.runtime.MutableState
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import com.korgnote.common.org.agenda.AgendaEntry
+import com.korgnote.common.org.agenda.AgendaFilter
+import com.korgnote.common.org.agenda.TodoEntry
+import korgnote.composeapp.generated.resources.cal_filter
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.AgendaOptions
@@ -113,6 +120,14 @@ fun CalendarScreen(
     stillReading: Boolean = false,
     /** What a long-press on an entry does to its heading — its clock, its keyword — and opening clocked time. */
     actions: CalendarActions? = null,
+    /** Opens the note a TODO is in, at its heading. */
+    onOpenTodo: (TodoEntry) -> Unit = {},
+    /**
+     * What the calendar is narrowed to, and whether the TODO list is open: held by the app when it
+     * gives them, so that both are still there on coming back from a note opened from them.
+     */
+    filterState: MutableState<AgendaFilter>? = null,
+    todosOpenState: MutableState<Boolean>? = null,
 ) = CompositionLocalProvider(LocalCalendarActions provides actions) {
     val clock by produceState(now ?: currentDateTime(), now) {
         if (now != null) return@produceState
@@ -124,7 +139,12 @@ fun CalendarScreen(
     val today = clock.date
     // The index is built when the notes change, and nothing need change overnight: what is carried
     // over and warned of follows this clock, not the day the index was built on.
-    val agendaToday = remember(agenda, today) { agenda.asOf(today) }
+    val ownFilter = rememberSaveable(stateSaver = AgendaFilterSaver) { mutableStateOf(AgendaFilter.NONE) }
+    val ownTodosOpen = rememberSaveable { mutableStateOf(false) }
+    var filter by (filterState ?: ownFilter)
+    var todosOpen by (todosOpenState ?: ownTodosOpen)
+    var filtering by remember { mutableStateOf(false) }
+    val agendaToday = remember(agenda, today, filter) { agenda.asOf(today).filtered(filter) }
     // Saved, as is the tab: turning the phone recreates the activity, and turning it to see more of
     // the calendar should not lose the place in it.
     var mode by rememberSaveable { mutableStateOf(initialMode ?: CalendarMode.Agenda) }
@@ -150,6 +170,27 @@ fun CalendarScreen(
         base = date
     }
 
+    if (filtering) {
+        AgendaFilterDialog(agendaToday, filter, onChange = { filter = it }, onDismiss = { filtering = false })
+    }
+    if (todosOpen) {
+        NavigationBackHandler(
+            state = rememberNavigationEventState(NavigationEventInfo.None),
+            isBackEnabled = true,
+            onBackCompleted = { todosOpen = false },
+        )
+        TodoListPage(
+            agenda = agendaToday,
+            today = today,
+            filter = filter,
+            onFilterChange = { filter = it },
+            onBack = { todosOpen = false },
+            onOpen = onOpenTodo,
+            modifier = modifier.background(MaterialTheme.colorScheme.surface).padding(8.dp),
+        )
+        return@CompositionLocalProvider
+    }
+
     Column(modifier = modifier.background(MaterialTheme.colorScheme.surface).padding(8.dp)) {
         CalendarHeader(
             title = mode.title(anchorDate),
@@ -172,8 +213,10 @@ fun CalendarScreen(
             onMode = { show(it) },
             onToggleDone = { showDone = !showDone },
             onPickDate = { pickingDate = true },
+            onFilter = { filtering = true },
             actions = headerActions,
         )
+        ActiveFilter(filter, onChange = { filter = it }, Modifier.padding(top = 4.dp))
         if (pickingDate) {
             GoToDateDialog(
                 initial = anchorDate,
@@ -202,6 +245,9 @@ fun CalendarScreen(
                         showDone = showDone,
                         onOpen = open,
                         now = clock,
+                        onShowTodos = { todosOpen = true },
+                        filter = filter,
+                        onFilterChange = { filter = it },
                     )
 
                     CalendarMode.Day -> TimeGridView(
@@ -259,6 +305,7 @@ private fun CalendarHeader(
     onMode: (CalendarMode) -> Unit,
     onToggleDone: () -> Unit,
     onPickDate: () -> Unit,
+    onFilter: () -> Unit,
     actions: @Composable () -> Unit,
 ) {
     // A tap on the period picks a date to go to: a day, a month or a year away, without swiping
@@ -343,6 +390,10 @@ private fun CalendarHeader(
                         role = Role.Switch
                         toggleableState = ToggleableState(showDone)
                     },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(Res.string.cal_filter)) },
+                    onClick = { open = false; onFilter() },
                 )
             }
         }
