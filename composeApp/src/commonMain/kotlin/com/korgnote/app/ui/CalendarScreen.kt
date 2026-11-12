@@ -22,7 +22,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.ui.platform.testTag
@@ -386,7 +386,7 @@ private fun CalendarHeader(
         val description = stringResource(if (filterActive) Res.string.cal_filter_on else Res.string.cal_filter)
         IconButton(onClick = onFilter, modifier = Modifier.semantics { contentDescription = description }) {
             BadgedBox(badge = { if (filterActive) Badge(Modifier.testTag("filterOn")) }) {
-                Icon(Icons.Filled.FilterList, contentDescription = null)
+                Icon(Icons.Filled.FilterAlt, contentDescription = null)
             }
         }
     }
