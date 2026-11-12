@@ -22,7 +22,11 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -76,14 +80,13 @@ import com.korgnote.common.org.agenda.AgendaOptions
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.cal_go
 import korgnote.composeapp.generated.resources.cal_go_to_date
-import korgnote.composeapp.generated.resources.cal_options
 import korgnote.composeapp.generated.resources.cal_mode_agenda
 import korgnote.composeapp.generated.resources.cal_mode_day
 import korgnote.composeapp.generated.resources.cal_mode_month
 import korgnote.composeapp.generated.resources.cal_mode_week
 import korgnote.composeapp.generated.resources.cal_next
 import korgnote.composeapp.generated.resources.cal_previous
-import korgnote.composeapp.generated.resources.cal_show_done
+import korgnote.composeapp.generated.resources.cal_filter_on
 import korgnote.composeapp.generated.resources.cal_today
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -171,7 +174,14 @@ fun CalendarScreen(
     }
 
     if (filtering) {
-        AgendaFilterDialog(agendaToday, filter, onChange = { filter = it }, onDismiss = { filtering = false })
+        AgendaFilterDialog(
+            agendaToday,
+            filter,
+            onChange = { filter = it },
+            showDone = showDone,
+            onShowDone = { showDone = it },
+            onDismiss = { filtering = false },
+        )
     }
     if (todosOpen) {
         NavigationBackHandler(
@@ -195,7 +205,7 @@ fun CalendarScreen(
         CalendarHeader(
             title = mode.title(anchorDate),
             mode = mode,
-            showDone = showDone,
+            filterActive = showDone || !filter.isEmpty,
             onToday = {
                 // Slid to when today is a page away, or back to the middle; jumped to otherwise.
                 val near = (CALENDAR_MIDDLE_PAGE - 1..CALENDAR_MIDDLE_PAGE + 1).firstOrNull { page ->
@@ -211,7 +221,6 @@ fun CalendarScreen(
             onPrevious = { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } },
             onNext = { scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } },
             onMode = { show(it) },
-            onToggleDone = { showDone = !showDone },
             onPickDate = { pickingDate = true },
             onFilter = { filtering = true },
             actions = headerActions,
@@ -298,12 +307,12 @@ private const val CALENDAR_MIDDLE_PAGE = CALENDAR_PAGES / 2
 private fun CalendarHeader(
     title: String,
     mode: CalendarMode,
-    showDone: Boolean,
+    /** Whether anything is filtered out, or done entries shown: the icon says so. */
+    filterActive: Boolean,
     onToday: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onMode: (CalendarMode) -> Unit,
-    onToggleDone: () -> Unit,
     onPickDate: () -> Unit,
     onFilter: () -> Unit,
     actions: @Composable () -> Unit,
@@ -371,30 +380,13 @@ private fun CalendarHeader(
             }
         }
     }
-    // How the calendar shows what it shows, behind ⋮: whether done entries show, as a switch. It was
-    // an eye that opened and shut, which said neither what it hid nor whether it was hiding it, and
-    // then a chip that a phone's width pushed off the end of the views'.
+    // What the calendar leaves out, and done entries: one icon, which says when anything is hidden or
+    // shown beyond the default. It replaced a ⋮ menu of two items that said neither.
     val options = @Composable {
-        var open by remember { mutableStateOf(false) }
-        Box {
-            IconButton(onClick = { open = true }) {
-                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(Res.string.cal_options))
-            }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                // Left open on a tap, so the switch is seen to move.
-                DropdownMenuItem(
-                    text = { Text(stringResource(Res.string.cal_show_done)) },
-                    trailingIcon = { Switch(checked = showDone, onCheckedChange = null) },
-                    onClick = onToggleDone,
-                    modifier = Modifier.semantics {
-                        role = Role.Switch
-                        toggleableState = ToggleableState(showDone)
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(Res.string.cal_filter)) },
-                    onClick = { open = false; onFilter() },
-                )
+        val description = stringResource(if (filterActive) Res.string.cal_filter_on else Res.string.cal_filter)
+        IconButton(onClick = onFilter, modifier = Modifier.semantics { contentDescription = description }) {
+            BadgedBox(badge = { if (filterActive) Badge(Modifier.testTag("filterOn")) }) {
+                Icon(Icons.Filled.FilterList, contentDescription = null)
             }
         }
     }

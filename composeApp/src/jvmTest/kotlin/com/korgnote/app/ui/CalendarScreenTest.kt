@@ -178,13 +178,24 @@ class CalendarScreenTest {
         show(CalendarMode.Agenda)
         onAllNodesWithText("Water plants", substring = true).assertCountEquals(0)
 
-        onNodeWithContentDescription("Calendar options").performClick()
+        onNodeWithTag("filterOn").assertDoesNotExist()
+        onNodeWithContentDescription("Filter").performClick()
         onNodeWithText("Show done").assertIsOff().performClick()
         assertShown("Water plants")
 
-        // The menu stays open, the switch now on.
-        onNodeWithText("Show done").assertIsOn().performClick()
+        // The dialog stays open, the switch now on; behind it, the icon says something is changed.
+        onNodeWithText("Show done").assertIsOn()
+        onNodeWithText("OK").performClick()
+        onNodeWithContentDescription("Filter, on").assertExists()
+        onNodeWithTag("filterOn", useUnmergedTree = true).assertExists()
+
+        // Clear puts it back as it starts.
+        onNodeWithContentDescription("Filter, on").performClick()
+        onNodeWithText("Clear").performClick()
+        onNodeWithText("Show done").assertIsOff()
+        onNodeWithText("OK").performClick()
         onAllNodesWithText("Water plants", substring = true).assertCountEquals(0)
+        onNodeWithContentDescription("Filter").assertExists()
     }
 
     @Test

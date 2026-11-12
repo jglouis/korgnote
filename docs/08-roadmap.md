@@ -779,7 +779,7 @@ or one half ticked through is opened, never written over. Covered by `TourNoteTe
 ### T45 · Agenda filter and TODO list
 **Why** Asked for by two users in the same week: filtering the agenda by TODO keyword or tag, and a TODO
 list like org-agenda's `t`, "the only thing missing" for one of them.
-**Landed** A tap on a keyword or tag in the agenda list, or *Filter…* in the ⋮ menu, narrows every view;
+**Landed** A tap on a keyword or tag in the agenda list, or the header's filter icon, narrows every view;
 a chip under the header says so and removes it. The agenda list opens on a *TODOs · N* row that leads to
 every heading still to do, dated or not, grouped by keyword. Search takes `todo:open`. Kept off the screen
 on purpose: no new view chip and no filter button, as the views' chips already scroll on a phone
@@ -791,5 +791,8 @@ keyword taps, the dialog, the week filtered, the TODO page, a note opened from i
 heading after the list was first drawn, and the list kept today at the top, hiding both; it now stays at
 its top until scrolled by hand. Tapping a keyword drew it underlined, as a link: it is styled as the
 keyword.
+**Then** The ⋮ menu, which held only *Show done* and *Filter…*, became a filter icon whose dialog
+starts with *Show done*, and which carries a dot whenever anything is hidden or done entries show. The
+calendar's floating button, a plain plus that on File adds a heading, became a calendar with a plus.
 **Not included** Excluding a tag (`-work`), Org's options to leave scheduled or dated tasks out of the
 TODO list, and keeping the filter across restarts.

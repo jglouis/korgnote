@@ -14,6 +14,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
@@ -118,8 +120,23 @@ internal fun NotesAppState.NotesFloatingButtons() {
     // event from the phone's calendar, put into the notes' own. It was in the
     // files' drawer, which is about notes, not dates.
     if (selectedScreen == BottomItem.CALENDAR) {
+        // A calendar with a plus, not the plus alone, which on File adds a heading.
         FloatingActionButton(onClick = { capturingEvent = true }) {
-            Icon(Icons.Filled.Add, contentDescription = stringResource(Res.string.capture_event))
+            Box(Modifier.size(28.dp)) {
+                Icon(
+                    Icons.Filled.CalendarToday,
+                    contentDescription = stringResource(Res.string.capture_event),
+                    modifier = Modifier.size(24.dp).align(Alignment.TopStart),
+                )
+                Icon(
+                    Icons.Filled.AddCircle,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(15.dp)
+                        .align(Alignment.BottomEnd)
+                        .background(FloatingActionButtonDefaults.containerColor, CircleShape),
+                )
+            }
         }
     }
     // While editing, the element's own actions live on the completion strip.

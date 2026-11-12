@@ -72,10 +72,9 @@ class AgendaFilterAndTodosTest {
     }
 
     @Test
-    fun theMenusFilterPicksAKeyword() = runComposeUiTest {
+    fun theFilterIconPicksAKeyword() = runComposeUiTest {
         show()
-        onNodeWithContentDescription("Calendar options").performClick()
-        onNodeWithText("Filter…").performClick()
+        onNodeWithContentDescription("Filter").performClick()
         onNodeWithTag("agendaFilterDialog").assertExists()
         onNodeWithText("NEXT").performClick()
         onNodeWithText("OK").performClick()

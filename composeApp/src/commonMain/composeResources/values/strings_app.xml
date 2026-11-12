@@ -24,7 +24,6 @@
     <string name="cal_mode_week">Week</string>
     <string name="cal_mode_month">Month</string>
     <string name="cal_show_done">Show done</string>
-    <string name="cal_options">Calendar options</string>
     <string name="cal_go_to_date">Go to a date</string>
     <string name="cal_go">Go</string>
     <string name="cal_reschedule">Reschedule…</string>
@@ -57,9 +56,9 @@
     <!-- A status before an entry's title: "Deadline: Submit the report". -->
     <string name="cal_status_prefix">%1$s:</string>
 
-    <!-- Narrowing the calendar to some TODO keywords and tags: the ⋮ menu's item, its dialog, and the chips that say a filter is on. -->
-    <string name="cal_filter">Filter…</string>
-    <string name="cal_filter_title">Show only</string>
+    <!-- Narrowing the calendar to some TODO keywords and tags, and showing done entries: the header's icon, as a screen reader names it (on: something is left out, or done entries show), its dialog, and the chips that say a filter is on. -->
+    <string name="cal_filter">Filter</string>
+    <string name="cal_filter_on">Filter, on</string>
     <string name="cal_filter_keywords">Keywords</string>
     <string name="cal_filter_tags">Tags</string>
     <string name="cal_filter_clear">Clear</string>

@@ -141,11 +141,17 @@ screen (`initialHour` in `CalendarLayout.kt`, `dayStartHour` in `TimeGridView.kt
 configurable day start and end hours, and a drag horizon on the week.
 
 The header's period opens a date picker, to go straight to a day, a month or a year away in the
-same view. Done entries are hidden until *Show done* is switched on, in the header's ⋮ menu.
+same view. Done entries are hidden until *Show done* is switched on, at the top of the dialog the header's
+filter icon opens: showing them is a filter like the others. The icon carries a dot whenever anything is
+left out or done entries show, and a screen reader calls it *Filter, on*. It replaced a ⋮ menu that held
+only these two and said nothing of either from outside.
+
+The calendar's floating button captures an event from the phone's calendar ([10](10-capture.md)). Its icon
+is a calendar with a plus, not the plus alone, which on the File tab adds a heading.
 
 **Filtering by keyword and tag**, as org-agenda's `/` narrows by tag (`AgendaFilter`, `AgendaIndex.filtered`).
 In the agenda list a tap on an entry's keyword or on one of its tag chips shows only what has it, and a
-second tap takes it away; *Filter…* in the ⋮ menu lists every keyword (still-to-do ones in declared order,
+second tap takes it away; the filter icon's dialog lists every keyword (still-to-do ones in declared order,
 then the rest) and every tag (most used first) to pick from. Within keywords, or within tags, one is
 enough; between the two, both are needed: `TODO` or `NEXT`, and `work`. Tags compare ignoring case,
 keywords as written. The filter narrows all four views and the TODO list; clocked time is left whole,

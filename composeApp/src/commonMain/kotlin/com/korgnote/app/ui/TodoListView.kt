@@ -32,6 +32,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -60,9 +63,10 @@ import korgnote.composeapp.generated.resources.cal_filter_clear
 import korgnote.composeapp.generated.resources.cal_filter_keywords
 import korgnote.composeapp.generated.resources.cal_filter_remove
 import korgnote.composeapp.generated.resources.cal_filter_tags
-import korgnote.composeapp.generated.resources.cal_filter_title
+import korgnote.composeapp.generated.resources.cal_filter
 import korgnote.composeapp.generated.resources.cal_kind_deadline
 import korgnote.composeapp.generated.resources.cal_kind_scheduled
+import korgnote.composeapp.generated.resources.cal_show_done
 import korgnote.composeapp.generated.resources.cal_status_overdue
 import korgnote.composeapp.generated.resources.cal_status_scheduled_ago
 import korgnote.composeapp.generated.resources.cal_today
@@ -120,8 +124,9 @@ private fun RemovableChip(label: String, onRemove: () -> Unit) {
 }
 
 /**
- * The ⋮ menu's *Filter…*: every keyword and tag in the agenda and the TODO list, to pick which to
- * show. A pick applies at once, behind the dialog.
+ * What the header's filter icon opens: whether done entries show, then every keyword and tag in the
+ * agenda and the TODO list, to pick which to show. A pick applies at once, behind the dialog; *Clear*
+ * puts everything back as it starts.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -129,6 +134,8 @@ internal fun AgendaFilterDialog(
     agenda: AgendaIndex,
     filter: AgendaFilter,
     onChange: (AgendaFilter) -> Unit,
+    showDone: Boolean,
+    onShowDone: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val whole = agenda.whole
@@ -139,9 +146,21 @@ internal fun AgendaFilterDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(Res.string.cal_filter_title)) },
+        title = { Text(stringResource(Res.string.cal_filter)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()).testTag("agendaFilterDialog")) {
+                // Finished entries are history, and a year of them buries what is still to do.
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .toggleable(value = showDone, role = Role.Switch, onValueChange = onShowDone)
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(Res.string.cal_show_done), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Switch(checked = showDone, onCheckedChange = null)
+                }
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 if (keywords.isNotEmpty()) {
                     Text(stringResource(Res.string.cal_filter_keywords), style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -171,7 +190,7 @@ internal fun AgendaFilterDialog(
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.ok)) } },
         dismissButton = {
-            TextButton(onClick = { onChange(AgendaFilter.NONE) }, enabled = !filter.isEmpty) {
+            TextButton(onClick = { onChange(AgendaFilter.NONE); onShowDone(false) }, enabled = showDone || !filter.isEmpty) {
                 Text(stringResource(Res.string.cal_filter_clear))
             }
         },
