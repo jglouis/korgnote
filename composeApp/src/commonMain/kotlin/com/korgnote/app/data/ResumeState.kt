@@ -22,8 +22,9 @@ data class ReadingPlace(
  * The screen the app was last left on, to open on again: the tab, and the calendar's view as it
  * was last seen there — which may be from before another tab was chosen.
  *
- * [savedOn] is the day it was left, as an ISO date: the calendar's period is only taken back on
- * that same day, since a calendar opened the next morning is wanted on that morning.
+ * [savedOn] is the day the calendar was last seen, as an ISO date: its period is only taken back on
+ * that same day, since a calendar opened the next morning is wanted on that morning — and the
+ * agenda's never, which is the days from today on.
  */
 @Serializable
 data class LastScreen(

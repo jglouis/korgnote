@@ -153,6 +153,7 @@ private fun NotesAppState.NotesShell(
     LifecycleResumeEffect(vm) {
         vm.agenda.refreshReminders()
         vm.server.onResume()
+        reopenCalendarLeftOvernight()
         // The share sheet may have queued captures while the app was in the background.
         scope.launch { vm.fileCaptures() }
         onPauseOrDispose {
@@ -163,13 +164,15 @@ private fun NotesAppState.NotesShell(
     }
     // Kept as it changes, so that the app opens on it again however it is closed.
     LaunchedEffect(Unit) {
-        snapshotFlow { selectedScreen to calendarView }.collect { (tab, view) ->
+        snapshotFlow { Triple(selectedScreen, calendarView, calendarSeenOn) }.collect { (tab, view, seenOn) ->
             settingsRepo.setLastScreen(
                 LastScreen(
                     tab = tab.name,
                     calendarMode = view?.mode?.name,
                     calendarDate = view?.date?.toString(),
-                    savedOn = currentDate().toString(),
+                    // The day the calendar was seen, not this one: another tab chosen the next
+                    // morning must not make yesterday's period today's.
+                    savedOn = seenOn.toString(),
                 ),
             )
         }
@@ -425,18 +428,18 @@ private fun NotesAppState.NotesShell(
                                     stillReading = vm.library.stillReading,
                                     initialMode = calendarTarget?.mode,
                                     initialAnchorDate = calendarTarget?.date,
-                                    onViewChanged = { mode, date -> calendarView = CalendarTarget(mode, date) },
+                                    onViewChanged = { mode, date -> onCalendarViewChanged(mode, date) },
                                     onOpenEntry = { entry ->
                                         // The heading is resolved by the view model once the file's text
                                         // has loaded: that text arrives asynchronously, so working it out
                                         // here would search the previously open file.
                                         vm.agenda.openEntry(entry)
-                                        selectedScreen = BottomItem.FILE
+                                        showNoteFromCalendar()
                                     },
                                     headerActions = statusIcons,
                                     onOpenTodo = { todo ->
                                         vm.agenda.openTodo(todo)
-                                        selectedScreen = BottomItem.FILE
+                                        showNoteFromCalendar()
                                     },
                                     filterState = agendaFilter,
                                     todosOpenState = todosOpen,
@@ -447,7 +450,7 @@ private fun NotesAppState.NotesShell(
                                             clockOut = { file, offset -> vm.clockActions.clockRunningOn(file, offset)?.let { vm.clockActions.clockOut(it) } },
                                             open = { file, offset ->
                                                 vm.onFileSelected(file, scrollToOffset = offset)
-                                                selectedScreen = BottomItem.FILE
+                                                showNoteFromCalendar()
                                             },
                                             keywords = { file -> vm.stateNotes.keywordsOf(file) },
                                             setTodo = { file, offset, keyword -> vm.stateNotes.setTodo(file, offset, keyword) },

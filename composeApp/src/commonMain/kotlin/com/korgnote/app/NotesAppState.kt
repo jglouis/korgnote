@@ -56,6 +56,8 @@ internal class NotesAppState(
     calendarView: MutableState<CalendarTarget?>,
     calendarTarget: MutableState<CalendarTarget?>,
     calendarRequests: MutableIntState,
+    calendarSeenOn: MutableState<LocalDate>,
+    noteFromCalendar: MutableState<Boolean>,
     /** What the calendar is narrowed to; kept here so a note opened from it comes back to it narrowed. */
     val agendaFilter: MutableState<AgendaFilter>,
     /** Whether the calendar shows its TODO list, kept here for the same reason. */
@@ -64,14 +66,23 @@ internal class NotesAppState(
     var selectedScreen by selectedScreen
 
     /**
-     * The calendar's view and period as last seen there, which its tab opens on again, now or at the
-     * next launch. A period left on an earlier day is not taken back: the calendar opens on today,
-     * in the view it was left in.
+     * The calendar's view and period as last seen there. Its tab opens in that view again, now or at
+     * the next launch, but not always on that period: see [reopenedCalendar].
      */
     var calendarView by calendarView
 
+    /** The day [calendarView] was seen on, which is what makes its period one from an earlier day. */
+    var calendarSeenOn by calendarSeenOn
+        private set
+
     /**
-     * The view and day the calendar opens on: from its tab, the one it was left on; when asked from
+     * Whether the note showing was opened from the calendar, with no other tab looked at since: the
+     * calendar is then gone back to rather than opened, and is wanted where it was.
+     */
+    private var noteFromCalendar by noteFromCalendar
+
+    /**
+     * The view and day the calendar opens on: from its tab, what [reopenedCalendar] makes of where it was left; when asked from
      * elsewhere — a tapped SCHEDULED or DEADLINE date opens its day, a widget the view it shows —
      * that one; and null for the calendar's own starting view, when it was never left anywhere.
      */
@@ -102,9 +113,32 @@ internal class NotesAppState(
     fun openCalendar(target: CalendarTarget) {
         // Asked for a day: the day, not the list over it.
         todosOpen.value = false
+        noteFromCalendar = false
         calendarTarget = target
         calendarRequests++
         selectedScreen = BottomItem.CALENDAR
+    }
+
+    /** The calendar moved to [mode] and [date], or first showed them. */
+    fun onCalendarViewChanged(mode: CalendarMode, date: LocalDate) {
+        calendarView = CalendarTarget(mode, date)
+        calendarSeenOn = currentDate()
+    }
+
+    /** Shows the note the calendar just opened, an entry's or a TODO's. */
+    fun showNoteFromCalendar() {
+        noteFromCalendar = true
+        selectedScreen = BottomItem.FILE
+    }
+
+    /**
+     * Back in the app: a calendar left showing since an earlier day opens again as its tab would
+     * open it, on today. The same day, it is left where it is.
+     */
+    fun reopenCalendarLeftOvernight() {
+        if (selectedScreen != BottomItem.CALENDAR || calendarSeenOn == currentDate()) return
+        calendarTarget = reopenedCalendar(calendarView, calendarSeenOn, currentDate())
+        calendarRequests++
     }
 
     /** Opens or starts today's daily, from the drawer. */
@@ -122,8 +156,12 @@ internal class NotesAppState(
     }
 
     fun selectTab(item: BottomItem) {
-        // Back to where the calendar was left; its own tab, tapped again, leaves it be.
-        if (item == BottomItem.CALENDAR && selectedScreen != BottomItem.CALENDAR) calendarTarget = calendarView
+        // Its own tab, tapped again, leaves the calendar be.
+        if (item == BottomItem.CALENDAR && selectedScreen != BottomItem.CALENDAR) {
+            calendarTarget = reopenedCalendar(calendarView, calendarSeenOn, currentDate(), returning = noteFromCalendar)
+        }
+        // Search or Settings looked at since: the calendar is no longer what the note is gone back from.
+        if (item != BottomItem.FILE) noteFromCalendar = false
         selectedScreen = item
     }
 }
@@ -170,27 +208,47 @@ internal fun rememberNotesAppState(source: NotesSource, vm: NotesViewModel, sett
     }
     val calendarTarget = rememberSaveable(stateSaver = OptionalCalendarTargetSaver) { mutableStateOf(calendarView.value) }
     val calendarRequests = rememberSaveable { mutableIntStateOf(0) }
+    val calendarSeenOn = rememberSaveable(stateSaver = LocalDateSaver) { mutableStateOf(currentDate()) }
+    val noteFromCalendar = rememberSaveable { mutableStateOf(false) }
     val documentListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     val agendaFilter = rememberSaveable(stateSaver = AgendaFilterSaver) { mutableStateOf(AgendaFilter.NONE) }
     val todosOpen = rememberSaveable { mutableStateOf(false) }
     return remember(vm) {
         NotesAppState(
             source, vm, settingsRepo, scope, drawerState, documentListState, selectedScreen, calendarView, calendarTarget,
-            calendarRequests, agendaFilter, todosOpen,
+            calendarRequests, calendarSeenOn, noteFromCalendar, agendaFilter, todosOpen,
         )
     }
 }
 
-/**
- * The calendar's view as it was left, to open on again [today]: in the same period when it was left
- * today, and on today otherwise. Null when it was never left anywhere.
- */
+/** The calendar's view as it was left before the app was closed, to open on again [today]; null when it was never left anywhere. */
 private fun LastScreen.calendarView(today: LocalDate): CalendarTarget? {
     val mode = CalendarMode.entries.firstOrNull { it.name == calendarMode } ?: return null
-    val date = calendarDate
-        ?.takeIf { savedOn == today.toString() }
-        ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-    return CalendarTarget(mode, date ?: today)
+    val date = calendarDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: today
+    val seenOn = savedOn?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    return reopenedCalendar(CalendarTarget(mode, date), seenOn, today)
+}
+
+/**
+ * Where the calendar opens again, [left] in a view and on a period seen on [seenOn]: always in that
+ * view, and on that period only when it still means what it did.
+ *
+ * The agenda is the days from today on, so it opens on [today] however far it was paged; the other
+ * views are a place in the calendar, and keep it for the day. A period left on an earlier day is not
+ * taken back in any view, since a calendar opened the next morning is wanted on that morning.
+ *
+ * [returning] from a note the calendar opened is not opening it: the agenda too is then where the
+ * note was opened from, that same day.
+ */
+internal fun reopenedCalendar(
+    left: CalendarTarget?,
+    seenOn: LocalDate?,
+    today: LocalDate,
+    returning: Boolean = false,
+): CalendarTarget? {
+    if (left == null) return null
+    val keepsPlace = seenOn == today && (returning || left.mode != CalendarMode.Agenda)
+    return if (keepsPlace) left else left.copy(date = today)
 }
 
 internal fun currentDate(): LocalDate = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
