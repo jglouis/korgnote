@@ -1,0 +1,6 @@
+* Filter the calendar by TODO keyword and tag: tap one in the agenda, or use the header's filter icon.
+* A TODO list at the top of the agenda: every heading still to do, dated or not, by keyword.
+* Search takes todo:open.
+* The agenda opens on today.
+* Fixed: the calendar could open on an earlier day after a night in the background.
+* The first start after updating reads your notes once.
