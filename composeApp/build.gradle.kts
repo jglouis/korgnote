@@ -118,7 +118,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "com.korgnote.app"
-            packageVersion = "1.7.0"
+            packageVersion = "1.8.0"
         }
     }
 }

@@ -20,8 +20,8 @@ extensions.configure<ApplicationExtension> {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
 
         // Raise versionCode on every release: Android refuses a lower one over a higher one.
-        versionCode = 17
-        versionName = "1.7.0"
+        versionCode = 18
+        versionName = "1.8.0"
     }
 
     // The release key lives in KeePassXC, and scripts/release.sh hands it over as these properties;

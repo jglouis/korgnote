@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.korgnote.server"
-version = "1.7.0"
+version = "1.8.0"
 application {
     mainClass.set("com.korgnote.server.ApplicationKt")
 }
