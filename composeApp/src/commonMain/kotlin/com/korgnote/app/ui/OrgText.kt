@@ -8,6 +8,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -360,6 +362,9 @@ private fun ItemContents(contents: List<OrgNode>, todoConfig: OrgTodoConfig, onT
     }
 }
 
+/** The most of a heading's width its tags may take; past that they wrap onto more lines. */
+private const val HEADING_TAGS_MAX_FRACTION = 0.4f
+
 /** How far an item's contents sit in from its bullet: about the width of `1. `. */
 private val ITEM_CONTENTS_INDENT = 20.dp
 
@@ -380,8 +385,10 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: (
     val progress = remember(node.title) {
         STATISTICS_COOKIE.find(node.title)?.let { cookie -> progressOf(cookie)?.let { cookie to it } }
     }
-    // A Box so the keyword menu opens from the heading, whose first word the keyword is.
-    Box {
+    // A Box so the keyword menu opens from the heading, whose first word the keyword is; one
+    // with constraints so the tags can be held to a share of its width.
+    BoxWithConstraints {
+        val tagsMaxWidth = maxWidth * HEADING_TAGS_MAX_FRACTION
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(top = if (node.level == 1) 12.dp else 6.dp, bottom = 2.dp)
@@ -434,9 +441,9 @@ private fun OrgHeading(node: OrgSection, todoConfig: OrgTodoConfig, onSetTodo: (
             }
             if (node.tags.isNotEmpty()) {
                 Spacer(Modifier.width(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    node.tags.forEach { tag -> OrgTagChip(tag) }
-                }
+                // Wrapped onto more lines rather than laid out in one: in a single row, three tags
+                // took the width first and left the title a column a few letters wide.
+                TagChips(node.tags, Modifier.widthIn(max = tagsMaxWidth))
             }
             // Where it happens, a tap away, without opening the property drawer to find the link.
             node.location()?.let { location ->
