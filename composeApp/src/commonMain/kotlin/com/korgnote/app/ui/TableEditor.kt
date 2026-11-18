@@ -550,26 +550,14 @@ private val PreviewGrid = TableGrid(
 )
 
 @Composable
-private fun TableGridEditorPreview(dark: Boolean) = PreviewTheme(dark) {
-    // The grid the dialog edits; the dialog itself is a window of its own.
-    Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(12.dp)) {
-        TableGridEditor(
-            grid = PreviewGrid,
-            computed = formulaCells(PreviewGrid.rows, PreviewGrid.formulas),
-            onChange = {},
-            editing = null,
-            onCellChange = { _, _, _ -> },
-            onCompletionKey = { false },
-            onColumnFormula = {},
-            onComputedCell = {},
-        )
-    }
+private fun TableEditorDialogPreview(dark: Boolean) = PreviewTheme(dark) {
+    TableEditorDialog(initial = PreviewGrid, onSave = {}, onDismiss = {})
 }
 
 @Preview(name = "Light")
 @Composable
-private fun TableGridEditorLightPreview() = TableGridEditorPreview(dark = false)
+private fun TableEditorDialogLightPreview() = TableEditorDialogPreview(dark = false)
 
 @Preview(name = "Dark")
 @Composable
-private fun TableGridEditorDarkPreview() = TableGridEditorPreview(dark = true)
+private fun TableEditorDialogDarkPreview() = TableEditorDialogPreview(dark = true)

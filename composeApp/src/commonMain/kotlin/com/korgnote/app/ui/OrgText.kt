@@ -115,6 +115,7 @@ import korgnote.composeapp.generated.resources.editor_current_priority
 import korgnote.composeapp.generated.resources.editor_no_priority
 import com.korgnote.common.org.OrgPriority
 import androidx.compose.ui.tooling.preview.Preview
+import com.korgnote.common.org.prioritiesOf
 
 
 
@@ -1140,3 +1141,30 @@ private fun TodoKeywordItemsLightPreview() = TodoKeywordItemsPreview(dark = fals
 @Preview(name = "Dark")
 @Composable
 private fun TodoKeywordItemsDarkPreview() = TodoKeywordItemsPreview(dark = true)
+
+@Composable
+private fun PriorityMenuPreview(dark: Boolean) = PreviewTheme(dark) {
+    // The menu drops from a small anchor under the heading, as it does from what was tapped.
+    Box(Modifier.fillMaxWidth().height(300.dp).padding(16.dp)) {
+        Column {
+            Text("Order seed potatoes", style = MaterialTheme.typography.titleMedium)
+            Box {
+                PriorityMenu(
+                    expanded = true,
+                    current = prioritiesOf("").range[0],
+                    priorities = prioritiesOf(""),
+                    onPick = {},
+                    onDismiss = {},
+                )
+            }
+        }
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun PriorityMenuLightPreview() = PriorityMenuPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun PriorityMenuDarkPreview() = PriorityMenuPreview(dark = true)

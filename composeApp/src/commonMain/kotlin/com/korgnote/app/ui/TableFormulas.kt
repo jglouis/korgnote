@@ -76,7 +76,6 @@ import korgnote.composeapp.generated.resources.editor_row_number
 import korgnote.composeapp.generated.resources.editor_rows_above
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.foundation.layout.padding
 import com.korgnote.common.org.table.reviewFormulas
 
 /**
@@ -374,26 +373,34 @@ private val PreviewFormulaGrid = TableGrid(
 )
 
 @Composable
-private fun FormulaReviewPreview(dark: Boolean) = PreviewTheme(dark) {
-    // What the formulas dialog lists for each formula, out of its window: the formula in words, as
-    // written, what the review says of it, and what it gives.
-    val grid = PreviewFormulaGrid
-    val notes = reviewFormulas(grid.rows, grid.formulas)
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        notes.filter { it.formula < 0 }.forEach { NoteLine(it) }
-        grid.formulas.forEachIndexed { index, formula ->
-            Text(formulaWords(describeFormula(grid.rows, formula)), style = MaterialTheme.typography.bodyLarge)
-            Text(formula, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = MaterialTheme.colorScheme.outline)
-            notes.filter { it.formula == index }.forEach { NoteLine(it) }
-            Preview(grid, index, formula)
-        }
-    }
+private fun TableFormulasDialogPreview(dark: Boolean) = PreviewTheme(dark) {
+    TableFormulasDialog(
+        grid = PreviewFormulaGrid,
+        notes = reviewFormulas(PreviewFormulaGrid.rows, PreviewFormulaGrid.formulas),
+        onChange = {},
+        onEdit = {},
+        onRecalculate = {},
+        onDismiss = {},
+    )
 }
 
 @Preview(name = "Light")
 @Composable
-private fun FormulaReviewLightPreview() = FormulaReviewPreview(dark = false)
+private fun TableFormulasDialogLightPreview() = TableFormulasDialogPreview(dark = false)
 
 @Preview(name = "Dark")
 @Composable
-private fun FormulaReviewDarkPreview() = FormulaReviewPreview(dark = true)
+private fun TableFormulasDialogDarkPreview() = TableFormulasDialogPreview(dark = true)
+
+@Composable
+private fun FormulaEditorDialogPreview(dark: Boolean) = PreviewTheme(dark) {
+    FormulaEditorDialog(grid = PreviewFormulaGrid, index = 0, initial = PreviewFormulaGrid.formulas[0], onSave = {}, onDismiss = {})
+}
+
+@Preview(name = "Light")
+@Composable
+private fun FormulaEditorDialogLightPreview() = FormulaEditorDialogPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun FormulaEditorDialogDarkPreview() = FormulaEditorDialogPreview(dark = true)

@@ -154,23 +154,22 @@ private fun LinkTargetRow(target: LinkTarget, onClick: () -> Unit) {
 
 // Previews
 
+private val PreviewTargets = listOf(
+    LinkTarget("garden.org", "Allotment", emptyList(), "Allotment", offset = null, id = "a1"),
+    LinkTarget("garden.org", "Allotment", emptyList(), "Rebuild the compost bay", offset = 210, id = null),
+    LinkTarget("garden.org", "Allotment", listOf("Rebuild the compost bay"), "Collect pallets", offset = 340, id = "b2"),
+    LinkTarget("reading.org", "Reading list", emptyList(), "Reading list", offset = null, id = null),
+)
+
 @Composable
-private fun LinkTargetRowsPreview(dark: Boolean) = PreviewTheme(dark) {
-    // The picker's rows: the dialog around them opens in a window of its own.
-    Column(Modifier.padding(16.dp)) {
-        listOf(
-            LinkTarget("garden.org", "Allotment", emptyList(), "Allotment", offset = null, id = "a1"),
-            LinkTarget("garden.org", "Allotment", emptyList(), "Rebuild the compost bay", offset = 210, id = null),
-            LinkTarget("garden.org", "Allotment", listOf("Rebuild the compost bay"), "Collect pallets", offset = 340, id = "b2"),
-            LinkTarget("reading.org", "Reading list", emptyList(), "Reading list", offset = null, id = null),
-        ).forEach { LinkTargetRow(it, onClick = {}) }
-    }
+private fun LinkPickerDialogPreview(dark: Boolean) = PreviewTheme(dark) {
+    LinkPickerDialog(targets = PreviewTargets, currentPath = "journal.org", onPick = {}, onTypeLink = {}, onDismiss = {})
 }
 
 @Preview(name = "Light")
 @Composable
-private fun LinkTargetRowsLightPreview() = LinkTargetRowsPreview(dark = false)
+private fun LinkPickerDialogLightPreview() = LinkPickerDialogPreview(dark = false)
 
 @Preview(name = "Dark")
 @Composable
-private fun LinkTargetRowsDarkPreview() = LinkTargetRowsPreview(dark = true)
+private fun LinkPickerDialogDarkPreview() = LinkPickerDialogPreview(dark = true)

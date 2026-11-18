@@ -27,6 +27,9 @@ import korgnote.composeapp.generated.resources.editor_this_heading
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import korgnote.composeapp.generated.resources.editor_priority
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 
 /** A stamp of the element the long-press menu can make active or inactive, as written. */
 internal class MenuStamp(val text: String, val active: Boolean, val toggle: () -> Unit)
@@ -153,3 +156,58 @@ internal fun DeleteSectionDialog(
         dismissButton = { CancelButton(onDismiss) },
     )
 }
+
+// Previews
+
+@Composable
+private fun ElementMenuPreview(dark: Boolean) = PreviewTheme(dark) {
+    // The menu drops from a small anchor under the heading, as it does from what was tapped.
+    Box(Modifier.fillMaxWidth().height(720.dp).padding(16.dp)) {
+        Column {
+            Text("Rebuild the compost bay", style = MaterialTheme.typography.titleMedium)
+            Box {
+                ElementMenu(
+                    expanded = true,
+                    onDismiss = {},
+                    isPreamble = false,
+                    stamps = listOf(
+                        MenuStamp("<2026-11-20 Fri 09:30>", active = true, toggle = {}),
+                        MenuStamp("[2026-11-12 Thu]", active = false, toggle = {}),
+                    ),
+                    onAddHeadingBelow = {},
+                    onAddSubheading = {},
+                    onDelete = {},
+                    onMoveUp = null,
+                    onMoveDown = {},
+                    onPromote = null,
+                    onDemote = {},
+                    onRefile = {},
+                    onPriority = {},
+                    onClockIn = {},
+                    onEffort = {},
+                )
+            }
+        }
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun ElementMenuLightPreview() = ElementMenuPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun ElementMenuDarkPreview() = ElementMenuPreview(dark = true)
+
+@Composable
+private fun DeleteSectionDialogPreview(dark: Boolean) = PreviewTheme(dark) {
+    DeleteSectionDialog(title = "Rebuild the compost bay", subheadings = 2, onDelete = {}, onDismiss = {})
+}
+
+@Preview(name = "Light")
+@Composable
+private fun DeleteSectionDialogLightPreview() = DeleteSectionDialogPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun DeleteSectionDialogDarkPreview() = DeleteSectionDialogPreview(dark = true)

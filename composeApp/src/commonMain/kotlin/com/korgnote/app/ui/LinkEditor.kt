@@ -47,6 +47,8 @@ import korgnote.composeapp.generated.resources.notes_link_web
 import korgnote.composeapp.generated.resources.notes_note
 import korgnote.composeapp.generated.resources.save
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.tooling.preview.Preview
+import com.korgnote.common.org.edit.DraftLink
 
 /**
  * A link as a form rather than as `[[…][…]]`: the words it shows, and where it goes — a web
@@ -223,3 +225,27 @@ private val TYPED_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+-]*:|^[A-Za-z][A-Za-z0-9+.
 /** The `file:`, or `file+sys:`, that [target] is written with, in the case it is written in; else nothing. */
 private fun filePrefixOf(target: String): String =
     OrgSyntax.linkScheme.find(target)?.takeIf { it.groupValues[1].lowercase() in OrgSyntax.fileLinkSchemes }?.value.orEmpty()
+
+// Previews
+
+@Composable
+private fun LinkEditorDialogPreview(dark: Boolean) = PreviewTheme(dark) {
+    LinkEditorDialog(
+        edit = LinkEdit(DraftLink(0, 40, "https://example.org/frost", "the frost dates"), isNew = false),
+        noteTitle = { it },
+        linkTargets = { emptyList() },
+        currentPath = "garden.org",
+        fileLinkMappings = emptyList(),
+        onSave = { _, _, _ -> },
+        onRemove = {},
+        onDismiss = {},
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun LinkEditorDialogLightPreview() = LinkEditorDialogPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun LinkEditorDialogDarkPreview() = LinkEditorDialogPreview(dark = true)
