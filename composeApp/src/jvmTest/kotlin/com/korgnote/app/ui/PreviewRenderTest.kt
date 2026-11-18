@@ -9,9 +9,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import java.awt.image.BufferedImage
 import java.io.File
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier as JavaModifier
@@ -56,7 +57,22 @@ class PreviewRenderTest {
                             method.invoke(null, currentComposer, 0)
                         }
                     }
-                    val image = onRoot().captureToImage().toAwtImage()
+                    // A dialog or popup is a root of its own, drawn here over the preview behind a scrim.
+                    val roots = onAllNodes(isRoot())
+                    // A preview that is only a dialog leaves the window's own root empty, with nothing to capture.
+                    val images = roots.fetchSemanticsNodes().indices
+                        .filter { roots.fetchSemanticsNodes()[it].size.let { size -> size.width > 0 && size.height > 0 } }
+                        .map { roots[it].captureToImage().toAwtImage() }
+                    val image = BufferedImage(images.maxOf { it.width }, images.maxOf { it.height }, BufferedImage.TYPE_INT_ARGB)
+                    image.createGraphics().apply {
+                        for ((index, overlay) in images.withIndex()) {
+                            if (index == 0) { drawImage(overlay, 0, 0, null); continue }
+                            color = java.awt.Color(0, 0, 0, 0x66)
+                            fillRect(0, 0, image.width, image.height)
+                            drawImage(overlay, (image.width - overlay.width) / 2, (image.height - overlay.height) / 2, null)
+                        }
+                        dispose()
+                    }
                     ImageIO.write(image, "png", File(outDir, "${method.declaringClass.simpleName}.${method.name}.png"))
                 }
             } catch (e: Throwable) {
