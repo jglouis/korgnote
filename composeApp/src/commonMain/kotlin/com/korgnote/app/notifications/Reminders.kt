@@ -1,11 +1,15 @@
 package com.korgnote.app.notifications
 
+import com.korgnote.app.currentDate
+import com.korgnote.app.ui.CalendarMode
 import com.korgnote.app.ui.buildOrgInlineString
 import com.korgnote.app.ui.capitalised
 import com.korgnote.app.ui.hhmm
 import com.korgnote.app.ui.monthNames
 import com.korgnote.app.ui.timeLabel
 import com.korgnote.app.ui.weekdayNames
+import com.korgnote.app.widgets.CalendarTarget
+import com.korgnote.app.widgets.CalendarTaps
 import com.korgnote.common.org.agenda.*
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.cal_kind_deadline
@@ -65,8 +69,8 @@ data class ReminderSettings(
  * One notification to show at [at], wall-clock time on the device.
  *
  * [id] is stable for the same entry at the same time, so a platform can tell a reminder it already
- * holds from a new one. [file] and [offset] are where tapping it opens: the heading of the entry,
- * or nothing for the daily digest.
+ * holds from a new one. [file] and [offset] are where tapping it opens: the heading of the entry;
+ * without them, as for the daily digest, today's agenda.
  *
  * [body] is the whole text, for a platform that shows nothing else. The digest also says what it
  * lists as [lines] and how many as [summary], for a platform that can lay a list out as one.
@@ -233,4 +237,12 @@ data class ReminderTarget(val file: String, val offset: Int)
  */
 object ReminderTaps {
     val pending = MutableStateFlow<ReminderTarget?>(null)
+
+    /**
+     * A tapped reminder that is about no one note — the daily digest — opens the agenda on the day
+     * it is tapped, which is the digest's own unless it waited overnight.
+     */
+    fun openTodaysAgenda() {
+        CalendarTaps.pending.value = CalendarTarget(CalendarMode.Agenda, currentDate())
+    }
 }

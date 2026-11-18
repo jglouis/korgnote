@@ -21,6 +21,9 @@ import kotlin.coroutines.resume
 private const val KEY_FILE = "file"
 private const val KEY_OFFSET = "offset"
 
+/** On a reminder about no one note, the digest: its tap opens today's agenda. */
+private const val KEY_AGENDA = "agenda"
+
 /**
  * iOS reminders: one calendar-triggered local notification per reminder. iOS keeps at most 64
  * pending, which [MAX_REMINDERS] stays under; the system shows them with the app closed and no
@@ -40,10 +43,11 @@ class IosNotificationScheduler : NotificationScheduler {
                 setTitle(reminder.title)
                 setBody(reminder.body)
                 setSound(UNNotificationSound.defaultSound())
-                val target = reminder.file?.let { file ->
-                    mapOf<Any?, Any?>(KEY_FILE to file, KEY_OFFSET to (reminder.offset ?: 0).toString())
-                }
-                if (target != null) setUserInfo(target)
+                val file = reminder.file
+                setUserInfo(
+                    if (file != null) mapOf<Any?, Any?>(KEY_FILE to file, KEY_OFFSET to (reminder.offset ?: 0).toString())
+                    else mapOf<Any?, Any?>(KEY_AGENDA to "1"),
+                )
             }
             val at = reminder.at
             val components = NSDateComponents().apply {
@@ -80,8 +84,9 @@ private class ReminderCenterDelegate : NSObject(), UNUserNotificationCenterDeleg
     ) {
         val info = didReceiveNotificationResponse.notification.request.content.userInfo
         val file = info[KEY_FILE] as? String
-        if (file != null) {
-            ReminderTaps.pending.value = ReminderTarget(file, (info[KEY_OFFSET] as? String)?.toIntOrNull() ?: 0)
+        when {
+            file != null -> ReminderTaps.pending.value = ReminderTarget(file, (info[KEY_OFFSET] as? String)?.toIntOrNull() ?: 0)
+            info[KEY_AGENDA] != null -> ReminderTaps.openTodaysAgenda()
         }
         withCompletionHandler()
     }

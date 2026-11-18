@@ -4,6 +4,13 @@ import com.korgnote.app.notifications.NotificationScheduler
 import com.korgnote.app.notifications.Reminder
 import com.korgnote.app.notifications.ReminderSettings
 import com.korgnote.app.notifications.ReminderTarget
+import com.korgnote.app.notifications.ReminderTaps
+import com.korgnote.app.ui.CalendarMode
+import com.korgnote.app.widgets.CalendarTarget
+import com.korgnote.app.widgets.CalendarTaps
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.todayIn
+import kotlin.time.Clock
 import com.korgnote.common.replica.DocumentStore
 import com.korgnote.common.replica.InMemoryReplicaStorage
 import com.korgnote.common.replica.SyncEngine
@@ -139,5 +146,18 @@ class ReminderSchedulingTest {
 
         assertEquals(workText, viewModel.note.content)
         assertEquals(null, viewModel.note.scrollToElementIndex)
+    }
+
+    @Test
+    fun theDigestsTapOpensTodaysAgenda() {
+        CalendarTaps.pending.value = null
+
+        ReminderTaps.openTodaysAgenda()
+
+        assertEquals(
+            CalendarTarget(CalendarMode.Agenda, Clock.System.todayIn(TimeZone.currentSystemDefault())),
+            CalendarTaps.pending.value,
+        )
+        CalendarTaps.pending.value = null
     }
 }

@@ -59,6 +59,9 @@ object ReminderAlarms {
     const val CHANNEL_ID = "agenda_reminders"
     const val EXTRA_FILE = "com.korgnote.app.reminder.FILE"
     const val EXTRA_OFFSET = "com.korgnote.app.reminder.OFFSET"
+
+    /** On the tap of a reminder about no one note, the digest: it opens today's agenda. */
+    const val EXTRA_AGENDA = "com.korgnote.app.reminder.AGENDA"
     private const val ACTION_FIRE = "com.korgnote.app.reminder.FIRE"
     private const val EXTRA_ID = "com.korgnote.app.reminder.ID"
     private const val EXTRA_TITLE = "com.korgnote.app.reminder.TITLE"
@@ -134,7 +137,8 @@ object ReminderAlarms {
         val id = intent.getStringExtra(EXTRA_ID) ?: return
         val open = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            intent.getStringExtra(EXTRA_FILE)?.let { putExtra(EXTRA_FILE, it) }
+            val file = intent.getStringExtra(EXTRA_FILE)
+            if (file != null) putExtra(EXTRA_FILE, file) else putExtra(EXTRA_AGENDA, true)
             if (intent.hasExtra(EXTRA_OFFSET)) putExtra(EXTRA_OFFSET, intent.getIntExtra(EXTRA_OFFSET, 0))
         }
         val body = intent.getStringExtra(EXTRA_BODY).orEmpty()

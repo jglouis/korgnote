@@ -12,10 +12,10 @@ compose-hot-reload = "1.2.0"
 compose-multiplatform = "1.12.2"
 kotlin = "2.4.21"
 kotlinx-coroutines = "1.11.0"
-kotlinx-serialization-core = "1.12.0"
+kotlinx-serialization-core = "1.13.0"
 ktor = "3.6.1"
 java-keyring = "1.0.4"
-logback = "1.6.6"
+logback = "1.6.7"
 koin = "4.2.2"
 
 [libraries]

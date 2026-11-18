@@ -67,8 +67,17 @@ class MainActivity : ComponentActivity() {
         PairingLinks.offer(intent.dataString)
     }
 
-    /** A notification's tap carries the note and heading it is about; the app opens them. */
+    /**
+     * A notification's tap carries the note and heading it is about; the app opens them. The
+     * digest's is about no one note, and opens today's agenda.
+     */
     private fun openReminderFrom(intent: Intent?) {
+        if (intent?.getBooleanExtra(ReminderAlarms.EXTRA_AGENDA, false) == true) {
+            ReminderTaps.openTodaysAgenda()
+            // Consumed: a rotation recreates the activity with the same intent.
+            intent.removeExtra(ReminderAlarms.EXTRA_AGENDA)
+            return
+        }
         val file = intent?.getStringExtra(ReminderAlarms.EXTRA_FILE) ?: return
         ReminderTaps.pending.value = ReminderTarget(file, intent.getIntExtra(ReminderAlarms.EXTRA_OFFSET, 0))
         // Consumed: a rotation recreates the activity with the same intent.
