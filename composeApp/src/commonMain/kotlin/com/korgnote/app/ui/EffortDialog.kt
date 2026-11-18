@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.edit.effortMinutes
 import korgnote.composeapp.generated.resources.Res
@@ -72,3 +73,18 @@ internal fun EffortDialog(current: String?, onPick: (minutes: Int?) -> Unit, onD
         dismissButton = { CancelButton(onDismiss) },
     )
 }
+
+// Previews
+
+@Composable
+private fun EffortDialogPreview(dark: Boolean) = PreviewTheme(dark) {
+    EffortDialog(current = "1:00", onPick = {}, onDismiss = {})
+}
+
+@Preview(name = "Light")
+@Composable
+private fun EffortDialogLightPreview() = EffortDialogPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun EffortDialogDarkPreview() = EffortDialogPreview(dark = true)
