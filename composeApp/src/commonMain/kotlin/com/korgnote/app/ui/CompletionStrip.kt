@@ -62,6 +62,9 @@ import korgnote.composeapp.generated.resources.editor_insert_tag
 import korgnote.composeapp.generated.resources.editor_make_active
 import korgnote.composeapp.generated.resources.editor_make_inactive
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 
 /** What a hardware keyboard can ask of the suggestions. */
 enum class CompletionKey { ACCEPT, DISMISS, NEXT, PREVIOUS }
@@ -310,3 +313,56 @@ private fun DraftInsert.icon(): ImageVector = when (this) {
     DraftInsert.CHECKBOX -> Icons.Filled.CheckBox
     DraftInsert.TABLE -> Icons.Filled.TableChart
 }
+
+// Previews
+
+/** The strip's own buttons, as the element editor puts them at its end. */
+@Composable
+private fun PreviewStripActions() {
+    IconButton(onClick = {}) { Icon(Icons.Filled.Close, contentDescription = null) }
+    IconButton(onClick = {}) { Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+}
+
+@Composable
+private fun CompletionStripInsertsPreview(dark: Boolean) = PreviewTheme(dark) {
+    // Nothing to suggest: the buttons that begin a link, a date, a tag, a place, a checkbox, a table.
+    CompletionStrip(
+        items = emptyList(),
+        selectedIndex = -1,
+        onAccept = {},
+        inserts = DraftInsert.entries,
+        onPickDate = {},
+        clearOfNavigationBar = false,
+        actions = { PreviewStripActions() },
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun CompletionStripInsertsLightPreview() = CompletionStripInsertsPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun CompletionStripInsertsDarkPreview() = CompletionStripInsertsPreview(dark = true)
+
+@Composable
+private fun CompletionStripSuggestionsPreview(dark: Boolean) = PreviewTheme(dark) {
+    // Keywords offered at the start of a heading, the first one picked: Tab would accept it.
+    CompletionStrip(
+        items = listOf("TODO", "NEXT", "WAIT", "DONE", "CANCELED").map {
+            CompletionItem(label = it, insert = "$it ", replace = 2..1, kind = CompletionItem.Kind.TODO_KEYWORD)
+        },
+        selectedIndex = 0,
+        onAccept = {},
+        clearOfNavigationBar = false,
+        actions = { PreviewStripActions() },
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun CompletionStripSuggestionsLightPreview() = CompletionStripSuggestionsPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun CompletionStripSuggestionsDarkPreview() = CompletionStripSuggestionsPreview(dark = true)

@@ -18,6 +18,7 @@ import com.korgnote.common.org.OrgTodoConfig
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.editor_editing_element
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 
 /**
  * Editor for a single element — the only editing surface there is.
@@ -73,3 +74,32 @@ internal fun OrgElementEditor(
         },
     )
 }
+
+// Previews
+
+@Composable
+private fun OrgElementEditorPreview(dark: Boolean) = PreviewTheme(dark) {
+    Box(Modifier.padding(16.dp)) {
+        OrgElementEditor(
+            elementKey = 0,
+            value = TextFieldValue(
+                """
+                * TODO Call the plumber :home:
+                SCHEDULED: <2026-11-19 Thu 08:30>
+                The kitchen tap drips /again/; ask about the *boiler* too.
+                """.trimIndent()
+            ),
+            onValueChange = {},
+            onCompletionKey = { false },
+            todoKeywords = DefaultOrgTodoConfig,
+        )
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun OrgElementEditorLightPreview() = OrgElementEditorPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun OrgElementEditorDarkPreview() = OrgElementEditorPreview(dark = true)

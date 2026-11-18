@@ -37,6 +37,16 @@ import com.korgnote.common.org.srcBlockSpans
 import com.korgnote.common.org.todoKeywordsOf
 import io.ktor.http.encodeURLQueryComponent
 import kotlinx.datetime.LocalDate
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.HorizontalDivider
 
 /**
  * Colors used by both reading mode ([OrgText]) and editing mode ([OrgSyntaxHighlightTransformation])
@@ -935,3 +945,32 @@ class OrgSyntaxHighlightTransformation(headingColor: Color) : VisualTransformati
         return TransformedText(highlighted, OffsetMapping.Identity)
     }
 }
+
+// Previews
+
+/** A heading with its planning, inline markup and an item, to compare reading and editing. */
+private val HighlightSample = """
+    * TODO [#B] Repot the fig [0/1] :garden:
+    SCHEDULED: <2026-11-21 Sat 10:00>
+    Use the /large/ pot and *fresh* compost, as in [[id:7f3c][Potting notes]].
+    - [ ] buy grit
+""".trimIndent()
+
+@Composable
+private fun OrgHighlightingPreview(dark: Boolean) = PreviewTheme(dark) {
+    // Reading mode above, which drops the markup; the editor's, which keeps every character, below.
+    val headingColor = MaterialTheme.colorScheme.primary
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(buildOrgHighlightedString(HighlightSample, headingColor, viewMode = true))
+        HorizontalDivider()
+        Text(buildOrgHighlightedString(HighlightSample, headingColor), fontFamily = FontFamily.Monospace)
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun OrgHighlightingLightPreview() = OrgHighlightingPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun OrgHighlightingDarkPreview() = OrgHighlightingPreview(dark = true)

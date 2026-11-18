@@ -85,6 +85,7 @@ import com.korgnote.common.org.orgHeadingOf
 import com.korgnote.common.org.prioritiesOf
 import com.korgnote.common.org.OrgPriorities
 import com.korgnote.common.org.OrgPriority
+import androidx.compose.ui.tooling.preview.Preview
 
 /**
  * What can be done to a note from its reading view, given by the app. An action left out is one not
@@ -697,3 +698,74 @@ private fun BacklinksSection(backlinks: List<OrgBacklink>, onOpen: (OrgBacklink)
         }
     }
 }
+
+// Previews
+
+private val PreviewDocument = """
+    #+TITLE: Allotment
+    #+AUTHOR: Sam Rivers
+    #+DATE: [2026-11-02 Mon]
+
+    * TODO [#A] Order seed potatoes [1/3] :errands:
+    SCHEDULED: <2026-11-20 Fri>
+    - [X] compare suppliers
+    - [ ] check the budget
+    - [ ] place the order
+    * DOING Rebuild the compost bay
+    :PROPERTIES:
+    :EFFORT:   2:00
+    :END:
+    :LOGBOOK:
+    CLOCK: [2026-11-16 Mon 14:00]--[2026-11-16 Mon 15:15] =>  1:15
+    :END:
+    ** DONE Collect pallets
+    CLOSED: [2026-11-15 Sun 11:02]
+    ** TODO Line the floor with cardboard
+    * Notes on soil
+    The beds by the gate drain *badly*; add grit before spring.
+""".trimIndent()
+
+private val PreviewBacklinks = listOf(
+    OrgBacklink(path = "projects/home.org", offset = 120, context = "Weekend jobs"),
+    OrgBacklink(path = "journal/2026-11-16.org", offset = 40, context = "journal/2026-11-16.org"),
+)
+
+@Composable
+private fun OrgDocumentViewPreview(dark: Boolean) = PreviewTheme(dark) {
+    OrgDocumentView(
+        text = PreviewDocument,
+        modifier = Modifier.padding(horizontal = 8.dp),
+        backlinks = PreviewBacklinks,
+        onEditDetails = {},
+        clockTime = LocalDateTime(2026, 11, 18, 10, 0),
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun OrgDocumentViewLightPreview() = OrgDocumentViewPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun OrgDocumentViewDarkPreview() = OrgDocumentViewPreview(dark = true)
+
+@Composable
+private fun OrgDocumentViewEditingPreview(dark: Boolean) = PreviewTheme(dark) {
+    // The first heading open in its editor, and the compost bay folded.
+    val draft = TextFieldValue(PreviewDocument.lines().drop(4).take(5).joinToString("\n"))
+    OrgDocumentView(
+        text = PreviewDocument,
+        modifier = Modifier.padding(horizontal = 8.dp),
+        editingElementIndex = 1,
+        elementDraft = { draft },
+        foldedElements = setOf(2),
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun OrgDocumentViewEditingLightPreview() = OrgDocumentViewEditingPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun OrgDocumentViewEditingDarkPreview() = OrgDocumentViewEditingPreview(dark = true)

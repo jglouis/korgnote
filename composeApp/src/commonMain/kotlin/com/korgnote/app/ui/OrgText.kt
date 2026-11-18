@@ -114,6 +114,7 @@ import com.korgnote.common.org.OrgPriorities
 import korgnote.composeapp.generated.resources.editor_current_priority
 import korgnote.composeapp.generated.resources.editor_no_priority
 import com.korgnote.common.org.OrgPriority
+import androidx.compose.ui.tooling.preview.Preview
 
 
 
@@ -1064,3 +1065,78 @@ private fun CheckboxLine(
         Text(text = buildOrgItemString(text), style = MaterialTheme.typography.bodyMedium)
     }
 }
+
+// Previews
+
+@Composable
+private fun OrgBodyPreview(dark: Boolean) = PreviewTheme(dark) {
+    Column(Modifier.padding(16.dp)) {
+        OrgBody(
+            """
+            Picked up the seed order on [2026-11-14 Sat]. Tomatoes go in /after/ the last frost:
+            see [[https://example.org/frost][the frost dates]] and the *allotment rules*.
+            - [X] order compost
+            - [ ] mend the fence by the shed
+            1. clear the beds
+            2. lay the cardboard
+            -----
+            Spent so far: =€84.50=, receipts in ~garden/receipts~.
+            """.trimIndent()
+        )
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun OrgBodyLightPreview() = OrgBodyPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun OrgBodyDarkPreview() = OrgBodyPreview(dark = true)
+
+@Composable
+private fun TagChipsPreview(dark: Boolean) = PreviewTheme(dark) {
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        TagChips(listOf("garden", "errands", "work", "reading", "health", "travel", "family", "someday"))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("garden", "errands", "urgent").forEach { TagSuggestionChip(it, onClick = {}) }
+        }
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun TagChipsLightPreview() = TagChipsPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun TagChipsDarkPreview() = TagChipsPreview(dark = true)
+
+@Composable
+private fun TodoKeywordItemsPreview(dark: Boolean) = PreviewTheme(dark) {
+    // The keyword menu's items, laid out as the menu shows them: a menu itself opens in a popup.
+    Box(Modifier.fillMaxWidth()) {
+        Surface(
+            modifier = Modifier.padding(16.dp).width(220.dp),
+            shape = MaterialTheme.shapes.extraSmall,
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            shadowElevation = 3.dp,
+        ) {
+            Column(Modifier.padding(vertical = 8.dp)) {
+                TodoKeywordItems(
+                    current = "NEXT",
+                    todoConfig = orgTodoConfigOf("#+TODO: TODO NEXT WAIT | DONE CANCELED"),
+                    onPick = {},
+                )
+            }
+        }
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun TodoKeywordItemsLightPreview() = TodoKeywordItemsPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun TodoKeywordItemsDarkPreview() = TodoKeywordItemsPreview(dark = true)

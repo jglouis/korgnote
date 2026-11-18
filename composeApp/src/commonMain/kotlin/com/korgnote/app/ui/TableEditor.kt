@@ -109,6 +109,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 
 /**
  * A table edited cell by cell, over the whole screen.
@@ -533,3 +534,42 @@ private const val KEYBOARD_SETTLES = 350L
 
 private val CELL_WIDTH = 140.dp
 private val ROW_MENU_WIDTH = 72.dp
+
+// Previews
+
+private val PreviewGrid = TableGrid(
+    rows = listOf(
+        listOf("Bed", "Kg"),
+        null,
+        listOf("Potatoes", "12.5"),
+        listOf("Leeks", "4"),
+        null,
+        listOf("Harvest", "16.5"),
+    ),
+    formulas = listOf("@>\$2=vsum(@I..@II)"),
+)
+
+@Composable
+private fun TableGridEditorPreview(dark: Boolean) = PreviewTheme(dark) {
+    // The grid the dialog edits; the dialog itself is a window of its own.
+    Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(12.dp)) {
+        TableGridEditor(
+            grid = PreviewGrid,
+            computed = formulaCells(PreviewGrid.rows, PreviewGrid.formulas),
+            onChange = {},
+            editing = null,
+            onCellChange = { _, _, _ -> },
+            onCompletionKey = { false },
+            onColumnFormula = {},
+            onComputedCell = {},
+        )
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun TableGridEditorLightPreview() = TableGridEditorPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun TableGridEditorDarkPreview() = TableGridEditorPreview(dark = true)
