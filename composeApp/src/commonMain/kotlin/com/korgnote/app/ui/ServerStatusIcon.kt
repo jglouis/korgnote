@@ -11,8 +11,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -40,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import korgnote.composeapp.generated.resources.Res
@@ -260,3 +263,44 @@ private fun clockTime(at: Instant): String {
     val time = at.toLocalDateTime(TimeZone.currentSystemDefault()).time
     return "${time.hour.toString().padStart(2, '0')}:${time.minute.toString().padStart(2, '0')}"
 }
+
+// Previews
+
+private const val PREVIEW_UNREACHABLE = "notes.example.com does not answer."
+
+/** The cloud in its resting states, side by side: synced a while ago, offline, never synced. */
+@Composable
+private fun ServerStatusIconPreview(dark: Boolean) = PreviewTheme(dark) {
+    val now = Clock.System.now()
+    Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        ServerStatusIcon(unreachable = null, syncing = false, lastSynced = now - 5.minutes, onRetry = {})
+        ServerStatusIcon(unreachable = PREVIEW_UNREACHABLE, syncing = false, lastSynced = now - 3.hours, onRetry = {})
+        ServerStatusIcon(unreachable = null, syncing = false, lastSynced = null, onRetry = {})
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun ServerStatusIconLightPreview() = ServerStatusIconPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun ServerStatusIconDarkPreview() = ServerStatusIconPreview(dark = true)
+
+/** In step a few minutes ago, then offline with the reason under the time. */
+@Composable
+private fun SyncStatusTextPreview(dark: Boolean) = PreviewTheme(dark) {
+    val now = Clock.System.now()
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SyncStatusText(unreachable = null, syncing = false, lastSynced = now - 5.minutes)
+        SyncStatusText(unreachable = PREVIEW_UNREACHABLE, syncing = false, lastSynced = now - 2.days)
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun SyncStatusTextLightPreview() = SyncStatusTextPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun SyncStatusTextDarkPreview() = SyncStatusTextPreview(dark = true)

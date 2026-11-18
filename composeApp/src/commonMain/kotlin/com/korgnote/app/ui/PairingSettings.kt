@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCodeScanner
@@ -24,8 +25,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.DevicePairing
+import com.korgnote.app.data.InMemorySettingsRepository
+import com.korgnote.app.data.PairedServer
 import com.korgnote.app.data.PairingResult
 import com.korgnote.app.data.SettingsRepository
 import com.korgnote.common.pairing.PairingLink
@@ -219,3 +223,48 @@ expect fun rememberPairingScanner(onScanned: (String) -> Unit): (() -> Unit)?
 /** What the Devices page lists this device as: its own name, as its owner set it, where there is one. */
 @Composable
 expect fun rememberDeviceName(): String
+
+// Previews
+
+@Composable
+private fun PairingSettingsUnpairedPreview(dark: Boolean) = PreviewTheme(dark) {
+    val repo = remember { InMemorySettingsRepository() }
+    Column(Modifier.padding(16.dp)) {
+        PairingSettings(repo, pairing = null, onChanged = {})
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun PairingSettingsUnpairedLightPreview() = PairingSettingsUnpairedPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun PairingSettingsUnpairedDarkPreview() = PairingSettingsUnpairedPreview(dark = true)
+
+/** Made up: no real computer, address or token. */
+private val previewPairedServer = PairedServer(
+    serverId = "server-1",
+    serverName = "Desk computer",
+    addresses = listOf("192.168.1.20", "notes.example.com"),
+    port = 8443,
+    fingerprint = "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+    deviceId = "device-1",
+    token = "not-a-real-token",
+)
+
+@Composable
+private fun PairingSettingsPairedPreview(dark: Boolean) = PreviewTheme(dark) {
+    val repo = remember { InMemorySettingsRepository(initialPairedServer = previewPairedServer) }
+    Column(Modifier.padding(16.dp)) {
+        PairingSettings(repo, pairing = null, onChanged = {})
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun PairingSettingsPairedLightPreview() = PairingSettingsPairedPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun PairingSettingsPairedDarkPreview() = PairingSettingsPairedPreview(dark = true)

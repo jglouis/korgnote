@@ -43,11 +43,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.korgnote.app.viewmodel.ConflictComparison
 import com.korgnote.common.sync.ChunkChoice
 import com.korgnote.common.sync.ConflictChunk
+import com.korgnote.common.sync.conflictChunks
 import com.korgnote.common.sync.lines
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.close
@@ -394,3 +396,110 @@ private fun keptSideName(keptSide: KeptSide): String = stringResource(
         KeptSide.FOLDER -> Res.string.notes_conflict_side_folder
     },
 )
+
+// Previews
+
+private const val PREVIEW_NOTE = "projects/garden.org"
+private const val PREVIEW_COPY = "projects/garden.sync-conflict-20250915-112000-PHONE.org"
+
+@Composable
+private fun ConflictStatusIconPreview(dark: Boolean) = PreviewTheme(dark) {
+    Box(Modifier.padding(8.dp)) {
+        ConflictStatusIcon(
+            conflicts = mapOf(PREVIEW_NOTE to listOf(PREVIEW_COPY), "inbox.org" to listOf("inbox.sync-conflict-20250914-080000-LAPTOP.org")),
+            onOpen = {},
+        )
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun ConflictStatusIconLightPreview() = ConflictStatusIconPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun ConflictStatusIconDarkPreview() = ConflictStatusIconPreview(dark = true)
+
+/** On the note, with a second copy waiting its turn. */
+@Composable
+private fun ConflictBannerNotePreview(dark: Boolean) = PreviewTheme(dark) {
+    ConflictBanner(
+        conflict = ShownConflict(PREVIEW_NOTE, PREVIEW_COPY, viewingCopy = false, moreCopies = 1),
+        onCompare = {},
+        onKeepNote = {},
+        onUseCopy = {},
+        modifier = Modifier.padding(16.dp),
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun ConflictBannerNoteLightPreview() = ConflictBannerNotePreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun ConflictBannerNoteDarkPreview() = ConflictBannerNotePreview(dark = true)
+
+/** On the copy, with the notes in a folder. */
+@Composable
+private fun ConflictBannerCopyPreview(dark: Boolean) = PreviewTheme(dark) {
+    ConflictBanner(
+        conflict = ShownConflict(PREVIEW_NOTE, PREVIEW_COPY, viewingCopy = true, moreCopies = 0),
+        onCompare = {},
+        onKeepNote = {},
+        onUseCopy = {},
+        modifier = Modifier.padding(16.dp),
+        keptSide = KeptSide.FOLDER,
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun ConflictBannerCopyLightPreview() = ConflictBannerCopyPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun ConflictBannerCopyDarkPreview() = ConflictBannerCopyPreview(dark = true)
+
+private val previewNoteText = """
+    * Garden
+    ** TODO Water the tomatoes
+    SCHEDULED: <2025-09-16 Tue>
+    ** TODO Buy seeds
+    Carrots and beans.
+    ** Notes
+    The shed key is under the pot.
+""".trimIndent()
+
+private val previewCopyText = """
+    * Garden
+    ** DONE Water the tomatoes
+    SCHEDULED: <2025-09-16 Tue>
+    ** TODO Buy seeds
+    Carrots, beans and peas.
+    ** Notes
+    The shed key is under the pot.
+""".trimIndent()
+
+/**
+ * The chunks of [ConflictCompareDialog], the first not chosen yet, the second settled for the copy.
+ * The dialog itself opens a window of its own, which the preview renderer cannot capture.
+ */
+@Composable
+private fun ChunkChooserPreview(dark: Boolean) = PreviewTheme(dark) {
+    val colors = diffColors()
+    val chunks = conflictChunks(previewNoteText, previewCopyText)
+    Column(Modifier.padding(16.dp)) {
+        chunks.forEachIndexed { index, chunk ->
+            ChunkChooser(chunk, choice = if (index == 0) null else ChunkChoice.Copy, colors = colors, onChoose = {})
+        }
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun ChunkChooserLightPreview() = ChunkChooserPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun ChunkChooserDarkPreview() = ChunkChooserPreview(dark = true)

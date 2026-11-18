@@ -50,11 +50,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import com.korgnote.app.data.DevicePairing
+import com.korgnote.app.data.InMemorySettingsRepository
 import com.korgnote.app.data.NotesSource
 import com.korgnote.app.data.PairingLinks
 import com.korgnote.app.data.SettingsRepository
@@ -582,3 +584,85 @@ private fun LocalNetworkCard(permission: PermissionAsk, why: String) {
 /** Where the README says how to install the server; ReadmeLinksTest checks the heading is there. */
 internal const val INSTALL_URL = "https://github.com/jglouis/korgnote#your-computer-with-the-korgnote-server"
 private const val DEVICES_URL = "http://localhost:8080/devices"
+
+// Previews
+//
+// [Onboarding] itself takes its repository and pairing from Koin, so each step is previewed on its
+// own, laid out as [Onboarding] lays it out. The WebDAV step is left out: it needs a WebDavSyncApi,
+// which needs an HTTP client.
+
+@Composable
+private fun OnboardingStepPreview(dark: Boolean, step: @Composable () -> Unit) = PreviewTheme(dark) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) { step() }
+}
+
+/** Without the WebDAV choice, which pushes the page past the preview's height. */
+@Composable
+private fun ChooseStepPreview(dark: Boolean) = OnboardingStepPreview(dark) {
+    ChooseStep(changing = false, onFolder = {}, onServer = {}, onWebDav = null)
+}
+
+@Preview(name = "Light")
+@Composable
+private fun ChooseStepLightPreview() = ChooseStepPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun ChooseStepDarkPreview() = ChooseStepPreview(dark = true)
+
+/** A folder picked, found empty: there is no folder access in a preview to count its notes. */
+@Composable
+private fun FolderStepPreview(dark: Boolean) = OnboardingStepPreview(dark) {
+    FolderStep(initial = "/home/me/Notes", folders = null, onUse = {})
+}
+
+@Preview(name = "Light")
+@Composable
+private fun FolderStepLightPreview() = FolderStepPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun FolderStepDarkPreview() = FolderStepPreview(dark = true)
+
+@Composable
+private fun ServerStepPreview(dark: Boolean) = OnboardingStepPreview(dark) {
+    val repo = remember { InMemorySettingsRepository() }
+    ServerStep(repo = repo, pairing = null, incomingLink = null, onDone = {})
+}
+
+@Preview(name = "Light")
+@Composable
+private fun ServerStepLightPreview() = ServerStepPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun ServerStepDarkPreview() = ServerStepPreview(dark = true)
+
+@Composable
+private fun RemindersStepPreview(dark: Boolean) = OnboardingStepPreview(dark) {
+    RemindersStep(permission = null, onDone = {})
+}
+
+@Preview(name = "Light")
+@Composable
+private fun RemindersStepLightPreview() = RemindersStepPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun RemindersStepDarkPreview() = RemindersStepPreview(dark = true)
+
+@Composable
+private fun TourStepPreview(dark: Boolean) = OnboardingStepPreview(dark) {
+    TourStep(onAdd = {}, onSkip = {})
+}
+
+@Preview(name = "Light")
+@Composable
+private fun TourStepLightPreview() = TourStepPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun TourStepDarkPreview() = TourStepPreview(dark = true)

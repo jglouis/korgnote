@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
@@ -19,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.settings_colour_from_name
@@ -103,3 +105,31 @@ private fun colorFor(tag: String, chosen: Map<String, Int>): Color {
 }
 
 private const val SHOWN_AT_FIRST = 24
+
+// Previews
+
+/** More tags than are shown at first, two of them with a colour chosen. */
+private val previewTags = listOf(
+    "work", "home", "errand", "reading", "garden", "music", "travel", "health", "finance", "family",
+    "ideas", "writing", "cooking", "bike", "phone", "email", "meeting", "project", "someday", "waiting",
+    "car", "school", "photos", "books", "games", "kids", "taxes", "repair",
+)
+
+@Composable
+private fun TagColorSettingsPreview(dark: Boolean) = PreviewTheme(dark) {
+    Column(Modifier.padding(16.dp)) {
+        TagColorSettings(
+            knownTags = previewTags,
+            chosen = mapOf("work" to TagColors.palette[5].light, "home" to TagColors.palette[8].light),
+            onChange = {},
+        )
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun TagColorSettingsLightPreview() = TagColorSettingsPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun TagColorSettingsDarkPreview() = TagColorSettingsPreview(dark = true)

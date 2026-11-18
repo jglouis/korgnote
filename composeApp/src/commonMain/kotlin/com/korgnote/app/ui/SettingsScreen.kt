@@ -54,8 +54,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.DevicePairing
+import com.korgnote.app.data.InMemorySettingsRepository
 import com.korgnote.app.data.PairingLinks
 import com.korgnote.app.data.canPair
 import com.korgnote.app.data.usesLocalServer
@@ -108,7 +110,9 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalTime
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * The app's settings, in sections, saved together. The save button shows only once something has
@@ -493,3 +497,51 @@ private fun Hint(text: String) {
 
 @Composable
 private fun SectionDivider() = HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+// Previews
+
+private val previewKnownTags = listOf("work", "home", "errand", "reading", "garden", "travel", "health", "ideas")
+
+/** Notes on the server, which last synced a few minutes ago. */
+@Composable
+private fun SettingsScreenServerPreview(dark: Boolean) = PreviewTheme(dark) {
+    val repo = remember { InMemorySettingsRepository(initialHost = "notes.example.com").apply { setNewNotesFolder("inbox") } }
+    val lastSynced = remember { Clock.System.now() - 5.minutes }
+    SettingsScreen(
+        repo = repo,
+        serverStatus = { ServerStatusIcon(unreachable = null, syncing = false, lastSynced = lastSynced, onRetry = {}) },
+        syncStatus = { SyncStatusText(unreachable = null, syncing = false, lastSynced = lastSynced) },
+        knownTags = previewKnownTags,
+        notesSource = NotesSource.Server,
+        onChangeNotesSource = {},
+        onTour = {},
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun SettingsScreenServerLightPreview() = SettingsScreenServerPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun SettingsScreenServerDarkPreview() = SettingsScreenServerPreview(dark = true)
+
+/** Notes in a folder another app syncs: no server section. */
+@Composable
+private fun SettingsScreenFolderPreview(dark: Boolean) = PreviewTheme(dark) {
+    val repo = remember { InMemorySettingsRepository(initialNotesSource = NotesSource.Folder("/home/me/Notes")) }
+    SettingsScreen(
+        repo = repo,
+        knownTags = previewKnownTags,
+        notesSource = NotesSource.Folder("/home/me/Notes"),
+        onChangeNotesSource = {},
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun SettingsScreenFolderLightPreview() = SettingsScreenFolderPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun SettingsScreenFolderDarkPreview() = SettingsScreenFolderPreview(dark = true)

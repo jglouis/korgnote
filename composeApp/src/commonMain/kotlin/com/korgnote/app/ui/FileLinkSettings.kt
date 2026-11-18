@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.korgnote.app.files.FileLinkMapping
 import com.korgnote.app.files.folderLabel
@@ -176,3 +177,26 @@ internal fun fileLinkMappingsError(mappings: List<FileLinkMapping>): StringResou
         else -> null
     }
 }
+
+// Previews
+
+@Composable
+private fun FileLinkSettingsPreview(dark: Boolean) = PreviewTheme(dark) {
+    Column(Modifier.padding(16.dp)) {
+        FileLinkSettings(
+            mappings = listOf(
+                FileLinkMapping("~/Documents/papers", "/home/me/papers"),
+                FileLinkMapping("~/Pictures", ""),
+            ),
+            onChange = {},
+        )
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun FileLinkSettingsLightPreview() = FileLinkSettingsPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun FileLinkSettingsDarkPreview() = FileLinkSettingsPreview(dark = true)
