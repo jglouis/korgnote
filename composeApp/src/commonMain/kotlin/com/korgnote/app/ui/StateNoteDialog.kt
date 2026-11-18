@@ -20,6 +20,19 @@ import korgnote.composeapp.generated.resources.editor_state_note_field
 import korgnote.composeapp.generated.resources.editor_state_note_save
 import korgnote.composeapp.generated.resources.editor_state_note_title
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import com.korgnote.app.viewmodel.LinkNavigator
+import com.korgnote.app.viewmodel.NoteLibrary
+import com.korgnote.app.viewmodel.OpenNote
+import com.korgnote.common.org.DEFAULT_TODO_KEYWORDS
+import com.korgnote.common.replica.DocumentStore
+import com.korgnote.common.replica.InMemoryReplicaStorage
+import kotlinx.datetime.LocalDate
 
 /**
  * The note a keyword's `@` asks for, as Org's note buffer takes it: a few lines written in the same
@@ -75,3 +88,36 @@ fun StateNoteDialog(
         dismissButton = { CancelButton(onCancel) },
     )
 }
+
+// Previews
+
+@Composable
+private fun StateNoteDialogPreview(dark: Boolean) = PreviewTheme(dark) {
+    var draft by remember { mutableStateOf(TextFieldValue("Used the rain barrel.")) }
+    val scope = rememberCoroutineScope()
+    // Completion over an empty, in-memory library: the strip shows its insert buttons.
+    val completion = remember {
+        val library = NoteLibrary(DocumentStore(InMemoryReplicaStorage()))
+        val note = OpenNote()
+        val links = LinkNavigator(scope, library, note, open = { _, _ -> }, showMessage = {}, beforeGoingBack = {})
+        CompletionController(library, note, links, today = { LocalDate(2025, 9, 15) }, draft = { draft }, replaceDraft = { draft = it })
+    }
+    StateNoteDialog(
+        keyword = "DONE",
+        headingTitle = "Water the tomatoes",
+        value = draft,
+        onValueChange = { draft = it },
+        completion = completion,
+        todoKeywords = DEFAULT_TODO_KEYWORDS,
+        onSave = {},
+        onCancel = {},
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun StateNoteDialogLightPreview() = StateNoteDialogPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun StateNoteDialogDarkPreview() = StateNoteDialogPreview(dark = true)

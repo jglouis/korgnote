@@ -503,3 +503,26 @@ private fun ChunkChooserLightPreview() = ChunkChooserPreview(dark = false)
 @Preview(name = "Dark")
 @Composable
 private fun ChunkChooserDarkPreview() = ChunkChooserPreview(dark = true)
+
+@Composable
+private fun ConflictCompareDialogPreview(dark: Boolean) = PreviewTheme(dark) {
+    ConflictCompareDialog(
+        comparison = ConflictComparison(
+            original = PREVIEW_NOTE,
+            copy = PREVIEW_COPY,
+            noteText = previewNoteText,
+            copyText = previewCopyText,
+            chunks = conflictChunks(previewNoteText, previewCopyText),
+        ),
+        onApply = {},
+        onDismiss = {},
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun ConflictCompareDialogLightPreview() = ConflictCompareDialogPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun ConflictCompareDialogDarkPreview() = ConflictCompareDialogPreview(dark = true)

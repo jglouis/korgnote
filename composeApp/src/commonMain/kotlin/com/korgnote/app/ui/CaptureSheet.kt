@@ -82,6 +82,14 @@ import korgnote.composeapp.generated.resources.capture_save_to
 import korgnote.composeapp.generated.resources.capture_where_to
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.tooling.preview.Preview
+import com.korgnote.app.capture.CaptureQueue
+import com.korgnote.app.capture.InMemoryCaptureQueueFolder
+import com.korgnote.app.data.NoteTemplateSettings
+import com.korgnote.common.org.capture.INBOX_FILE_NAME
+import com.korgnote.common.replica.InMemoryReplicaStorage
+import kotlinx.datetime.TimeZone
+import kotlin.time.Instant
 
 /** Where a capture goes, once the user chose: a note, made for it if new, or a heading. */
 private sealed interface Destination {
@@ -365,3 +373,61 @@ private fun previewOfAdditions(heading: LinkTarget, captured: Captured, addition
     val line = "*".repeat(heading.outline.size + 1) + " " + heading.title + "\n"
     return captureInto(line, HeadingRef("", title = heading.title), captured, additions)?.takeIf { it != line }
 }
+
+// Previews
+
+/** A filer with a fixed clock and an in-memory inbox, so the entry is stamped the same every time. */
+private fun previewFiler() = CaptureFiler(
+    CaptureQueue(InMemoryCaptureQueueFolder()),
+    newNotesFolder = { "" },
+    noteTemplate = { NoteTemplateSettings() },
+    zone = { TimeZone.UTC },
+    now = { Instant.parse("2025-09-15T11:20:00Z") },
+    newId = { "preview" },
+)
+
+private fun previewStore() = DocumentStore(
+    InMemoryReplicaStorage(mapOf(INBOX_FILE_NAME to "#+TITLE: Inbox\n#+TODO: TODO NEXT | DONE\n")),
+)
+
+/** A shared link, shown as the entry it makes. */
+@Composable
+private fun CaptureSheetPreview(dark: Boolean) = PreviewTheme(dark) {
+    CaptureSheet(
+        shared = SharedContent(subject = "Grilled sardines", url = "https://example.com/recipes/grilled-sardines"),
+        store = remember { previewStore() },
+        filer = remember { previewFiler() },
+        onSave = {},
+        onDismiss = {},
+        destinations = { emptyList() },
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun CaptureSheetLightPreview() = CaptureSheetPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun CaptureSheetDarkPreview() = CaptureSheetPreview(dark = true)
+
+/** Nothing shared: the entry's heading open to type. */
+@Composable
+private fun CaptureSheetEmptyPreview(dark: Boolean) = PreviewTheme(dark) {
+    CaptureSheet(
+        shared = SharedContent(),
+        store = remember { previewStore() },
+        filer = remember { previewFiler() },
+        onSave = {},
+        onDismiss = {},
+        destinations = { emptyList() },
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun CaptureSheetEmptyLightPreview() = CaptureSheetEmptyPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun CaptureSheetEmptyDarkPreview() = CaptureSheetEmptyPreview(dark = true)

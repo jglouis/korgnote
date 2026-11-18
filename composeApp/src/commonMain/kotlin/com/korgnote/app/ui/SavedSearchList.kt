@@ -202,3 +202,16 @@ private fun SavedSearchListEmptyLightPreview() = SavedSearchListEmptyPreview(dar
 @Preview(name = "Dark")
 @Composable
 private fun SavedSearchListEmptyDarkPreview() = SavedSearchListEmptyPreview(dark = true)
+
+@Composable
+private fun SaveSearchDialogPreview(dark: Boolean) = PreviewTheme(dark) {
+    SaveSearchDialog(query = "tag:travel -todo:DONE", name = "Travel", renaming = false, onSave = {}, onDismiss = {})
+}
+
+@Preview(name = "Light")
+@Composable
+private fun SaveSearchDialogLightPreview() = SaveSearchDialogPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun SaveSearchDialogDarkPreview() = SaveSearchDialogPreview(dark = true)

@@ -378,3 +378,74 @@ private fun TagsFieldTypingLightPreview() = TagsFieldTypingPreview(dark = false)
 @Preview(name = "Dark")
 @Composable
 private fun TagsFieldTypingDarkPreview() = TagsFieldTypingPreview(dark = true)
+
+@Composable
+private fun NewNoteDialogPreview(dark: Boolean) = PreviewTheme(dark) {
+    NewNoteDialog(
+        pathFor = { title -> title.takeIf { it.isNotBlank() }?.let { "notes/$it.org" } },
+        onCreate = { _, _ -> },
+        onDismiss = {},
+        knownTags = previewKnownTags,
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun NewNoteDialogLightPreview() = NewNoteDialogPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun NewNoteDialogDarkPreview() = NewNoteDialogPreview(dark = true)
+
+@Composable
+private fun NoteDetailsDialogPreview(dark: Boolean) = PreviewTheme(dark) {
+    NoteDetailsDialog(
+        initial = FileKeywords(title = "Trip to Lisbon", date = "[2025-09-12 Fri]", tags = listOf("travel")),
+        knownTags = previewKnownTags,
+        defaultAuthor = "Alex",
+        today = LocalDate(2025, 9, 15),
+        onSave = {},
+        onDismiss = {},
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun NoteDetailsDialogLightPreview() = NoteDetailsDialogPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun NoteDetailsDialogDarkPreview() = NoteDetailsDialogPreview(dark = true)
+
+@Composable
+private fun RenameNoteDialogPreview(dark: Boolean) = PreviewTheme(dark) {
+    RenameNoteDialog(path = "projects/garden.org", onRename = {}, onDismiss = {})
+}
+
+@Preview(name = "Light")
+@Composable
+private fun RenameNoteDialogLightPreview() = RenameNoteDialogPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun RenameNoteDialogDarkPreview() = RenameNoteDialogPreview(dark = true)
+
+/** With edits the server has not seen yet, which is when it warns. */
+@Composable
+private fun DeleteNoteDialogPreview(dark: Boolean) = PreviewTheme(dark) {
+    DeleteNoteDialog(
+        path = "projects/garden.org",
+        hasUnsyncedChanges = true,
+        keepsACopy = true,
+        onDelete = {},
+        onDismiss = {},
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun DeleteNoteDialogLightPreview() = DeleteNoteDialogPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun DeleteNoteDialogDarkPreview() = DeleteNoteDialogPreview(dark = true)
