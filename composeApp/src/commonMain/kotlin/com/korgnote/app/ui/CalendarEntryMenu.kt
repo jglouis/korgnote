@@ -18,6 +18,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
 import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.agenda.AgendaEntry
@@ -119,3 +124,37 @@ internal fun Modifier.openOrMenu(onOpen: () -> Unit, onMenu: () -> Unit): Modifi
     val actions = LocalCalendarActions.current
     return combinedClickable(onClick = onOpen, onLongClick = if (actions != null) onMenu else null)
 }
+
+// Previews
+// -----------------------
+
+/** Made-up actions for the menu to show: nothing running, the note's keywords TODO NEXT WAIT | DONE. */
+private val previewActions = CalendarActions(
+    isRunning = { _, _ -> false },
+    clockIn = { _, _ -> },
+    clockOut = { _, _ -> },
+    open = { _, _ -> },
+    keywords = { OrgTodoConfig(todo = setOf("TODO", "NEXT", "WAIT"), done = setOf("DONE")) },
+    setTodo = { _, _, _ -> },
+    reschedule = { _, _, _, _ -> },
+)
+
+/** The long-press menu, open, on the made-up NEXT heading scheduled for 15 September 2025. */
+@Composable
+private fun EntryMenuPreview(dark: Boolean) = PreviewTheme(dark) {
+    val entry = previewCalendarAgenda().entries.first { it.todo == "NEXT" }
+    CompositionLocalProvider(LocalCalendarActions provides previewActions) {
+        Box(Modifier.padding(16.dp)) {
+            Text("Review pull requests")
+            EntryMenu(entry.file, entry.headingOffset, entry.todo, expanded = true, onDismiss = {}, entry = entry)
+        }
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun EntryMenuLightPreview() = EntryMenuPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun EntryMenuDarkPreview() = EntryMenuPreview(dark = true)

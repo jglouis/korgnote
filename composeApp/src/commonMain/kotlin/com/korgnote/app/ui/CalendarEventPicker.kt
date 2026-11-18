@@ -263,3 +263,47 @@ private fun CalendarEventRowsLightPreview() = CalendarEventRowsPreview(dark = fa
 @Preview(name = "Dark")
 @Composable
 private fun CalendarEventRowsDarkPreview() = CalendarEventRowsPreview(dark = true)
+
+/** The made-up events as the phone's calendar. */
+private object PreviewDeviceCalendar : DeviceCalendar {
+    override suspend fun events(from: LocalDate, days: Int): List<DeviceEvent> = previewEvents
+}
+
+/** The calendar already allowed to be read. */
+private object PreviewCalendarAllowed : PermissionAsk {
+    override val granted = true
+    override fun request(onDone: (Boolean) -> Unit) = onDone(true)
+}
+
+/** The whole picker, the calendar allowed and read. */
+@Composable
+private fun CalendarEventPickerPreview(dark: Boolean) = PreviewTheme(dark) {
+    CalendarEventPicker(PreviewDeviceCalendar, PreviewCalendarAllowed, onPick = {}, onDismiss = {})
+}
+
+@Preview(name = "Light")
+@Composable
+private fun CalendarEventPickerLightPreview() = CalendarEventPickerPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun CalendarEventPickerDarkPreview() = CalendarEventPickerPreview(dark = true)
+
+/** The calendar not yet allowed: the picker asks for it first. */
+private object PreviewCalendarNotAllowed : PermissionAsk {
+    override val granted = false
+    override fun request(onDone: (Boolean) -> Unit) = onDone(false)
+}
+
+@Composable
+private fun CalendarEventPickerAskPreview(dark: Boolean) = PreviewTheme(dark) {
+    CalendarEventPicker(PreviewDeviceCalendar, PreviewCalendarNotAllowed, onPick = {}, onDismiss = {})
+}
+
+@Preview(name = "Light")
+@Composable
+private fun CalendarEventPickerAskLightPreview() = CalendarEventPickerAskPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun CalendarEventPickerAskDarkPreview() = CalendarEventPickerAskPreview(dark = true)

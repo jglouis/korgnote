@@ -407,3 +407,24 @@ private fun ActiveFilterLightPreview() = ActiveFilterPreview(dark = false)
 @Preview(name = "Dark")
 @Composable
 private fun ActiveFilterDarkPreview() = ActiveFilterPreview(dark = true)
+
+/** The filter dialog over the made-up notes, narrowed to the travel tag, done entries hidden. */
+@Composable
+private fun AgendaFilterDialogPreview(dark: Boolean) = PreviewTheme(dark) {
+    AgendaFilterDialog(
+        agenda = previewCalendarAgenda(),
+        filter = AgendaFilter(tags = setOf("travel")),
+        onChange = {},
+        showDone = false,
+        onShowDone = {},
+        onDismiss = {},
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun AgendaFilterDialogLightPreview() = AgendaFilterDialogPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun AgendaFilterDialogDarkPreview() = AgendaFilterDialogPreview(dark = true)

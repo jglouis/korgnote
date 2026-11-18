@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.tooling.preview.Preview
 import com.korgnote.app.viewmodel.CompletionController
 import com.korgnote.common.org.complete.shiftedEnd
 import korgnote.composeapp.generated.resources.Res
@@ -177,3 +178,29 @@ private fun currentHour(): Int = Clock.System.now().toLocalDateTime(TimeZone.cur
 
 internal fun Long.toUtcDate(): LocalDate =
     Instant.fromEpochMilliseconds(this).toLocalDateTime(TimeZone.UTC).date
+
+// Previews
+// -----------------------
+
+/**
+ * Changing a meeting's stamp, `<2025-09-15 Mon 14:30-15:15>`: the date step it opens on. The time
+ * steps are behind its buttons, in state of its own, so only this one can be previewed.
+ */
+@Composable
+private fun OrgDatePickerDialogPreview(dark: Boolean) = PreviewTheme(dark) {
+    OrgDatePickerDialog(
+        initialDate = LocalDate(2025, 9, 15),
+        initialTime = LocalTime(14, 30),
+        initialEndTime = LocalTime(15, 15),
+        onPick = { _, _, _ -> },
+        onDismiss = {},
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun OrgDatePickerDialogLightPreview() = OrgDatePickerDialogPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun OrgDatePickerDialogDarkPreview() = OrgDatePickerDialogPreview(dark = true)
