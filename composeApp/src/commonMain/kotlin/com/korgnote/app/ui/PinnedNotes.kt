@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
 import com.korgnote.app.viewmodel.pinLabels
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.notes_pinned
@@ -89,3 +90,23 @@ private fun PinnedNoteRow(
         }
     }
 }
+
+// Previews
+
+@Composable
+private fun PinnedNotesPreview(dark: Boolean) = PreviewTheme(dark) {
+    PinnedNotes(
+        paths = listOf("inbox.org", "projects/garden.org", "work/ideas.org", "home/ideas.org"),
+        onOpen = {},
+        onUnpin = {},
+        modifier = Modifier.padding(8.dp),
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun PinnedNotesLightPreview() = PinnedNotesPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun PinnedNotesDarkPreview() = PinnedNotesPreview(dark = true)

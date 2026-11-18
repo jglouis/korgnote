@@ -17,6 +17,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.unit.dp
 
 /** How long a chevron takes to turn, and what it opens to unfold: the two move together. */
 internal const val DISCLOSURE_MILLIS = 200
@@ -50,3 +55,21 @@ fun DisclosureChevron(
         modifier = modifier.rotate(angle),
     )
 }
+
+// Previews
+
+@Composable
+private fun DisclosureChevronPreview(dark: Boolean) = PreviewTheme(dark) {
+    Row(Modifier.fillMaxWidth().padding(16.dp)) {
+        DisclosureChevron(expanded = false, contentDescription = null)
+        DisclosureChevron(expanded = true, contentDescription = null)
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun DisclosureChevronLightPreview() = DisclosureChevronPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun DisclosureChevronDarkPreview() = DisclosureChevronPreview(dark = true)

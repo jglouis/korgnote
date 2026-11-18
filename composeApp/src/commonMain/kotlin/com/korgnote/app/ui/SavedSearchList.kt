@@ -34,6 +34,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
 import com.korgnote.app.data.SavedSearch
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.notes_name
@@ -167,3 +168,37 @@ fun SaveSearchDialog(
         dismissButton = { CancelButton(onDismiss) },
     )
 }
+
+// Previews
+
+private val previewSearches = listOf(
+    SavedSearch(name = "Next actions", query = "todo:NEXT"),
+    SavedSearch(name = "Travel", query = "tag:travel -todo:DONE"),
+    SavedSearch(name = "garden", query = "garden"),
+)
+
+@Composable
+private fun SavedSearchListPreview(dark: Boolean) = PreviewTheme(dark) {
+    SavedSearchList(previewSearches, onRun = {}, onRename = {}, onRemove = {}, modifier = Modifier.padding(8.dp))
+}
+
+@Preview(name = "Light")
+@Composable
+private fun SavedSearchListLightPreview() = SavedSearchListPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun SavedSearchListDarkPreview() = SavedSearchListPreview(dark = true)
+
+@Composable
+private fun SavedSearchListEmptyPreview(dark: Boolean) = PreviewTheme(dark) {
+    SavedSearchList(emptyList(), onRun = {}, onRename = {}, onRemove = {}, modifier = Modifier.padding(8.dp))
+}
+
+@Preview(name = "Light")
+@Composable
+private fun SavedSearchListEmptyLightPreview() = SavedSearchListEmptyPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun SavedSearchListEmptyDarkPreview() = SavedSearchListEmptyPreview(dark = true)

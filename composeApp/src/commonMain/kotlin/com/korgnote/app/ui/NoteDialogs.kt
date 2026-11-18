@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -29,6 +30,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.korgnote.common.fs.NotePaths
 import com.korgnote.common.org.agenda.parseOrgTimestamp
@@ -340,3 +342,39 @@ private fun RefusalText(error: String?) {
     Spacer(Modifier.height(8.dp))
     Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
 }
+
+// Previews
+
+private val previewKnownTags = listOf("work", "home", "reading", "travel", "ideas")
+
+// The tags field as the new-note and details dialogs show it: the dialogs' own windows are not drawn here.
+
+@Composable
+private fun TagsFieldPreview(dark: Boolean) = PreviewTheme(dark) {
+    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+        TagsField(TextFieldValue(""), previewKnownTags) {}
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun TagsFieldLightPreview() = TagsFieldPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun TagsFieldDarkPreview() = TagsFieldPreview(dark = true)
+
+@Composable
+private fun TagsFieldTypingPreview(dark: Boolean) = PreviewTheme(dark) {
+    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+        TagsField(TextFieldValue("work r", TextRange(6)), previewKnownTags) {}
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun TagsFieldTypingLightPreview() = TagsFieldTypingPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun TagsFieldTypingDarkPreview() = TagsFieldTypingPreview(dark = true)

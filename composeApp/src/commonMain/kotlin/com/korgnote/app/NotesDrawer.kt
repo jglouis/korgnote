@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
 import com.korgnote.app.ui.*
 import kotlinx.coroutines.launch
 import korgnote.composeapp.generated.resources.Res
@@ -108,3 +109,23 @@ private fun DrawerAction(icon: androidx.compose.ui.graphics.vector.ImageVector, 
         Text(label, style = MaterialTheme.typography.labelLarge)
     }
 }
+
+// Previews
+
+// The drawer's actions; the drawer itself needs the app's view model.
+
+@Composable
+private fun DrawerActionsPreview(dark: Boolean) = PreviewTheme(dark) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(8.dp)) {
+        DrawerAction(Icons.AutoMirrored.Filled.NoteAdd, stringResource(Res.string.app_new_note)) {}
+        DrawerAction(Icons.Filled.Today, stringResource(Res.string.app_todays_daily)) {}
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun DrawerActionsLightPreview() = DrawerActionsPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun DrawerActionsDarkPreview() = DrawerActionsPreview(dark = true)

@@ -7,6 +7,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.unit.dp
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.cancel
 import org.jetbrains.compose.resources.stringResource
@@ -33,3 +39,21 @@ internal fun rememberAutoFocus(key: Any? = Unit, enabled: Boolean = true): Focus
 internal fun FaintHint(text: String) {
     Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
 }
+
+// Previews
+
+@Composable
+private fun SharedPartsPreview(dark: Boolean) = PreviewTheme(dark) {
+    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+        FaintHint("Saved on this phone; sent when the server is back.")
+        CancelButton {}
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun SharedPartsLightPreview() = SharedPartsPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun SharedPartsDarkPreview() = SharedPartsPreview(dark = true)

@@ -15,7 +15,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.foundation.layout.Box
 import com.korgnote.common.org.OrgDocument
 import com.korgnote.common.org.OrgKeyword
 import com.korgnote.common.org.OrgSyntax
@@ -113,3 +116,20 @@ private fun BylinePart(icon: ImageVector, text: String, what: String) {
         )
     }
 }
+
+// Previews
+
+@Composable
+private fun NoteBylineViewPreview(dark: Boolean) = PreviewTheme(dark) {
+    Box(Modifier.fillMaxWidth().padding(16.dp)) {
+        NoteBylineView(NoteByline(author = "Alex Martin", writtenDate = "[2025-09-12 Fri 09:30]", indices = setOf(0, 1)))
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun NoteBylineViewLightPreview() = NoteBylineViewPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun NoteBylineViewDarkPreview() = NoteBylineViewPreview(dark = true)

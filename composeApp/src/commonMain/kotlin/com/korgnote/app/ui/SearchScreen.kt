@@ -35,6 +35,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
 import com.korgnote.common.org.OrgSyntax
 import com.korgnote.common.org.search.SearchHit
 import korgnote.composeapp.generated.resources.Res
@@ -203,3 +204,68 @@ private fun SearchHit.snippet(highlight: Color): AnnotatedString {
         }
     }
 }
+
+// Previews
+
+/** A hit on [words] in [lineText]. */
+private fun previewHit(
+    path: String,
+    line: Int,
+    lineText: String,
+    words: String,
+    breadcrumb: List<String> = emptyList(),
+    tags: List<String> = emptyList(),
+    kind: SearchHit.Kind = SearchHit.Kind.LINE,
+): SearchHit {
+    val at = lineText.indexOf(words, ignoreCase = true)
+    return SearchHit(path, breadcrumb, tags, line, 0, lineText, at until at + words.length, kind)
+}
+
+private val previewHits = listOf(
+    previewHit("travel/porto.org", 0, "travel/porto.org", "porto", kind = SearchHit.Kind.PATH),
+    previewHit("travel/porto.org", 4, "** TODO Book the train to Porto :travel:", "porto", listOf("Getting there"), listOf("travel")),
+    previewHit("inbox.org", 12, "Ask Sam about the /best/ cafés in Porto", "porto", listOf("Questions")),
+)
+
+@Composable
+private fun SearchScreenEmptyPreview(dark: Boolean) = PreviewTheme(dark) {
+    SearchScreen(
+        query = "",
+        results = emptyList(),
+        onQueryChange = {},
+        onOpen = {},
+        modifier = Modifier.padding(8.dp),
+        onToggleSaved = {},
+        onShowSaved = {},
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun SearchScreenEmptyLightPreview() = SearchScreenEmptyPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun SearchScreenEmptyDarkPreview() = SearchScreenEmptyPreview(dark = true)
+
+@Composable
+private fun SearchScreenResultsPreview(dark: Boolean) = PreviewTheme(dark) {
+    SearchScreen(
+        query = "porto",
+        results = previewHits,
+        onQueryChange = {},
+        onOpen = {},
+        modifier = Modifier.padding(8.dp),
+        saved = true,
+        onToggleSaved = {},
+        onShowSaved = {},
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun SearchScreenResultsLightPreview() = SearchScreenResultsPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun SearchScreenResultsDarkPreview() = SearchScreenResultsPreview(dark = true)
