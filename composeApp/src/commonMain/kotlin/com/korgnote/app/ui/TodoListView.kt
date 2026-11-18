@@ -52,6 +52,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
 import com.korgnote.common.org.agenda.AgendaFilter
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.TodoEntry
@@ -368,3 +369,41 @@ private fun dueLabel(todo: TodoEntry, today: LocalDate): Pair<String, Boolean>? 
 @Composable
 private fun dayLabel(date: LocalDate, today: LocalDate): String =
     if (date == today) stringResource(Res.string.cal_today) else shortDay(date)
+
+// Previews
+// -----------------------
+
+/** The made-up notes' TODOs, grouped by keyword, with what each is due by. */
+@Composable
+private fun TodoListPagePreview(dark: Boolean) = PreviewTheme(dark) {
+    TodoListPage(
+        agenda = previewCalendarAgenda(),
+        today = calendarPreviewToday,
+        filter = AgendaFilter.NONE,
+        onFilterChange = {},
+        onBack = {},
+        onOpen = {},
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun TodoListPageLightPreview() = TodoListPagePreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun TodoListPageDarkPreview() = TodoListPagePreview(dark = true)
+
+/** A filter on a keyword and a tag, each a chip to take it away. */
+@Composable
+private fun ActiveFilterPreview(dark: Boolean) = PreviewTheme(dark) {
+    ActiveFilter(AgendaFilter(keywords = setOf("NEXT"), tags = setOf("work")), onChange = {}, Modifier.padding(16.dp))
+}
+
+@Preview(name = "Light")
+@Composable
+private fun ActiveFilterLightPreview() = ActiveFilterPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun ActiveFilterDarkPreview() = ActiveFilterPreview(dark = true)

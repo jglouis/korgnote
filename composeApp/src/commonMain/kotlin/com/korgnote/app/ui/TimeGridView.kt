@@ -59,6 +59,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.sp
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOccurrence
@@ -539,3 +540,50 @@ private fun WeekAllDay(
 
 /** Entries in the week's all-day strip, bars and days together, before the rest are counted. */
 private const val ALL_DAY_LIMIT = 3
+
+// Previews
+// -----------------------
+
+/** Today in the made-up week: the stand-up, the dentist, a morning's clocked time and a clock running since ten. */
+@Composable
+private fun TimeGridDayPreview(dark: Boolean) = PreviewTheme(dark) {
+    TimeGridView(
+        dates = listOf(calendarPreviewToday),
+        agenda = previewCalendarAgenda(),
+        now = calendarPreviewNow,
+        showDone = true,
+        onOpen = {},
+        onDayClick = {},
+        modifier = Modifier.height(720.dp),
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun TimeGridDayLightPreview() = TimeGridDayPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun TimeGridDayDarkPreview() = TimeGridDayPreview(dark = true)
+
+/** The made-up week, Monday to Sunday: day headers, the all-day strip with the holidays as a bar, and the hours. */
+@Composable
+private fun TimeGridWeekPreview(dark: Boolean) = PreviewTheme(dark) {
+    TimeGridView(
+        dates = (0 until 7).map { LocalDate(2025, 9, 15 + it) },
+        agenda = previewCalendarAgenda(),
+        now = calendarPreviewNow,
+        showDone = true,
+        onOpen = {},
+        onDayClick = {},
+        modifier = Modifier.height(720.dp),
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun TimeGridWeekLightPreview() = TimeGridWeekPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun TimeGridWeekDarkPreview() = TimeGridWeekPreview(dark = true)

@@ -28,6 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
+import kotlinx.datetime.LocalDateTime
 import com.korgnote.app.capture.DeviceCalendar
 import com.korgnote.app.capture.DeviceEvent
 import com.korgnote.common.org.capture.CalendarEvent
@@ -223,3 +225,41 @@ private const val PAST_DAYS = 7
 
 /** How far ahead it looks. */
 private const val COMING_DAYS = 60
+
+// Previews
+// -----------------------
+
+// The picker itself is a dialog, which the preview renderer cannot capture: these are its rows.
+
+private val previewEvents = listOf(
+    DeviceEvent(
+        CalendarEvent("Design review", EventTime.At(LocalDateTime(2025, 9, 15, 10, 0)), EventTime.At(LocalDateTime(2025, 9, 15, 11, 0)), location = "Room 4"),
+        "Work",
+    ),
+    DeviceEvent(CalendarEvent("Dentist", EventTime.At(LocalDateTime(2025, 9, 15, 14, 30)), EventTime.At(LocalDateTime(2025, 9, 15, 15, 15))), "Personal"),
+    DeviceEvent(CalendarEvent("Team lunch", EventTime.At(LocalDateTime(2025, 9, 17, 12, 0)), EventTime.At(LocalDateTime(2025, 9, 17, 13, 30))), "Work"),
+    DeviceEvent(CalendarEvent("Holidays", EventTime.AllDay(LocalDate(2025, 9, 19)), EventTime.AllDay(LocalDate(2025, 9, 24))), "Family"),
+)
+
+/** A few days of a made-up phone calendar, today (15 September 2025) in bold, as the picker lists them. */
+@Composable
+private fun CalendarEventRowsPreview(dark: Boolean) = PreviewTheme(dark) {
+    val today = LocalDate(2025, 9, 15)
+    Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+        var lastDay: LocalDate? = null
+        for (each in previewEvents) {
+            val day = dayOf(each.event.start)
+            if (day != lastDay) DayHeader(day, today)
+            lastDay = day
+            EventRow(each, onClick = {})
+        }
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun CalendarEventRowsLightPreview() = CalendarEventRowsPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun CalendarEventRowsDarkPreview() = CalendarEventRowsPreview(dark = true)

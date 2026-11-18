@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.DaySpan
@@ -177,3 +178,26 @@ private fun WeekRows(height: Dp, modifier: Modifier, content: @Composable () -> 
 
 /** Lines of entries under a day's number, bars included, before the rest are counted. */
 private const val MONTH_MAX_ENTRIES = 5
+
+// Previews
+// -----------------------
+
+@Composable
+private fun MonthViewPreview(dark: Boolean) = PreviewTheme(dark) {
+    MonthView(
+        anchorDate = calendarPreviewToday,
+        agenda = previewCalendarAgenda(),
+        today = calendarPreviewToday,
+        showDone = true,
+        onDayClick = {},
+        modifier = Modifier.height(600.dp).padding(4.dp),
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun MonthViewLightPreview() = MonthViewPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun MonthViewDarkPreview() = MonthViewPreview(dark = true)

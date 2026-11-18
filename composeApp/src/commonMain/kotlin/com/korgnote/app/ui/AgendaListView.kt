@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
 import com.korgnote.common.org.agenda.AgendaFilter
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOccurrence
@@ -277,3 +278,47 @@ private fun AgendaRow(
         }
     }
 }
+
+// Previews
+// -----------------------
+
+/** The made-up week from Monday 15 September 2025: the TODOs row, what is overdue, then each day. */
+@Composable
+private fun AgendaListPreview(dark: Boolean) = PreviewTheme(dark) {
+    AgendaListView(
+        agenda = previewCalendarAgenda(),
+        from = calendarPreviewToday,
+        today = calendarPreviewToday,
+        showDone = true,
+        onOpen = {},
+        now = calendarPreviewNow,
+        onFilterChange = {},
+        modifier = Modifier.padding(horizontal = 8.dp),
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun AgendaListLightPreview() = AgendaListPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun AgendaListDarkPreview() = AgendaListPreview(dark = true)
+
+/** The week's clock report, at the foot of the agenda: a finished clock and one still running. */
+@Composable
+private fun ClockReportPreview(dark: Boolean) = PreviewTheme(dark) {
+    val from = calendarPreviewToday.plus(-3, DateTimeUnit.DAY)
+    val to = calendarPreviewToday.plus(3, DateTimeUnit.DAY)
+    Column(Modifier.padding(horizontal = 12.dp)) {
+        ClockReport(previewCalendarAgenda().clocks.report(from, to, calendarPreviewNow), from, to)
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun ClockReportLightPreview() = ClockReportPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun ClockReportDarkPreview() = ClockReportPreview(dark = true)

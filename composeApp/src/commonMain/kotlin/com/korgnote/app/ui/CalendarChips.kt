@@ -2,7 +2,9 @@ package com.korgnote.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,6 +33,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.tooling.preview.Preview
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.plus
 import com.korgnote.common.org.agenda.AgendaKind
 import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.DaySpan
@@ -185,3 +190,46 @@ internal val DAY_NUMBER_SIZE = 24.dp
 /** The text of an entry in the week's all-day strip and in the month, where a day is narrow. */
 internal val CHIP_FONT = 10.sp
 internal val CHIP_LINE = 12.sp
+
+// Previews
+// -----------------------
+
+/**
+ * The pieces a day, a week and a month are made of, from the made-up week of 15 September 2025:
+ * day numbers (today, a day of another month), a chip of each kind, the compact chips a month cell
+ * shows, and the holidays as one bar across the week.
+ */
+@Composable
+private fun CalendarChipsPreview(dark: Boolean) = PreviewTheme(dark) {
+    val agenda = previewCalendarAgenda()
+    val today = calendarPreviewToday
+    val colors = rememberKeywordColors(agenda)
+    val chips = agenda.shownOn(today, today, showDone = true).filter { it.isAllDay } +
+        agenda.shownOn(LocalDate(2025, 9, 16), today, showDone = true)
+    val week = (0 until 7).map { agenda.monthDay(today.plus(it, DateTimeUnit.DAY), showDone = true) }
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DayNumber(LocalDate(2025, 8, 31), isToday = false, dim = true)
+            DayNumber(LocalDate(2025, 9, 14), isToday = false)
+            DayNumber(today, isToday = true)
+            DayNumber(LocalDate(2025, 9, 16), isToday = false)
+        }
+        for (each in chips) EventChip(each, today, colors.of(each.entry), onOpen = {})
+        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            for (each in chips.take(3)) {
+                Box(Modifier.width(72.dp)) { EventChip(each, today, colors.of(each.entry), onOpen = {}, compact = true) }
+            }
+        }
+        BarLane(layoutRangeBars(week), days = 7, Modifier.padding(top = 8.dp)) { bar ->
+            RangeBarChip(bar, colors.of(bar.occurrence.entry), maxLines = 1, onOpen = {})
+        }
+    }
+}
+
+@Preview(name = "Light")
+@Composable
+private fun CalendarChipsLightPreview() = CalendarChipsPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun CalendarChipsDarkPreview() = CalendarChipsPreview(dark = true)

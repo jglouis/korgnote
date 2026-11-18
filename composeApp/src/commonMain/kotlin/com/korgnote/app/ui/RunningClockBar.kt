@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
 import com.korgnote.app.viewmodel.ClockRecent
 import com.korgnote.app.viewmodel.ClockRunning
 import korgnote.composeapp.generated.resources.Res
@@ -309,3 +310,76 @@ fun clockDuration(minutes: Int): String {
 
 /** A heading's title as it reads: its links' descriptions, without the brackets around them. */
 private fun plainHeadingTitle(title: String): String = buildOrgInlineString(title, viewMode = true).text
+
+// Previews
+// -----------------------
+
+private val previewRecent = listOf(
+    ClockRecent("work.org", 0, "Review pull requests", LocalDateTime(2025, 9, 15, 11, 5)),
+    ClockRecent("home.org", 120, "Pay invoices", LocalDateTime(2025, 9, 12, 18, 40)),
+)
+
+/** A clock running for an hour and twenty minutes, with recent headings to switch to. */
+@Composable
+private fun RunningClockBarPreview(dark: Boolean) = PreviewTheme(dark) {
+    RunningClockBar(
+        clocks = listOf(ClockRunning("work.org", 200, "Quarterly report", LocalDateTime(2025, 9, 15, 10, 0))),
+        now = calendarPreviewNow,
+        onOpen = {},
+        onClockOut = { _, _ -> },
+        onCancel = {},
+        recent = previewRecent,
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun RunningClockBarLightPreview() = RunningClockBarPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun RunningClockBarDarkPreview() = RunningClockBarPreview(dark = true)
+
+/** A clock left running overnight, and a second one from another device: the warning. */
+@Composable
+private fun RunningClockBarLeftOnPreview(dark: Boolean) = PreviewTheme(dark) {
+    RunningClockBar(
+        clocks = listOf(
+            ClockRunning("work.org", 200, "Quarterly report", LocalDateTime(2025, 9, 14, 17, 30)),
+            ClockRunning("home.org", 80, "Plan the trip", LocalDateTime(2025, 9, 14, 16, 0)),
+        ),
+        now = calendarPreviewNow,
+        onOpen = {},
+        onClockOut = { _, _ -> },
+        onCancel = {},
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun RunningClockBarLeftOnLightPreview() = RunningClockBarLeftOnPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun RunningClockBarLeftOnDarkPreview() = RunningClockBarLeftOnPreview(dark = true)
+
+/** Stopped a quarter of an hour ago: back in with a tap. */
+@Composable
+private fun RunningClockBarStoppedPreview(dark: Boolean) = PreviewTheme(dark) {
+    RunningClockBar(
+        clocks = emptyList(),
+        now = calendarPreviewNow,
+        onOpen = {},
+        onClockOut = { _, _ -> },
+        onCancel = {},
+        recent = previewRecent,
+    )
+}
+
+@Preview(name = "Light")
+@Composable
+private fun RunningClockBarStoppedLightPreview() = RunningClockBarStoppedPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun RunningClockBarStoppedDarkPreview() = RunningClockBarStoppedPreview(dark = true)
