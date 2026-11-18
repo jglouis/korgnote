@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.lazy.LazyColumn
@@ -306,8 +305,7 @@ fun Folder.visibleRows(
 }
 
 @Composable
-@Preview
-fun FileTree_Preview() {
+private fun FileTreePreview(dark: Boolean) {
     val sample = Folder(
         name = "Documents",
         path = "",
@@ -369,9 +367,15 @@ fun FileTree_Preview() {
         )
     )
 
-    MaterialTheme {
-        Surface {
-            FileTree(root = sample, onFileSelected = {}, modifier = Modifier.padding(8.dp).height(300.dp))
-        }
+    PreviewTheme(dark) {
+        FileTree(root = sample, onFileSelected = {}, modifier = Modifier.padding(8.dp).height(300.dp))
     }
 }
+
+@Preview(name = "Light")
+@Composable
+private fun FileTreeLightPreview() = FileTreePreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun FileTreeDarkPreview() = FileTreePreview(dark = true)

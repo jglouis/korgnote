@@ -495,26 +495,54 @@ private fun previewSampleAgenda(): AgendaIndex = AgendaIndex.of(
 
 private val previewNow = LocalDateTime(2025, 9, 15, 11, 20)
 
-@Preview
 @Composable
-private fun Preview_Calendar_Agenda() {
+private fun CalendarAgendaPreview(dark: Boolean) = PreviewTheme(dark) {
     CalendarScreen(agenda = previewSampleAgenda(), initialMode = CalendarMode.Agenda, now = previewNow)
 }
 
-@Preview
+@Preview(name = "Light")
 @Composable
-private fun Preview_Calendar_Day() {
+private fun CalendarAgendaLightPreview() = CalendarAgendaPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun CalendarAgendaDarkPreview() = CalendarAgendaPreview(dark = true)
+
+@Composable
+private fun CalendarDayPreview(dark: Boolean) = PreviewTheme(dark) {
     CalendarScreen(agenda = previewSampleAgenda(), initialMode = CalendarMode.Day, now = previewNow)
 }
 
-@Preview
+@Preview(name = "Light")
 @Composable
-private fun Preview_Calendar_Week() {
+private fun CalendarDayLightPreview() = CalendarDayPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun CalendarDayDarkPreview() = CalendarDayPreview(dark = true)
+
+@Composable
+private fun CalendarWeekPreview(dark: Boolean) = PreviewTheme(dark) {
     CalendarScreen(agenda = previewSampleAgenda(), initialMode = CalendarMode.Week, now = previewNow)
 }
 
-@Preview
+@Preview(name = "Light")
 @Composable
-private fun Preview_Calendar_Month() {
+private fun CalendarWeekLightPreview() = CalendarWeekPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun CalendarWeekDarkPreview() = CalendarWeekPreview(dark = true)
+
+@Composable
+private fun CalendarMonthPreview(dark: Boolean) = PreviewTheme(dark) {
     CalendarScreen(agenda = previewSampleAgenda(), initialMode = CalendarMode.Month, now = previewNow)
 }
+
+@Preview(name = "Light")
+@Composable
+private fun CalendarMonthLightPreview() = CalendarMonthPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun CalendarMonthDarkPreview() = CalendarMonthPreview(dark = true)

@@ -7,7 +7,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -66,52 +65,65 @@ val OrgSampleDocument = """
 """.trimIndent()
 
 @Composable
-private fun PreviewSurface(content: @Composable () -> Unit) {
-    MaterialTheme {
-        Surface {
-            Column(
-                modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())
-            ) { content() }
-        }
+private fun PreviewSurface(dark: Boolean, content: @Composable () -> Unit) {
+    PreviewTheme(dark) {
+        Column(
+            modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())
+        ) { content() }
     }
 }
 
-@Preview
 @Composable
-fun OrgText_Preview() {
-    PreviewSurface {
-        OrgText(content = OrgSampleDocument.toOrgDocument(), onToggleCheckbox = { })
-    }
+private fun OrgTextPreview(dark: Boolean) = PreviewSurface(dark) {
+    OrgText(content = OrgSampleDocument.toOrgDocument(), onToggleCheckbox = { })
 }
 
-@Preview
+@Preview(name = "Light")
 @Composable
-fun OrgEditor_Preview() {
-    PreviewSurface {
-        var text by remember { mutableStateOf(OrgSampleDocument) }
-        val headingColor = MaterialTheme.colorScheme.primary
-        val transformation = remember(headingColor) { OrgSyntaxHighlightTransformation(headingColor) }
-        OutlinedTextField(
-            value = text,
-            onValueChange = { text = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Content") },
-            visualTransformation = transformation
-        )
-    }
+private fun OrgTextLightPreview() = OrgTextPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun OrgTextDarkPreview() = OrgTextPreview(dark = true)
+
+@Composable
+private fun OrgEditorPreview(dark: Boolean) = PreviewSurface(dark) {
+    var text by remember { mutableStateOf(OrgSampleDocument) }
+    val headingColor = MaterialTheme.colorScheme.primary
+    val transformation = remember(headingColor) { OrgSyntaxHighlightTransformation(headingColor) }
+    OutlinedTextField(
+        value = text,
+        onValueChange = { text = it },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text("Content") },
+        visualTransformation = transformation
+    )
 }
 
-@Preview
+@Preview(name = "Light")
 @Composable
-fun OrgTable_Preview() {
-    PreviewSurface {
-        OrgText(
-            content = """
-            | Name | Qty | Price |
-            |-
-            | Apples | 10 | 1.20 |
-            | Pears with a long name | 3 | 0.95 |
-            """.trimIndent().toOrgDocument(),
-        )
-    }
+private fun OrgEditorLightPreview() = OrgEditorPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun OrgEditorDarkPreview() = OrgEditorPreview(dark = true)
+
+@Composable
+private fun OrgTablePreview(dark: Boolean) = PreviewSurface(dark) {
+    OrgText(
+        content = """
+        | Name | Qty | Price |
+        |-
+        | Apples | 10 | 1.20 |
+        | Pears with a long name | 3 | 0.95 |
+        """.trimIndent().toOrgDocument(),
+    )
 }
+
+@Preview(name = "Light")
+@Composable
+private fun OrgTableLightPreview() = OrgTablePreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun OrgTableDarkPreview() = OrgTablePreview(dark = true)
