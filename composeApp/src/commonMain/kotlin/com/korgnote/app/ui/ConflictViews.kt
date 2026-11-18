@@ -482,8 +482,8 @@ private val previewCopyText = """
 """.trimIndent()
 
 /**
- * The chunks of [ConflictCompareDialog], the first not chosen yet, the second settled for the copy.
- * The dialog itself opens a window of its own, which the preview renderer cannot capture.
+ * The chunks of [ConflictCompareDialog] on their own, the first not chosen yet, the second settled
+ * for the copy, at a size where both fit.
  */
 @Composable
 private fun ChunkChooserPreview(dark: Boolean) = PreviewTheme(dark) {
