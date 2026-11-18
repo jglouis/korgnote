@@ -235,7 +235,8 @@ private fun keywordValueItems(prefix: String, lineStart: Int, cursor: Int, ctx: 
     val match = KEYWORD_VALUE.matchEntire(prefix) ?: return null
     val keyword = match.groupValues[1].uppercase()
     val value = match.groupValues[2]
-    val valueStart = lineStart + match.groups[2]!!.range.first
+    // The value runs to the end of the prefix. Not `groups[2].range`: common code has no range for a group.
+    val valueStart = lineStart + prefix.length - value.length
     return when (keyword) {
         "FILETAGS" -> {
             // The tag being typed is what follows the last colon or space; the ones before it are done.
@@ -274,7 +275,8 @@ private fun keywordValueItems(prefix: String, lineStart: Int, cursor: Int, ctx: 
 private fun locationItems(prefix: String, lineStart: Int, cursor: Int, ctx: CompletionContext): List<CompletionItem>? {
     val match = LOCATION_VALUE.matchEntire(prefix) ?: return null
     val typed = match.groupValues[1]
-    val valueStart = lineStart + match.groups[1]!!.range.first
+    // What is typed runs to the end of the prefix. Not `groups[1].range`: common code has no range for a group.
+    val valueStart = lineStart + prefix.length - typed.length
     return ctx.knownLocations
         .filter { it.contains(typed.trim(), ignoreCase = true) && it != typed }
         .take(MAX_LOCATIONS)
