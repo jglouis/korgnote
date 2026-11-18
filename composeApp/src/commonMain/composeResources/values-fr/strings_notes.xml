@@ -14,6 +14,7 @@
     <string name="notes_onboarding_webdav_pro">Nextcloud, un NAS ou un hébergeur que vous avez déjà : aucun ordinateur n’a besoin de rester allumé.</string>
     <string name="notes_onboarding_webdav_con">Nouveau, et testé uniquement avec Nextcloud et Apache. En HTTPS, et seulement avec un serveur qui passe un contrôle de sécurité.</string>
     <string name="notes_onboarding_all_offline">Tous fonctionnent hors ligne. Vous pourrez changer cela plus tard dans les Réglages.</string>
+    <string name="notes_onboarding_one_offline">Il fonctionne hors ligne.</string>
     <string name="notes_onboarding_both_offline">Les deux fonctionnent hors ligne. Vous pourrez changer cela plus tard dans les Réglages.</string>
     <string name="notes_onboarding_for">Pour</string>
     <string name="notes_onboarding_against">Contre</string>

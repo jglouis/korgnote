@@ -8,8 +8,10 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import com.korgnote.app.data.InMemorySettingsRepository
 import com.korgnote.app.data.NotesSource
 import com.korgnote.app.data.SettingsRepository
+import com.korgnote.app.files.NoteFolderAccess
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import org.koin.core.context.unloadKoinModules
 import org.koin.dsl.module
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -23,8 +25,16 @@ class OnboardingTest {
 
     @BeforeTest
     fun setUp() {
-        startKoin { modules(module { single<SettingsRepository> { InMemorySettingsRepository(initialNotesSource = null) } }) }
+        startKoin {
+            modules(
+                module { single<SettingsRepository> { InMemorySettingsRepository(initialNotesSource = null) } },
+                // A phone's: one that can reach a folder of the user's. Never opened by these tests.
+                folderAccess,
+            )
+        }
     }
+
+    private val folderAccess = module { single<NoteFolderAccess> { NoteFolderAccess { error("No folder is opened here") } } }
 
     @AfterTest
     fun tearDown() {
@@ -43,6 +53,17 @@ class OnboardingTest {
         onNodeWithText("A WebDAV server (experimental)").assertDoesNotExist()
         // Nothing to go back to on the first start.
         onNodeWithContentDescription("Back").assertDoesNotExist()
+    }
+
+    @Test
+    fun withoutAFolderToReachTheFolderIsNotOffered() = runComposeUiTest {
+        // As on the desktop and the web, which have no folder access.
+        unloadKoinModules(folderAccess)
+        setContent { Onboarding(current = null, onChosen = {}, onCancel = null) }
+
+        onNodeWithText("My computer, with the KorgNote server").assertExists()
+        onNodeWithText("A folder on this device").assertDoesNotExist()
+        onNodeWithText("It works offline.").assertExists()
     }
 
     @Test

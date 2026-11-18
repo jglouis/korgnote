@@ -78,6 +78,7 @@ import korgnote.composeapp.generated.resources.notes_onboarding_allow_local_netw
 import korgnote.composeapp.generated.resources.notes_onboarding_allow_notifications
 import korgnote.composeapp.generated.resources.notes_onboarding_app_password
 import korgnote.composeapp.generated.resources.notes_onboarding_both_offline
+import korgnote.composeapp.generated.resources.notes_onboarding_one_offline
 import korgnote.composeapp.generated.resources.notes_onboarding_check_explained
 import korgnote.composeapp.generated.resources.notes_onboarding_check_server
 import korgnote.composeapp.generated.resources.notes_onboarding_checking_server
@@ -236,7 +237,8 @@ fun Onboarding(
                 when (step) {
                     OnboardingStep.CHOOSE -> ChooseStep(
                         changing = current != null,
-                        onFolder = { step = OnboardingStep.FOLDER },
+                        // Offered where the platform can reach a folder of the user's: not on desktop or the web.
+                        onFolder = folders?.let { { step = OnboardingStep.FOLDER } },
                         onServer = { step = OnboardingStep.SERVER },
                         onWebDav = webDav?.let { { step = OnboardingStep.WEBDAV } },
                     )
@@ -268,19 +270,22 @@ fun Onboarding(
 internal enum class OnboardingStep { CHOOSE, FOLDER, SERVER, WEBDAV, REMINDERS, TOUR }
 
 @Composable
-private fun ChooseStep(changing: Boolean, onFolder: () -> Unit, onServer: () -> Unit, onWebDav: (() -> Unit)? = null) {
+private fun ChooseStep(changing: Boolean, onFolder: (() -> Unit)?, onServer: () -> Unit, onWebDav: (() -> Unit)? = null) {
     Text(
         stringResource(if (changing) Res.string.notes_onboarding_where else Res.string.notes_onboarding_welcome),
         style = MaterialTheme.typography.headlineSmall,
     )
     Text(stringResource(Res.string.notes_onboarding_intro))
-    SourceOption(
-        icon = Icons.Filled.Folder,
-        title = stringResource(Res.string.notes_onboarding_folder_title),
-        pros = listOf(stringResource(Res.string.notes_onboarding_folder_pro), notesFolderPlaces),
-        cons = listOf(stringResource(Res.string.notes_onboarding_folder_con)),
-        onClick = onFolder,
-    )
+    if (onFolder != null) {
+        SourceOption(
+            icon = Icons.Filled.Folder,
+            title = stringResource(Res.string.notes_onboarding_folder_title),
+            // Where a folder can be is said only where folders are offered: empty elsewhere.
+            pros = listOf(stringResource(Res.string.notes_onboarding_folder_pro), notesFolderPlaces).filter { it.isNotEmpty() },
+            cons = listOf(stringResource(Res.string.notes_onboarding_folder_con)),
+            onClick = onFolder,
+        )
+    }
     SourceOption(
         icon = Icons.Filled.Computer,
         title = stringResource(Res.string.notes_onboarding_server_title),
@@ -302,7 +307,11 @@ private fun ChooseStep(changing: Boolean, onFolder: () -> Unit, onServer: () -> 
     }
     FaintHint(
         stringResource(
-            if (onWebDav != null) Res.string.notes_onboarding_all_offline else Res.string.notes_onboarding_both_offline,
+            when (1 + listOfNotNull(onFolder, onWebDav).size) {
+                1 -> Res.string.notes_onboarding_one_offline
+                2 -> Res.string.notes_onboarding_both_offline
+                else -> Res.string.notes_onboarding_all_offline
+            },
         )
     )
 }
@@ -612,6 +621,20 @@ private fun ChooseStepLightPreview() = ChooseStepPreview(dark = false)
 @Preview(name = "Dark")
 @Composable
 private fun ChooseStepDarkPreview() = ChooseStepPreview(dark = true)
+
+/** On the desktop and the web, where notes cannot be kept in a folder: the server is all there is. */
+@Composable
+private fun ChooseStepDesktopPreview(dark: Boolean) = OnboardingStepPreview(dark) {
+    ChooseStep(changing = false, onFolder = null, onServer = {}, onWebDav = null)
+}
+
+@Preview(name = "Light")
+@Composable
+private fun ChooseStepDesktopLightPreview() = ChooseStepDesktopPreview(dark = false)
+
+@Preview(name = "Dark")
+@Composable
+private fun ChooseStepDesktopDarkPreview() = ChooseStepDesktopPreview(dark = true)
 
 /** A folder picked, found empty: there is no folder access in a preview to count its notes. */
 @Composable

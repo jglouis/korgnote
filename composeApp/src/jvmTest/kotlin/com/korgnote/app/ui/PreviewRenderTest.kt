@@ -37,7 +37,7 @@ class PreviewRenderTest {
     @Test
     fun everyPreviewRendersInBothThemes() {
         val previews = previewMethods()
-        assertTrue(previews.size >= 160, "Found only ${previews.size} previews; is the class scan broken?")
+        assertTrue(previews.size >= 162, "Found only ${previews.size} previews; is the class scan broken?")
 
         val names = previews.map { it.name }.toSet()
         val unpaired = names.filter {

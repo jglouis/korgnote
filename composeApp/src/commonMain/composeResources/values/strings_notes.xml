@@ -14,6 +14,7 @@
     <string name="notes_onboarding_webdav_pro">Nextcloud, a NAS or a hosting service you already have, so no computer needs to stay on.</string>
     <string name="notes_onboarding_webdav_con">New, and tried with Nextcloud and Apache only. Over HTTPS, and only with a server that passes a safety check.</string>
     <string name="notes_onboarding_all_offline">All of them work offline. You can change this later in Settings.</string>
+    <string name="notes_onboarding_one_offline">It works offline.</string>
     <string name="notes_onboarding_both_offline">Both work offline. You can change this later in Settings.</string>
     <string name="notes_onboarding_for">For</string>
     <string name="notes_onboarding_against">Against</string>
