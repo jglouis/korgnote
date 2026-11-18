@@ -58,8 +58,12 @@ object OrgColors {
      * Whether the dark values are in use; [KorgNoteTheme] sets it before anything is drawn. Not
      * observable: the highlighting is built and cached outside composition, so a change of theme
      * composes the content afresh instead.
+     *
+     * Public, not internal: the JVM name of an internal member carries the module's name, and
+     * Android Studio's preview, compiling some of the code itself under another, then failed to
+     * find it (`NoSuchMethodError: setDark$korgnote_composeApp`) in every preview.
      */
-    internal var dark = false
+    var dark = false
 
     private fun pick(light: Long, dark: Long) = Color(if (this.dark) dark else light)
 
