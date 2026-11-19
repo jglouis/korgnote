@@ -60,6 +60,15 @@ replica. A dot-*file* is not covered by the rule; see [open gaps](08-roadmap.md#
 so in the log and on the Devices page. A container sets `KORGNOTE_REQUIRE_NOTES_DIR`, which stops the
 server instead.
 
+**A notes folder that goes away** while the server runs, or is no longer on the volume it was on when
+the server started, fails the listing with a `500` rather than being listed as a library with no notes,
+which every phone would take as every note deleted. That is what an unmounted volume looks like: its
+mount point left behind, empty, on another volume. Mounted again, it is listed again. A notes folder
+that is a link is listed and watched where it leads.
+
+A `500` for what the disk would not read says so in a sentence; the exception, which names the file on
+this computer, goes to the server's log.
+
 **Watching** is a class of its own, `server/…/NotesWatcher.kt` (a `java.nio` `WatchService`), which turns
 each change on disk into a journal entry. Anything that moves folders, an overflow of events or an
 invalid key makes it build its watches again from scratch and walk the tree, journaling every difference:
@@ -204,7 +213,7 @@ certificate's fingerprint, so a phone needs no proxy and no certificate authorit
 | Port | For | Who gets in |
 |---|---|---|
 | 8443, TLS (`KORGNOTE_HTTPS_PORT`) | paired devices | `/api/v1/`, with `Authorization: Bearer <device token>`, and `/api/pair`, which is how a device gets one. Everything else is `404`, however the path is spelled: what may be reached is checked against the path as it was sent, while routing ignores empty segments and decodes the rest. An unknown or revoked token is `401`. |
-| 8080, plain (`KORGNOTE_PORT`) | this computer | no token. Bound to `127.0.0.1` (`KORGNOTE_HTTP_HOST`). The connection must come from loopback — or, in a container, from its network's gateway, which is where the host's published port arrives — or `403`. The `Host` must also name this computer (`localhost` or a loopback address), or `403` — which stops DNS rebinding — and a change that carries an `Origin` must come from the server's own pages. Serves the web client, the desktop app, the Devices page (`/devices`) and `POST /api/local/pairing`, which `scripts/pair.sh` calls. |
+| 8080, plain (`KORGNOTE_PORT`) | this computer | no token. Bound to `127.0.0.1` (`KORGNOTE_HTTP_HOST`). The connection must come from loopback — or, in a container, from its network's gateway, which is where the host's published port arrives — or `403`. The `Host` must also name this computer (`localhost` or a loopback address), or `403` — which stops DNS rebinding — and a change that carries an `Origin` must come from the server's own pages: an `Origin` that is not `scheme://host[:port]`, `null` included, is none of them. Serves the web client, the desktop app, the Devices page (`/devices`) and `POST /api/local/pairing`, which `scripts/pair.sh` calls. |
 
 TLS uses a self-signed certificate the server makes on first start and keeps, with its id and
 the paired devices, in `KORGNOTE_STATE_DIR` (`~/.korgnote-server`). The Devices page shows a QR

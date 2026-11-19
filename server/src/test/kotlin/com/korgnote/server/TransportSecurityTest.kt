@@ -189,6 +189,47 @@ class TransportSecurityTest {
         assertEquals(HttpStatusCode.Forbidden, response.status)
     }
 
+    /**
+     * The test host answers as `localhost` on port 80, which is where Ktor's `Url` puts whatever it
+     * cannot read: an `Origin` of `null` used to pass for one of the server's own pages there.
+     */
+    @Test
+    fun anOriginThatIsNoPageAddressIsRefused() = testApplication {
+        asThisComputer()
+        for (origin in listOf("null", "not a url", "", "localhost", "http://localhost/", "http://user@localhost", "file:///etc/passwd", "http://localhost:abc", "x://localhost")) {
+            val response = client.put("/api/v1/files/new.org") {
+                header(HttpHeaders.Origin, origin)
+                setBody("* hi\n")
+            }
+            assertEquals("Changes are accepted from this server's own pages only.", response.bodyAsText(), origin)
+        }
+        // These are the server's own page: past the check, to the library, which here is read-only.
+        for (origin in listOf("http://localhost", "http://LOCALHOST:80", "ws://localhost", "x://localhost:80")) {
+            val response = client.put("/api/v1/files/new.org") {
+                header(HttpHeaders.Origin, origin)
+                setBody("* hi\n")
+            }
+            assertEquals("Read-only library", response.bodyAsText(), origin)
+        }
+    }
+
+    @Test
+    fun anOriginIsReadStrictly() {
+        assertEquals("localhost" to 80, originHostAndPort("http://localhost"))
+        assertEquals("localhost" to 443, originHostAndPort("https://localhost"))
+        assertEquals("127.0.0.1" to 8080, originHostAndPort("http://127.0.0.1:8080"))
+        assertEquals("127.0.0.1" to 80, originHostAndPort("HTTP://127.0.0.1:080"))
+        assertEquals("[::1]" to 80, originHostAndPort("http://[::1]"))
+        assertEquals("[::1]" to 8080, originHostAndPort("http://[::1]:8080"))
+        for (bad in listOf(
+            "null", "", "localhost", "//localhost", "http://", "://", "null://", "x://127.0.0.1", "http:localhost", "http:/localhost",
+            "http://localhost/", "http://localhost:80/path?q#f", "http://user@localhost:80", "http://localhost:", "http://127.0.0.1:65536",
+            "http://::1", "http://[::1", "http://[::1]x", " http://localhost", "about:blank",
+        )) {
+            assertEquals(null, originHostAndPort(bad), bad)
+        }
+    }
+
     @Test
     fun theDevicesPageListsAndRevokes() = testApplication {
         asThisComputer()

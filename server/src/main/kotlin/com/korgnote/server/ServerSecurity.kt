@@ -5,7 +5,6 @@ import com.korgnote.common.pairing.SECURE_PORT
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.Url
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.plugins.origin
 import io.ktor.server.request.header
@@ -344,11 +343,58 @@ internal fun refusalOf(call: ApplicationCall, access: ServerAccess): Pair<HttpSt
     }
     val method = call.request.httpMethod
     if (method != HttpMethod.Get && method != HttpMethod.Head && method != HttpMethod.Options) {
-        val origin = call.request.header(HttpHeaders.Origin)?.let { runCatching { Url(it) }.getOrNull() ?: Url("null://") }
-        if (origin != null && !(origin.host.equals(call.request.host(), ignoreCase = true) && origin.port == call.request.port())) {
-            return HttpStatusCode.Forbidden to "Changes are accepted from this server's own pages only."
+        val origin = call.request.header(HttpHeaders.Origin)
+        if (origin != null) {
+            val own = originHostAndPort(origin)?.let { (host, port) -> host.equals(call.request.host(), ignoreCase = true) && port == call.request.port() } == true
+            if (!own) return HttpStatusCode.Forbidden to "Changes are accepted from this server's own pages only."
         }
     }
     return null
+}
+
+/**
+ * The host and port of an `Origin` header, read strictly: a scheme, `://`, a host, and a port or the
+ * scheme's own. Null for anything else, which is no page of this server's.
+ *
+ * Ktor's `Url` is no use here: it makes `localhost` on port 80 of anything it cannot read, `null`
+ * included, so such an `Origin` passed for the server's own page whenever the server was itself asked
+ * for as `localhost` on port 80. No browser writes an `Origin` any other way than this reads.
+ */
+internal fun originHostAndPort(origin: String): Pair<String, Int>? {
+    fun isLetter(c: Char) = c in 'a'..'z' || c in 'A'..'Z'
+    val at = origin.indexOf("://")
+    if (at <= 0) return null
+    val scheme = origin.substring(0, at)
+    val authority = origin.substring(at + 3)
+    if (!isLetter(scheme[0]) || !scheme.all { isLetter(it) || it in '0'..'9' || it in "+-." }) return null
+    if (authority.isEmpty() || authority.any { it in "/?#@\\" || it.code <= 0x20 || it.code == 0x7f }) return null
+    val host: String
+    val portText: String?
+    if (authority.startsWith("[")) {
+        val end = authority.indexOf(']')
+        if (end < 0) return null
+        host = authority.substring(0, end + 1)
+        val rest = authority.substring(end + 1)
+        portText = when {
+            rest.isEmpty() -> null
+            rest.startsWith(":") -> rest.substring(1)
+            else -> return null
+        }
+    } else {
+        val colon = authority.lastIndexOf(':')
+        host = if (colon >= 0) authority.substring(0, colon) else authority
+        portText = if (colon >= 0) authority.substring(colon + 1) else null
+    }
+    if (host.isEmpty() || (':' in host && !host.startsWith("["))) return null
+    val port = when {
+        portText == null -> when (scheme.lowercase()) {
+            "http", "ws" -> 80
+            "https", "wss" -> 443
+            else -> return null
+        }
+        portText.isEmpty() || portText.length > 5 || !portText.all { it in '0'..'9' } -> return null
+        else -> portText.toInt().takeIf { it <= 65535 } ?: return null
+    }
+    return host to port
 }
 

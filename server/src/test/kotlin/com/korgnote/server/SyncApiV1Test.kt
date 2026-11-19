@@ -252,11 +252,54 @@ class SyncApiV1Test {
             if (locked.canRead()) return@testApplication // As root, nothing is out of reach.
             serve(dir)
 
-            assertEquals(HttpStatusCode.InternalServerError, client.get("/api/v1/manifest").status)
-            assertEquals(HttpStatusCode.InternalServerError, client.get("/api/v1/bundle").status)
+            for (path in listOf("/api/v1/manifest", "/api/v1/bundle")) {
+                val response = client.get(path)
+                assertEquals(HttpStatusCode.InternalServerError, response.status, path)
+                assertEquals(COULD_NOT_READ, response.bodyAsText(), "where the notes are on this computer is not said")
+            }
         } finally {
             locked.setReadable(true)
         }
+    }
+
+    /** It used to be told in the answer, as the exception's message: the file's path on this computer. */
+    @Test
+    fun aNoteThatCannotBeReadIsAServerErrorThatDoesNotSayWhere() = testApplication {
+        val dir = notesDir("locked.org" to "* locked\n")
+        val locked = File(dir, "locked.org")
+        locked.setReadable(false)
+        try {
+            if (locked.canRead()) return@testApplication
+            serve(dir)
+
+            val answers = listOf(
+                client.get("/api/v1/files/locked.org") { header(HttpHeaders.IfNoneMatch, "abc") },
+                client.put("/api/v1/files/locked.org") {
+                    header(HttpHeaders.IfMatch, "abc")
+                    setBody("* edited\n")
+                },
+                client.delete("/api/v1/files/locked.org") { header(HttpHeaders.IfMatch, "abc") },
+            )
+            for (response in answers) {
+                assertEquals(HttpStatusCode.InternalServerError, response.status)
+                assertEquals(COULD_NOT_READ, response.bodyAsText())
+            }
+            assertEquals("* locked\n", locked.apply { setReadable(true) }.readText())
+        } finally {
+            locked.setReadable(true)
+        }
+    }
+
+    /** A notes folder gone from under the server is no library at all, not an empty one. */
+    @Test
+    fun aNotesFolderThatWentAwayIsAServerErrorAndNotAnEmptyManifest() = testApplication {
+        val dir = notesDir("a.org" to "* A\n")
+        serve(dir)
+        assertEquals(HttpStatusCode.OK, client.get("/api/v1/manifest").status)
+        dir.deleteRecursively()
+
+        assertEquals(HttpStatusCode.InternalServerError, client.get("/api/v1/manifest").status)
+        assertEquals(HttpStatusCode.InternalServerError, client.get("/api/v1/bundle").status)
     }
 
     @Test

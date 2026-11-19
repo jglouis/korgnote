@@ -330,6 +330,68 @@ class FileStoreTest {
         assertEquals("* a\n", store.readWithMeta("also-a.org")?.text)
     }
 
+    // --- The notes directory itself ---
+
+    /**
+     * The walk follows no link, and walked from a notes directory that is one it took the directory
+     * itself for a file: a complete library with no notes, which takes every note off every phone.
+     */
+    @Test
+    fun aNotesDirectoryThatIsALinkIsListedAndWrittenThrough() {
+        writeFile("a.org", "* a\n")
+        writeFile("sub/b.org", "* b\n")
+        val holder = createTempDirectory("korgnote-holder")
+        try {
+            val link = holder.resolve("notes")
+            java.nio.file.Files.createSymbolicLink(link, root)
+            val linked = FileStore(link)
+
+            assertEquals(listOf("a.org", "sub/b.org"), linked.list().map { it.path })
+            assertEquals("* b\n", linked.readWithMeta("sub/b.org")?.text)
+            assertIs<WriteResult.Written>(linked.put("new/c.org", "* c\n", mustNotExist = true))
+            assertEquals("* c\n", root.resolve("new/c.org").readText())
+        } finally {
+            holder.toFile().deleteRecursively()
+        }
+    }
+
+    /** Gone from under the server, it is every note deleted to a phone, and so not listed. */
+    @Test
+    fun aNotesDirectoryThatWentAwayFailsTheListing() {
+        writeFile("a.org", "* a\n")
+        store.list()
+        root.toFile().deleteRecursively()
+
+        assertFailsWith<java.io.IOException> { store.list() }
+        assertEquals(emptyList(), FileStore(root, readOnly = true).list(), "one that was never there is an empty library")
+    }
+
+    /**
+     * A volume unmounted leaves its mount point behind, an empty folder on another volume. Listed, it
+     * would be a complete library with no notes in it. Mounted again, it is listed again.
+     */
+    @Test
+    fun aNotesDirectoryNoLongerOnItsVolumeFailsTheListingUntilItIsBack() {
+        writeFile("a.org", "* a\n")
+        var volume = "the notes' own"
+        val mounted = FileStore(root, volumeOf = { volume })
+        assertEquals(listOf("a.org"), mounted.list().map { it.path })
+
+        volume = "the one the mount point is on"
+        assertFailsWith<java.io.IOException> { mounted.list() }
+
+        volume = "the notes' own"
+        assertEquals(listOf("a.org"), mounted.list().map { it.path })
+    }
+
+    @Test
+    fun theVolumeOfAFolderIsToldWhereTheSystemTellsIt() {
+        val volume = volumeOf(root)
+        if (volume == null) return // Not Linux or macOS: nothing to compare.
+        assertEquals(volume, volumeOf(root.resolve(".")))
+        assertNull(volumeOf(root.resolve("not-there")))
+    }
+
     // --- What a walk meets on the way ---
 
     /** A write's temporary file goes while the walk is on its way to it: nothing to do with this manifest. */

@@ -6,6 +6,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
+import java.io.IOException
 import io.ktor.server.application.log
 import io.ktor.server.request.header
 import io.ktor.server.request.receiveText
@@ -233,7 +234,19 @@ private suspend fun ApplicationCall.respondTo(result: WriteResult, path: String,
 }
 
 /** The store reads and writes files, which blocks; that must not happen on a thread serving requests. */
-private suspend fun <T> onDisk(work: () -> T): T = withContext(Dispatchers.IO) { work() }
+private suspend fun <T> onDisk(work: () -> T): T = withContext(Dispatchers.IO) {
+    try {
+        work()
+    } catch (failure: IOException) {
+        throw NotesUnreadable(failure)
+    }
+}
+
+/**
+ * The disk refused to tell the store what it was asked: a note or a folder it may not read, or a
+ * notes folder gone. Answered by the module, without the message, which names the file.
+ */
+internal class NotesUnreadable(cause: IOException) : Exception(cause.message, cause)
 
 private fun ApplicationCall.pathSegments(): String =
     parameters.getAll("path")?.joinToString("/").orEmpty()

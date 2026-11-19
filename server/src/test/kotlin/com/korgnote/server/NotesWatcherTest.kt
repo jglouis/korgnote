@@ -124,6 +124,27 @@ class NotesWatcherTest {
         assertEquals(listOf("e.org"), watcher.status.lastMissedPaths)
     }
 
+    /** Watched as it was named, a notes directory that is a link had no folder in it watched at all. */
+    @Test
+    fun aNotesDirectoryThatIsALinkIsWatched() = runBlocking {
+        val holder = Files.createTempDirectory("korgnote-watcher-holder")
+        try {
+            val link = holder.resolve("notes")
+            Files.createSymbolicLink(link, root)
+            root = link
+            startWatching()
+            assertEquals(2, watcher.status.folders, "the root and sub/")
+
+            val before = journal.generation
+            root.resolve("sub").resolve("new.org").writeText("* new\n")
+            awaitChange(before, "sub/new.org") { it.path == "sub/new.org" && !it.deleted }
+            editUntilHeard("a.org")
+        } finally {
+            root = root.toRealPath()
+            holder.deleteRecursively()
+        }
+    }
+
     /** Syncthing keeps old versions in `.stversions`: neither a change to a note, nor a folder that moved. */
     @Test
     fun aDotFolderIsNotWatched() = runBlocking {

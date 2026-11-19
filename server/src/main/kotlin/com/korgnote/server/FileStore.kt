@@ -65,6 +65,12 @@ internal fun isLibraryPath(relativePath: String): Boolean =
     relativePath.endsWith(".org") && isLibraryFolder(relativePath.substringBeforeLast('/', ""))
 
 /**
+ * The volume [path] is on, through links: its device number, where the system has one to give
+ * (Linux, macOS); null elsewhere, and for a path that is not there.
+ */
+internal fun volumeOf(path: Path): Any? = runCatching { Files.getAttribute(path, "unix:dev") }.getOrNull()
+
+/**
  * Reads and writes the notes directory, answering from the disk every time it is asked.
  *
  * The previous implementation loaded every file once at startup and served that map forever, which
@@ -78,8 +84,18 @@ class FileStore(
     val root: Path,
     /** True when the notes directory was not there at startup, so there is nowhere to write to. */
     val readOnly: Boolean = false,
+    /** Which volume a folder is on; see [list]. Given in tests, which cannot unmount one. */
+    private val volumeOf: (Path) -> Any? = ::volumeOf,
 ) {
     private data class HashEntry(val size: Long, val mtimeMillis: Long, val etag: String)
+
+    /**
+     * The volume the notes directory was on when the store was made, or null where the system does
+     * not say. A volume unmounted leaves its mount point behind, an empty folder on another volume,
+     * which listed as it is would be a complete library with no notes in it: every phone would
+     * delete its copies. So a notes directory that is no longer on this volume is not listed.
+     */
+    private val volume: Any? = if (readOnly) null else volumeOf(root)
 
     private val hashes = ConcurrentHashMap<String, HashEntry>()
 
@@ -108,9 +124,19 @@ class FileStore(
      * count against it: a big checkout or first upload would fail every listing while it lasted, and a
      * path too many is a stale name for a moment, where a path too few is a note deleted. Notes that keep
      * going fail the list.
+     *
+     * A notes directory that was there when the store was made and is gone, or is no longer on the
+     * volume it was on, fails the list too: listed, it would be every note deleted. One that was
+     * never there, the read-only store's, is an empty library.
      */
     fun list(): List<FileMeta> {
-        if (!root.exists() || !root.isDirectory()) return emptyList()
+        if (!root.exists() || !root.isDirectory()) {
+            if (readOnly) return emptyList()
+            throw IOException("The notes folder is gone. Is the volume it is on unmounted?")
+        }
+        if (volume != null && volumeOf(root) != volume) {
+            throw IOException("The notes folder is no longer on the volume it was on when the server started. Is that volume unmounted?")
+        }
         var previous = walk().map { it.path }
         repeat(MAX_WALKS - 1) {
             val latest = walk()
@@ -124,10 +150,12 @@ class FileStore(
     private fun walk(): List<FileMeta> {
         val rootReal = root.toRealPath()
         val found = mutableListOf<FileMeta>()
-        Files.walkFileTree(root, object : SimpleFileVisitor<Path>() {
+        // From where the notes really are. Walked from a notes directory that is a link, the walk,
+        // which follows no link, took the root itself for a file: a complete library with no notes.
+        Files.walkFileTree(rootReal, object : SimpleFileVisitor<Path>() {
             override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
                 if (attrs.isRegularFile || file.isRegularFile()) {
-                    val path = relativePathOf(file)
+                    val path = rootReal.relativize(file).joinToString("/") { it.toString() }
                     // The same check as [resolve], so that what is listed can also be fetched: a link
                     // to a file outside the root cannot, and a phone would keep trying. But not
                     // [resolve] itself, whose null also means a file that went just now, which here
@@ -302,9 +330,6 @@ class FileStore(
     }
 
     private fun hashOf(content: ByteArray): String = sha256Hex(content).take(ETAG_HEX_DIGITS)
-
-    private fun relativePathOf(file: Path): String =
-        root.relativize(file).joinToString("/") { it.toString() }
 
     /**
      * Turns a request path into a file inside [root], or null when it is not one.

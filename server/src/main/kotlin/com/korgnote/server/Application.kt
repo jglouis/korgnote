@@ -82,6 +82,21 @@ fun Application.module(
         }
     }
 
+    // What the disk will not let the server read, a note or a folder, is the server's problem, and
+    // the exception's message, which Ktor would answer with, is the file's path on this computer:
+    // nothing a client can use, and not for a device on the network to learn. The log has it.
+    intercept(ApplicationCallPipeline.Monitoring) {
+        try {
+            proceed()
+        } catch (failure: NotesUnreadable) {
+            // Begun already, as a stream is: nothing to do but let the connection end.
+            if (call.response.isCommitted) throw failure
+            this@module.log.error("Could not answer ${call.request.httpMethod.value} ${call.request.uri}", failure.cause)
+            call.respondText(COULD_NOT_READ, status = HttpStatusCode.InternalServerError)
+            finish()
+        }
+    }
+
     intercept(ApplicationCallPipeline.Monitoring) {
         val origin = call.request.origin
         val ua = call.request.userAgent()
@@ -133,6 +148,8 @@ fun Application.module(
 }
 
 private const val RUNNING = "Ktor: the KorgNote server is running."
+
+internal const val COULD_NOT_READ = "The server could not read the notes; its log says why."
 
 suspend fun RoutingContext.respondFavIcon() {
     val bytes = this::class.java.classLoader.getResourceAsStream("favicon.png")?.readBytes()

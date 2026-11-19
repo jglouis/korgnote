@@ -105,8 +105,18 @@ class NotesWatcher(
     /** What the journal last heard of each note: path to etag. Only the watcher's coroutine uses it. */
     private val known = HashMap<String, String>()
 
-    /** The folders being watched, so a deleted one is recognised once it can no longer be looked at. */
-    private val watchedDirectories = HashSet<Path>()
+    /**
+     * The folders being watched, so a deleted one is recognised once it can no longer be looked at,
+     * each with which folder it was when the watch was put on it; see [stillTheFoldersWatched].
+     */
+    private val watchedDirectories = HashMap<Path, Any?>()
+
+    /**
+     * Where the notes really are, as the watches are put on: [root] with its links followed. The
+     * watch service reports the paths it was given, and a notes directory that is a link, walked as
+     * it is named, had no folder in it watched at all.
+     */
+    private var base: Path = root
 
     /**
      * Changes the periodic check found before any event, with when: journaled at once, and counted
@@ -179,7 +189,8 @@ class NotesWatcher(
     private suspend fun watchUntilTheFoldersMove(recovering: Boolean): String {
         FileSystems.getDefault().newWatchService().use { watcher ->
             watchedDirectories.clear()
-            registerRecursively(root, watcher)
+            base = root.toRealPath()
+            registerRecursively(base, watcher)
             val wasStarting = status.state == WatcherStatus.State.STARTING
             update {
                 copy(
@@ -200,6 +211,13 @@ class NotesWatcher(
             while (currentCoroutineContext().isActive) {
                 // Walked on its own clock, so a steady stream of events cannot put it off.
                 if (lastScan.elapsedNow() >= rescanEvery) {
+                    if (!stillTheFoldersWatched()) {
+                        val reason = "a folder is no longer the one that was being watched"
+                        suspects.clear()
+                        update { copy(rebuilds = rebuilds + 1) }
+                        log.info("Folders changed in $root ($reason); watching them again")
+                        return reason
+                    }
                     rescan(journalChanges = true)?.forEach { suspects.putIfAbsent(it, TimeSource.Monotonic.markNow()) }
                     lastScan = TimeSource.Monotonic.markNow()
                 }
@@ -357,7 +375,7 @@ class NotesWatcher(
             override fun preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult {
                 if (excluded(dir)) return FileVisitResult.SKIP_SUBTREE
                 dir.register(watcher, ENTRY_CREATE, ENTRY_MODIFY, ENTRY_DELETE)
-                watchedDirectories.add(dir)
+                watchedDirectories[dir] = folderKeyOf(dir)
                 return FileVisitResult.CONTINUE
             }
 
@@ -377,12 +395,24 @@ class NotesWatcher(
      * judged by the folder it was in, as what it was cannot be asked any more.
      */
     private fun excluded(path: Path): Boolean {
-        val relative = root.relativize(path).joinToString("/") { it.toString() }
+        val relative = base.relativize(path).joinToString("/") { it.toString() }
         return !isLibraryFolder(if (path.isDirectory()) relative else relative.substringBeforeLast('/', ""))
     }
 
     private fun relativePathOf(file: Path): String =
-        root.relativize(file).joinToString("/") { it.toString() }.ifEmpty { "." }
+        base.relativize(file).joinToString("/") { it.toString() }.ifEmpty { "." }
+
+    /**
+     * Whether every watched path still leads to the folder the watch was put on. A watch follows its
+     * folder, not its name, and one way of losing the folder says nothing: a volume mounted again
+     * over the folder its watch was put on while it was away. Edits would then reach the devices
+     * only through the walk each [rescanEvery], and be reported as missed.
+     */
+    private fun stillTheFoldersWatched(): Boolean = watchedDirectories.all { (folder, key) -> folderKeyOf(folder) == key }
+
+    /** Which folder [path] leads to, where the system says: its device and its inode, on Linux and macOS. */
+    private fun folderKeyOf(path: Path): Any? =
+        runCatching { Files.readAttributes(path, BasicFileAttributes::class.java).fileKey() }.getOrNull()
 
     private companion object {
         const val SHOWN_PATHS = 5
