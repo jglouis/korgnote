@@ -22,3 +22,7 @@ local.properties
 .DS_Store
 # Holds this computer's settings for docker compose, which mean nothing inside the image either.
 .env
+# The Rust server's build output, which its own Dockerfile builds again inside the image.
+server-rust/target/
+# Worktrees and scratch files of coding sessions: whole copies of the repository.
+.claude/
