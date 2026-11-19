@@ -41,7 +41,10 @@ ENV NOTES_DIR=/notes \
     KORGNOTE_HTTP_HOST=0.0.0.0 \
     KORGNOTE_HTTPS_PORT=8443 \
     KORGNOTE_STATE_DIR=/state \
-    KORGNOTE_REQUIRE_NOTES_DIR=1
+    KORGNOTE_REQUIRE_NOTES_DIR=1 \
+    MALLOC_ARENA_MAX=2
+# MALLOC_ARENA_MAX: glibc otherwise keeps a pool of freed memory per thread, eight times the CPU
+# count of them, and the JVM's native allocations end up spread over all of those.
 
 # Files the server creates in the mounted directory belong to this user. Match the host user that
 # owns the notes (`id -u`, `id -g`), either here at build time or with `--user` / compose `user:`.
@@ -55,5 +58,15 @@ WORKDIR /opt/korgnote
 EXPOSE 8080 8443
 # There is no /bin/sh for Gradle's bin/server script, so start the JVM directly, with native access
 # for Netty's transport (which only silences the JDK's warning).
+#
+# The memory flags set no ceiling: a sync still gets what it needs, and the JVM hands it back
+# afterwards instead of keeping its high-water mark for good (measured: 464 MiB kept after a sync
+# with a 20 MB note, against about 190 MiB with these). Start the heap small and keep little of it
+# free; after a minute without a collection run a full one, which is what shrinks the heap (the
+# default, a concurrent cycle, gives back less); and every minute return freed native memory to the
+# system. JAVA_TOOL_OPTIONS at run time adds to these or overrides them, -Xmx included.
 ENTRYPOINT ["java", "--enable-native-access=ALL-UNNAMED", \
+            "-Xms16m", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=30", \
+            "-XX:G1PeriodicGCInterval=60000", "-XX:-G1PeriodicGCInvokesConcurrent", \
+            "-XX:TrimNativeHeapInterval=60000", \
             "-cp", "/opt/korgnote/lib/*", "com.korgnote.server.ApplicationKt"]
