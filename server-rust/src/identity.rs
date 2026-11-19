@@ -8,11 +8,14 @@
 //!
 //! The files are the Kotlin server's, read and written as it reads and writes them, so that one
 //! state directory serves either: `server-id`, `tls.password`, and `tls.jks`, which for all its name
-//! is a PKCS#12 store when a current JDK made it, and a JKS one from an old JDK. Both are read; a new
-//! one is written as PKCS#12, which the Kotlin server reads too.
+//! is a PKCS#12 store, as every JDK since 9 writes one, and the Kotlin server has only ever run on
+//! newer. The store of older JDKs, JKS, is not read.
+//!
+//! A new key is an EC P-256 one where the Kotlin server makes an RSA one: devices trust the
+//! certificate by its fingerprint, whatever its key, and the Kotlin server serves either.
 
 use crate::text::{random_hex, random_uuid, sha256_hex};
-use sha1::{Digest, Sha1};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::io;
 use std::os::unix::fs::PermissionsExt;
@@ -89,16 +92,10 @@ fn owner_only(file: &Path) {
     let _ = fs::set_permissions(file, fs::Permissions::from_mode(mode));
 }
 
-/// A 2048-bit RSA key and a certificate for it, signed by itself and good for a hundred years, as
-/// the Kotlin server makes them. Returns (certificate DER, PKCS#8 key DER).
+/// An EC P-256 key and a certificate for it, signed by itself and good for a hundred years, with
+/// the names the Kotlin server gives its own. Returns (certificate DER, PKCS#8 key DER).
 fn make_certificate(server_id: &str) -> Result<(Vec<u8>, Vec<u8>), String> {
-    use rsa::pkcs8::EncodePrivateKey;
-    let mut rng = getrandom::SysRng;
-    let key = rsa::PrivateKey::new(&mut rng, 2048).map_err(|error| format!("could not make a key: {error}"))?;
-    let key_der = key.to_pkcs8_der().map_err(|error| format!("could not write the key: {error}"))?.as_bytes().to_vec();
-
-    let pkcs8 = rustls::pki_types::PrivatePkcs8KeyDer::from(key_der.clone());
-    let key_pair = rcgen::KeyPair::from_pkcs8_der_and_sign_algo(&pkcs8, &rcgen::PKCS_RSA_SHA256).map_err(|error| format!("could not use the key: {error}"))?;
+    let key_pair = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256).map_err(|error| format!("could not make a key: {error}"))?;
     let mut params = rcgen::CertificateParams::new(vec!["korgnote".to_string()]).map_err(|error| error.to_string())?;
     params.subject_alt_names.push(rcgen::SanType::IpAddress(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)));
     let mut name = rcgen::DistinguishedName::new();
@@ -109,14 +106,13 @@ fn make_certificate(server_id: &str) -> Result<(Vec<u8>, Vec<u8>), String> {
     params.not_before = now;
     params.not_after = now + time::Duration::days(36_500);
     let certificate = params.self_signed(&key_pair).map_err(|error| format!("could not sign the certificate: {error}"))?;
-    Ok((certificate.der().to_vec(), key_der))
+    Ok((certificate.der().to_vec(), key_pair.serialize_der()))
 }
 
-/// (certificate DER, PKCS#8 key DER) from a key store of either kind, under the alias the Kotlin
-/// server uses.
+/// (certificate DER, PKCS#8 key DER) from a PKCS#12 key store, under the alias the Kotlin server uses.
 fn read_key_store(data: &[u8], password: &str) -> Result<(Vec<u8>, Vec<u8>), String> {
     if data.starts_with(&[0xFE, 0xED, 0xFE, 0xED]) {
-        return jks::read(data, password);
+        return Err("it is a JKS store, which only JDKs before 9 write, and this server does not read; move it away to make a new one.".to_string());
     }
     let store = p12_keystore::KeyStore::from_pkcs12(data, password, p12_keystore::Pkcs12ImportPolicy::Strict).map_err(|error| error.to_string())?;
     match store.entry(KEY_ALIAS) {
@@ -134,7 +130,8 @@ fn no_certificate() -> String {
 
 fn write_key_store(certificate: &[u8], private_key: &[u8], password: &str) -> Result<Vec<u8>, String> {
     use p12_keystore::{Certificate, KeyStore, KeyStoreEntry, PrivateKey, PrivateKeyChain};
-    let key_id = Sha1::digest(certificate).to_vec();
+    // Only pairs the key with its certificate in the store; Java writes "Time …" there.
+    let key_id = Sha256::digest(certificate).to_vec();
     let chain = PrivateKeyChain::new(
         key_id,
         PrivateKey::from_der(private_key).map_err(|error| error.to_string())?,
@@ -143,130 +140,6 @@ fn write_key_store(certificate: &[u8], private_key: &[u8], password: &str) -> Re
     let mut store = KeyStore::new();
     store.add_entry(KEY_ALIAS, KeyStoreEntry::PrivateKeyChain(chain));
     store.writer(password).write().map_err(|error| error.to_string())
-}
-
-/// The key store of JDKs before 9, which a state directory that has been kept a long time may hold.
-mod jks {
-    use sha1::{Digest, Sha1};
-
-    struct Reader<'a> {
-        data: &'a [u8],
-        at: usize,
-    }
-
-    impl<'a> Reader<'a> {
-        fn take(&mut self, count: usize) -> Result<&'a [u8], String> {
-            let end = self.at.checked_add(count).filter(|end| *end <= self.data.len()).ok_or("the key store is cut short")?;
-            let slice = &self.data[self.at..end];
-            self.at = end;
-            Ok(slice)
-        }
-        fn u16(&mut self) -> Result<usize, String> {
-            Ok(u16::from_be_bytes(self.take(2)?.try_into().unwrap()) as usize)
-        }
-        fn u32(&mut self) -> Result<usize, String> {
-            Ok(u32::from_be_bytes(self.take(4)?.try_into().unwrap()) as usize)
-        }
-        fn text(&mut self) -> Result<String, String> {
-            let length = self.u16()?;
-            Ok(String::from_utf8_lossy(self.take(length)?).into_owned())
-        }
-        fn certificate(&mut self, version: usize) -> Result<Vec<u8>, String> {
-            if version == 2 {
-                self.text()?;
-            }
-            let length = self.u32()?;
-            Ok(self.take(length)?.to_vec())
-        }
-    }
-
-    fn password_bytes(password: &str) -> Vec<u8> {
-        password.encode_utf16().flat_map(u16::to_be_bytes).collect()
-    }
-
-    /// One DER element at the start of `data`: (tag, contents, what follows).
-    fn der(data: &[u8]) -> Result<(u8, &[u8], &[u8]), String> {
-        let cut = "the key in the key store is not written as expected";
-        let (&tag, rest) = data.split_first().ok_or(cut)?;
-        let (&first, rest) = rest.split_first().ok_or(cut)?;
-        let (length, rest) = if first < 0x80 {
-            (first as usize, rest)
-        } else {
-            let count = (first & 0x7f) as usize;
-            if count == 0 || count > 4 || rest.len() < count {
-                return Err(cut.to_string());
-            }
-            (rest[..count].iter().fold(0usize, |length, byte| (length << 8) | *byte as usize), &rest[count..])
-        };
-        if rest.len() < length {
-            return Err(cut.to_string());
-        }
-        Ok((tag, &rest[..length], &rest[length..]))
-    }
-
-    /// Sun's own protection of a key, which is all a JKS store has: the key XORed with a stream of
-    /// SHA-1 digests of the password and a salt, and a digest of both to check it by.
-    fn unprotect(encrypted_info: &[u8], password: &[u8]) -> Result<Vec<u8>, String> {
-        let (_, sequence, _) = der(encrypted_info)?;
-        let (_, _algorithm, after) = der(sequence)?;
-        let (tag, protected, _) = der(after)?;
-        if tag != 0x04 || protected.len() < 40 {
-            return Err("the key in the key store is not protected as expected".to_string());
-        }
-        let (salt, rest) = protected.split_at(20);
-        let (encrypted, check) = rest.split_at(rest.len() - 20);
-        let mut key = Vec::with_capacity(encrypted.len());
-        let mut digest = Sha1::new().chain_update(password).chain_update(salt).finalize();
-        for block in encrypted.chunks(20) {
-            key.extend(block.iter().zip(digest.iter()).map(|(byte, mask)| byte ^ mask));
-            digest = Sha1::new().chain_update(password).chain_update(digest).finalize();
-        }
-        if Sha1::new().chain_update(password).chain_update(&key).finalize().as_slice() != check {
-            return Err("the password in tls.password does not open the key".to_string());
-        }
-        Ok(key)
-    }
-
-    pub fn read(data: &[u8], password: &str) -> Result<(Vec<u8>, Vec<u8>), String> {
-        let password = password_bytes(password);
-        if data.len() < 32 {
-            return Err("the key store is cut short".to_string());
-        }
-        let (body, seal) = data.split_at(data.len() - 20);
-        if Sha1::new().chain_update(&password).chain_update(b"Mighty Aphrodite").chain_update(body).finalize().as_slice() != seal {
-            return Err("the password in tls.password does not open the key store, or it was changed".to_string());
-        }
-        let mut reader = Reader { data: body, at: 4 };
-        let version = reader.u32()?;
-        if version != 1 && version != 2 {
-            return Err(format!("a key store of version {version} is not one this server reads"));
-        }
-        for _ in 0..reader.u32()? {
-            let tag = reader.u32()?;
-            let alias = reader.text()?;
-            reader.take(8)?;
-            match tag {
-                1 => {
-                    let key_length = reader.u32()?;
-                    let protected = reader.take(key_length)?;
-                    let chain_length = reader.u32()?;
-                    let mut chain = Vec::new();
-                    for _ in 0..chain_length {
-                        chain.push(reader.certificate(version)?);
-                    }
-                    if alias.eq_ignore_ascii_case(super::KEY_ALIAS) {
-                        let certificate = chain.into_iter().next().ok_or_else(super::no_certificate)?;
-                        return Ok((certificate, unprotect(protected, &password)?));
-                    }
-                }
-                2 => {
-                    reader.certificate(version)?;
-                }
-                other => return Err(format!("the key store has an entry of a kind this server does not know ({other})")),
-            }
-        }
-        Err(super::no_certificate())
-    }
 }
 
 #[cfg(test)]
@@ -345,22 +218,15 @@ mod tests {
         fs::remove_dir_all(dir).unwrap();
     }
 
-    /// The same key and certificate in the store of JDKs before 9, as `keytool` writes one.
+    /// The store of JDKs before 9 is refused, with what to do about it, not misread.
     #[test]
-    fn an_old_jks_store_is_read() {
-        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/jks-state");
+    fn a_jks_store_says_what_to_do() {
         let dir = scratch();
         fs::create_dir_all(&dir).unwrap();
-        for name in ["server-id", "tls.password", "tls.jks"] {
-            fs::copy(fixture.join(name), dir.join(name)).unwrap();
-        }
-        let identity = ServerIdentity::load_or_create(&dir).unwrap();
-        assert_eq!(identity.fingerprint, fs::read_to_string(fixture.join("fingerprint")).unwrap().trim());
-        assert!(identity.tls_config().is_ok());
-
-        fs::write(dir.join("tls.password"), "not-the-password\n").unwrap();
+        fs::write(dir.join("tls.password"), "secret\n").unwrap();
+        fs::write(dir.join("tls.jks"), [0xFE, 0xED, 0xFE, 0xED, 0, 0, 0, 2, 0, 0, 0, 0]).unwrap();
         let error = ServerIdentity::load_or_create(&dir).err().unwrap().to_string();
-        assert!(error.contains("does not open"), "{error}");
+        assert!(error.contains("JKS") && error.contains("move it away"), "{error}");
         fs::remove_dir_all(dir).unwrap();
     }
 }

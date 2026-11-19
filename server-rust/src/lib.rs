@@ -2,6 +2,10 @@
 //! computers with little memory. The Kotlin server is the specification: this one reads the same
 //! environment, keeps the same files, and gives the same answers, checked by `conformance/harness.py`.
 
+// The one exception is asking the C library for the time zone, in `clock`, where it says why.
+#![deny(unsafe_code)]
+
+pub mod clock;
 pub mod config;
 pub mod devices;
 pub mod devices_page;

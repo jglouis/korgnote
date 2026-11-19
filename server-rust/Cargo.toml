@@ -8,32 +8,26 @@ publish = false
 
 [dependencies]
 bytes = "1.12.2"
-chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 flate2 = "1.1.11"
 futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
 getrandom = { version = "0.4.3", features = ["sys_rng"] }
 http-body-util = "0.1.5"
 hyper = { version = "1.12.0", features = ["http1", "http2", "server"] }
 hyper-util = { version = "0.1.21", features = ["tokio", "server-auto", "http1", "http2", "service"] }
+libc = "0.2.191"
 nix = { version = "0.32.0", features = ["net", "user"] }
 notify = { version = "8.2.2", default-features = false, features = ["macos_fsevent"] }
 p12-keystore = "0.4.1"
 qrcodegen = "1.8.0"
 rcgen = { version = "0.14.10", default-features = false, features = ["ring"] }
-rsa = "0.10.0"
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "tls12", "std"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-sha1 = "0.11.0"
 sha2 = "0.11.1"
 socket2 = { version = "0.6.5", features = ["all"] }
 time = "0.3"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "macros", "sync", "time", "signal", "io-util", "fs"] }
 tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
-
-# Making the server's key takes a minute unoptimized, and a second optimized: the tests make several.
-[profile.dev.package."*"]
-opt-level = 3
 
 [profile.release]
 opt-level = "s"

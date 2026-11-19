@@ -6,15 +6,15 @@ use crate::pairing::{PairingLink, qr_svg};
 use crate::security::ServerAccess;
 use crate::text::escape_html as escape;
 use crate::watcher::{WatcherState, WatcherStatus, duration_text};
-use chrono::TimeZone;
+use crate::clock;
 
 /// A `<time>` the page's script shows in the browser's zone; the server's own, without script.
 fn time(epoch_millis: i64) -> String {
-    let instant = chrono::Utc.timestamp_millis_opt(epoch_millis).single().unwrap_or_default();
+    let instant = clock::utc(epoch_millis);
     // As Java writes an instant: the seconds always, and the milliseconds when there are any.
-    let fraction = if epoch_millis.rem_euclid(1000) == 0 { String::new() } else { format!(".{:03}", epoch_millis.rem_euclid(1000)) };
-    let iso = format!("{}{fraction}Z", instant.format("%Y-%m-%dT%H:%M:%S"));
-    let shown = instant.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S");
+    let fraction = if instant.millisecond() == 0 { String::new() } else { format!(".{:03}", instant.millisecond()) };
+    let iso = format!("{}{fraction}Z", clock::date_time(instant).replace(' ', "T"));
+    let shown = clock::date_time(clock::local(epoch_millis));
     format!("<time datetime=\"{iso}\">{shown}</time>")
 }
 
@@ -39,7 +39,7 @@ pub fn devices_body(access: &ServerAccess, watcher: Option<&WatcherStatus>, prob
         }
         out.push_str("</table>");
     }
-    out.push_str(&notes_folder_section(watcher, chrono::Utc::now().timestamp_millis()));
+    out.push_str(&notes_folder_section(watcher, clock::now_millis()));
     if let Some(details) = &access.pairing {
         out.push_str("<h2>Pair a device</h2>");
         out.push_str("<p>Shows a QR code to scan in KorgNote's Settings. It works once, for 10 minutes.</p>");

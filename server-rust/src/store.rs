@@ -355,7 +355,7 @@ impl FileStore {
                 return Ok(WriteResult::Conflict(current));
             }
         let trash = || -> io::Result<()> {
-            let day = chrono::Local::now().format("%Y-%m-%d").to_string();
+            let day = crate::clock::date(crate::clock::local(crate::clock::now_millis()));
             let target = self.root.join(".korgnote-trash").join(day).join(path);
             if let Some(parent) = target.parent() {
                 fs::create_dir_all(parent)?;

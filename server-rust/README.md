@@ -56,7 +56,7 @@ which is what a 64-bit Raspberry Pi runs.
 
 Four layers, each catching what the one before cannot.
 
-1. **`cargo test`**: 222 tests. The Kotlin server's 144 are ported test for test where they apply,
+1. **`cargo test`**: 224 tests. The Kotlin server's 144 are ported test for test where they apply,
    over real connections and a real folder; the rest cover what the comparison below brought up.
 2. **`conformance/harness.py`** sends one scripted conversation to both servers and compares every
    answer, and what each leaves on disk: about 2,300 requests that probe paths, methods, headers,
@@ -115,13 +115,19 @@ Each of these is listed in `ALLOWED` in the harness with the steps it excuses.
 - **A pairing link too long for a QR code** is a `500` from both; this one's says to give fewer
   addresses, where the Kotlin one's says how many bits the library was short.
 
-And three that cannot be seen from a client that behaves:
+And five that cannot be seen from a client that behaves:
 
 - A `304` has no `Content-Length: 0` (hyper leaves it out).
 - A request line with bytes that are not ASCII is `400`, where Netty passes it on to find nothing
   (`404`). The apps percent-encode.
 - A pairing request must be JSON as JSON is written. Ktor's lenient parser would also take
   unquoted strings.
+- A state directory made by this server has an EC P-256 key where the Kotlin server makes an RSA
+  one, with the same names and the same hundred years. A phone trusts the certificate by its
+  fingerprint, whatever its key, and the Kotlin server serves it as it is: the harness hands such a
+  directory to it and back.
+- A key store in the format of JDKs before 9 (JKS) is refused with what to do, not read. The Kotlin
+  server has only ever run on Java 25, which writes PKCS#12.
 
 ## What both servers do, for better or worse
 

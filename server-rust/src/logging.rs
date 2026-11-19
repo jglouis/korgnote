@@ -16,7 +16,8 @@ pub fn write(level: &str, message: &str) {
     // Written without `println!`, which panics when the line cannot be written: a full disk under
     // a redirected log, or a pipe whose reader has gone, must not take the server with it.
     use std::io::Write;
-    let _ = writeln!(std::io::stdout().lock(), "{} {level:<5} {message}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f"));
+    let now = crate::clock::local(crate::clock::now_millis());
+    let _ = writeln!(std::io::stdout().lock(), "{}.{:03} {level:<5} {message}", crate::clock::date_time(now), now.millisecond());
 }
 
 #[macro_export]
