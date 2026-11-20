@@ -198,13 +198,45 @@ pub fn default_gateway(routes: &str) -> Option<String> {
         .map(|gateway| (0..4).map(|byte| ((gateway >> (8 * byte)) & 0xff).to_string()).collect::<Vec<_>>().join("."))
 }
 
-/// Inside a container, the default gateway, from `/proc/net/route`: the host's published port
-/// reaches the server from there. Empty anywhere else.
+/// Inside a container on a network of its own, the default gateway, from `/proc/net/route`: the
+/// host's published port reaches the server from there. Empty anywhere else.
+///
+/// A container on the host's own network (`--network host`) has `/.dockerenv` too, but there the
+/// default gateway is the network's router, and a connection from it is not this computer's. What
+/// tells the two apart is the interfaces: a container on one network has one besides loopback,
+/// while a host running containers has its own and the bridge they hang off (`docker0`). Two or
+/// more, and no gateway is trusted: the plain port then answers loopback only.
 pub fn container_gateway() -> HashSet<String> {
     if !Path::new("/.dockerenv").exists() {
         return HashSet::new();
     }
+    let interfaces: Vec<String> = nix::ifaddrs::getifaddrs()
+        .map(|addresses| {
+            addresses
+                .filter(|interface| !interface.flags.contains(nix::net::if_::InterfaceFlags::IFF_LOOPBACK))
+                .filter(|interface| interface.address.as_ref().is_some_and(|address| address.as_sockaddr_in().is_some() || address.as_sockaddr_in6().is_some()))
+                .map(|interface| interface.interface_name)
+                .collect()
+        })
+        .unwrap_or_default();
+    if !on_one_network(&interfaces) {
+        crate::warn!(
+            "In a container that sees {} network interfaces, which is the host's network or several networks: the plain port answers loopback only, not the host's published port.",
+            distinct(&interfaces).len()
+        );
+        return HashSet::new();
+    }
     std::fs::read_to_string("/proc/net/route").ok().and_then(|routes| default_gateway(&routes)).into_iter().collect()
+}
+
+fn distinct(names: &[String]) -> HashSet<&str> {
+    names.iter().map(String::as_str).collect()
+}
+
+/// Whether the interfaces with an address, loopback left out and named once for each address, are
+/// one: a container on a single network of its own.
+pub fn on_one_network(names: &[String]) -> bool {
+    distinct(names).len() == 1
 }
 
 /// What a request says of itself, as far as who may make it goes.
@@ -282,6 +314,11 @@ fn origin_host_and_port(origin: &str) -> Option<(String, u32)> {
     Some((host.to_string(), port))
 }
 
+/// The token an `Authorization` header carries: what follows `Bearer `, or the whole header.
+pub fn bearer_token(header: &str) -> &str {
+    crate::text::trim(header.strip_prefix("Bearer ").unwrap_or(header))
+}
+
 /// Why a request may not go on, as a status and a sentence; None when it may.
 ///
 /// Over TLS, only the sync API answers, and only to a paired device's token, pairing itself
@@ -300,8 +337,7 @@ pub fn refusal_of(asking: &Asking, access: &ServerAccess) -> io::Result<Option<(
         if !asking.raw_path.starts_with("/api/v1/") {
             return Ok(Some((404, NOT_FOUND_OVER_TLS)));
         }
-        let token = asking.authorization.map(|header| crate::text::trim(header.strip_prefix("Bearer ").unwrap_or(header)));
-        return Ok(match token {
+        return Ok(match asking.authorization.map(bearer_token) {
             Some(token) if !token.is_empty() && access.devices.authenticate(token)?.is_some() => None,
             _ => Some((401, NOT_PAIRED)),
         });
@@ -352,6 +388,19 @@ mod tests {
                       eth0\t000011AC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0\n";
         assert_eq!(default_gateway(routes).as_deref(), Some("172.17.0.1"));
         assert_eq!(default_gateway("Iface\tDestination\tGateway\n"), None);
+    }
+
+    #[test]
+    fn only_a_container_on_one_network_trusts_its_gateway() {
+        let names = |list: &[&str]| list.iter().map(|name| name.to_string()).collect::<Vec<_>>();
+        // A container on the default bridge: eth0, with an IPv4 and an IPv6 address.
+        assert!(on_one_network(&names(&["eth0", "eth0"])));
+        // On the host's network: its own interface and the bridge its containers hang off.
+        assert!(!on_one_network(&names(&["eth0", "docker0"])));
+        assert!(!on_one_network(&names(&["wlan0", "eth0", "docker0", "br-1a2b3c"])));
+        // On two networks of compose's: which gateway the host comes through is not known.
+        assert!(!on_one_network(&names(&["eth0", "eth1"])));
+        assert!(!on_one_network(&[]));
     }
 
     #[test]

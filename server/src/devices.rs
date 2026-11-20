@@ -8,6 +8,7 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::watch;
 
 /// A device paired with this server. Only a hash of its token is kept: the token stays on the device.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,6 +47,9 @@ pub struct DeviceRegistry {
     new_token: Maker,
     new_code: Maker,
     state: Mutex<State>,
+    /// Counts the devices taken off, so that what a device has open, its change stream, can end
+    /// the moment it is revoked rather than at its next request.
+    removals: watch::Sender<u64>,
 }
 
 fn system_millis() -> i64 {
@@ -74,7 +78,7 @@ impl DeviceRegistry {
             let text = fs::read_to_string(path)?;
             devices = serde_json::from_str(&text).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, format!("{}: {error}", path.display())))?;
         }
-        Ok(DeviceRegistry { file, now, new_token, new_code, state: Mutex::new(State { devices, codes: Vec::new() }) })
+        Ok(DeviceRegistry { file, now, new_token, new_code, state: Mutex::new(State { devices, codes: Vec::new() }), removals: watch::Sender::new(0) })
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
@@ -111,6 +115,7 @@ impl DeviceRegistry {
             && let Some(at) = state.devices.iter().position(|device| device.id == *id)
                 && constant_time_equals(&state.devices[at].token_hash, &hash(replaced_token)) {
                     state.devices.remove(at);
+                    self.removals.send_modify(|count| *count += 1);
                 }
         let token = (self.new_token)();
         let name = take_utf16(trim(&request.device_name), 80);
@@ -139,6 +144,17 @@ impl DeviceRegistry {
         Ok(Some(state.devices[index].clone()))
     }
 
+    /// Whether `token` is a paired device's, without counting it as the device being seen.
+    pub fn knows(&self, token: &str) -> bool {
+        let hashed = hash(token);
+        self.lock().devices.iter().any(|device| constant_time_equals(&device.token_hash, &hashed))
+    }
+
+    /// Changes each time a device is taken off: revoked, or replaced by its own pairing again.
+    pub fn removals(&self) -> watch::Receiver<u64> {
+        self.removals.subscribe()
+    }
+
     /// Whether there was such a device to revoke.
     pub fn revoke(&self, id: &str) -> io::Result<bool> {
         let mut state = self.lock();
@@ -146,6 +162,7 @@ impl DeviceRegistry {
         state.devices.retain(|device| device.id != id);
         let removed = state.devices.len() != before;
         if removed {
+            self.removals.send_modify(|count| *count += 1);
             self.save(&state)?;
         }
         Ok(removed)

@@ -219,6 +219,14 @@ impl TestServer {
         Ok(exchange(stream, method, path, headers, body).await)
     }
 
+    /// A connection to the secure port made as a paired device makes one, left open for the test
+    /// to say what it likes on, or nothing. `Err` is one the server would not take.
+    pub async fn device_connection(&self) -> Result<tokio_rustls::client::TlsStream<TcpStream>, String> {
+        let stream = TcpStream::connect(("127.0.0.1", self.secure_port())).await.map_err(|error| error.to_string())?;
+        let connector = tokio_rustls::TlsConnector::from(Arc::new(pinning(self.fingerprint.as_deref().expect("a secure port"))));
+        connector.connect(rustls::pki_types::ServerName::try_from("korgnote").unwrap(), stream).await.map_err(|error| error.to_string())
+    }
+
     /// As `secure_request`, pinning the certificate this server does show.
     pub async fn device(&self, method: &str, path: &str, headers: &[(&str, &str)], body: Option<&[u8]>) -> Answer {
         self.secure_request(self.fingerprint.as_deref().expect("a secure port"), method, path, headers, body).await.unwrap()

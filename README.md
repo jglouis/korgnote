@@ -226,7 +226,10 @@ phone: there, choose where your notes are again and they sync.
 **The server has two ports.**
 
 - **8443 (HTTPS)** faces the network. On this port the server answers only sync requests, and only
-  from a paired device's token. The one exception is pairing, which needs a one-time code.
+  from a paired device's token. The one exception is pairing, which needs a one-time code. A
+  connection that has not shown a paired device's token within 30 seconds is closed, and one
+  address can hold no more than 64 connections open, so a stranger on the network cannot tie the
+  port up.
 - **8080 (HTTP)**, unencrypted, is for this computer only: the web app, the desktop app and the
   Devices page. It has no password, so whoever can reach it can read and change every note, and pair
   a device of their own. That is why it listens on `127.0.0.1` only (the `-p 127.0.0.1:8080:8080`
@@ -262,8 +265,8 @@ phone: there, choose where your notes are again and they sync.
 computer they are in your notes folder. On the phone they are in the app's private storage, which
 other apps cannot read, and which any recent phone encrypts along with the rest of its storage.
 
-**A lost phone.** Revoke it on the Devices page. Its token stops working on its next request, but the
-copy of the notes already on it stays there.
+**A lost phone.** Revoke it on the Devices page. Its token stops working at once, and the change
+stream it has open is closed, but the copy of the notes already on it stays there.
 
 ## Status
 

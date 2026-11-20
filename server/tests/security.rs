@@ -16,6 +16,7 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
+use std::time::Duration;
 
 struct Fixture {
     clock: Arc<AtomicI64>,
@@ -61,6 +62,11 @@ fn identity(state: &Scratch) -> ServerIdentity {
 
 /// A server with both ports. `addresses` are those it was started with; `interfaces` those it finds for itself.
 async fn fixture_with(addresses: &[&str], interfaces: &'static [&'static str], notes: &[(&str, &str)]) -> Fixture {
+    fixture_adjusted(addresses, interfaces, notes, |_| {}).await
+}
+
+/// As `fixture_with`, with what `adjust` changes of the server before it starts.
+async fn fixture_adjusted(addresses: &[&str], interfaces: &'static [&'static str], notes: &[(&str, &str)], adjust: impl FnOnce(&mut App)) -> Fixture {
     let clock = Arc::new(AtomicI64::new(1_000_000));
     let (tokens, codes) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
     let (now, made) = (clock.clone(), codes.clone());
@@ -83,7 +89,8 @@ async fn fixture_with(addresses: &[&str], interfaces: &'static [&'static str], n
     );
     let access = ServerAccess { devices: Arc::new(devices), pairing: Some(details), this_computer: HashSet::new() };
     let notes = Scratch::with("notes", notes);
-    let app = App::new(FileStore::new(&notes.path), access);
+    let mut app = App::new(FileStore::new(&notes.path), access);
+    adjust(&mut app);
     let server = TestServer::start(app, Some((identity.tls_config().unwrap(), identity.fingerprint.clone()))).await;
     Fixture { clock, codes, server, _state: state, _notes: notes }
 }
@@ -549,4 +556,141 @@ async fn too_many_addresses_for_a_code_is_an_error_and_not_the_end_of_the_server
     assert!(link.text().starts_with("korgnote://pair?v=1"));
     // And with fewer, a code is drawn again.
     assert_eq!(f.server.post("/devices/pair", &[FORM], &form("192.168.1.20")).await.status, 200);
+}
+
+// --- What a stranger on the network can hold, and what a revoked device keeps ---
+
+/// Sends `request` on `stream` and reads the answer's head and as much body as it says it has.
+async fn ask<S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(stream: &mut S, request: &str) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    stream.write_all(request.as_bytes()).await.unwrap();
+    let mut raw = Vec::new();
+    let mut buffer = [0u8; 4096];
+    loop {
+        let read = tokio::time::timeout(Duration::from_secs(5), stream.read(&mut buffer)).await.expect("an answer").unwrap();
+        assert!(read > 0, "closed before answering: {:?}", String::from_utf8_lossy(&raw));
+        raw.extend_from_slice(&buffer[..read]);
+        if let Some(end) = raw.windows(4).position(|window| window == b"\r\n\r\n") {
+            let head = String::from_utf8_lossy(&raw[..end]).to_ascii_lowercase();
+            let length: usize = head.lines().find_map(|line| line.strip_prefix("content-length:")).map(|value| value.trim().parse().unwrap()).unwrap_or(0);
+            if raw.len() >= end + 4 + length {
+                return String::from_utf8_lossy(&raw).into_owned();
+            }
+        }
+    }
+}
+
+/// Reads `stream` until what it has said contains `wanted`, and returns all it said.
+async fn read_until<S: tokio::io::AsyncRead + Unpin>(stream: &mut S, wanted: &str) -> String {
+    use tokio::io::AsyncReadExt;
+    let mut seen = Vec::new();
+    let mut buffer = [0u8; 1024];
+    while !String::from_utf8_lossy(&seen).contains(wanted) {
+        let read = tokio::time::timeout(Duration::from_secs(5), stream.read(&mut buffer)).await.expect("more of the stream").unwrap();
+        assert!(read > 0, "ended before {wanted:?}: {:?}", String::from_utf8_lossy(&seen));
+        seen.extend_from_slice(&buffer[..read]);
+    }
+    String::from_utf8_lossy(&seen).into_owned()
+}
+
+/// Whether the server closes `stream` within `within`, saying nothing more.
+async fn closed_within<S: tokio::io::AsyncRead + Unpin>(stream: &mut S, within: Duration) -> bool {
+    use tokio::io::AsyncReadExt;
+    let mut buffer = [0u8; 64];
+    matches!(tokio::time::timeout(within, stream.read(&mut buffer)).await, Ok(Ok(0)) | Ok(Err(_)))
+}
+
+async fn short_lived() -> Fixture {
+    fixture_adjusted(&["192.168.1.20"], &[], &[("a.org", "* A\n")], |app| app.unpaired_lifetime = Duration::from_millis(500)).await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stranger_is_let_go_and_a_paired_device_is_not() {
+    use tokio::io::AsyncWriteExt;
+    let f = short_lived().await;
+    let (_, token) = f.paired().await;
+    let request = format!("GET /api/v1/manifest HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {token}\r\n\r\n");
+    let mut stranger = f.server.device_connection().await.unwrap();
+    let mut trickling = f.server.device_connection().await.unwrap();
+    let mut device = f.server.device_connection().await.unwrap();
+    assert!(ask(&mut device, &request).await.starts_with("HTTP/1.1 200"));
+    // A request begun and never finished buys no more time than none at all.
+    trickling.write_all(b"GET /api/v1/manifest HTTP/1.1\r\nHost: localhost\r\n").await.unwrap();
+    assert!(closed_within(&mut stranger, Duration::from_secs(3)).await, "a connection that says nothing is closed");
+    assert!(closed_within(&mut trickling, Duration::from_secs(3)).await, "so is one that never finishes its request");
+    // The device's, past the same time, still answers on the same connection.
+    assert!(ask(&mut device, &request).await.starts_with("HTTP/1.1 200"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stranger_who_fails_to_show_a_token_is_let_go_too() {
+    let f = short_lived().await;
+    let mut guessing = f.server.device_connection().await.unwrap();
+    let wrong = "GET /api/v1/manifest HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer not-a-token\r\n\r\n";
+    assert!(ask(&mut guessing, wrong).await.starts_with("HTTP/1.1 401"));
+    assert!(closed_within(&mut guessing, Duration::from_secs(3)).await);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn one_address_holds_no_more_than_its_share_of_connections() {
+    let f = fixture().await;
+    let mut open = Vec::new();
+    for _ in 0..64 {
+        open.push(f.server.device_connection().await.expect("within the share"));
+    }
+    assert!(f.server.device_connection().await.is_err(), "the 65th from one address is turned away");
+    // A place given back is a place to be had again.
+    drop(open.pop());
+    let mut again = None;
+    for _ in 0..50 {
+        if let Ok(connection) = f.server.device_connection().await {
+            again = Some(connection);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(again.is_some());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_pairing_request_past_its_size_is_not_read_and_spends_no_code() {
+    let f = fixture().await;
+    let code = f.devices().new_pairing_code();
+    let long_name = "x".repeat(20_000);
+    let too_long = f.pair_with(&format!(r#"{{"code":"{code}","deviceName":"{long_name}"}}"#)).await;
+    assert_eq!(too_long.status, 403);
+    assert!(f.devices().all().is_empty());
+    assert_eq!(f.pair(&code).await.status, 200, "the code is still good");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_revoked_devices_change_stream_ends_at_once() {
+    use tokio::io::AsyncWriteExt;
+    let f = fixture().await;
+    let (id, token) = f.paired().await;
+    let (_, other_token) = f.paired().await;
+    let mut revoked = f.server.device_connection().await.unwrap();
+    let mut other = f.server.device_connection().await.unwrap();
+    for (stream, token) in [(&mut revoked, &token), (&mut other, &other_token)] {
+        stream.write_all(format!("GET /api/v1/events HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {token}\r\n\r\n").as_bytes()).await.unwrap();
+    }
+    read_until(&mut revoked, ": connected").await;
+    read_until(&mut other, ": connected").await;
+    f.devices().revoke(&id).unwrap();
+    // The last chunk ends the revoked device's stream, with no change told before it.
+    let rest = read_until(&mut revoked, "0\r\n\r\n").await;
+    assert!(!rest.contains("event:"), "{rest}");
+    // The other device's goes on, and is told of a change made after.
+    f.server.app.journal.record("b.org", Some("etag-b"), false);
+    assert!(read_until(&mut other, "event: changed").await.contains("b.org"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn no_page_is_shown_inside_another_sites() {
+    let f = fixture().await;
+    for answer in [f.server.get("/devices").await, f.server.get("/api/v1/manifest").await, f.server.get("/nowhere").await] {
+        assert_eq!(answer.header("x-frame-options"), Some("DENY"));
+        assert_eq!(answer.header("content-security-policy"), Some("frame-ancestors 'none'"));
+        assert_eq!(answer.header("x-content-type-options"), Some("nosniff"));
+    }
 }

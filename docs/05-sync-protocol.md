@@ -235,7 +235,15 @@ What this trusts, stated plainly:
   claim to be localhost; it is refused, because it connects from its own address. The host's
   published port arrives from the network's gateway (read from `/proc/net/route`), which is
   trusted — so 8080 must stay published on the host's loopback only (`-p 127.0.0.1:8080:8080`), or
-  the network reaches it through that gateway too.
+  the network reaches it through that gateway too. The gateway is trusted only when the container
+  has one network interface besides loopback: under `--network host` the default gateway is the
+  LAN's router, and with two networks it is not known which one the host comes through, so then
+  only loopback is (`security.rs`, `container_gateway`).
+- The TLS port closes a connection that has not shown a paired device's token within 30 seconds,
+  holds at most 64 connections from one address (one /64 for IPv6) and 512 in all, reads no more
+  than 16 KiB of a pairing request, and reads ahead at most 64 KiB on a connection: a stranger
+  on the network can neither hold it open nor make it hold memory (`server.rs`). A revoked
+  device's open change stream ends when it is revoked.
 - The device token is sealed on Android (a Keystore key) and iOS (the Keychain). On the desktop it
   is sealed in Java `Preferences` with an AES key kept in the system's keyring — macOS Keychain,
   Windows Credential Manager, Secret Service on Linux (`KeyringCipher.kt`, through

@@ -4,7 +4,7 @@ use korgnote_server::http::App;
 use korgnote_server::identity::ServerIdentity;
 use korgnote_server::journal::ChangeJournal;
 use korgnote_server::security::{PairingDetails, ServerAccess, container_gateway};
-use korgnote_server::server::{listen_plain, listen_secure};
+use korgnote_server::server::{listen_plain, listen_secure, raise_open_file_limit};
 use korgnote_server::watcher::NotesWatcher;
 use korgnote_server::{error, info, warn};
 use std::sync::Arc;
@@ -16,6 +16,7 @@ fn port(value: i32, variable: &str) -> Result<u16, String> {
 async fn run() -> Result<(), String> {
     korgnote_server::logging::set_debug(std::env::var("KORGNOTE_LOG").is_ok_and(|level| level.eq_ignore_ascii_case("debug")));
     let config = ServerConfig::from_process();
+    raise_open_file_limit();
     let (http_port, https_port) = (port(config.http_port, "KORGNOTE_PORT")?, port(config.https_port, "KORGNOTE_HTTPS_PORT")?);
 
     let identity = ServerIdentity::load_or_create(&config.state_dir).map_err(|error| format!("Could not read or make the server's identity in {}: {error}", config.state_dir.display()))?;

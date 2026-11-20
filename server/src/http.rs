@@ -5,7 +5,7 @@
 use crate::devices_page::{devices_body, page, pairing_body};
 use crate::journal::ChangeJournal;
 use crate::pairing::{PairRequest, PairResponse, PairingLink, qr_terminal};
-use crate::security::{Asking, ServerAccess, is_pairing_address, refusal_of};
+use crate::security::{Asking, ServerAccess, bearer_token, is_pairing_address, refusal_of};
 use crate::store::{FileMeta, FileStore, MAX_BYTES, WriteResult};
 use crate::text::{decode_utf8, percent_decode, query_value, trim, utf16_length};
 use crate::watcher::NotesWatcher;
@@ -23,6 +23,7 @@ use std::io::{self, Write};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
@@ -47,6 +48,9 @@ pub struct App {
     /// the network in the middle of a save is never heard from again, and what it held of the
     /// upload budget must come back.
     pub body_idle: Duration,
+    /// How long a connection to the secure port may stay open without showing a paired device's
+    /// token: see `UNPAIRED_LIFETIME`.
+    pub unpaired_lifetime: Duration,
     /// How much of notes being sent may be held in memory at once, in megabytes: see `UPLOAD_BUDGET_MB`.
     uploads: tokio::sync::Semaphore,
 }
@@ -54,7 +58,7 @@ pub struct App {
 impl App {
     /// As the server itself is put together, every request logged.
     pub fn with(store: Arc<FileStore>, access: Arc<ServerAccess>, journal: Arc<ChangeJournal>, watcher: Option<Arc<NotesWatcher>>, web_client: Option<PathBuf>) -> Self {
-        App { store, access, journal, watcher, web_client, heartbeat_every: Duration::from_secs(30), log_requests: true, body_idle: BODY_IDLE, uploads: tokio::sync::Semaphore::new(UPLOAD_BUDGET_MB) }
+        App { store, access, journal, watcher, web_client, heartbeat_every: Duration::from_secs(30), log_requests: true, body_idle: BODY_IDLE, unpaired_lifetime: UNPAIRED_LIFETIME, uploads: tokio::sync::Semaphore::new(UPLOAD_BUDGET_MB) }
     }
 
     pub fn new(store: FileStore, access: ServerAccess) -> Self {
@@ -67,17 +71,27 @@ impl App {
             heartbeat_every: Duration::from_secs(30),
             log_requests: false,
             body_idle: BODY_IDLE,
+            unpaired_lifetime: UNPAIRED_LIFETIME,
             uploads: tokio::sync::Semaphore::new(UPLOAD_BUDGET_MB),
         }
     }
 }
 
 /// Where a connection comes from, and which of the two ports it arrived on.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Peer {
     pub remote: SocketAddr,
     pub local_port: u16,
     pub secure: bool,
+    /// Set once a request on this connection has shown a paired device's token. Until then a
+    /// connection to the secure port is a stranger's, which the server does not keep open long.
+    pub paired: Arc<AtomicBool>,
+}
+
+impl Peer {
+    pub fn new(remote: SocketAddr, local_port: u16, secure: bool) -> Self {
+        Peer { remote, local_port, secure, paired: Arc::new(AtomicBool::new(false)) }
+    }
 }
 
 /// What `/` and `/api/` answer when the web client is not served, which a health check may look for.
@@ -95,6 +109,18 @@ const MINIMUM_COMPRESSED_SIZE: u64 = 200;
 const DRAIN_LIMIT: u64 = 1024 * 1024 * 1024;
 const CHUNK: usize = 64 * 1024;
 const BODY_IDLE: Duration = Duration::from_secs(60);
+/// How long a note may take to arrive whole, however steadily it comes: a sender that trickles a
+/// byte a minute would otherwise hold its share of the upload budget for good. A 32 MB note at
+/// 64 KB/s is in well within it.
+const BODY_WHOLE: Duration = Duration::from_secs(10 * 60);
+/// How long a connection to the secure port may stay open, once it is TLS, without a request that
+/// shows a paired device's token. Pairing takes one request and a moment; anyone else that holds
+/// a connection open, saying nothing or a byte at a time, would otherwise hold it for good, and
+/// enough of them would leave no room for the phones.
+pub const UNPAIRED_LIFETIME: Duration = Duration::from_secs(30);
+/// A pairing request is a code, a name of 80 characters and perhaps the device it replaces: a few
+/// hundred bytes. Anyone can send one, before a token, so no more than this is ever held of it.
+const PAIR_BODY_LIMIT: usize = 16 * 1024;
 /// A note is held whole while it is checked and written, and one may be 32 MB. So that what the
 /// server needs does not grow with how many are sent at once, no more than this much of them is
 /// held at a time, and a note that would pass it waits its turn: two of the largest, or any number
@@ -104,7 +130,7 @@ const UPLOAD_BUDGET_MB: usize = 64;
 /// How much of the upload budget a body of the length it says it has will take, in megabytes.
 fn megabytes_held(content_length: Option<u64>) -> u32 {
     match content_length {
-        // Over the limit: it is read and let go, and none of it is held.
+        // Over the limit, said beforehand: it is read and let go, and none of it is held.
         Some(length) if length > MAX_BYTES as u64 => 1,
         Some(length) => length.div_ceil(1024 * 1024).max(1) as u32,
         // It does not say: it may be as large as a note may be.
@@ -236,11 +262,19 @@ pub async fn handle(app: Arc<App>, peer: Peer, request: Request<Incoming>) -> Re
         local_port: peer.local_port,
         secure: peer.secure,
     };
-    let reply = match refusal_of(&asking, &app.access) {
+    let refusal = refusal_of(&asking, &app.access);
+    // Over TLS, a request let through anywhere but pairing showed a paired device's token.
+    let token = if peer.secure && matches!(refusal, Ok(None)) && raw_path != "/api/pair" {
+        peer.paired.store(true, Ordering::Relaxed);
+        authorization.as_deref().map(|header| bearer_token(header).to_string())
+    } else {
+        None
+    };
+    let reply = match refusal {
         Ok(Some((status, why))) => Reply::text(StatusCode::from_u16(status).unwrap_or(StatusCode::FORBIDDEN), why),
         Err(error) => Reply::could_not_read("the paired devices", &error),
         Ok(None) if parts.headers.get_all(header::HOST).iter().count() > 1 => Reply::empty(StatusCode::BAD_REQUEST),
-        Ok(None) => route(&app, &parts.method, &parts.headers, &uri_text, &raw_path, query.as_deref(), body).await,
+        Ok(None) => route(&app, &parts.method, &parts.headers, &uri_text, &raw_path, query.as_deref(), token, body).await,
     };
     finish(reply, accept_encoding.as_deref())
 }
@@ -292,7 +326,9 @@ fn find_route(segments: &[String], trailing: bool, web: bool) -> Option<(Route, 
     })
 }
 
-async fn route(app: &Arc<App>, method: &Method, headers: &HeaderMap, uri_text: &str, raw_path: &str, query: Option<&str>, body: Incoming) -> Reply {
+/// `token` is the paired device's that asks, over TLS; None on the plain port.
+#[allow(clippy::too_many_arguments)]
+async fn route(app: &Arc<App>, method: &Method, headers: &HeaderMap, uri_text: &str, raw_path: &str, query: Option<&str>, token: Option<String>, body: Incoming) -> Reply {
     let mut segments = Vec::new();
     for segment in raw_path.split('/').filter(|segment| !segment.is_empty()) {
         match percent_decode(segment, false) {
@@ -331,7 +367,7 @@ async fn route(app: &Arc<App>, method: &Method, headers: &HeaderMap, uri_text: &
         Route::Pair => pair(app, headers, body).await,
         Route::Manifest => manifest(app, query).await,
         Route::Bundle => bundle(app, query).await,
-        Route::Events => events(app),
+        Route::Events => events(app, token),
         Route::Files(path) => match name {
             "GET" => get_file(app, headers, path).await,
             "PUT" => put_file(app, headers, path, body).await,
@@ -433,11 +469,16 @@ fn receiver_stream(receiver: mpsc::Receiver<io::Result<Bytes>>) -> impl Stream<I
     Box::pin(stream::unfold(receiver, |mut receiver| async move { receiver.recv().await.map(|item| (item, receiver)) }))
 }
 
-fn events(app: &Arc<App>) -> Reply {
+/// The change stream. `token` is the device's that opened it, over TLS: when that device is
+/// revoked the stream ends there and then, with nothing more said to it.
+fn events(app: &Arc<App>, token: Option<String>) -> Reply {
     // A hint stream: clients reconcile with the manifest, so a missed event is a delay, never a
     // lost edit. It closes at one missed, for the client to do that.
     let mut changes = app.journal.events_until_one_is_missed();
     let heartbeat_every = app.heartbeat_every;
+    let devices = app.access.devices.clone();
+    let mut removals = devices.removals();
+    let still_paired = move || token.as_deref().is_none_or(|token| devices.knows(token));
     // One frame at a time: a reader that has stopped reading stops this task, and the journal then
     // drops what that reader would have been told, which ends the stream when it reads again.
     let (sender, receiver) = mpsc::channel::<io::Result<Bytes>>(1);
@@ -459,7 +500,15 @@ fn events(app: &Arc<App>) -> Reply {
                 // A comment line, which SSE clients skip.
                 _ = heartbeat.tick() => ": ping\n\n".to_string(),
                 _ = sender.closed() => return,
+                // A device was taken off: nothing to say, but if it is this one the stream ends below.
+                Ok(()) = removals.changed() => String::new(),
             };
+            if !still_paired() {
+                return;
+            }
+            if frame.is_empty() {
+                continue;
+            }
             if sender.send(Ok(Bytes::from(frame))).await.is_err() {
                 return;
             }
@@ -505,6 +554,9 @@ async fn read_body(mut body: Incoming, limit: usize, idle: Duration) -> io::Resu
     // Room for what it says it is, all at once: grown as it comes, a large note is copied over and
     // over, and for a moment held twice.
     let expected = body.size_hint().upper().filter(|length| *length <= limit as u64).unwrap_or(0) as usize;
+    // A body that says beforehand it is too long is kept none of: held up to the limit, it would
+    // let a sender that stops one byte short hold that much for as long as it waits.
+    let too_long = body.size_hint().lower() > limit as u64;
     let mut data = Vec::with_capacity(expected);
     let mut seen: u64 = 0;
     loop {
@@ -518,14 +570,14 @@ async fn read_body(mut body: Incoming, limit: usize, idle: Duration) -> io::Resu
         if seen > DRAIN_LIMIT {
             return Err(io::Error::other("a body past all reason"));
         }
-        if seen as usize <= limit {
+        if !too_long && seen as usize <= limit {
             data.extend_from_slice(&chunk);
         } else {
             // No more is kept, and what was is let go.
             data = Vec::new();
         }
     }
-    Ok((seen as usize <= limit).then_some(data))
+    Ok((!too_long && seen as usize <= limit).then_some(data))
 }
 
 /// How a body's bytes are to be read as text, from its `Content-Type`.
@@ -663,10 +715,11 @@ async fn put_file(app: &Arc<App>, headers: &HeaderMap, path: String, body: Incom
     // may be: past that it is let go as it comes, and the answer is the same.
     let said = header_text(headers, header::CONTENT_LENGTH).and_then(|length| length.parse::<u64>().ok());
     let _held = app.uploads.acquire_many(megabytes_held(said)).await.expect("the budget is never closed");
-    let body = match read_body(body, MAX_BYTES, app.body_idle).await {
-        Ok(body) => body,
-        Err(error) if error.kind() == io::ErrorKind::TimedOut => return Reply::text(StatusCode::REQUEST_TIMEOUT, "The note did not arrive whole: nothing more of it came."),
-        Err(error) => return Reply::text(StatusCode::BAD_REQUEST, format!("The note did not arrive whole: {error}")),
+    let body = match tokio::time::timeout(BODY_WHOLE, read_body(body, MAX_BYTES, app.body_idle)).await {
+        Ok(Ok(body)) => body,
+        Ok(Err(error)) if error.kind() == io::ErrorKind::TimedOut => return Reply::text(StatusCode::REQUEST_TIMEOUT, "The note did not arrive whole: nothing more of it came."),
+        Ok(Err(error)) => return Reply::text(StatusCode::BAD_REQUEST, format!("The note did not arrive whole: {error}")),
+        Err(_) => return Reply::text(StatusCode::REQUEST_TIMEOUT, "The note did not arrive whole: it was too long coming."),
     };
     if let Charset::Other(name) = &charset {
         return Reply::text(StatusCode::UNSUPPORTED_MEDIA_TYPE, format!("This server reads notes sent as UTF-8, ISO-8859-1, US-ASCII or UTF-16, not as {name}."));
@@ -710,7 +763,7 @@ fn is_json(headers: &HeaderMap) -> bool {
 async fn pair(app: &Arc<App>, headers: &HeaderMap, body: Incoming) -> Reply {
     let Some(details) = &app.access.pairing else { return Reply::text(StatusCode::NOT_FOUND, "This server does not pair devices.") };
     let json = is_json(headers);
-    let body = read_body(body, 1024 * 1024, app.body_idle).await.ok().flatten();
+    let body = read_body(body, PAIR_BODY_LIMIT, app.body_idle).await.ok().flatten();
     let request = body.filter(|_| json).and_then(|body| serde_json::from_slice::<PairRequest>(&body).ok());
     let paired = match request {
         Some(request) => match app.access.devices.pair(&request) {
@@ -1036,7 +1089,14 @@ fn stream_body(pieces: impl Stream<Item = io::Result<Bytes>> + Send + 'static) -
 }
 
 fn finish(reply: Reply, accept_encoding: Option<&str>) -> Response<Body> {
-    let mut response = Response::builder().status(reply.status);
+    // No page of this server's is shown inside another site's: the Devices page would otherwise
+    // be a button to revoke a phone with, under whatever that site draws over it. And a type is
+    // taken as said, never guessed from the bytes.
+    let mut response = Response::builder()
+        .status(reply.status)
+        .header(header::X_FRAME_OPTIONS, "DENY")
+        .header(header::CONTENT_SECURITY_POLICY, "frame-ancestors 'none'")
+        .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff");
     if let Some(content_type) = reply.content_type {
         response = response.header(header::CONTENT_TYPE, content_type);
     }
