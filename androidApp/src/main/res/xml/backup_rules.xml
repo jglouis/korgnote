@@ -9,4 +9,5 @@
     <exclude domain="file" path="agenda-widget.json" />
     <exclude domain="file" path="capture-queue" />
     <exclude domain="sharedpref" path="korgnote_reminders.xml" />
+    <exclude domain="sharedpref" path="korgnote_device_only.xml" />
 </full-backup-content>

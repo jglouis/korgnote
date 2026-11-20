@@ -21,21 +21,30 @@ class PersistentSettingsRepository : KeyValueSettings() {
     override fun write(key: String, value: String) = defaults.setObject(value, forKey = key)
 
     /**
-     * The secret kept at [key], from the Keychain. One an older version kept in the user defaults is
-     * moved there on the way — and only taken out of them once the Keychain has it.
+     * The secret kept at [key], from the Keychain; from [DeviceOnlyFiles] when the Keychain refused it.
+     * One an older version kept in the user defaults, which go to every backup, is moved out of them on
+     * the way: to the Keychain, or to [DeviceOnlyFiles] when the Keychain will not have it.
      */
     private fun readSecret(key: String): String? {
         Keychain.read(key)?.let { return it }
+        DeviceOnlyFiles.read(key)?.let { kept ->
+            // The Keychain may take it now.
+            if (Keychain.write(key, kept)) DeviceOnlyFiles.remove(key)
+            return kept
+        }
         val legacy = defaults.stringForKey(key) ?: return null
-        if (Keychain.write(key, legacy)) defaults.removeObjectForKey(key)
+        writeSecret(key, legacy)
         return legacy
     }
 
-    /** Keeps [value] in the Keychain; in the user defaults, as before, only if the Keychain refuses it. */
+    /**
+     * Keeps [value] in the Keychain; when the Keychain refuses it, in [DeviceOnlyFiles], never in the
+     * user defaults, which iCloud and every computer backup take.
+     */
     private fun writeSecret(key: String, value: String?) {
-        if (Keychain.write(key, value)) defaults.removeObjectForKey(key)
-        else if (value == null) defaults.removeObjectForKey(key)
-        else defaults.setObject(value, forKey = key)
+        defaults.removeObjectForKey(key)
+        val inKeychain = Keychain.write(key, value)
+        if (inKeychain || value == null) DeviceOnlyFiles.remove(key) else DeviceOnlyFiles.write(key, value)
     }
 
 

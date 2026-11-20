@@ -37,14 +37,17 @@ import com.korgnote.common.replica.defaultReplicaRoot
 fun MainViewController(): UIViewController {
     val replica = defaultReplicaRoot()
     val webDavReplica = "$replica-webdav"
+    // The index holds the notes' titles, headings, tags and links, so it is the notes too.
+    val noteIndex = "${replica.substringBeforeLast('/')}/note-index"
     // Nothing of the notes leaves the iPhone in a backup, as on Android: they are kept where the
     // user chose, and a new iPhone syncs them again.
     keepOutOfBackups(replica)
     keepOutOfBackups(webDavReplica)
+    keepOutOfBackups(noteIndex)
     val iosModule = module {
         single<SettingsRepository> { PersistentSettingsRepository() }
         single<ReplicaStorage> { FileSystemReplicaStorage(replica) }
-        single<NoteIndexFiles> { NoteIndexFiles { name -> FileNoteIndexFile("${replica.substringBeforeLast('/')}/note-index/$name") } }
+        single<NoteIndexFiles> { NoteIndexFiles { name -> FileNoteIndexFile("$noteIndex/$name") } }
         // The WebDAV sync's, beside it and never mixed with it.
         single<ReplicaStorage>(WEBDAV) { FileSystemReplicaStorage(webDavReplica) }
         single<NotificationScheduler> { IosNotificationScheduler() }

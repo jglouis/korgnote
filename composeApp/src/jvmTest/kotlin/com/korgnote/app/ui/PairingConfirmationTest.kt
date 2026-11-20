@@ -16,6 +16,7 @@ import com.korgnote.common.pairing.PairingLink
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.HttpHeaders
 import io.ktor.http.headersOf
@@ -43,7 +44,10 @@ class PairingConfirmationTest {
                 """{"deviceId":"dev-2","token":"new-token","serverId":"server-2","serverName":"Not yours"}""",
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
-        }) { install(ContentNegotiation) { json() } }
+        }) {
+            install(ContentNegotiation) { json() }
+            install(HttpTimeout)
+        }
     }, settings)
 
     private val inTheDialog = hasAnyAncestor(isDialog())

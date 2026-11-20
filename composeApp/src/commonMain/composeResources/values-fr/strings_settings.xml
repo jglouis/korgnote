@@ -59,7 +59,7 @@
     <string name="settings_pair_no_address">Ce code de %1$s ne dit pas où le joindre : le serveur ne connaît aucune adresse pour lui-même, comme lorsqu’il tourne dans Docker sans KORGNOTE_ADVERTISED_ADDRESSES. Sur sa page Devices, saisissez l’adresse de l’ordinateur sur votre réseau (comme 192.168.1.20) dans le champ d’adresse, appuyez sur Show a pairing code et scannez le nouveau code.</string>
     <string name="settings_pair_incomplete">Ce lien d’appairage est incomplet. Copiez-le en entier, de korgnote://pair jusqu’au code après &amp;c=, ou scannez plutôt le code QR.</string>
     <string name="settings_pair_failed_title">Appairage impossible</string>
-    <string name="settings_pairing_with">Association avec %1$s…</string>
+    <string name="settings_pairing_with">Association avec %1$s… Sur sa page Devices, appuyez sur Allow quand cet appareil le demande.</string>
     <string name="settings_the_computer">l’ordinateur</string>
     <string name="settings_paired_with">Associé à %1$s.</string>
     <string name="settings_forget_title">Oublier %1$s ?</string>
@@ -77,4 +77,5 @@
     <string name="settings_pair_replace_title">Remplacer %1$s par %2$s ?</string>
     <string name="settings_pair_replace_text">Cet appareil est associé à %1$s. L’associer à %2$s, à %3$s, le fait se synchroniser avec cet ordinateur à la place : les notes déjà synchronisées avec %1$s sont retirées de cet appareil (elles restent sur %1$s), et les modifications pas encore envoyées partent vers %2$s. N’acceptez que si vous venez d’afficher ce code sur la page Devices de votre propre ordinateur.</string>
     <string name="settings_pair_replace">Remplacer</string>
+    <string name="settings_pairing_unreadable">Cet appareil est associé, mais son association ne peut pas être lue : le trousseau du système n’a pas donné sa clé. Il ne se synchronise plus jusqu’à une nouvelle association.</string>
 </resources>

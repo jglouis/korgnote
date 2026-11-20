@@ -21,11 +21,12 @@ interface SecretCipher {
 internal const val SEALED_PREFIX = "sealed1:"
 
 /**
- * [plain] as settings keep it: sealed, or, when the key store fails, in the clear as before — a
- * pairing kept unsealed is better than a pairing lost.
+ * [plain] sealed, as settings keep it; null when the key store fails. Settings that are backed up
+ * must then keep it somewhere that is not: in the clear there, it would go to the cloud and work on
+ * the next phone, which is what sealing is for.
  */
-internal fun sealSecret(plain: String, cipher: SecretCipher): String =
-    cipher.seal(plain)?.let { SEALED_PREFIX + it } ?: plain
+internal fun sealSecret(plain: String, cipher: SecretCipher): String? =
+    cipher.seal(plain)?.let { SEALED_PREFIX + it }
 
 /**
  * The secret [stored] holds, or null. One an older version saved in the clear is sealed in passing,
@@ -34,5 +35,5 @@ internal fun sealSecret(plain: String, cipher: SecretCipher): String =
 internal fun openSecret(stored: String?, cipher: SecretCipher, save: (String) -> Unit): String? = when {
     stored == null -> null
     stored.startsWith(SEALED_PREFIX) -> cipher.open(stored.removePrefix(SEALED_PREFIX))
-    else -> stored.also { sealSecret(it, cipher).takeIf { sealed -> sealed != it }?.let(save) }
+    else -> stored.also { sealSecret(it, cipher)?.let(save) }
 }

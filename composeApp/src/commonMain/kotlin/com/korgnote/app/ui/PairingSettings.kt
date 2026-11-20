@@ -55,6 +55,7 @@ import korgnote.composeapp.generated.resources.settings_pair_no_address
 import korgnote.composeapp.generated.resources.settings_pair_title
 import korgnote.composeapp.generated.resources.settings_paired_as
 import korgnote.composeapp.generated.resources.settings_paired_with
+import korgnote.composeapp.generated.resources.settings_pairing_unreadable
 import korgnote.composeapp.generated.resources.settings_pairing_with
 import korgnote.composeapp.generated.resources.settings_paste_link
 import korgnote.composeapp.generated.resources.settings_reached_at
@@ -233,6 +234,12 @@ fun PairingSettings(
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
+            )
+        } else if (repo.isPairingUnreadable()) {
+            Text(
+                stringResource(Res.string.settings_pairing_unreadable),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
             )
         } else if (showHowTo) {
             Text(

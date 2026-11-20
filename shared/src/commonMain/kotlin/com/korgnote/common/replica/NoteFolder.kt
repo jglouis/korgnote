@@ -48,5 +48,20 @@ interface NoteFolder {
 fun isListedNotePath(path: String): Boolean =
     path.endsWith(".org") && path.split('/').none { it.isEmpty() || it.startsWith('.') }
 
+/** The longest name, in UTF-8 bytes, of a folder or note that is synced: 255 is what most file systems take, less room for `.tmp` and a conflict copy's suffix. */
+const val LONGEST_SYNCED_NAME = 200
+
+/**
+ * Whether a path a server or a WebDAV folder names is one this device keeps a copy of: a note as
+ * [isListedNotePath] has it, with no control characters, and no name longer than
+ * [LONGEST_SYNCED_NAME]. Anything else a server lists is left where it is: a file that is not a
+ * note has no business on this device, and a name that cannot be written here would stop every
+ * sync at it.
+ */
+fun isSyncedNotePath(path: String): Boolean =
+    isListedNotePath(path) &&
+        path.none { it.code < 0x20 || it.code == 0x7F } &&
+        path.split('/').all { it.encodeToByteArray().size <= LONGEST_SYNCED_NAME }
+
 /** Rejects a path that is not relative, or climbs out of the folder, as [NoteFolder]s must. */
 fun requireSafeNotePath(path: String) = requireSafeReplicaPath(path)

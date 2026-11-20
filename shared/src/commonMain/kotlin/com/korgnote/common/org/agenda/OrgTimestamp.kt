@@ -203,19 +203,20 @@ private fun parsePart(stamp: String): Part? {
                     ".+" -> RepeatKind.Restart
                     else -> RepeatKind.Cumulate
                 }
-                repeater = OrgRepeater(
-                    kind = kind,
-                    every = durationOf(repeaterMatch.groupValues[2], repeaterMatch.groupValues[3]),
-                    habitMax = repeaterMatch.groupValues[4].takeIf { it.isNotEmpty() }
-                        ?.let { durationOf(it, repeaterMatch.groupValues[5]) },
-                )
+                repeater = durationOf(repeaterMatch.groupValues[2], repeaterMatch.groupValues[3])?.let { every ->
+                    OrgRepeater(
+                        kind = kind,
+                        every = every,
+                        habitMax = repeaterMatch.groupValues[4].takeIf { it.isNotEmpty() }
+                            ?.let { durationOf(it, repeaterMatch.groupValues[5]) },
+                    )
+                }
             }
 
             delayMatch != null -> if (delay == null) {
-                delay = OrgDelay(
-                    by = durationOf(delayMatch.groupValues[2], delayMatch.groupValues[3]),
-                    firstOnly = delayMatch.groupValues[1] == "--",
-                )
+                delay = durationOf(delayMatch.groupValues[2], delayMatch.groupValues[3])?.let { by ->
+                    OrgDelay(by = by, firstOnly = delayMatch.groupValues[1] == "--")
+                }
             }
             // Anything else is a day name, in whatever language it was written, and says nothing
             // the date does not.
@@ -224,16 +225,25 @@ private fun parsePart(stamp: String): Part? {
     return Part(date, time, endTime, active, repeater, delay)
 }
 
-private fun durationOf(amount: String, unit: String) = OrgDuration(
-    amount = amount.toInt(),
-    unit = when (unit) {
-        "h" -> OrgTimeUnit.HOUR
-        "d" -> OrgTimeUnit.DAY
-        "w" -> OrgTimeUnit.WEEK
-        "m" -> OrgTimeUnit.MONTH
-        else -> OrgTimeUnit.YEAR
-    },
-)
+/**
+ * The most of any unit a repeater or a delay may say. A note can say anything, and one that said
+ * `+2000000000y` once overflowed every sum made of it, on every launch; past this a token is not a
+ * repeater or a delay, and the stamp is read without it, as an unknown word would be.
+ */
+const val LARGEST_DURATION_AMOUNT = 100_000
+
+private fun durationOf(amount: String, unit: String): OrgDuration? = amount.toIntOrNull()?.takeIf { it <= LARGEST_DURATION_AMOUNT }?.let {
+    OrgDuration(
+        amount = it,
+        unit = when (unit) {
+            "h" -> OrgTimeUnit.HOUR
+            "d" -> OrgTimeUnit.DAY
+            "w" -> OrgTimeUnit.WEEK
+            "m" -> OrgTimeUnit.MONTH
+            else -> OrgTimeUnit.YEAR
+        },
+    )
+}
 
 private fun dateOrNull(year: Int, month: Int, day: Int): LocalDate? =
     runCatching { LocalDate(year, month, day) }.getOrNull()

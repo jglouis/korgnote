@@ -6,7 +6,8 @@
   Nothing of the notes: not the copies the app keeps of them, nor the agenda the widgets show, nor
   the reminders, which name their headings, nor captures waiting to be filed. The notes are kept where the user chose: the computer,
   the WebDAV server, or a folder. On a new phone the app syncs them again, once paired; the pairing
-  token itself never travels, its key being in the Keystore. The settings do travel.
+  token itself never travels, its key being in the Keystore, or, when the Keystore would not seal
+  it, korgnote_device_only.xml keeps it, which is excluded below. The settings do travel.
 -->
 <data-extraction-rules>
     <cloud-backup>
@@ -15,6 +16,7 @@
         <exclude domain="file" path="agenda-widget.json" />
         <exclude domain="file" path="capture-queue" />
         <exclude domain="sharedpref" path="korgnote_reminders.xml" />
+        <exclude domain="sharedpref" path="korgnote_device_only.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="KorgNote" />
@@ -22,5 +24,6 @@
         <exclude domain="file" path="agenda-widget.json" />
         <exclude domain="file" path="capture-queue" />
         <exclude domain="sharedpref" path="korgnote_reminders.xml" />
+        <exclude domain="sharedpref" path="korgnote_device_only.xml" />
     </device-transfer>
 </data-extraction-rules>

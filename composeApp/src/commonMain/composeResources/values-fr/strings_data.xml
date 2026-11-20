@@ -28,6 +28,7 @@
     <string name="vm_file_not_on_device">%1$s n’est pas sur cet appareil. S’il se trouve ailleurs sur l’appareil, indiquez où dans Réglages, sous Liens vers des fichiers.</string>
     <string name="vm_file_not_in_mapped_folder">%1$s n’est pas sur cet appareil, dans le dossier défini pour %2$s.</string>
     <string name="vm_file_no_app">Aucune app de cet appareil n’ouvre %1$s.</string>
+    <string name="vm_file_program_refused">KorgNote n’ouvre pas de programme ni de script depuis un lien : %1$s. Ouvrez-le vous-même si vous lui faites confiance.</string>
     <string name="vm_file_needs_mapping">Aucun dossier de cet appareil n’est défini pour %1$s. Choisissez-en un dans Réglages, sous Liens vers des fichiers.</string>
     <string name="vm_file_links_unsupported">Les fichiers ne peuvent pas être ouverts depuis des liens sur cet appareil.</string>
     <string name="vm_folder_conflict">Modifié dans le dossier pendant votre modification : %1$s. La version du dossier est conservée ; la vôtre est enregistrée à côté dans une copie .sync-conflict-.</string>
@@ -38,6 +39,8 @@
     <string name="data_pairing_revoked">L’ordinateur ne reconnaît plus cet appareil. Associez-le à nouveau dans Réglages.</string>
     <string name="data_pairing_server_said">Le serveur a répondu : %1$s.</string>
     <string name="data_pairing_code_refused">%1$s a refusé ce code d’appairage. Chaque code ne sert qu’une fois, pendant 10 minutes. Sur l’ordinateur, appuyez à nouveau sur Show a pairing code et scannez le nouveau code.</string>
+    <string name="data_pairing_refused_on_computer">L’association a été refusée sur la page Devices de %1$s. Si ce n’était pas vous, quelqu’un d’autre tente de s’associer à votre ordinateur : vérifiez sa page Devices.</string>
+    <string name="data_pairing_not_allowed_in_time">Personne n’a autorisé cet appareil à temps sur la page Devices de %1$s. Affichez un nouveau code, scannez-le, puis appuyez sur Allow sur la page Devices quand cet appareil le demande.</string>
     <string name="data_pairing_server_error">%1$s n’a pas pu appairer cet appareil. %2$s</string>
     <string name="data_pairing_wrong_certificate">Quelque chose a répondu à %1$s, mais pas %2$s : il a présenté un autre certificat que celui du code. Si le serveur a été réinstallé ou son dossier d’état vidé, affichez un nouveau code sur sa page Devices et scannez-le. Sinon, ce réseau s’interpose peut-être entre cet appareil et l’ordinateur ; essayez-en un autre.</string>
     <string name="data_pairing_not_listening">L’ordinateur à %1$s a répondu, mais rien n’écoute sur le port %2$d. Le serveur KorgNote est-il lancé ? Avec Docker, ce port doit être publié, comme dans -p %2$d:8443.</string>

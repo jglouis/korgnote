@@ -8,6 +8,7 @@ import com.korgnote.common.replica.RemoteEntry
 import com.korgnote.common.replica.RemoteFile
 import com.korgnote.common.replica.RemoteManifest
 import com.korgnote.common.replica.SyncApi
+import com.korgnote.common.replica.isSyncedNotePath
 import com.korgnote.common.sync.Manifest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -119,11 +120,13 @@ class KtorSyncApi(
     override suspend fun manifest(since: Long?): RemoteManifest {
         val suffix = if (since != null) "/manifest?since=$since" else "/manifest"
         val wire: Manifest = reach { api, token -> client.get(api + suffix) { authorize(token) }.unlessRefused().body() }
+        // Only notes: a server that listed a script, or a folder, would otherwise have it written
+        // into the replica, or have a folder taken off this device.
         return RemoteManifest(
             generation = wire.generation,
             complete = wire.complete,
-            entries = wire.entries.map { RemoteEntry(it.path, it.etag, it.size, it.mtime) },
-            deleted = wire.deleted,
+            entries = wire.entries.filter { isSyncedNotePath(it.path) }.map { RemoteEntry(it.path, it.etag, it.size, it.mtime) },
+            deleted = wire.deleted.filter(::isSyncedNotePath),
         )
     }
 
@@ -151,7 +154,7 @@ class KtorSyncApi(
             .filter { it.isNotBlank() }
             .map { bundleJson.decodeFromString<WireBundleLine>(it) }
             .takeWhile { !it.truncated }
-            .mapNotNull { line -> line.path?.let { path -> RemoteFile(path, line.etag ?: return@let null, line.text ?: return@let null) } }
+            .mapNotNull { line -> line.path?.takeIf(::isSyncedNotePath)?.let { path -> RemoteFile(path, line.etag ?: return@let null, line.text ?: return@let null) } }
             .toList()
     }
 
@@ -224,7 +227,7 @@ class KtorSyncApi(
                         // The frame carries the etag too, but the engine re-fetches anyway: the
                         // stream is a hint, and the file may have moved again since.
                         val path = PATH_IN_FRAME.find(line)?.groupValues?.get(1)
-                        if (path != null) onChange(path, deleted)
+                        if (path != null && isSyncedNotePath(path)) onChange(path, deleted)
                     }
                 }
             }

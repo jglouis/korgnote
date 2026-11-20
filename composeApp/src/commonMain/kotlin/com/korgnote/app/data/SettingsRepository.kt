@@ -20,6 +20,14 @@ interface SettingsRepository {
     fun setPairedServer(server: PairedServer?)
 
     /**
+     * Whether this device is paired with a server that cannot be read back, as when the keyring
+     * its token is sealed with will not open. [getPairedServer] is null then, but the device is not
+     * unpaired: it syncs with nothing until it is paired again, rather than with whatever answers
+     * on this computer in its place.
+     */
+    fun isPairingUnreadable(): Boolean = false
+
+    /**
      * Where the notes are: the server's replica, or a folder of the user's. Null until chosen; see
      * [chosenNotesSource], which is what to read.
      */

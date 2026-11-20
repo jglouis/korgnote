@@ -5,6 +5,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.toByteArray
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -50,7 +51,10 @@ class DevicePairingTest {
                     status,
                     headersOf(HttpHeaders.ContentType, "application/json"),
                 )
-            }) { install(ContentNegotiation) { json() } }
+            }) {
+            install(ContentNegotiation) { json() }
+            install(HttpTimeout)
+        }
         }, settings)
 
     @Test
@@ -133,6 +137,22 @@ class DevicePairingTest {
         assertIs<PairingResult.Failed>(result)
         assertEquals(PairingProblem.CodeRefused, result.problem)
         assertEquals(true, result.reason.startsWith("Laptop turned this pairing code down."), result.reason)
+    }
+
+    @Test
+    fun aPairingRefusedOrNotAllowedOnTheComputerSaysSoAndChangesNothing() = runTest {
+        val settings = InMemorySettingsRepository(initialPairedServer = before)
+        val refused = pairing(settings, status = HttpStatusCode.Gone).pair(link, "Phone")
+        assertIs<PairingResult.Failed>(refused)
+        assertEquals(PairingProblem.RefusedOnComputer, refused.problem)
+        assertTrue(refused.reason.startsWith("Pairing was refused on Laptop's Devices page."), refused.reason)
+
+        val notInTime = pairing(settings, status = HttpStatusCode.RequestTimeout).pair(link, "Phone")
+        assertIs<PairingResult.Failed>(notInTime)
+        assertEquals(PairingProblem.NotAllowedInTime, notInTime.problem)
+        assertEquals(before, settings.getPairedServer())
+        // Each was asked once, at the first address: an answer from the computer is not tried again elsewhere.
+        assertEquals(listOf("10.0.0.5", "10.0.0.5"), hosts)
     }
 
     @Test

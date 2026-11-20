@@ -74,13 +74,22 @@ object OrgSyntax {
 
     /** A fixed-width line, `: text` or a lone `:`, shown verbatim in a monospace font. */
     val fixedWidth = Regex("^[ \\t]*:( |$)")
-    val descriptionTerm = Regex("^(\\s*)(.+?)(\\s+::)(\\s|$)")
+    /**
+     * A description item's term, `- term :: description`: its indent, the term, then the space and
+     * `::` after it. The term starts and ends on something that is not a space, so a long run of
+     * spaces is tried once rather than split every way in turn, which took minutes on a crafted line.
+     */
+    val descriptionTerm = Regex("^(\\s*)(\\S(?:.*?\\S)?)(\\s+::)(\\s|$)")
     /**
      * A priority cookie at the start of a heading's title, capturing its value: an uppercase letter,
      * or a number from 0 to 64, as Org allows (see [OrgPriority]).
      */
     val priority = Regex("^\\[#([A-Z]|6[0-4]|[1-5]?[0-9])\\]")
-    val tags = Regex("\\s+(:[\\p{L}\\p{N}_@#%]+(?::[\\p{L}\\p{N}_@#%]+)*:)\\s*$")
+    /**
+     * A heading's tags at the end of its title. The space before them is tried from where it starts
+     * only, not again from each space in it: a long run of spaces once took seconds a heading.
+     */
+    val tags = Regex("(?<!\\s)\\s+(:[\\p{L}\\p{N}_@#%]+(?::[\\p{L}\\p{N}_@#%]+)*:)\\s*$")
     val footnoteDefinition = Regex("^\\[fn:([^\\]]+)\\]\\s*(.*)$")
 
     // --- Inline (intra-line) constructs ---
@@ -100,7 +109,11 @@ object OrgSyntax {
     val fileLinkSchemes = setOf("file", "file+sys", "file+emacs")
 
     val url = Regex("(?:https?|ftp|mailto):[^\\s<>\\[\\]()\"']+")
-    val timestamp = Regex("[<\\[]\\d{4}-\\d{2}-\\d{2}(?: [^\\]>\\n]*)?[>\\]]")
+    /**
+     * A timestamp. Nothing in one opens another, so its words stop at `<` and `[`: a line of stamps
+     * that never close is not read to its end again from each one.
+     */
+    val timestamp = Regex("[<\\[]\\d{4}-\\d{2}-\\d{2}(?: [^\\]>\\[<\\n]*)?[>\\]]")
     val footnoteReference = Regex("\\[fn:[^\\]]+\\]")
     /**
      * A statistics cookie, `[2/5]` or `[40%]`, capturing its two numbers (or its percentage, then

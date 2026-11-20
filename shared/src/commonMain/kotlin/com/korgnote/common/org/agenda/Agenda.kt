@@ -9,6 +9,7 @@ import com.korgnote.common.org.OrgTodoConfig
 import com.korgnote.common.org.todoKeywordsOf
 import com.korgnote.common.org.search.fileTagsOf
 import com.korgnote.common.org.sliceOf
+import kotlinx.datetime.DateTimeArithmeticException
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -299,7 +300,7 @@ private fun AgendaEntry.expandInto(into: MutableList<AgendaOccurrence>, from: Lo
 
         AgendaKind.Scheduled -> {
             val delay = stamp.delay
-            val maxDelayDays = delay?.let { stamp.start.daysUntil(stamp.start.plus(it.by, 1)) } ?: 0
+            val maxDelayDays = delay?.let { stamp.start.plusOrNull(it.by, 1)?.let { later -> stamp.start.daysUntil(later) } ?: 0 } ?: 0
             // `SCHEDULED: <a>--<b>` is how a trip or a week off is usually written, and it is on
             // every day it covers, not only the first. org-agenda shows only the first.
             val spanDays = stamp.spanDays
@@ -307,13 +308,13 @@ private fun AgendaEntry.expandInto(into: MutableList<AgendaOccurrence>, from: Lo
             for (repeat in stamp.repeats(onOrAfter = from.minus(maxDelayDays + spanDays, DateTimeUnit.DAY))) {
                 if (repeat.date > to) break
                 val shift = delay?.takeIf { !it.firstOnly || repeat.index == 0 }?.by
-                val date = shift?.let { repeat.date.plus(it, 1) } ?: repeat.date
+                val date = shift?.let { repeat.date.plusOrNull(it, 1) } ?: repeat.date
                 if (repeat.index == 0) firstShown = date
                 addDays(into, repeat.copy(date = date), spanDays, from, to)
             }
             // Not yet done and already due: org-agenda keeps it in front of you, on today. A range
             // still running is on today already, and the check below keeps it from showing twice.
-            val start = firstShown ?: stamp.start.plus(delay?.by ?: OrgDuration(0, OrgTimeUnit.DAY), 1)
+            val start = firstShown ?: delay?.by?.let { stamp.start.plusOrNull(it, 1) } ?: stamp.start
             if (options.carryOver && !done && start < today && today in from..to && notOnTodayYet()) {
                 into += AgendaOccurrence(this, today, null, null, isCarriedOver = true)
             }
@@ -421,24 +422,40 @@ internal fun OrgTimestamp.repeats(onOrAfter: LocalDate): Sequence<Repeat> {
         OrgTimeUnit.YEAR -> start.monthsUntil(onOrAfter) / (every.amount * 12) - 1
         OrgTimeUnit.HOUR -> 0
     }.coerceAtLeast(0)
+    // Repeats stop where the calendar does: a large repeat, many times over, passes the last date a
+    // platform can hold, and that is the end of them rather than an error on every launch.
     return generateSequence(first) { it + 1 }.take(MAX_REPEATS)
-        .map { k -> Repeat(k, start.plus(every, k), startTime) }
+        .map { k -> start.plusOrNull(every, k)?.let { Repeat(k, it, startTime) } }
+        .takeWhile { it != null }
+        .map { it!! }
         .filter { it.date >= onOrAfter }
 }
 
-/** [this] moved on by [times] lots of [duration]. Hours count whole days only. */
-private fun LocalDate.plus(duration: OrgDuration, times: Int): LocalDate {
-    val n = duration.amount * times
-    return when (duration.unit) {
-        OrgTimeUnit.HOUR -> plus(n / 24, DateTimeUnit.DAY)
-        OrgTimeUnit.DAY -> plus(n, DateTimeUnit.DAY)
-        OrgTimeUnit.WEEK -> plus(n * 7, DateTimeUnit.DAY)
-        OrgTimeUnit.MONTH -> plus(n, DateTimeUnit.MONTH)
-        OrgTimeUnit.YEAR -> plus(n, DateTimeUnit.YEAR)
+/**
+ * [this] moved on by [times] lots of [duration], or null past the dates this platform can hold.
+ * Hours count whole days only.
+ */
+private fun LocalDate.plusOrNull(duration: OrgDuration, times: Int): LocalDate? {
+    val n = duration.amount.toLong() * times
+    val (count, unit) = when (duration.unit) {
+        OrgTimeUnit.HOUR -> n / 24 to DateTimeUnit.DAY
+        OrgTimeUnit.DAY -> n to DateTimeUnit.DAY
+        OrgTimeUnit.WEEK -> n * 7 to DateTimeUnit.DAY
+        OrgTimeUnit.MONTH -> n to DateTimeUnit.MONTH
+        OrgTimeUnit.YEAR -> n to DateTimeUnit.YEAR
+    }
+    if (count !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) return null
+    return try {
+        plus(count.toInt(), unit)
+    } catch (_: DateTimeArithmeticException) {
+        null
+    } catch (_: IllegalArgumentException) {
+        null
     }
 }
 
-private fun LocalDate.minus(duration: OrgDuration): LocalDate = plus(duration.copy(amount = -duration.amount), 1)
+/** [this] moved back by [duration]; itself when that is before any date this platform holds. */
+private fun LocalDate.minus(duration: OrgDuration): LocalDate = plusOrNull(duration.copy(amount = -duration.amount), 1) ?: this
 
 // --- The index the app keeps -------------------------------------------------------------------
 

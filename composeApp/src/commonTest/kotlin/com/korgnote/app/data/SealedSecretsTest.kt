@@ -19,7 +19,7 @@ class SealedSecretsTest {
     @Test
     fun aSecretIsKeptSealedAndOpenedAgain() {
         val cipher = FakeCipher()
-        val stored = sealSecret("token", cipher)
+        val stored = sealSecret("token", cipher)!!
         assertTrue(stored.startsWith(SEALED_PREFIX) && "token" !in stored, stored)
         assertEquals("token", openSecret(stored, cipher) { error("nothing to move") })
     }
@@ -37,15 +37,16 @@ class SealedSecretsTest {
     fun oneSealedWithAKeyThisDeviceHasNotIsGone() {
         // As on a phone restored from a backup: the settings came, the key did not.
         val cipher = FakeCipher()
-        val stored = sealSecret("token", cipher)
+        val stored = sealSecret("token", cipher)!!
         cipher.keys.clear()
         assertNull(openSecret(stored, cipher) { error("nothing to move") })
     }
 
     @Test
-    fun aKeyStoreThatFailsKeepsTheSecretAsBefore() {
+    fun aKeyStoreThatFailsSealsNothingAndSaysSo() {
+        // Never the secret itself in its place: settings kept in the clear go to every backup.
         val cipher = FakeCipher(working = false)
-        assertEquals("token", sealSecret("token", cipher))
+        assertNull(sealSecret("token", cipher))
         assertEquals("token", openSecret("token", cipher) { error("could not be sealed, so not moved") })
     }
 

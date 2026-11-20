@@ -11,7 +11,11 @@ class InMemorySettingsRepository(
     initialPairedServer: PairedServer? = null,
     /** The server unless told otherwise, so a test sees the notes rather than the welcome screens. */
     initialNotesSource: NotesSource? = NotesSource.Server,
+    /** As a desktop whose keyring would not open its pairing. */
+    private var pairingUnreadable: Boolean = false,
 ) : KeyValueSettings() {
+    override fun isPairingUnreadable(): Boolean = pairingUnreadable
+
     private val kept = mutableMapOf<String, String>()
 
     init {
@@ -41,6 +45,7 @@ class InMemorySettingsRepository(
     }
 
     override fun setPairedServer(server: PairedServer?) {
+        pairingUnreadable = false
         pairedServer = server
     }
 

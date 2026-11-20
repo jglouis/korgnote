@@ -8,6 +8,8 @@ import com.korgnote.common.org.agenda.AgendaOptions
 import com.korgnote.common.org.agenda.DaySpan
 import com.korgnote.common.org.agenda.agendaEntries
 import com.korgnote.common.org.agenda.occurrences
+import com.korgnote.common.org.agenda.parseOrgTimestamp
+import com.korgnote.common.org.agenda.LARGEST_DURATION_AMOUNT
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlin.test.Test
@@ -387,5 +389,35 @@ class AgendaTests {
         val byDay = generateSequence(from) { if (it < to) LocalDate.fromEpochDays(it.toEpochDays() + 1) else null }
             .flatMap { index.on(it) }.toList()
         assertEquals(index.between(from, to), byDay)
+    }
+
+    // --- Whatever a note says ---
+
+    /**
+     * A note can say anything, and one with a huge repeater once overflowed the sums made of it on
+     * every launch, which the app never got past. Each of these is an ordinary entry, without the
+     * repeat or delay it cannot have, or with as many repeats as fit in the calendar.
+     */
+    @Test
+    fun noRepeaterOrDelayIsTooLargeToReadOrToExpand() {
+        val stamps = listOf(
+            "<2026-09-18 Fri +2000000000y>", "<2026-09-18 Fri 10:00 +2000000000y>", "<2026-09-18 Fri +99999999999d>",
+            "<2026-09-18 Fri +300000000m>", "<2026-09-18 Fri 10:00 +2000000000w>", "<2026-09-18 Fri +2000000000h>",
+            "<2026-09-18 Fri -99999999999d>", "<2026-09-18 Fri .+1d/99999999999d>",
+            "<2026-09-18 Fri +100000y>", "<2026-09-18 Fri ++100000m>", "<0001-01-01 Mon +1d>", "<9999-12-31 Fri +100000y -100000y>",
+        )
+        for (stamp in stamps) {
+            for (keyword in listOf("SCHEDULED", "DEADLINE")) {
+                val text = "* TODO x\n$keyword: $stamp\n"
+                val found = occurrences(text, from = LocalDate(2026, 9, 1), to = LocalDate(2027, 9, 1))
+                assertTrue(found.size <= 400, "$keyword $stamp: ${found.size}")
+                occurrences(text, options = options.copy(carryOver = false))
+            }
+            assertTrue(parseOrgTimestamp(stamp) != null || stamp.startsWith("<0001"), stamp)
+        }
+        // Past the largest, the stamp is read without the repeater, as an unknown word would be.
+        assertEquals(null, parseOrgTimestamp("<2026-09-18 Fri +2000000000y>")?.repeater)
+        assertEquals(LocalDate(2026, 9, 18), parseOrgTimestamp("<2026-09-18 Fri +99999999999d>")?.start)
+        assertTrue(parseOrgTimestamp("<2026-09-18 Fri +$LARGEST_DURATION_AMOUNT" + "d>")?.repeater != null)
     }
 }

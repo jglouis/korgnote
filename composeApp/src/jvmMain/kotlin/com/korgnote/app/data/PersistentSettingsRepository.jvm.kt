@@ -11,10 +11,18 @@ class PersistentSettingsRepository(
 
     private var host = loadHost()
     private var port = loadPort()
+    private val storedPairing: String? = prefs.get(KEY_PAIRED_SERVER, null)
     private var pairedServer: PairedServer? = PairedServer.decode(
         // One an older version kept in the clear is sealed on the way.
-        openSecret(prefs.get(KEY_PAIRED_SERVER, null), cipher) { sealed -> prefs.put(KEY_PAIRED_SERVER, sealed) },
+        openSecret(storedPairing, cipher) { sealed -> prefs.put(KEY_PAIRED_SERVER, sealed) },
     )
+    private var pairingUnreadable = storedPairing != null && pairedServer == null
+
+    init {
+        if (pairingUnreadable) println("[DEBUG_LOG][Settings] The pairing is kept but cannot be opened: the keyring did not give its key. Not syncing until it is paired again.")
+    }
+
+    override fun isPairingUnreadable(): Boolean = pairingUnreadable
 
 
     override fun read(key: String): String? = prefs.get(key, null)
@@ -37,7 +45,10 @@ class PersistentSettingsRepository(
 
     override fun setPairedServer(server: PairedServer?) {
         pairedServer = server
-        if (server == null) prefs.remove(KEY_PAIRED_SERVER) else prefs.put(KEY_PAIRED_SERVER, sealSecret(server.encode(), cipher))
+        pairingUnreadable = false
+        // With no keyring to be had the token is kept in the clear, as before: Java's preferences
+        // are this user's own, and go to no phone backup. See [KeyringCipher].
+        if (server == null) prefs.remove(KEY_PAIRED_SERVER) else prefs.put(KEY_PAIRED_SERVER, server.encode().let { sealSecret(it, cipher) ?: it })
         // The shared token from before pairing, which nothing reads any more.
         prefs.remove(KEY_TOKEN)
     }

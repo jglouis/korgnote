@@ -119,7 +119,14 @@ class NoteAgenda(
         // Before the notes have been read the agenda is empty or partial, and replacing with that would
         // cancel the reminders the device holds until the notes arrive.
         if (!library.everyNoteKnown) return
-        val plan = planReminders(index.entries, now(), reminderSettings(), reminderWords)
+        // Runs on every return to the app, over whatever the notes say: a note no reminder can be
+        // made of keeps the reminders already set, rather than ending the app each time it opens.
+        val plan = try {
+            planReminders(index.entries, now(), reminderSettings(), reminderWords)
+        } catch (e: Exception) {
+            println("[DEBUG_LOG][NoteAgenda] Planning reminders failed: ${e::class.simpleName}: ${e.message}")
+            return
+        }
         if (plan == plannedReminders) return
         plannedReminders = plan
         scope.launch {

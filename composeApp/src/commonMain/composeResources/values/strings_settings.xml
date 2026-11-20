@@ -60,7 +60,7 @@
     <string name="settings_pair_no_address">This code from %1$s does not say where to reach it: the server knows no address for itself, as when it runs in Docker without KORGNOTE_ADVERTISED_ADDRESSES. On its Devices page, type the computer's address on your network (such as 192.168.1.20) in the address box, press Show a pairing code, and scan the new code.</string>
     <string name="settings_pair_incomplete">This pairing link is incomplete. Copy all of it, from korgnote://pair to the code after &amp;c=, or scan the QR code instead.</string>
     <string name="settings_pair_failed_title">Could not pair</string>
-    <string name="settings_pairing_with">Pairing with %1$s…</string>
+    <string name="settings_pairing_with">Pairing with %1$s… On its Devices page, press Allow when this device asks.</string>
     <string name="settings_the_computer">the computer</string>
     <string name="settings_paired_with">Paired with %1$s.</string>
     <string name="settings_forget_title">Forget %1$s?</string>
@@ -78,4 +78,5 @@
     <string name="settings_pair_replace_title">Replace %1$s with %2$s?</string>
     <string name="settings_pair_replace_text">This device is paired with %1$s. Pairing with %2$s, at %3$s, makes it sync with that computer instead: the notes this device has already synced with %1$s are taken off it (they stay on %1$s), and changes not yet sent go to %2$s. Pair only if you just showed this code on your own computer's Devices page.</string>
     <string name="settings_pair_replace">Replace</string>
+    <string name="settings_pairing_unreadable">This device is paired, but its pairing cannot be read: the system keyring did not give its key. It does not sync until it is paired again.</string>
 </resources>

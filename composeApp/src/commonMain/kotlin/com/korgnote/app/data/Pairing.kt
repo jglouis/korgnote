@@ -5,6 +5,7 @@ import com.korgnote.common.pairing.PairResponse
 import com.korgnote.common.pairing.PairingLink
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -15,6 +16,8 @@ import korgnote.composeapp.generated.resources.Res
 import com.korgnote.common.pairing.PairingLinkCheck
 import korgnote.composeapp.generated.resources.data_or
 import korgnote.composeapp.generated.resources.data_pairing_code_refused
+import korgnote.composeapp.generated.resources.data_pairing_not_allowed_in_time
+import korgnote.composeapp.generated.resources.data_pairing_refused_on_computer
 import korgnote.composeapp.generated.resources.data_pairing_no_answer
 import korgnote.composeapp.generated.resources.data_pairing_not_listening
 import korgnote.composeapp.generated.resources.data_pairing_server_error
@@ -72,6 +75,8 @@ fun endpointsFor(settings: SettingsRepository, localServer: Boolean = usesLocalS
     val paired = settings.getPairedServer()
     return when {
         paired != null -> paired.baseUrls().map { Endpoint(it, paired.token) }
+        // Paired, but with a pairing that cannot be read: not the server on this computer instead.
+        settings.isPairingUnreadable() -> emptyList()
         localServer -> listOf(Endpoint(buildLocalBaseUrl(settings.getServerHost(), settings.getServerPort()), null))
         else -> emptyList()
     }
@@ -137,6 +142,13 @@ fun confirmationFor(link: PairingLink, current: PairedServer?, fromOutside: Bool
     else -> null
 }
 
+/**
+ * How long a pairing request waits for its answer: the server holds it until someone at the
+ * computer allows the device on the Devices page, for two minutes, and a little longer for the
+ * answer to come back.
+ */
+const val PAIRING_APPROVAL_WAIT_MS = 150_000L
+
 /** How a pairing went. */
 sealed interface PairingResult {
     data class Paired(val server: PairedServer) : PairingResult
@@ -149,6 +161,12 @@ sealed interface PairingResult {
 enum class PairingProblem {
     /** The server turned the code down: used already, or older than its 10 minutes. */
     CodeRefused,
+
+    /** Someone at the computer pressed Refuse on its Devices page. */
+    RefusedOnComputer,
+
+    /** Nobody at the computer allowed it on its Devices page in time. */
+    NotAllowedInTime,
 
     /** Something answered, showing another certificate than the code names. */
     WrongCertificate,
@@ -212,6 +230,12 @@ class DevicePairing(
                     client.post("https://${hostForUrl(address)}:${link.port}/api/pair") {
                         contentType(ContentType.Application.Json)
                         setBody(request)
+                        // The server answers once someone at the computer has allowed this device on
+                        // its Devices page, which it waits two minutes for.
+                        timeout {
+                            requestTimeoutMillis = PAIRING_APPROVAL_WAIT_MS
+                            socketTimeoutMillis = PAIRING_APPROVAL_WAIT_MS
+                        }
                     }
                 } catch (e: CancellationException) {
                     throw e
@@ -227,6 +251,12 @@ class DevicePairing(
                 }
                 if (response.status == HttpStatusCode.Forbidden) {
                     return@use PairingResult.Failed(getString(Res.string.data_pairing_code_refused, computer), PairingProblem.CodeRefused)
+                }
+                if (response.status == HttpStatusCode.Gone) {
+                    return@use PairingResult.Failed(getString(Res.string.data_pairing_refused_on_computer, computer), PairingProblem.RefusedOnComputer)
+                }
+                if (response.status == HttpStatusCode.RequestTimeout) {
+                    return@use PairingResult.Failed(getString(Res.string.data_pairing_not_allowed_in_time, computer), PairingProblem.NotAllowedInTime)
                 }
                 if (response.status != HttpStatusCode.OK) {
                     val said = response.bodyAsText().ifBlank { getString(Res.string.data_pairing_server_said, response.status.toString()) }

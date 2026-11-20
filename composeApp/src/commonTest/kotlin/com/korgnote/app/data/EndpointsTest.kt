@@ -43,4 +43,14 @@ class EndpointsTest {
         assertEquals("This device is not paired with a computer yet. Pair it in Settings.", error.message)
         assertEquals(0, sent)
     }
+
+    @Test
+    fun aPairingThatCannotBeReadIsNotTheServerOnThisComputerInstead() {
+        // As a desktop whose keyring would not give the key its pairing is sealed with: whatever
+        // answers on this computer's port 8080 is not the computer it was paired with.
+        val settings = InMemorySettingsRepository(initialHost = "localhost", initialPort = 8080, pairingUnreadable = true)
+        assertTrue(endpointsFor(settings, localServer = true).isEmpty())
+        settings.setPairedServer(null)
+        assertEquals(listOf(Endpoint("http://localhost:8080", null)), endpointsFor(settings, localServer = true), "once forgotten, it is unpaired")
+    }
 }

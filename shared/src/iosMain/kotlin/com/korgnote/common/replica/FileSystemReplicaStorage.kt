@@ -10,6 +10,8 @@ import platform.Foundation.NSApplicationSupportDirectory
 import platform.Foundation.NSDate
 import platform.Foundation.NSFileModificationDate
 import platform.Foundation.NSFileSize
+import platform.Foundation.NSFileType
+import platform.Foundation.NSFileTypeDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSNumber
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
@@ -106,6 +108,16 @@ class FileSystemReplicaStorage(root: String) : ReplicaStorage {
         return readMeta().files.values.any { !it.deleted && it.path != path && accentsTogether(it.path) == name }
     }
 
+    /**
+     * Removes the note at [path], and never a folder: `removeItemAtPath` takes a folder whole, with
+     * every note in it, edits not yet sent included. A name that is a folder here is left as it is,
+     * as `File.delete` leaves one on the JVM.
+     */
+    private fun removeFile(path: String) {
+        if (manager.attributesOfItemAtPath(path, error = null)?.get(NSFileType) == NSFileTypeDirectory) return
+        manager.removeItemAtPath(path, error = null)
+    }
+
     override suspend fun read(path: String): String? = withContext(Dispatchers.IO) { readText(pathIn(notesDir, path)) }
 
     override suspend fun write(path: String, content: String) = withContext(Dispatchers.IO) {
@@ -114,7 +126,7 @@ class FileSystemReplicaStorage(root: String) : ReplicaStorage {
 
     override suspend fun delete(path: String) {
         withContext(Dispatchers.IO) {
-            if (!isRecordedUnderAnotherName(path)) manager.removeItemAtPath(pathIn(notesDir, path), error = null)
+            if (!isRecordedUnderAnotherName(path)) removeFile(pathIn(notesDir, path))
         }
     }
 
@@ -126,7 +138,7 @@ class FileSystemReplicaStorage(root: String) : ReplicaStorage {
 
     override suspend fun deleteBase(path: String) {
         withContext(Dispatchers.IO) {
-            if (!isRecordedUnderAnotherName(path)) manager.removeItemAtPath(pathIn(baseDir, path), error = null)
+            if (!isRecordedUnderAnotherName(path)) removeFile(pathIn(baseDir, path))
         }
     }
 

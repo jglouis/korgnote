@@ -8,7 +8,7 @@ import com.korgnote.common.replica.RemoteEntry
 import com.korgnote.common.replica.RemoteFile
 import com.korgnote.common.replica.RemoteManifest
 import com.korgnote.common.replica.SyncApi
-import com.korgnote.common.replica.isListedNotePath
+import com.korgnote.common.replica.isSyncedNotePath
 import io.ktor.client.HttpClient
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
@@ -180,7 +180,7 @@ class WebDavSyncApi(
                 if (item.path == folder || item.path.isEmpty()) continue
                 if (item.folder) {
                     if (!item.path.substringAfterLast('/').startsWith('.')) folders += item.path
-                } else if (isListedNotePath(item.path)) {
+                } else if (isSyncedNotePath(item.path)) {
                     val etag = item.etag ?: throw WebDavException(getString(Res.string.data_webdav_listed_without_etag, item.path))
                     entries += RemoteEntry(item.path, etag, item.size)
                 }
