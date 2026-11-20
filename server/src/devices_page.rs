@@ -1,5 +1,6 @@
 //! The Devices page, on the plain port only: every paired device with a button to revoke it, how
 //! the watching of the notes folder is doing, and a button that shows a QR code to pair another.
+use crate::approvals::Request;
 use crate::pairing::{PairingLink, qr_svg};
 use crate::security::ServerAccess;
 use crate::text::escape_html as escape;
@@ -16,10 +17,31 @@ fn time(epoch_millis: i64) -> String {
     format!("<time datetime=\"{iso}\">{shown}</time>")
 }
 
+/// The pairings waiting to be allowed, each with its Allow and Refuse buttons. The page's script
+/// draws the same again every two seconds, from `/devices/requests`, so that one appears while the
+/// page that shows the code is open.
+fn requests_section(waiting: &[Request]) -> String {
+    let mut out = String::from("<div id=requests>");
+    if !waiting.is_empty() {
+        out.push_str("<h2>Asking to pair</h2>");
+        for request in waiting {
+            out.push_str(&format!("<p class=ask><b>{}</b> asks to pair, from {}, {}. ", escape(&request.name), request.from, time(request.asked_at)));
+            out.push_str(&format!("<form method=post action=\"/devices/requests/{}/refuse\" class=inline><button>Refuse</button></form> ", escape(&request.id)));
+            out.push_str(&format!("<form method=post action=\"/devices/requests/{}/allow\" class=inline><button>Allow</button></form></p>", escape(&request.id)));
+        }
+        out.push_str("<p class=muted>Allow only a device you are pairing yourself, now.</p>");
+    }
+    out.push_str("</div>");
+    out
+}
+
 /// The devices, and the form that shows a pairing code. `problem` is said above the form when the
 /// last try made no code, with what was typed, `typed`, kept in the box to correct.
-pub fn devices_body(access: &ServerAccess, watcher: Option<&WatcherStatus>, problem: Option<&str>, typed: Option<&str>) -> String {
+pub fn devices_body(access: &ServerAccess, waiting: &[Request], watcher: Option<&WatcherStatus>, problem: Option<&str>, typed: Option<&str>) -> String {
     let mut out = String::from("<h1>Devices</h1>");
+    if access.pairing.is_some() {
+        out.push_str(&requests_section(waiting));
+    }
     let mut devices = access.devices.all();
     if devices.is_empty() {
         out.push_str("<p class=muted>No device is paired yet.</p>");
@@ -128,7 +150,8 @@ pub fn notes_folder_section(status: Option<&WatcherStatus>, now: i64) -> String 
 pub fn pairing_body(link: &PairingLink) -> Option<String> {
     let uri = link.to_uri();
     let mut out = String::from("<h1>Pair a device</h1>");
-    out.push_str("<p>In KorgNote on the phone: Settings, <b>Pair with a computer</b>, <b>Scan the code</b>.</p>");
+    out.push_str("<p>In KorgNote on the phone: Settings, <b>Pair with a computer</b>, <b>Scan the code</b>. Then press <b>Allow</b> here when the phone asks.</p>");
+    out.push_str(&requests_section(&[]));
     out.push_str(&format!("<div class=qr>{}</div>", qr_svg(&uri, 6)?));
     out.push_str(&format!("<p class=muted>Valid once, for 10 minutes. Addresses: {}", escape(&link.addresses.join(", "))));
     out.push_str(&format!(" · port {}</p>", link.port));
@@ -148,7 +171,7 @@ const PAGE_HEAD: &str = r#"<!doctype html>
 body{font:16px/1.5 system-ui,sans-serif;max-width:44rem;margin:2rem auto;padding:0 1rem;color:#1c1b1f;background:#fffbfe}
 table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:.4rem .6rem;border-bottom:1px solid #ddd}
 button{font:inherit;padding:.3rem .9rem;cursor:pointer}input{font:inherit;padding:.3rem}
-.muted{color:#79747e}.qr svg{max-width:100%;height:auto}code{word-break:break-all}
+.muted{color:#79747e}.inline{display:inline}.ask{border-left:4px solid #6750a4;padding:.5rem .8rem}.qr svg{max-width:100%;height:auto}code{word-break:break-all}
 .warning{border-left:4px solid #b3261e;padding:.5rem .8rem;background:#f9dedc;color:#410e0b}
 @media (prefers-color-scheme:dark){body{color:#e6e1e5;background:#1c1b1f}th,td{border-color:#49454f}.muted{color:#938f99}.warning{background:#601410;color:#f9dedc;border-color:#f2b8b5}}
 </style></head><body>"#;
@@ -164,6 +187,45 @@ for (const form of document.querySelectorAll("form[data-name]")) {
   form.addEventListener("submit", event => {
     if (!confirm("Revoke " + form.dataset.name + "? It will stop syncing until it is paired again.")) event.preventDefault()
   })
+}
+// Devices asking to pair, as they come: what they say is put in as text, never as markup.
+const requests = document.getElementById("requests")
+if (requests) {
+  let shown = ""
+  const draw = list => {
+    const ids = list.map(r => r.id).join()
+    if (ids === shown) return
+    shown = ids
+    requests.replaceChildren()
+    if (!list.length) return
+    const heading = document.createElement("h2")
+    heading.textContent = "Asking to pair"
+    requests.append(heading)
+    for (const r of list) {
+      const p = document.createElement("p")
+      p.className = "ask"
+      const name = document.createElement("b")
+      name.textContent = r.name
+      p.append(name, " asks to pair, from " + r.from + ", " + new Date(r.askedAt).toLocaleTimeString() + ". ")
+      for (const [action, label] of [["refuse", "Refuse"], ["allow", "Allow"]]) {
+        const form = document.createElement("form")
+        form.method = "post"
+        form.action = "/devices/requests/" + encodeURIComponent(r.id) + "/" + action
+        form.className = "inline"
+        const button = document.createElement("button")
+        button.textContent = label
+        form.append(button)
+        p.append(form, " ")
+      }
+      requests.append(p)
+    }
+    const note = document.createElement("p")
+    note.className = "muted"
+    note.textContent = "Allow only a device you are pairing yourself, now."
+    requests.append(note)
+  }
+  shown = [...requests.querySelectorAll("form[action$='/allow']")].map(f => decodeURIComponent(f.action.split("/").slice(-2)[0])).join()
+  setInterval(() => fetch("/devices/requests").then(r => r.ok ? r.json() : null).then(list => list && draw(list)).catch(() => {}), 2000)
 }
 </script></body></html>"#;
 

@@ -56,6 +56,12 @@ fn system_millis() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
+/// What a device is called on the Devices page: the name it gave, trimmed and cut to 80 characters.
+pub fn shown_name(given: &str) -> String {
+    let name = take_utf16(trim(given), 80);
+    if name.is_empty() { "A device".to_string() } else { name.to_string() }
+}
+
 fn hash(token: &str) -> String {
     sha256_hex(token.as_bytes())
 }
@@ -103,14 +109,28 @@ impl DeviceRegistry {
     }
 
     /// Pairs the device `request` describes when its code is one this registry handed out and has
-    /// not been used or expired, and returns it with the token to give it; None otherwise.
+    /// not been used or expired, and returns it with the token to give it; None otherwise. The
+    /// server asks first, between [take_code](Self::take_code) and [add](Self::add).
     pub fn pair(&self, request: &PairRequest) -> io::Result<Option<(PairedDevice, String)>> {
-        let mut state = self.lock();
-        let Some(at) = state.codes.iter().position(|(code, _)| constant_time_equals(code, &request.code)) else { return Ok(None) };
-        let (_, expires) = state.codes.remove(at);
-        if expires < (self.now)() {
+        if !self.take_code(&request.code) {
             return Ok(None);
         }
+        self.add(request).map(Some)
+    }
+
+    /// Whether `code` is one this registry handed out and has not been used or expired; it is used
+    /// now, whatever comes of the pairing it was brought for.
+    pub fn take_code(&self, code: &str) -> bool {
+        let mut state = self.lock();
+        let Some(at) = state.codes.iter().position(|(known, _)| constant_time_equals(known, code)) else { return false };
+        let (_, expires) = state.codes.remove(at);
+        expires >= (self.now)()
+    }
+
+    /// Adds the device `request` describes, its code already taken, and returns it with the token to
+    /// give it. The entry it says it replaces goes, when it brings that entry's token.
+    pub fn add(&self, request: &PairRequest) -> io::Result<(PairedDevice, String)> {
+        let mut state = self.lock();
         if let (Some(id), Some(replaced_token)) = (request.replaces.as_ref(), request.replaces_token.as_ref())
             && let Some(at) = state.devices.iter().position(|device| device.id == *id)
                 && constant_time_equals(&state.devices[at].token_hash, &hash(replaced_token)) {
@@ -118,12 +138,10 @@ impl DeviceRegistry {
                     self.removals.send_modify(|count| *count += 1);
                 }
         let token = (self.new_token)();
-        let name = take_utf16(trim(&request.device_name), 80);
-        let name = if name.is_empty() { "A device" } else { name };
-        let device = PairedDevice { id: random_uuid(), name: name.to_string(), token_hash: hash(&token), paired_at: (self.now)(), last_seen: None };
+        let device = PairedDevice { id: random_uuid(), name: shown_name(&request.device_name), token_hash: hash(&token), paired_at: (self.now)(), last_seen: None };
         state.devices.push(device.clone());
         self.save(&state)?;
-        Ok(Some((device, token)))
+        Ok((device, token))
     }
 
     /// The device `token` belongs to, its last-seen time brought up to date; None for any other token.

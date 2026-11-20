@@ -18,6 +18,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -25,6 +27,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.ServerSocket
@@ -137,16 +143,31 @@ class ExternalServerSyncTest {
         private var watching: Job? = null
         val applied = Channel<String>(Channel.UNLIMITED)
 
-        /** Pairs as the app does: the link the server shows, traded over TLS to its certificate alone. */
+        /**
+         * Pairs as the app does: the link the server shows, traded over TLS to its certificate alone,
+         * once someone at the computer has pressed Allow on the Devices page, which this does too.
+         */
         suspend fun pair() {
             val (status, text) = local("POST", "/api/local/pairing?format=link")
             assertEquals(200, status, text)
             val link = assertNotNull(PairingLink.parse(text), "not a pairing link: $text")
             assertEquals(httpsPort, link.port)
             val client = platformBuildHttpClient(CertificatePins { link.fingerprint }).also { clients += it }
-            val response = client.post("https://${link.addresses.first()}:${link.port}/api/pair") {
-                contentType(ContentType.Application.Json)
-                setBody(PairRequest(link.code, name, deviceId, token))
+            val response = coroutineScope {
+                val asking = async {
+                    client.post("https://${link.addresses.first()}:${link.port}/api/pair") {
+                        contentType(ContentType.Application.Json)
+                        setBody(PairRequest(link.code, name, deviceId, token))
+                    }
+                }
+                while (!asking.isCompleted) {
+                    val (_, listed) = local("GET", "/devices/requests")
+                    Json.parseToJsonElement(listed).jsonArray.map { it.jsonObject }
+                        .firstOrNull { it["name"]?.jsonPrimitive?.content == name }
+                        ?.let { local("POST", "/devices/requests/${it["id"]!!.jsonPrimitive.content}/allow") }
+                    delay(50)
+                }
+                asking.await()
             }
             assertEquals(HttpStatusCode.OK, response.status)
             val answer = response.body<PairResponse>()

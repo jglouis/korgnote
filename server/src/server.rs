@@ -1,25 +1,24 @@
 //! The two listening ports, and each connection from accepted to served.
 
+use crate::devices::DeviceRegistry;
 use crate::http::{App, Peer, handle};
 use hyper::service::service_fn;
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto;
-use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::io;
-use std::net::{IpAddr, SocketAddr};
+use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::Notify;
 use tokio_rustls::TlsAcceptor;
 
 /// How long a connection to the secure port may take to become TLS before it is let go: a port
 /// scanner, or a browser pointed at it in plain HTTP, says nothing more.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
-/// Connections to the secure port open at once from one address (one /64 for IPv6): a household's
-/// phones behind one router use a handful each.
-const MOST_FROM_ONE_ADDRESS: usize = 64;
-/// And from everywhere, at most; fewer when the process may open fewer files.
+/// Connections to the secure port open at once, at most; fewer when the process may open fewer files.
 const MOST_CONNECTIONS: usize = 512;
 /// The most HTTP/1.1 reads ahead on one connection.
 const READ_BUFFER: usize = 64 * 1024;
@@ -44,76 +43,133 @@ fn most_connections() -> usize {
     room.clamp(16, MOST_CONNECTIONS)
 }
 
-/// The address connections are counted against: an IPv6 one by its /64, which is what one
-/// household or one machine is given.
-fn counted_as(address: IpAddr) -> IpAddr {
-    match address.to_canonical() {
-        IpAddr::V6(v6) => IpAddr::V6(std::net::Ipv6Addr::from(u128::from(v6) & !((1u128 << 64) - 1))),
-        v4 => v4,
-    }
-}
-
-/// The connections open to the secure port, overall and by address.
+/// The connections open to the secure port.
+///
+/// Who a connection is cannot be told by where it comes from: behind Docker Desktop every one
+/// comes from the same address, a phone's and a stranger's alike. What tells them apart is a
+/// paired device's token. So connections that have shown none, strangers, take their turn in a
+/// queue of [App::most_strangers] at most, and a new one past it takes the place of the oldest:
+/// someone who fills the queue does not keep a phone out, as the phone's connection is the newest
+/// and shows its token in a moment. A connection that has shown one is never let go for a new one,
+/// nor is one waiting for its pairing to be allowed.
 struct Admission {
     most: usize,
-    open: Mutex<(usize, HashMap<IpAddr, usize>)>,
-    last_refusal_logged: AtomicU64,
+    most_strangers: usize,
+    open: Mutex<Open>,
+    last_logged: AtomicU64,
 }
 
-/// One connection's place, given back when it closes.
+struct Open {
+    next: u64,
+    /// Connections that had shown no token when last looked at, the oldest first.
+    strangers: VecDeque<Stranger>,
+    /// The others: those that have shown one.
+    paired: usize,
+}
+
+struct Stranger {
+    id: u64,
+    peer: Peer,
+    let_go: Arc<Notify>,
+    gone: Arc<AtomicBool>,
+}
+
+/// One connection's place, given back when it closes; `let_go` is told when its place is given
+/// to a newer connection.
 struct Ticket {
     admission: Arc<Admission>,
-    address: IpAddr,
+    id: u64,
+    let_go: Arc<Notify>,
+    gone: Arc<AtomicBool>,
+}
+
+impl Open {
+    /// Counts those that have shown a token since among the paired, out of the queue.
+    fn settle(&mut self) {
+        let before = self.strangers.len();
+        self.strangers.retain(|stranger| !stranger.peer.is_paired());
+        self.paired += before - self.strangers.len();
+    }
 }
 
 impl Admission {
-    fn new(most: usize) -> Arc<Self> {
-        Arc::new(Admission { most, open: Mutex::new((0, HashMap::new())), last_refusal_logged: AtomicU64::new(0) })
+    fn new(most: usize, most_strangers: usize) -> Arc<Self> {
+        Arc::new(Admission { most, most_strangers, open: Mutex::new(Open { next: 0, strangers: VecDeque::new(), paired: 0 }), last_logged: AtomicU64::new(0) })
     }
 
-    fn admit(self: &Arc<Self>, remote: IpAddr) -> Option<Ticket> {
-        let address = counted_as(remote);
-        let mut open = self.open.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        let from_there = open.1.get(&address).copied().unwrap_or(0);
-        if open.0 >= self.most || from_there >= MOST_FROM_ONE_ADDRESS {
-            drop(open);
-            self.say_refused(remote);
-            return None;
+    fn lock(&self) -> std::sync::MutexGuard<'_, Open> {
+        self.open.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// A place for `peer`'s connection, made by letting the oldest stranger go when there is none;
+    /// None when every connection open has shown a token or waits on its pairing.
+    fn admit(self: &Arc<Self>, peer: &Peer) -> Option<Ticket> {
+        let mut open = self.lock();
+        open.settle();
+        while open.strangers.len() >= self.most_strangers || open.strangers.len() + open.paired >= self.most {
+            let Some(at) = open.strangers.iter().position(|stranger| stranger.peer.pairing.load(Ordering::SeqCst) == 0) else {
+                drop(open);
+                self.say("Turning connections away: every one open has shown a paired device's token or waits on its pairing.");
+                return None;
+            };
+            let oldest = open.strangers.remove(at).expect("it was found there");
+            oldest.gone.store(true, Ordering::SeqCst);
+            oldest.let_go.notify_one();
+            self.say("Letting the oldest connections that showed no token go, to make room for new ones: something is opening many.");
         }
-        open.0 += 1;
-        open.1.insert(address, from_there + 1);
-        Some(Ticket { admission: self.clone(), address })
+        let id = open.next;
+        open.next += 1;
+        let (let_go, gone) = (Arc::new(Notify::new()), Arc::new(AtomicBool::new(false)));
+        open.strangers.push_back(Stranger { id, peer: peer.clone(), let_go: let_go.clone(), gone: gone.clone() });
+        Some(Ticket { admission: self.clone(), id, let_go, gone })
     }
 
-    /// Once a minute at most: a flood of refusals is not worth a flood of lines.
-    fn say_refused(&self, remote: IpAddr) {
+    /// Once a minute at most: a flood is not worth a flood of lines.
+    fn say(&self, what: &str) {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|elapsed| elapsed.as_secs()).unwrap_or(0);
-        let last = self.last_refusal_logged.load(Ordering::Relaxed);
-        if now >= last + 60 && self.last_refusal_logged.compare_exchange(last, now, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
-            crate::warn!("Turning connections away: too many are open, from {remote} or altogether ({} at most, {MOST_FROM_ONE_ADDRESS} from one address).", self.most);
+        let last = self.last_logged.load(Ordering::Relaxed);
+        if now >= last + 60 && self.last_logged.compare_exchange(last, now, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
+            crate::warn!("{what}");
         }
     }
 }
 
 impl Drop for Ticket {
     fn drop(&mut self) {
-        let mut open = self.admission.open.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        open.0 = open.0.saturating_sub(1);
-        if let Some(count) = open.1.get_mut(&self.address) {
-            *count -= 1;
-            if *count == 0 {
-                open.1.remove(&self.address);
-            }
+        let mut open = self.admission.lock();
+        if let Some(at) = open.strangers.iter().position(|stranger| stranger.id == self.id) {
+            open.strangers.remove(at);
+        } else if !self.gone.load(Ordering::SeqCst) {
+            open.paired = open.paired.saturating_sub(1);
         }
     }
 }
 
-/// Ends when a connection has gone `lifetime` without showing a paired device's token, and never
-/// once it has.
-async fn strangers_time_is_up(paired: Arc<AtomicBool>, lifetime: Duration) {
-    tokio::time::sleep(lifetime).await;
-    if paired.load(Ordering::Relaxed) {
-        std::future::pending::<()>().await;
+/// Ends when a connection has gone `lifetime` without showing a paired device's token, unless a
+/// pairing on it is waiting to be allowed; never once it has shown one.
+async fn strangers_time_is_up(peer: Peer, lifetime: Duration) {
+    loop {
+        tokio::time::sleep(lifetime).await;
+        if peer.is_paired() {
+            std::future::pending::<()>().await;
+        }
+        if peer.pairing.load(Ordering::SeqCst) == 0 {
+            return;
+        }
+    }
+}
+
+/// Ends when the device whose token the connection showed is revoked: its change stream and
+/// anything else it holds open go with it.
+async fn revoked(peer: Peer, devices: Arc<DeviceRegistry>) {
+    let mut removals = devices.removals();
+    loop {
+        if removals.changed().await.is_err() {
+            std::future::pending::<()>().await;
+        }
+        if peer.paired.get().is_some_and(|token| !devices.knows(token)) {
+            return;
+        }
     }
 }
 
@@ -186,22 +242,29 @@ pub async fn listen_secure(app: Arc<App>, host: &str, port: u16, tls: rustls::Se
     let listener = TcpListener::bind((host, port)).await?;
     let address = listener.local_addr()?;
     let acceptor = TlsAcceptor::from(Arc::new(tls));
-    let admission = Admission::new(most_connections());
+    let admission = Admission::new(most_connections(), app.most_strangers);
     let task = tokio::spawn(async move {
         loop {
             let Some((stream, remote)) = accept(&listener).await else { continue };
+            let peer = Peer::new(remote, address.port(), true);
             // Closed at once, which a client takes as the server being busy, and tries again.
-            let Some(ticket) = admission.admit(remote.ip()) else { continue };
+            let Some(ticket) = admission.admit(&peer) else { continue };
             let (app, acceptor) = (app.clone(), acceptor.clone());
             tokio::spawn(async move {
+                let let_go = ticket.let_go.clone();
                 let _ticket = ticket;
-                if let Ok(Ok(stream)) = tokio::time::timeout(HANDSHAKE_TIMEOUT, acceptor.accept(stream)).await {
-                    let peer = Peer::new(remote, address.port(), true);
-                    let (paired, lifetime) = (peer.paired.clone(), app.unpaired_lifetime);
-                    tokio::select! {
-                        _ = serve(app, peer, stream) => {}
-                        _ = strangers_time_is_up(paired, lifetime) => {}
-                    }
+                // Subscribed from the start, so that no revocation falls between a request and this.
+                let revoked = revoked(peer.clone(), app.access.devices.clone());
+                let lifetime = strangers_time_is_up(peer.clone(), app.unpaired_lifetime);
+                tokio::select! {
+                    _ = async {
+                        if let Ok(Ok(stream)) = tokio::time::timeout(HANDSHAKE_TIMEOUT, acceptor.accept(stream)).await {
+                            serve(app, peer, stream).await;
+                        }
+                    } => {}
+                    _ = lifetime => {}
+                    _ = revoked => {}
+                    _ = let_go.notified() => {}
                 }
             });
         }

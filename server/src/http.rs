@@ -2,6 +2,7 @@
 //! the web client, and what goes on around them that a client can see: how a path finds its route,
 //! what a wrong method gets, what is compressed.
 
+use crate::approvals::Approvals;
 use crate::devices_page::{devices_body, page, pairing_body};
 use crate::journal::ChangeJournal;
 use crate::pairing::{PairRequest, PairResponse, PairingLink, qr_terminal};
@@ -23,7 +24,8 @@ use std::io::{self, Write};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
@@ -51,6 +53,12 @@ pub struct App {
     /// How long a connection to the secure port may stay open without showing a paired device's
     /// token: see `UNPAIRED_LIFETIME`.
     pub unpaired_lifetime: Duration,
+    /// How many strangers' connections the secure port holds at once: see `MOST_STRANGERS`.
+    pub most_strangers: usize,
+    /// Pairings waiting for someone at the computer to allow them.
+    pub approvals: Approvals,
+    /// How long a pairing waits to be allowed on the Devices page: see `APPROVAL_WAIT`.
+    pub approval_wait: Duration,
     /// How much of notes being sent may be held in memory at once, in megabytes: see `UPLOAD_BUDGET_MB`.
     uploads: tokio::sync::Semaphore,
 }
@@ -58,20 +66,28 @@ pub struct App {
 impl App {
     /// As the server itself is put together, every request logged.
     pub fn with(store: Arc<FileStore>, access: Arc<ServerAccess>, journal: Arc<ChangeJournal>, watcher: Option<Arc<NotesWatcher>>, web_client: Option<PathBuf>) -> Self {
-        App { store, access, journal, watcher, web_client, heartbeat_every: Duration::from_secs(30), log_requests: true, body_idle: BODY_IDLE, unpaired_lifetime: UNPAIRED_LIFETIME, uploads: tokio::sync::Semaphore::new(UPLOAD_BUDGET_MB) }
+        App { store, access, journal, watcher, web_client, log_requests: true, ..Self::defaults() }
     }
 
     pub fn new(store: FileStore, access: ServerAccess) -> Self {
+        App { store: Arc::new(store), access: Arc::new(access), log_requests: false, ..Self::defaults() }
+    }
+
+    /// Everything but the notes and who may reach them, as the server runs.
+    fn defaults() -> Self {
         App {
-            store: Arc::new(store),
-            access: Arc::new(access),
+            store: Arc::new(FileStore::new(PathBuf::new())),
+            access: Arc::new(ServerAccess::local_only()),
             journal: Arc::new(ChangeJournal::new()),
             watcher: None,
             web_client: None,
             heartbeat_every: Duration::from_secs(30),
-            log_requests: false,
+            log_requests: true,
             body_idle: BODY_IDLE,
             unpaired_lifetime: UNPAIRED_LIFETIME,
+            most_strangers: MOST_STRANGERS,
+            approvals: Approvals::default(),
+            approval_wait: APPROVAL_WAIT,
             uploads: tokio::sync::Semaphore::new(UPLOAD_BUDGET_MB),
         }
     }
@@ -83,14 +99,23 @@ pub struct Peer {
     pub remote: SocketAddr,
     pub local_port: u16,
     pub secure: bool,
-    /// Set once a request on this connection has shown a paired device's token. Until then a
-    /// connection to the secure port is a stranger's, which the server does not keep open long.
-    pub paired: Arc<AtomicBool>,
+    /// The token of the paired device a request on this connection first showed. Until there is
+    /// one, a connection to the secure port is a stranger's, which the server does not keep long;
+    /// once the device is revoked, the connection is closed.
+    pub paired: Arc<OnceLock<String>>,
+    /// Pairings on this connection waiting to be allowed on the Devices page, which can take a
+    /// minute or two: a connection with one is not let go meanwhile.
+    pub pairing: Arc<AtomicUsize>,
 }
 
 impl Peer {
     pub fn new(remote: SocketAddr, local_port: u16, secure: bool) -> Self {
-        Peer { remote, local_port, secure, paired: Arc::new(AtomicBool::new(false)) }
+        Peer { remote, local_port, secure, paired: Arc::new(OnceLock::new()), pairing: Arc::new(AtomicUsize::new(0)) }
+    }
+
+    /// Whether a request on this connection has shown a paired device's token.
+    pub fn is_paired(&self) -> bool {
+        self.paired.get().is_some()
     }
 }
 
@@ -114,10 +139,16 @@ const BODY_IDLE: Duration = Duration::from_secs(60);
 /// 64 KB/s is in well within it.
 const BODY_WHOLE: Duration = Duration::from_secs(10 * 60);
 /// How long a connection to the secure port may stay open, once it is TLS, without a request that
-/// shows a paired device's token. Pairing takes one request and a moment; anyone else that holds
-/// a connection open, saying nothing or a byte at a time, would otherwise hold it for good, and
-/// enough of them would leave no room for the phones.
+/// shows a paired device's token, a pairing waiting to be allowed aside. Anyone else that holds a
+/// connection open, saying nothing or a byte at a time, would otherwise hold it for good.
 pub const UNPAIRED_LIFETIME: Duration = Duration::from_secs(30);
+/// How many connections to the secure port that have shown no token, strangers' and phones' about
+/// to, it holds at once. A new one past it takes the place of the oldest, so a stranger who fills
+/// them does not keep a phone out: its connection is the newest, and in a moment it shows its token.
+/// Behind Docker Desktop every connection comes from one address, so they cannot be counted by address.
+pub const MOST_STRANGERS: usize = 128;
+/// How long a pairing waits for someone at the computer to allow it on the Devices page.
+pub const APPROVAL_WAIT: Duration = Duration::from_secs(120);
 /// A pairing request is a code, a name of 80 characters and perhaps the device it replaces: a few
 /// hundred bytes. Anyone can send one, before a token, so no more than this is ever held of it.
 const PAIR_BODY_LIMIT: usize = 16 * 1024;
@@ -213,6 +244,16 @@ struct BundleTruncated {
     generation: i64,
 }
 
+/// A pairing waiting to be allowed, as the Devices page's script reads it.
+#[derive(Serialize)]
+struct WaitingRequest<'a> {
+    id: &'a str,
+    name: &'a str,
+    from: String,
+    #[serde(rename = "askedAt")]
+    asked_at: i64,
+}
+
 #[derive(Serialize)]
 struct EtagResponse<'a> {
     etag: &'a str,
@@ -265,8 +306,9 @@ pub async fn handle(app: Arc<App>, peer: Peer, request: Request<Incoming>) -> Re
     let refusal = refusal_of(&asking, &app.access);
     // Over TLS, a request let through anywhere but pairing showed a paired device's token.
     let token = if peer.secure && matches!(refusal, Ok(None)) && raw_path != "/api/pair" {
-        peer.paired.store(true, Ordering::Relaxed);
-        authorization.as_deref().map(|header| bearer_token(header).to_string())
+        let token = authorization.as_deref().map(|header| bearer_token(header).to_string()).unwrap_or_default();
+        peer.paired.get_or_init(|| token.clone());
+        Some(token)
     } else {
         None
     };
@@ -274,7 +316,7 @@ pub async fn handle(app: Arc<App>, peer: Peer, request: Request<Incoming>) -> Re
         Ok(Some((status, why))) => Reply::text(StatusCode::from_u16(status).unwrap_or(StatusCode::FORBIDDEN), why),
         Err(error) => Reply::could_not_read("the paired devices", &error),
         Ok(None) if parts.headers.get_all(header::HOST).iter().count() > 1 => Reply::empty(StatusCode::BAD_REQUEST),
-        Ok(None) => route(&app, &parts.method, &parts.headers, &uri_text, &raw_path, query.as_deref(), token, body).await,
+        Ok(None) => route(&app, &peer, &parts.method, &parts.headers, &uri_text, &raw_path, query.as_deref(), token, body).await,
     };
     finish(reply, accept_encoding.as_deref())
 }
@@ -287,6 +329,10 @@ enum Route {
     Devices,
     DevicesPair,
     Revoke(String),
+    /// The pairings waiting to be allowed, for the Devices page to show as they come.
+    Requests,
+    /// Allow (true) or refuse the pairing waiting with this id.
+    Answer(String, bool),
     LocalPairing,
     Pair,
     Manifest,
@@ -315,6 +361,9 @@ fn find_route(segments: &[String], trailing: bool, web: bool) -> Option<(Route, 
         (["api", "v1", "bundle"], false) => (Route::Bundle, GET, true),
         (["api", "v1", "events"], false) => (Route::Events, GET, true),
         (["devices", id, "revoke"], false) => (Route::Revoke(id.to_string()), POST, false),
+        (["devices", "requests"], false) => (Route::Requests, GET, true),
+        (["devices", "requests", id, "allow"], false) => (Route::Answer(id.to_string(), true), POST, false),
+        (["devices", "requests", id, "refuse"], false) => (Route::Answer(id.to_string(), false), POST, false),
         (["api", "v1", "files", rest @ ..], _) => {
             let mut path = rest.join("/");
             if trailing && !rest.is_empty() {
@@ -328,7 +377,7 @@ fn find_route(segments: &[String], trailing: bool, web: bool) -> Option<(Route, 
 
 /// `token` is the paired device's that asks, over TLS; None on the plain port.
 #[allow(clippy::too_many_arguments)]
-async fn route(app: &Arc<App>, method: &Method, headers: &HeaderMap, uri_text: &str, raw_path: &str, query: Option<&str>, token: Option<String>, body: Incoming) -> Reply {
+async fn route(app: &Arc<App>, peer: &Peer, method: &Method, headers: &HeaderMap, uri_text: &str, raw_path: &str, query: Option<&str>, token: Option<String>, body: Incoming) -> Reply {
     let mut segments = Vec::new();
     for segment in raw_path.split('/').filter(|segment| !segment.is_empty()) {
         match percent_decode(segment, false) {
@@ -349,11 +398,25 @@ async fn route(app: &Arc<App>, method: &Method, headers: &HeaderMap, uri_text: &
         return Reply::empty(if spelled_out { StatusCode::METHOD_NOT_ALLOWED } else { StatusCode::NOT_FOUND });
     };
     let query = query.unwrap_or("");
-    match route {
+    // Notes, pairing codes and the devices are kept by no cache, the browser's or a phone's own on its
+    // disk: only what says nothing of them may be.
+    let private = !matches!(route, Route::Root | Route::Api | Route::Favicon);
+    let reply = match route {
         Route::Root | Route::Api => Reply::text(StatusCode::OK, RUNNING),
         Route::Favicon => Reply { status: StatusCode::OK, content_type: Some("image/png"), headers: Vec::new(), payload: Payload::Full(Bytes::from_static(FAVICON)) },
-        Route::Devices => Reply::html(StatusCode::OK, page(&devices_body(&app.access, app.watcher.as_ref().map(|watcher| watcher.status()).as_ref(), None, None))),
+        Route::Devices => Reply::html(StatusCode::OK, page(&devices_body(&app.access, &app.approvals.waiting(), app.watcher.as_ref().map(|watcher| watcher.status()).as_ref(), None, None))),
         Route::DevicesPair => devices_pair(app, headers, body).await,
+        Route::Requests => {
+            let requests = app.approvals.waiting();
+            let waiting: Vec<WaitingRequest> = requests.iter().map(|request| WaitingRequest { id: &request.id, name: &request.name, from: request.from.to_string(), asked_at: request.asked_at }).collect();
+            Reply::json(&waiting)
+        }
+        Route::Answer(id, allow) => {
+            if app.approvals.answer(&id, allow) {
+                crate::info!("Pairing {id} {} on the Devices page", if allow { "allowed" } else { "refused" });
+            }
+            Reply::empty(StatusCode::FOUND).with(header::LOCATION, "/devices")
+        }
         Route::Revoke(id) => match app.access.devices.revoke(&id) {
             Ok(revoked) => {
                 if revoked {
@@ -364,7 +427,7 @@ async fn route(app: &Arc<App>, method: &Method, headers: &HeaderMap, uri_text: &
             Err(error) => Reply::could_not_read("the paired devices", &error),
         },
         Route::LocalPairing => local_pairing(app, query),
-        Route::Pair => pair(app, headers, body).await,
+        Route::Pair => pair(app, peer, headers, body).await,
         Route::Manifest => manifest(app, query).await,
         Route::Bundle => bundle(app, query).await,
         Route::Events => events(app, token),
@@ -373,7 +436,8 @@ async fn route(app: &Arc<App>, method: &Method, headers: &HeaderMap, uri_text: &
             "PUT" => put_file(app, headers, path, body).await,
             _ => delete_file(app, headers, path).await,
         },
-    }
+    };
+    if private && !reply.headers.iter().any(|(name, _)| name == header::CACHE_CONTROL) { reply.with(header::CACHE_CONTROL, "no-store") } else { reply }
 }
 
 // --- The sync API ---
@@ -760,23 +824,57 @@ fn is_json(headers: &HeaderMap) -> bool {
 /// `POST /api/pair`: a device exchanges the one-time code from a pairing QR code for a token of its
 /// own. Reached over TLS, to the certificate the same QR code named, so the token cannot go anywhere
 /// else.
-async fn pair(app: &Arc<App>, headers: &HeaderMap, body: Incoming) -> Reply {
+///
+/// A good code is not enough: another app on the phone may have taken it from the QR code. The
+/// device is shown on the Devices page, and this answers once someone there allows it (`200` with
+/// the token), refuses it (`410`), or `APPROVAL_WAIT` passes (`408`).
+async fn pair(app: &Arc<App>, peer: &Peer, headers: &HeaderMap, body: Incoming) -> Reply {
     let Some(details) = &app.access.pairing else { return Reply::text(StatusCode::NOT_FOUND, "This server does not pair devices.") };
     let json = is_json(headers);
     let body = read_body(body, PAIR_BODY_LIMIT, app.body_idle).await.ok().flatten();
     let request = body.filter(|_| json).and_then(|body| serde_json::from_slice::<PairRequest>(&body).ok());
-    let paired = match request {
-        Some(request) => match app.access.devices.pair(&request) {
-            Ok(paired) => paired,
-            Err(error) => return Reply::could_not_read("the paired devices", &error),
-        },
-        None => None,
-    };
-    let Some((device, token)) = paired else {
+    let Some(request) = request.filter(|request| app.access.devices.take_code(&request.code)) else {
         return Reply::text(StatusCode::FORBIDDEN, "That pairing code is not valid any more. Show a new one on the Devices page and scan it again.");
+    };
+    let name = crate::devices::shown_name(&request.device_name);
+    let from = peer.remote.ip().to_canonical();
+    crate::info!("{name} asks to pair, from {from}: waiting for Allow on the Devices page");
+    // While it waits, the connection is not a stranger's to let go of.
+    let _waiting = PairingInFlight::new(peer);
+    let mut asked = app.approvals.ask(&name, from, crate::clock::now_millis());
+    match tokio::time::timeout(app.approval_wait, &mut asked.answer).await {
+        Ok(Ok(true)) => {}
+        Ok(_) => {
+            crate::info!("{name} was refused on the Devices page");
+            return Reply::text(StatusCode::GONE, "Pairing was refused on the computer's Devices page.");
+        }
+        Err(_) => {
+            crate::info!("{name} was not allowed on the Devices page in time");
+            return Reply::text(StatusCode::REQUEST_TIMEOUT, "Nobody allowed this device on the computer's Devices page in time.");
+        }
+    }
+    let (device, token) = match app.access.devices.add(&request) {
+        Ok(added) => added,
+        Err(error) => return Reply::could_not_read("the paired devices", &error),
     };
     crate::info!("Paired {} ({})", device.name, device.id);
     Reply::json(&PairResponse { device_id: device.id, token, server_id: details.server_id.clone(), server_name: details.server_name.clone() })
+}
+
+/// Counts a pairing waiting on a connection, for as long as it waits.
+struct PairingInFlight(Arc<AtomicUsize>);
+
+impl PairingInFlight {
+    fn new(peer: &Peer) -> Self {
+        peer.pairing.fetch_add(1, Ordering::SeqCst);
+        PairingInFlight(peer.pairing.clone())
+    }
+}
+
+impl Drop for PairingInFlight {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 /// When the QR code library refuses the link: a `500`, since the server made the link.
@@ -841,13 +939,13 @@ async fn devices_pair(app: &Arc<App>, headers: &HeaderMap, body: Incoming) -> Re
     let wrong: Vec<&str> = typed.iter().map(String::as_str).filter(|address| !is_pairing_address(address)).collect();
     if !wrong.is_empty() {
         let problem = format!("“{}” is not an address. Type addresses only, such as 192.168.1.20, separated by commas: no http://, no port.", wrong.join(", "));
-        return Reply::html(StatusCode::BAD_REQUEST, page(&devices_body(&app.access, status.as_ref(), Some(&problem), Some(&typed_text))));
+        return Reply::html(StatusCode::BAD_REQUEST, page(&devices_body(&app.access, &app.approvals.waiting(), status.as_ref(), Some(&problem), Some(&typed_text))));
     }
     if !typed.is_empty() {
         details.set_last_addresses(typed);
     }
     if let Some(advice) = details.missing_address_advice() {
-        return Reply::html(StatusCode::BAD_REQUEST, page(&devices_body(&app.access, status.as_ref(), Some(advice), Some(&typed_text))));
+        return Reply::html(StatusCode::BAD_REQUEST, page(&devices_body(&app.access, &app.approvals.waiting(), status.as_ref(), Some(advice), Some(&typed_text))));
     }
     match pairing_body(&new_link(app, details)) {
         Some(body) => Reply::html(StatusCode::OK, page(&body)),
@@ -880,7 +978,7 @@ fn local_pairing(app: &Arc<App>, query: &str) -> Reply {
     Reply::text(
         StatusCode::OK,
         format!(
-            "{picture}\nScan it in KorgNote's Settings, under Pair with a computer, within 10 minutes.\nAddresses: {}  Port: {}\nOr paste this link there:\n{uri}\n",
+            "{picture}\nScan it in KorgNote's Settings, under Pair with a computer, within 10 minutes.\nThen press Allow on the Devices page, at /devices on this computer, when the phone asks.\nAddresses: {}  Port: {}\nOr paste this link there:\n{uri}\n",
             link.addresses.join(", "),
             link.port
         ),

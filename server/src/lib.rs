@@ -5,6 +5,7 @@
 // The one exception is asking the C library for the time zone, in `clock`, where it says why.
 #![deny(unsafe_code)]
 
+pub mod approvals;
 pub mod clock;
 pub mod config;
 pub mod devices;

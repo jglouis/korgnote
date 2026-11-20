@@ -35,8 +35,26 @@ impl Fixture {
         self.server.app.access.pairing.as_ref().unwrap()
     }
 
+    /// Asks to pair, and presses Allow on the Devices page for whatever asks meanwhile, as whoever
+    /// pairs a phone does.
     async fn pair_with(&self, body: &str) -> Answer {
-        self.server.device("POST", "/api/pair", &[("Content-Type", "application/json")], Some(body.as_bytes())).await
+        self.pair_answered(body, true).await
+    }
+
+    /// As [pair_with](Self::pair_with), pressing Allow or Refuse as `allow` says.
+    async fn pair_answered(&self, body: &str, allow: bool) -> Answer {
+        let asking = self.server.device("POST", "/api/pair", &[("Content-Type", "application/json")], Some(body.as_bytes()));
+        tokio::pin!(asking);
+        loop {
+            tokio::select! {
+                answer = &mut asking => return answer,
+                _ = tokio::time::sleep(Duration::from_millis(10)) => {
+                    for request in self.server.app.approvals.waiting() {
+                        self.server.app.approvals.answer(&request.id, allow);
+                    }
+                }
+            }
+        }
     }
 
     async fn pair(&self, code: &str) -> Answer {
@@ -388,7 +406,7 @@ async fn the_script_gets_the_code_as_text() {
     assert!(text.ends_with("&c=code-1"));
     let picture = f.server.post("/api/local/pairing", &[], "").await.text();
     assert!(picture.starts_with("\u{1b}[30;107m"), "{picture}");
-    assert!(picture.contains("\nScan it in KorgNote's Settings, under Pair with a computer, within 10 minutes.\nAddresses: 192.168.1.30, 192.168.1.20  Port: 8443\nOr paste this link there:\nkorgnote://pair?v=1"), "{picture}");
+    assert!(picture.contains("\nScan it in KorgNote's Settings, under Pair with a computer, within 10 minutes.\nThen press Allow on the Devices page, at /devices on this computer, when the phone asks.\nAddresses: 192.168.1.30, 192.168.1.20  Port: 8443\nOr paste this link there:\nkorgnote://pair?v=1"), "{picture}");
     assert!(picture.ends_with("&c=code-2\n"));
 }
 
@@ -632,24 +650,122 @@ async fn a_stranger_who_fails_to_show_a_token_is_let_go_too() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn one_address_holds_no_more_than_its_share_of_connections() {
-    let f = fixture().await;
-    let mut open = Vec::new();
-    for _ in 0..64 {
-        open.push(f.server.device_connection().await.expect("within the share"));
+async fn strangers_who_fill_the_queue_do_not_keep_a_phone_out() {
+    // All from one address, as every connection is behind Docker Desktop.
+    let f = fixture_adjusted(&["192.168.1.20"], &[], &[("a.org", "* A\n")], |app| app.most_strangers = 8).await;
+    let (_, token) = f.paired().await;
+    let request = format!("GET /api/v1/manifest HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {token}\r\n\r\n");
+    let mut phone = f.server.device_connection().await.unwrap();
+    assert!(ask(&mut phone, &request).await.starts_with("HTTP/1.1 200"));
+    let mut strangers = Vec::new();
+    for _ in 0..8 {
+        strangers.push(f.server.device_connection().await.unwrap());
     }
-    assert!(f.server.device_connection().await.is_err(), "the 65th from one address is turned away");
-    // A place given back is a place to be had again.
-    drop(open.pop());
-    let mut again = None;
-    for _ in 0..50 {
-        if let Ok(connection) = f.server.device_connection().await {
-            again = Some(connection);
-            break;
+    // The queue is full of strangers: a new connection takes the place of the oldest, and is served.
+    let mut newcomer = f.server.device_connection().await.expect("a place made for it");
+    assert!(ask(&mut newcomer, &request).await.starts_with("HTTP/1.1 200"));
+    assert!(closed_within(&mut strangers[0], Duration::from_secs(3)).await, "the oldest stranger was let go");
+    // Many more strangers after it: neither phone connection is let go for them.
+    for _ in 0..20 {
+        strangers.push(f.server.device_connection().await.unwrap());
+    }
+    assert!(ask(&mut phone, &request).await.starts_with("HTTP/1.1 200"));
+    assert!(ask(&mut newcomer, &request).await.starts_with("HTTP/1.1 200"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_pairing_waiting_to_be_allowed_is_not_let_go() {
+    let f = fixture_adjusted(&["192.168.1.20"], &[], &[], |app| {
+        app.unpaired_lifetime = Duration::from_millis(300);
+        app.most_strangers = 2;
+    })
+    .await;
+    let code = f.devices().new_pairing_code();
+    let body = format!(r#"{{"code":"{code}","deviceName":"Phone"}}"#);
+    let asking = f.server.device("POST", "/api/pair", &[("Content-Type", "application/json")], Some(body.as_bytes()));
+    tokio::pin!(asking);
+    // Past the strangers' time, and past a queue's worth of strangers: it still waits.
+    let flood = async {
+        while f.server.app.approvals.waiting().is_empty() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        let mut strangers = Vec::new();
+        for _ in 0..6 {
+            strangers.push(f.server.device_connection().await.unwrap());
+        }
+        tokio::time::sleep(Duration::from_millis(900)).await;
+        let waiting = f.server.app.approvals.waiting();
+        assert_eq!(waiting.len(), 1);
+        assert!(f.server.app.approvals.answer(&waiting[0].id, true));
+        strangers
+    };
+    let (answer, _strangers) = tokio::join!(&mut asking, flood);
+    assert_eq!(answer.status, 200, "{}", answer.text());
+    assert_eq!(f.devices().all().len(), 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_good_code_alone_does_not_pair() {
+    let f = fixture_adjusted(&["192.168.1.20"], &[], &[], |app| app.approval_wait = Duration::from_millis(300)).await;
+    // Refused on the Devices page.
+    let code = f.devices().new_pairing_code();
+    let refused = f.pair_answered(&format!(r#"{{"code":"{code}","deviceName":"Phone"}}"#), false).await;
+    assert_eq!(refused.status, 410);
+    assert!(f.devices().all().is_empty());
+    assert_eq!(f.pair(&code).await.status, 403, "its code is spent");
+    // Not answered in time.
+    let code = f.devices().new_pairing_code();
+    let late = f.server.device("POST", "/api/pair", &[("Content-Type", "application/json")], Some(format!(r#"{{"code":"{code}","deviceName":"Phone"}}"#).as_bytes())).await;
+    assert_eq!(late.status, 408);
+    assert!(f.devices().all().is_empty());
+    assert!(f.server.app.approvals.waiting().is_empty(), "no longer shown");
+    // A wrong code is never shown at all.
+    assert_eq!(f.server.device("POST", "/api/pair", &[("Content-Type", "application/json")], Some(br#"{"code":"made-up","deviceName":"Phone"}"#)).await.status, 403);
+    assert!(f.server.app.approvals.waiting().is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_devices_page_shows_who_asks_and_only_its_own_pages_answer() {
+    let f = fixture().await;
+    let code = f.devices().new_pairing_code();
+    let body = format!(r#"{{"code":"{code}","deviceName":"Pixel <img src=x onerror=alert(1)>"}}"#);
+    let asking = f.server.device("POST", "/api/pair", &[("Content-Type", "application/json")], Some(body.as_bytes()));
+    tokio::pin!(asking);
+    let page = async {
+        while f.server.app.approvals.waiting().is_empty() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let page = f.server.get("/devices").await;
+        assert!(page.text().contains("<b>Pixel &lt;img src=x onerror=alert(1)&gt;</b> asks to pair, from 127.0.0.1"), "{}", page.text());
+        let listed = f.server.get("/devices/requests").await.json();
+        let id = listed[0]["id"].as_str().unwrap().to_string();
+        assert_eq!(listed[0]["name"], "Pixel <img src=x onerror=alert(1)>");
+        // Another site's page cannot press Allow.
+        let forged = f.server.post(&format!("/devices/requests/{id}/allow"), &[("Origin", "http://evil.example")], "").await;
+        assert_eq!(forged.status, 403);
+        assert_eq!(f.server.app.approvals.waiting().len(), 1);
+        // Nor can a paired device, over TLS.
+        assert_eq!(f.server.device("POST", &format!("/devices/requests/{id}/allow"), &[], None).await.status, 404);
+        // The page's own button can.
+        let allowed = f.server.post(&format!("/devices/requests/{id}/allow"), &[("Origin", &format!("http://localhost:{}", f.server.port())), ("Host", &format!("localhost:{}", f.server.port()))], "").await;
+        assert_eq!(allowed.status, 302);
+    };
+    let (answer, ()) = tokio::join!(&mut asking, page);
+    assert_eq!(answer.status, 200);
+    assert_eq!(f.devices().all()[0].name, "Pixel <img src=x onerror=alert(1)>");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn notes_and_codes_are_kept_by_no_cache() {
+    let f = fixture().await;
+    let (_, token) = f.paired().await;
+    let bearer = format!("Bearer {token}");
+    for path in ["/api/v1/manifest", "/api/v1/bundle", "/api/v1/files/a.org"] {
+        assert_eq!(f.server.device("GET", path, &[("Authorization", &bearer)], None).await.header("cache-control"), Some("no-store"), "{path}");
     }
-    assert!(again.is_some());
+    assert_eq!(f.server.get("/devices").await.header("cache-control"), Some("no-store"));
+    assert_eq!(f.server.get("/api/v1/manifest").await.header("cache-control"), Some("no-store"));
+    assert_eq!(f.server.get("/favicon.png").await.header("cache-control"), None, "what says nothing of them may be cached");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -677,9 +793,14 @@ async fn a_revoked_devices_change_stream_ends_at_once() {
     read_until(&mut revoked, ": connected").await;
     read_until(&mut other, ": connected").await;
     f.devices().revoke(&id).unwrap();
-    // The last chunk ends the revoked device's stream, with no change told before it.
-    let rest = read_until(&mut revoked, "0\r\n\r\n").await;
-    assert!(!rest.contains("event:"), "{rest}");
+    // The revoked device's connection is closed, its stream with it, with no change told before.
+    let mut rest = Vec::new();
+    {
+        use tokio::io::AsyncReadExt;
+        let ended = tokio::time::timeout(Duration::from_secs(3), revoked.read_to_end(&mut rest)).await;
+        assert!(ended.is_ok(), "the connection is closed at once");
+    }
+    assert!(!String::from_utf8_lossy(&rest).contains("event:"), "{}", String::from_utf8_lossy(&rest));
     // The other device's goes on, and is told of a change made after.
     f.server.app.journal.record("b.org", Some("etag-b"), false);
     assert!(read_until(&mut other, "event: changed").await.contains("b.org"));

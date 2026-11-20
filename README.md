@@ -149,6 +149,9 @@ off or out of reach, the phone keeps working and syncs the next time it can reac
    enter this computer's address, for example `192.168.1.20` (run `ipconfig getifaddr en0` on a Mac,
    `hostname -I` on Linux), or its VPN address. Then click **Show a pairing code**.
 3. **In the app,** choose **My computer, with the KorgNote server** and scan the code.
+4. **Back on the Devices page,** the phone asks to pair: press **Allow**. Allow only a device you
+   are pairing yourself, right then. A code alone pairs nothing, so another app on the phone that
+   reads the QR code in KorgNote's place cannot pair with it.
 
 The server also gives you the **web app**, at <http://localhost:8080/>, and the **desktop app**
 (built from source, see [Development](#development)) on the same computer.
@@ -182,7 +185,9 @@ You can still run it on a machine with a public address, such as a VPS:
    ```
 
    This prints the QR code in the terminal, with a `korgnote://pair` link under it. Within 10
-   minutes, scan the code in the app, or paste the link there. The code works only once.
+   minutes, scan the code in the app, or paste the link there. The code works only once, and the
+   phone waits for you to press **Allow** on the Devices page, which you reach through the SSH
+   tunnel below.
 
    To list or revoke devices, open the Devices page through an SSH tunnel:
 
@@ -226,10 +231,10 @@ phone: there, choose where your notes are again and they sync.
 **The server has two ports.**
 
 - **8443 (HTTPS)** faces the network. On this port the server answers only sync requests, and only
-  from a paired device's token. The one exception is pairing, which needs a one-time code. A
-  connection that has not shown a paired device's token within 30 seconds is closed, and one
-  address can hold no more than 64 connections open, so a stranger on the network cannot tie the
-  port up.
+  from a paired device's token. The one exception is pairing, which needs a one-time code and
+  your **Allow** on the Devices page. A connection that has not shown a paired device's token within
+  30 seconds is closed, and when too many such connections are open the oldest go first, so a
+  stranger on the network cannot tie the port up or keep your phones out.
 - **8080 (HTTP)**, unencrypted, is for this computer only: the web app, the desktop app and the
   Devices page. It has no password, so whoever can reach it can read and change every note, and pair
   a device of their own. That is why it listens on `127.0.0.1` only (the `-p 127.0.0.1:8080:8080`
@@ -349,7 +354,8 @@ On Windows, use `gradlew.bat` instead of `./gradlew`.
 
    This installs *KorgNote Debug*, a separate app from the one on the release page.
 
-4. Open the app, choose **My computer, with the KorgNote server**, and scan the code.
+4. Open the app, choose **My computer, with the KorgNote server**, and scan the code. Then press
+   **Allow** on the Devices page when the phone asks.
 
 To use the desktop app instead of a phone, run `./gradlew :composeApp:run` on the same computer as
 the server. No pairing is needed.

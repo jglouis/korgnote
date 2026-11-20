@@ -224,6 +224,13 @@ device trades the code at `POST /api/pair` for a token of its own, over a client
 that certificate and nothing else (`shared/…/pairing/PinnedTrustManager.kt`); the server keeps
 only a hash of the token.
 
+The code alone pairs nothing. A QR code read by the phone's camera goes to whichever app claims
+`korgnote://` links, so another app could take the code. The server spends the code, shows the
+device on the Devices page by its name and address, and holds the request until someone there
+presses **Allow** (`200` with the token), **Refuse** (`410`), or two minutes pass (`408`); a wrong
+or used code is `403` and shows nothing (`server/src/approvals.rs`). The app waits two and a half
+minutes for the answer and says which it was.
+
 What this trusts, stated plainly:
 
 - **Any process on this computer has full read and write through port 8080**, and can mint
@@ -239,11 +246,15 @@ What this trusts, stated plainly:
   has one network interface besides loopback: under `--network host` the default gateway is the
   LAN's router, and with two networks it is not known which one the host comes through, so then
   only loopback is (`security.rs`, `container_gateway`).
-- The TLS port closes a connection that has not shown a paired device's token within 30 seconds,
-  holds at most 64 connections from one address (one /64 for IPv6) and 512 in all, reads no more
-  than 16 KiB of a pairing request, and reads ahead at most 64 KiB on a connection: a stranger
-  on the network can neither hold it open nor make it hold memory (`server.rs`). A revoked
-  device's open change stream ends when it is revoked.
+- The TLS port closes a connection that has not shown a paired device's token within 30 seconds
+  (one whose pairing waits to be allowed aside). It cannot count connections by address: behind
+  Docker Desktop all of them come from one. So those that have shown no token share a queue of
+  128, and a new one past it takes the place of the oldest; one that has shown a token, or waits
+  on its pairing, is never let go for a newcomer. With at most 512 in all, 16 KiB read of a pairing
+  request and 64 KiB read ahead on a connection, a stranger on the network can neither keep the
+  phones out nor make the server hold memory (`server.rs`). Revoking a device closes every
+  connection it has open, its change stream with them. Notes, codes and the Devices page are
+  sent `Cache-Control: no-store`.
 - The device token is sealed on Android (a Keystore key) and iOS (the Keychain). On the desktop it
   is sealed in Java `Preferences` with an AES key kept in the system's keyring — macOS Keychain,
   Windows Credential Manager, Secret Service on Linux (`KeyringCipher.kt`, through
