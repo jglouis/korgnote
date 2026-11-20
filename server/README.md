@@ -83,9 +83,10 @@ refused with what to do.
 - A note of up to 32 MB is held whole while it is checked and written.
 - A reader that stops reading the change stream has it closed once it has lost an event, for its
   app to catch up from the manifest. How soon depends on how much the system buffers on the way.
-- A notes folder that is there but empty, as the folder a volume is mounted on is while the volume
-  is not, is a complete library with no notes in it. `KORGNOTE_REQUIRE_NOTES_DIR` is asked at
-  startup only.
+- A notes folder that goes away, or is no longer on the volume it was on at startup, as an unmounted
+  volume's mount point is, fails the listing with a `500` until it is back, rather than being listed
+  as a library with no notes. A volume that was never mounted when the server started is not told
+  apart from an empty folder: `KORGNOTE_REQUIRE_NOTES_DIR` is asked at startup only.
 - A request body is read as UTF-8, ISO-8859-1, US-ASCII or UTF-16; another charset is `415`. The
   apps send UTF-8.
 - Not yet tried by hand: iOS against it, a real phone on Wi-Fi, a phone that sleeps and comes back.

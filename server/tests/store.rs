@@ -734,3 +734,48 @@ fn folders_many_levels_deep_are_listed_without_running_out_of_stack() {
     let listed = std::thread::Builder::new().stack_size(64 * 1024).spawn(move || paths(&store)).unwrap().join().unwrap();
     assert_eq!(listed, [deep]);
 }
+
+// --- The notes directory itself ---
+
+/// Gone from under the server, it is every note deleted to a phone, and so not listed.
+#[test]
+fn a_notes_directory_that_went_away_fails_the_listing() {
+    let (root, store) = fixture();
+    root.write("a.org", "* a\n");
+    assert_eq!(paths(&store), ["a.org"]);
+    std::fs::remove_dir_all(&root.path).unwrap();
+    assert!(store.list().is_err());
+    assert!(FileStore::with_mode(&root.path, true).list().unwrap().is_empty(), "one that was never there is an empty library");
+}
+
+/// Which volume the next test's notes are on: 1 their own, 2 the one their mount point is on.
+static VOLUME: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+fn pretend_volume(_: &std::path::Path) -> Option<u64> {
+    Some(VOLUME.load(Ordering::SeqCst))
+}
+
+/// A volume unmounted leaves its mount point behind, an empty folder on another volume. Listed, it
+/// would be a complete library with no notes in it. Mounted again, it is listed again.
+#[test]
+fn a_notes_directory_no_longer_on_its_volume_fails_the_listing_until_it_is_back() {
+    let root = Scratch::new("store");
+    root.write("a.org", "* a\n");
+    VOLUME.store(1, Ordering::SeqCst);
+    let mounted = FileStore::with_volume_of(&root.path, false, pretend_volume);
+    assert_eq!(paths(&mounted), ["a.org"]);
+    VOLUME.store(2, Ordering::SeqCst);
+    let error = mounted.list().unwrap_err();
+    assert!(error.to_string().contains("no longer on the volume"), "{error}");
+    VOLUME.store(1, Ordering::SeqCst);
+    assert_eq!(paths(&mounted), ["a.org"]);
+}
+
+#[test]
+fn the_volume_of_a_folder_is_told() {
+    let root = Scratch::new("store");
+    let volume = korgnote_server::store::volume_of(&root.path);
+    assert!(volume.is_some());
+    assert_eq!(volume, korgnote_server::store::volume_of(&root.path.join(".")));
+    assert_eq!(korgnote_server::store::volume_of(&root.path.join("not-there")), None);
+}

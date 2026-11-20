@@ -128,6 +128,19 @@ pub struct FileStore {
     /// server does not take it: a save landing in that instant is still overwritten, which nothing on
     /// a plain filesystem can prevent.
     writing: Mutex<()>,
+    /// Which volume a folder is on; see [Self::list]. Given in tests, which cannot unmount one.
+    volume_of: fn(&Path) -> Option<u64>,
+    /// The volume the notes directory was on when the store was made, or None where the system does
+    /// not say. A volume unmounted leaves its mount point behind, an empty folder on another volume,
+    /// which listed as it is would be a complete library with no notes in it: every phone would
+    /// delete its copies. So a notes directory that is no longer on this volume is not listed.
+    volume: Option<u64>,
+}
+
+/// The volume `path` is on, through links: its device number; None for a path that is not there.
+pub fn volume_of(path: &Path) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+    fs::metadata(path).ok().map(|metadata| metadata.dev())
 }
 
 impl FileStore {
@@ -136,9 +149,15 @@ impl FileStore {
     }
 
     pub fn with_mode(root: impl Into<PathBuf>, read_only: bool) -> Self {
+        Self::with_volume_of(root, read_only, volume_of)
+    }
+
+    /// As [Self::with_mode], telling volumes apart with `volume_of`.
+    pub fn with_volume_of(root: impl Into<PathBuf>, read_only: bool, volume_of: fn(&Path) -> Option<u64>) -> Self {
         // A relative path is taken from the working directory.
-        let root: PathBuf = root.into();
-        FileStore { root: normalize(&root), read_only, hashes: Mutex::new(HashMap::new()), writing: Mutex::new(()) }
+        let root = normalize(&root.into());
+        let volume = if read_only { None } else { volume_of(&root) };
+        FileStore { root, read_only, hashes: Mutex::new(HashMap::new()), writing: Mutex::new(()), volume_of, volume }
     }
 
     fn is_our_temporary_file(path: &Path) -> bool {
@@ -161,9 +180,19 @@ impl FileStore {
     /// count against it: a big checkout or first upload would fail every listing while it lasted, and a
     /// path too many is a stale name for a moment, where a path too few is a note deleted. Notes that keep
     /// going fail the list.
+    ///
+    /// A notes directory that was there when the store was made and is gone, or is no longer on the
+    /// volume it was on, fails the list too: listed, it would be every note deleted. One that was
+    /// never there, the read-only store's, is an empty library.
     pub fn list(&self) -> io::Result<Vec<FileMeta>> {
         if !self.root.is_dir() {
-            return Ok(Vec::new());
+            if self.read_only {
+                return Ok(Vec::new());
+            }
+            return Err(io::Error::new(io::ErrorKind::NotFound, "The notes folder is gone. Is the volume it is on unmounted?"));
+        }
+        if self.volume.is_some() && (self.volume_of)(&self.root) != self.volume {
+            return Err(io::Error::other("The notes folder is no longer on the volume it was on when the server started. Is that volume unmounted?"));
         }
         let mut previous: Vec<String> = self.walk()?.into_iter().map(|meta| meta.path).collect();
         for _ in 0..MAX_WALKS - 1 {
