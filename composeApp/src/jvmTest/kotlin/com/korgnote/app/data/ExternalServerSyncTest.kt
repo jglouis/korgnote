@@ -44,13 +44,12 @@ import kotlin.time.Duration.Companion.seconds
  * the desktop app is built with, pinned to the server's certificate as a paired device's is,
  * `KtorSyncApi`, `SyncEngine` and `DocumentStore`, with nothing faked in between.
  *
- * Which server is said by the environment, so that the same tests hold the Kotlin server and the
- * Rust one to the same behaviour:
+ * The server is the binary the environment names, built from `server/` first:
  *
- *     KORGNOTE_SERVER_UNDER_TEST=server/build/install/server/bin/server ./gradlew :composeApp:jvmTest --tests '*ExternalServerSyncTest*'
- *     KORGNOTE_SERVER_UNDER_TEST=server-rust/target/release/korgnote-server ./gradlew :composeApp:jvmTest --tests '*ExternalServerSyncTest*'
+ *     cargo build --release --manifest-path server/Cargo.toml
+ *     KORGNOTE_SERVER_UNDER_TEST=server/target/release/korgnote-server ./gradlew :composeApp:jvmTest --tests '*ExternalServerSyncTest*'
  *
- * Without it they do nothing. Every note is made up here, in a folder of the test's own.
+ * Without it they do nothing; CI sets it. Every note is made up here, in a folder of the test's own.
  */
 class ExternalServerSyncTest {
 

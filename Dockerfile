@@ -4,47 +4,61 @@
 #
 # docker-compose.yml shows how to run it with a notes directory from the host.
 
-# --- Build: the server's distribution and the web client, from the same Gradle build CI uses ---
-# On the machine's own platform, whatever the image is for: what it makes is bytecode and wasm, the
-# same on any CPU (Netty's QUIC natives come for every platform, and its epoll jar carries none). So
-# an image for amd64 and arm64 builds once, without emulating the other CPU, and only the stage
-# below, which copies files and runs nothing, is made for each.
-FROM --platform=$BUILDPLATFORM eclipse-temurin:25-jdk AS build
+# --- The web client, from the same Gradle build CI uses ---
+# On the machine's own platform, whatever the image is for: what it makes is wasm, the same on any CPU.
+FROM --platform=$BUILDPLATFORM eclipse-temurin:25-jdk AS web
 # The Node that the Kotlin plugin downloads for the wasm build links against libatomic.
 RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
-COPY . .
-# Gradle configures every module even though only these two tasks run. The cache mount keeps
-# Gradle's downloads between builds (Node and the wasm toolchain included); it is not part of any
-# image layer.
+# What Gradle needs to configure and to build the web client, named one by one so that a change to
+# the server does not build the web client again. Gradle configures every module in
+# settings.gradle.kts, Android's included, even though only the web client is built.
+COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
+COPY gradle gradle
+COPY kotlin-js-store kotlin-js-store
+COPY shared shared
+COPY composeApp composeApp
+COPY androidApp androidApp
 RUN --mount=type=cache,target=/root/.gradle \
-    ./gradlew --no-daemon :server:installDist :composeApp:wasmJsBrowserDistribution
+    ./gradlew --no-daemon :composeApp:wasmJsBrowserDistribution
 
-# --- Run: a JRE and the distribution, nothing else ---
-# Distroless: the same Temurin 25 JRE without a shell or package manager, so far fewer packages for
-# CVEs to land in. Security fixes arrive by rebuilding on a newer base. For a shell to debug with,
-# swap in the :debug-nonroot tag (busybox).
-FROM gcr.io/distroless/java25-debian13:nonroot
+# --- The server: one static binary ---
+# Built on the machine's own platform too, cross-compiled for the image's: an image for amd64 and
+# arm64 builds without emulating the other CPU. xx sets up the linker and C compiler (ring has C
+# in it) for the target; Alpine's musl makes a binary that needs nothing from the image it runs in.
+FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.6.1 AS xx
+FROM --platform=$BUILDPLATFORM rust:1-alpine AS server
+COPY --from=xx / /
+RUN apk add --no-cache clang lld
+ARG TARGETPLATFORM
+RUN xx-apk add --no-cache musl-dev gcc
+WORKDIR /src
+COPY server server
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=korgnote-server-target-$TARGETPLATFORM,target=/src/server/target \
+    xx-cargo build --release --locked --manifest-path server/Cargo.toml \
+    && cp "server/target/$(xx-cargo --print-target-triple)/release/korgnote-server" /korgnote-server \
+    && xx-verify --static /korgnote-server
 
-COPY --from=build /src/server/build/install/server /opt/korgnote
+# --- Run: the binary and the web client, and nothing else ---
+# No shell, no libraries, no package to carry a CVE: the binary is the image.
+FROM scratch
+COPY --from=server /korgnote-server /korgnote-server
 # The browser client, served at / on the same origin as the API. KORGNOTE_DISABLE_WEB=1 at run time
 # serves the API only.
-COPY --from=build /src/composeApp/build/dist/wasmJs/productionExecutable /opt/korgnote/web
+COPY --from=web /src/composeApp/build/dist/wasmJs/productionExecutable /web
 
 # A missing or unwritable /notes is fatal, not an empty library that looks healthy. The plain port
 # listens on every interface inside, which is the only way a published port reaches it: the
 # compose file publishes it on the host's loopback only, since it serves this computer without a
 # token. The secure port is for paired devices; /state keeps the certificate and the device list.
 ENV NOTES_DIR=/notes \
-    WASM_DIR=/opt/korgnote/web \
+    WASM_DIR=/web \
     KORGNOTE_PORT=8080 \
     KORGNOTE_HTTP_HOST=0.0.0.0 \
     KORGNOTE_HTTPS_PORT=8443 \
     KORGNOTE_STATE_DIR=/state \
-    KORGNOTE_REQUIRE_NOTES_DIR=1 \
-    MALLOC_ARENA_MAX=2
-# MALLOC_ARENA_MAX: glibc otherwise keeps a pool of freed memory per thread, eight times the CPU
-# count of them, and the JVM's native allocations end up spread over all of those.
+    KORGNOTE_REQUIRE_NOTES_DIR=1
 
 # Files the server creates in the mounted directory belong to this user. Match the host user that
 # owns the notes (`id -u`, `id -g`), either here at build time or with `--user` / compose `user:`.
@@ -52,21 +66,5 @@ ENV NOTES_DIR=/notes \
 ARG UID=1000
 ARG GID=1000
 USER ${UID}:${GID}
-# Ktor resolves the working directory at startup, and the base image's (/home/nonroot) is closed to
-# any UID but 65532.
-WORKDIR /opt/korgnote
 EXPOSE 8080 8443
-# There is no /bin/sh for Gradle's bin/server script, so start the JVM directly, with native access
-# for Netty's transport (which only silences the JDK's warning).
-#
-# The memory flags set no ceiling: a sync still gets what it needs, and the JVM hands it back
-# afterwards instead of keeping its high-water mark for good (measured: 464 MiB kept after a sync
-# with a 20 MB note, against about 190 MiB with these). Start the heap small and keep little of it
-# free; after a minute without a collection run a full one, which is what shrinks the heap (the
-# default, a concurrent cycle, gives back less); and every minute return freed native memory to the
-# system. JAVA_TOOL_OPTIONS at run time adds to these or overrides them, -Xmx included.
-ENTRYPOINT ["java", "--enable-native-access=ALL-UNNAMED", \
-            "-Xms16m", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=30", \
-            "-XX:G1PeriodicGCInterval=60000", "-XX:-G1PeriodicGCInvokesConcurrent", \
-            "-XX:TrimNativeHeapInterval=60000", \
-            "-cp", "/opt/korgnote/lib/*", "com.korgnote.server.ApplicationKt"]
+ENTRYPOINT ["/korgnote-server"]

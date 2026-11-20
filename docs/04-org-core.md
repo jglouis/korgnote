@@ -187,7 +187,7 @@ What remains:
 ## Testing
 
 What exists: `OrgSourceRangeTests` asserts I1 and I2 over hand-written edge cases on every platform,
-`OrgFixtureRoundTripTest` over the samples in `server/src/test/resources/org`,
+`OrgFixtureRoundTripTest` over the samples in `shared/src/jvmTest/resources/org`,
 `OrgNestingTests` the weaker I3, `OrgEditTests` the edits, and `OrgSpansTests` with
 `OrgSyntaxHighlightingTest` the spans, as assertions rather than golden files. Known gaps:
 

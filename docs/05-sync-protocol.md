@@ -4,19 +4,19 @@ Addresses G4, G5 and defects D1, D2, D3, D8, D9, D10, D11.
 
 ## Server: a file store that tells the truth
 
-The server answers from the disk on every request (`server/…/FileStore.kt`). It once served a snapshot
+The server answers from the disk on every request (`server/src/store.rs`). It once served a snapshot
 taken at startup, which could overwrite edits made in Emacs (D1).
 
-```kotlin
-class FileStore(val root: Path, val readOnly: Boolean = false) {
-    fun list(): List<FileMeta>                      // walks the tree on demand
-    fun readWithMeta(path: String): FileContent?    // a file's text and its version, from one read
-    fun meta(path: String): FileMeta?
-    fun put(path: String, content: String, ifMatch: String?, mustNotExist: Boolean): WriteResult
-    fun delete(path: String, ifMatch: String?): WriteResult
+```rust
+impl FileStore {
+    fn list(&self) -> io::Result<Vec<FileMeta>>                  // walks the tree on demand
+    fn read_with_meta(&self, path: &str) -> Option<FileContent>  // a file's text and its version, from one read
+    fn meta(&self, path: &str) -> io::Result<Option<FileMeta>>
+    fn put(&self, path: &str, content: &[u8], if_match: Option<&str>, must_not_exist: bool) -> io::Result<WriteResult>
+    fn delete(&self, path: &str, if_match: Option<&str>) -> io::Result<WriteResult>
 }
 
-data class FileMeta(val path: String, val size: Long, val mtimeMillis: Long, val etag: String)
+struct FileMeta { path: String, size: u64, mtime_millis: i64, etag: String }
 ```
 
 - `etag` is a **content hash** (SHA-256, hex-truncated to 16 bytes), not an mtime: Emacs and
@@ -30,10 +30,10 @@ data class FileMeta(val path: String, val size: Long, val mtimeMillis: Long, val
 - The `If-Match` check and the move are under one lock, so of two devices pushing from the same version
   only one wins and the other is told to merge. An editor outside the server does not take it: a save
   landing in that instant is overwritten, which nothing on a plain filesystem can prevent.
-- A text and its etag come from one read (`readWithMeta`): read apart, an edit landing between pairs the
+- A text and its etag come from one read (`read_with_meta`): read apart, an edit landing between pairs the
   old etag with the new text, and the client's next push is a false conflict.
 
-**What is a note.** `isLibraryPath` is one rule for what is listed, what can be read and written, and
+**What is a note.** `is_library_path` is one rule for what is listed, what can be read and written, and
 what is watched: an `.org` file, in no dot-folder. `.korgnote-trash` holds what was deleted, `.stversions`
 Syncthing's old versions and `.git` git's own business; served as notes, those would reach every phone
 as more copies of the same headings. On top of it, every call rejects absolute paths, empty, `.` and `..`
@@ -56,7 +56,7 @@ at the next complete manifest. A copy with an unsent edit is kept and pushed as 
 server refuses with `422`, so the push fails each cycle, and says nothing, while the edit stays in the
 replica. A dot-*file* is not covered by the rule; see [open gaps](08-roadmap.md#open-and-known-gaps).
 
-**With no notes folder**, `ServerConfig.openStore` serves an empty, read-only, unwatched library, and says
+**With no notes folder**, `ServerConfig::open_store` serves an empty, read-only, unwatched library, and says
 so in the log and on the Devices page. A container sets `KORGNOTE_REQUIRE_NOTES_DIR`, which stops the
 server instead.
 
@@ -66,14 +66,15 @@ which every phone would take as every note deleted. That is what an unmounted vo
 mount point left behind, empty, on another volume. Mounted again, it is listed again. A notes folder
 that is a link is listed and watched where it leads.
 
-A `500` for what the disk would not read says so in a sentence; the exception, which names the file on
+A `500` for what the disk would not read says so in a sentence; the error, which names the file on
 this computer, goes to the server's log.
 
-**Watching** is a class of its own, `server/…/NotesWatcher.kt` (a `java.nio` `WatchService`), which turns
-each change on disk into a journal entry. Anything that moves folders, an overflow of events or an
-invalid key makes it build its watches again from scratch and walk the tree, journaling every difference:
-a watch follows its folder's inode, so a renamed folder is its old notes deleted and its new ones made.
-It walks the tree once a minute as well (`rescanEvery`), because a watch can miss events and say nothing:
+**Watching** is a module of its own, `server/src/watcher.rs` (the `notify` crate: FSEvents on macOS,
+inotify on Linux), which turns each change on disk into a journal entry. Anything that moves folders, an
+overflow of events or an error makes it build its watches again from scratch and walk the tree, journaling
+every difference: a watch follows its folder, not its name, so a renamed folder is its old notes deleted
+and its new ones made.
+It walks the tree once a minute as well (`rescan_every`), because a watch can miss events and say nothing:
 Docker Desktop's file sharing drops some made on the host. What that walk finds, and no event reported
 within ten seconds, is logged as a warning and counted rather than healed quietly.
 
@@ -84,7 +85,7 @@ stopped looking reports a good sync, so this is the only place to notice.
 
 ## Protocol
 
-Versioned under `/api/v1`. All responses are compressible (Ktor's `Compression` plugin; Org text gzips
+Versioned under `/api/v1`. All responses are compressible (gzip or deflate, as `Accept-Encoding` asks; Org text gzips
 roughly 4–5×, D10).
 
 ### `GET /api/v1/manifest[?since=<generation>]`
@@ -208,7 +209,7 @@ from `KORGNOTE_TOKEN`, with TLS left to a reverse proxy. It was replaced by pair
 gets a token of its own, which the Devices page can revoke, and TLS is built in, trusted by the
 certificate's fingerprint, so a phone needs no proxy and no certificate authority.
 `KORGNOTE_TOKEN` is now only logged as an ignored leftover. The server
-(`server/…/ServerSecurity.kt`) has two ports:
+(`server/src/config.rs`, `server/src/security.rs`) has two ports:
 
 | Port | For | Who gets in |
 |---|---|---|

@@ -43,7 +43,7 @@
 └───────────┬─────────────────────────────────────────────────────────────────────┘
             │  HTTP: manifest · conditional GET · PUT If-Match · SSE events
 ┌───────────▼─────────────────────────────────────────────────────────────────────┐
-│  server/ (Ktor, JVM)                                                            │
+│  server/ (Rust: hyper, tokio, rustls)                                           │
 │    file store over NOTES_DIR  ·  metadata (hash, size, mtime)  ·  file watcher  │
 │    TLS :8443 for paired devices — pinned certificate, a token per device        │
 │    plain :8080 for this computer only — web build, desktop app, Devices page    │
@@ -78,13 +78,13 @@ Everything below is pure, multiplatform, and unit-testable without a UI or a ser
 | `org.template` | What a new note starts as | [08](08-roadmap.md#t20--creating-renaming-and-deleting-notes) |
 | `replica` | `DocumentStore`, `SyncEngine`, `ReplicaStorage`, and the client's view of the server (`SyncApi`, `RemoteManifest`) | [05](05-sync-protocol.md) |
 | `sync` | Three-way line merge, conflict-copy names and chunks, and the manifest's wire classes | [05](05-sync-protocol.md) |
-| `pairing` | The pairing link and its request/response, shared by server and client; the pinned trust manager on the JVM | [05](05-sync-protocol.md#auth) |
+| `pairing` | The pairing link and its request/response, as the client reads and sends them; the pinned trust manager on the JVM | [05](05-sync-protocol.md#auth) |
 | `fs` | The folder tree built from note paths, and what a note's path may be | |
 
-Most of the sync wire format is not shared. The manifest's classes are (`shared/…/sync/Manifest.kt`),
-and a test pins their field names; for the rest the server (`server/…/SyncApiV1.kt`) and the client
-(`composeApp/…/data/KtorSyncApi.kt`) each declare their own small serializable classes. The JSON is the
-contract.
+None of the sync wire format is shared with the server, which is not Kotlin. The client's side of the
+manifest is in `shared/…/sync/Manifest.kt`, the rest in `composeApp/…/data/KtorSyncApi.kt`; the server
+declares its own in `server/src/http.rs`. A test on each side pins the manifest's field names. The JSON
+is the contract.
 
 ### `composeApp/` — UI and device concerns
 
@@ -111,10 +111,14 @@ note, and rebuilding what is derived from the notes when they change.
 
 ### `server/` — thin
 
-Ktor, static hosting of the web build, and a file store over `NOTES_DIR` that always reads current disk
-state, computes metadata, and has a `WatchService`-based watcher feeding an SSE endpoint. Compression,
-and device pairing: TLS with its own certificate and a token per device for the network, a plain port
-for its own computer only ([05](05-sync-protocol.md#auth)). The server does not parse Org at all.
+A Rust program of its own, outside the Gradle build: hyper and tokio for HTTP, rustls for TLS.
+Static hosting of the web build, and a file store over `NOTES_DIR` that always reads current disk
+state, computes metadata, and has a watcher (`notify`: FSEvents on macOS, inotify on Linux) feeding
+an SSE endpoint. Compression, and device pairing: TLS with its own certificate and a token per device
+for the network, a plain port for its own computer only ([05](05-sync-protocol.md#auth)). The server
+does not parse Org at all, and shares no code with the app.
+It replaced a Kotlin server on the JVM that did the same in about a hundred times the memory
+([08](08-roadmap.md#t46--the-server-in-rust)).
 
 ## Ownership of state
 
@@ -181,7 +185,7 @@ nothing of it.
 
 ## The web target
 
-The web app is only ever served by the Ktor server it talks to. It is online by definition,
+The web app is only ever served by the KorgNote server it talks to. It is online by definition,
 same-origin, and never has to survive a network partition. Offline is a non-goal there, and that
 is what keeps the gap small between it and the local-first native client: it is the same client with
 `InMemoryReplicaStorage` under the same `DocumentStore` and `SyncEngine`, and about 250 lines of its

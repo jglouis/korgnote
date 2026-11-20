@@ -1,5 +1,4 @@
-# Keep the build context to what the Dockerfile's Gradle tasks need to configure and compile: its
-# `COPY . .` runs them again whenever anything copied changes.
+# Keep the build context to what the Dockerfile copies: the web client's Gradle build and the server.
 .git
 .gradle
 .kotlin
@@ -22,7 +21,7 @@ local.properties
 .DS_Store
 # Holds this computer's settings for docker compose, which mean nothing inside the image either.
 .env
-# The Rust server's build output, which its own Dockerfile builds again inside the image.
-server-rust/target/
+# The server's build output, which the Dockerfile builds again inside the image.
+server/target/
 # Worktrees and scratch files of coding sessions: whole copies of the repository.
 .claude/

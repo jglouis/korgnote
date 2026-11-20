@@ -118,21 +118,21 @@ This is the only status list; the rules for keeping it are in the [docs README](
 
 The first snapshot of the app, at `2cc66f7` (2026-09-20), listed these. They are cited as D1–D12 in
 code comments and tests, so the numbers stay; every one is fixed. *Where* gives the place at that
-commit.
+commit; the first server, in Kotlin, is gone since T46.
 
 | # | Issue | Where | What became of it |
 |---|-------|-------|-------------------|
-| D1 | Server caches files at startup and never re-reads disk | `Application.kt:81,112` | `FileStore` reads on demand and refuses a write whose baseline is stale |
-| D2 | Whole corpus is parsed and shipped as JSON on every cold start | `Application.kt:169` | T9/T10: the endpoint is deleted, and the client syncs text through the manifest, fetching only stale files, in one bundle when eight or more are stale |
+| D1 | Server caches files at startup and never re-reads disk | first server, `Application.kt:81,112` | `FileStore` reads on demand and refuses a write whose baseline is stale |
+| D2 | Whole corpus is parsed and shipped as JSON on every cold start | first server, `Application.kt:169` | T9/T10: the endpoint is deleted, and the client syncs text through the manifest, fetching only stale files, in one bundle when eight or more are stale |
 | D3 | No local persistence of documents on the client | `composeApp/…/data/` | T8: a local replica; the app opens and edits with no network |
 | D4 | AST cannot round-trip to its own source text | `OrgMode.kt:329` | T3: every node carries its source range and the document its text, so the model is lossless; edits are range replacements (T7) |
 | D5 | Two independent Org grammars | `OrgMode.kt` vs `OrgSyntaxHighlighting.kt:85` | T5/T6: `OrgSyntax` and `orgSpans()` in `shared/` are the one grammar, and `OrgElements.kt` uses them too. What crept back later was folded in again; what stays apart is in [04](04-org-core.md#one-grammar-two-consumers) |
 | D6 | Full-document re-highlight per keystroke; whole document composed eagerly | `OrgSyntaxHighlighting.kt`, `OrgDocumentView.kt` | Highlighting by cache and per-element editing; reading mode is a `LazyColumn` keyed by element (T12b) |
 | D7 | Calendar only understands `SCHEDULED` with a plain date | `FileTreeViewModel.kt:230` | T15–T17: a timestamp parser, an agenda engine (`AgendaIndex`) and agenda, day, week and month views |
-| D8 | No authentication, no TLS, binds `0.0.0.0` | `Application.kt:36` | T2 added a token; pairing replaced it (T30): devices sync over TLS on 8443 with a pinned certificate and a token each, and plain 8080 answers this computer only |
-| D9 | No conflict detection on save | `Application.kt` | T11: a diff3 merge, and a conflict copy when both sides changed the same lines; neither version is lost |
-| D10 | No compression on server responses | `Application.kt` | T2: gzip on |
-| D11 | Cannot create, rename or delete files from the app | `Application.kt:189` | T20: the drawer creates, renames and deletes notes, offline too, synced through tombstones ([05](05-sync-protocol.md#creating-renaming-and-deleting-t20)) |
+| D8 | No authentication, no TLS, binds `0.0.0.0` | first server, `Application.kt:36` | T2 added a token; pairing replaced it (T30): devices sync over TLS on 8443 with a pinned certificate and a token each, and plain 8080 answers this computer only |
+| D9 | No conflict detection on save | first server, `Application.kt` | T11: a diff3 merge, and a conflict copy when both sides changed the same lines; neither version is lost |
+| D10 | No compression on server responses | first server, `Application.kt` | T2: gzip on |
+| D11 | Cannot create, rename or delete files from the app | first server, `Application.kt:189` | T20: the drawer creates, renames and deletes notes, offline too, synced through tombstones ([05](05-sync-protocol.md#creating-renaming-and-deleting-t20)) |
 | D12 | Flat document model (sections are not nested) | `OrgMode.kt:19,93` | T4: headings nest, and a heading's range covers its subtree |
 
 ---
@@ -247,7 +247,7 @@ client keeps a full manifest's generation as given, not only when it is higher (
 promises. Every criterion was also checked with `curl` against a real server. The SSE stream itself has
 no automated test: driving a never-ending response through the Ktor test host deadlocked the test, so
 it is covered by curl and by the journal and watcher tests underneath it, rather than by a flaky test
-pretending to be evidence.
+pretending to be evidence. The Rust server's tests (T46) read the stream over a real connection.
 
 ### T10 · Sync engine (client) and cutover
 `/api/org-content`, `/api/org-tree-paths` and `/api/content/{…}` went along with `KtorOrgRepository`
@@ -447,17 +447,20 @@ Edit/Save buttons, the whole-file `BasicTextField`, `EditorViewport`, viewport-s
 1.6.0 ([09](09-element-editing.md#refile)); keyboard shortcuts for any of it did not.
 
 ### T23 · Server container
-A multi-stage [`Dockerfile`](../Dockerfile) (`:server:installDist` on a JDK 25 image, then
-`gcr.io/distroless/java25-debian13:nonroot`, the same JRE with no shell or package manager, so far fewer
-packages for CVEs to land in, e4ebc1e) and a [`docker-compose.yml`](../docker-compose.yml). The image is
-published to GHCR for amd64 and arm64 on each `v*` tag by `container.yml` (e094b3e).
+A multi-stage [`Dockerfile`](../Dockerfile) and a [`docker-compose.yml`](../docker-compose.yml). The
+web client is built with Gradle on a JDK 25 image; the server, since T46, is one static binary, built
+against Alpine's musl and cross-compiled with `xx-cargo` on the build machine's own platform, so an
+arm64 image needs no emulation. The image is `FROM scratch`: the binary and the web client, with no
+shell, no libraries and no package for a CVE to land in. It began as the JVM server on distroless
+Java, which had already shed the shell and the package manager (e4ebc1e). The image is published to
+GHCR for amd64 and arm64 on each `v*` tag by `container.yml` (e094b3e).
 **A missing or unwritable `/notes` is fatal** (`KORGNOTE_REQUIRE_NOTES_DIR`), since in a container an
 empty library would hide a typo in the volume path. Writability is checked by writing a probe file,
-because through Docker Desktop's file sharing a `chmod 555` directory reports `canWrite()` as true and
-then refuses the write. The container runs as a non-root user, and compose sets it to
+because through Docker Desktop's file sharing a `chmod 555` directory can report itself writable and
+then refuse the write. The container runs as a non-root user, and compose sets it to
 `KORGNOTE_UID:KORGNOTE_GID`. `UID` itself cannot be used because it is read-only in bash and zsh.
 **Build context** Not a problem: with `local.properties` excluded and no SDK in the image, Gradle
-configures the Android modules and builds `:server` without complaint. The build stage needs
+configures the Android modules and builds the web client without complaint. The web stage needs
 `libatomic1`, which the Node that the Kotlin plugin downloads links against.
 **Verified** On Docker Desktop for macOS: a host edit arrived as an SSE `changed` event within seconds
 through the bind mount; a `PUT` from a client created the file on the host owned by the host UID; each
@@ -796,3 +799,17 @@ starts with *Show done*, and which carries a dot whenever anything is hidden or 
 calendar's floating button, a plain plus that on File adds a heading, became a calendar with a plus.
 **Not included** Excluding a tag (`-work`), Org's options to leave scheduled or dated tasks out of the
 TODO list, and keeping the filter across restarts.
+
+### T46 · The server in Rust
+**Why** Memory. The Kotlin server on the JVM idled at about 130 to 200 MiB, which is a lot to ask of a
+small machine such as a Raspberry Pi, for a program that mostly waits. The same server in Rust idles at
+about 2 MiB, and its image went from 289 MB to about 22 MB.
+**Landed** `server/`, in Rust: hyper and tokio, rustls for TLS, `notify` for the watcher, built as one
+static binary in a `FROM scratch` image (T23). It replaced the Kotlin server for good rather than
+sitting beside it: same API, ports, environment variables and state directory, so a paired phone sees
+the same server and needs no pairing again. The Org fixtures the server's tests used to hold moved to
+`shared/src/jvmTest/resources/org`.
+**Verified** Before the Kotlin server went, a harness sent the same requests to both and compared every
+answer and what each left on disk, and the Kotlin server's tests were ported to `cargo test` where they apply.
+`ExternalServerSyncTest` runs the app's own sync code, two devices and the change stream included,
+against the built binary on every push.

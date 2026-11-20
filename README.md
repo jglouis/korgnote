@@ -309,7 +309,7 @@ KorgNote is licensed under the [GNU General Public License v3.0](LICENSE) or lat
 ## Development
 
 KorgNote is a [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)
-project with a Compose Multiplatform UI and a Ktor server. Design notes are in [docs/](docs/README.md).
+project with a Compose Multiplatform UI, and a sync server in Rust. Design notes are in [docs/](docs/README.md).
 
 | Module | Contents |
 |---|---|
@@ -317,12 +317,12 @@ project with a Compose Multiplatform UI and a Ktor server. Design notes are in [
 | [composeApp/](composeApp/src) | The app UI and the clients for the sync API and WebDAV, for all platforms |
 | [androidApp/](androidApp) | Android app |
 | [iosApp/](iosApp/iosApp) | iOS app (open in Xcode) |
-| [server/](server/src/main/kotlin) | Sync server, also serves the web app |
+| [server/](server) | Sync server, also serves the web app (Rust, built with Cargo, not Gradle) |
 
 | To build | You need |
 |---|---|
 | The Android app | The Android SDK ([Android Studio](https://developer.android.com/studio) is the easiest way to get it) |
-| The server | JDK 25, or Docker |
+| The server | [Rust](https://rustup.rs), or Docker |
 | The iOS app | A Mac with Xcode |
 | The desktop app | JDK 25 |
 
@@ -333,8 +333,8 @@ On Windows, use `gradlew.bat` instead of `./gradlew`.
 1. Start the server on the computer that has your notes:
 
    ```shell
-   scripts/run-server-container.sh ~/notes     # with Docker, built from your checkout
-   NOTES_DIR=~/notes ./gradlew :server:run      # with Java
+   scripts/run-server-container.sh ~/notes                                 # with Docker, built from your checkout
+   NOTES_DIR=~/notes cargo run --release --manifest-path server/Cargo.toml  # with Rust
    ```
 
 2. Open <http://localhost:8080/devices> and click **Show a pairing code**.
@@ -458,8 +458,8 @@ the Devices page, in the terminal.
 
 | Variable | Meaning |
 |---|---|
-| `NOTES_DIR` | Folder with your `.org` files. The `-Dnotes.dir=…` system property wins over it. Without either, the server uses `notes` in its working directory. With no such folder it serves an empty, read-only library, and says so in the log and on the Devices page. |
-| `WASM_DIR` | Folder of the built web app. The `-Dwasm.dir=…` system property wins over it. Without either, the server looks in `composeApp/build/dist/wasmJs/` from the repository root or from `server/`. |
+| `NOTES_DIR` | Folder with your `.org` files. A `-Dnotes.dir=…` argument wins over it. Without either, the server uses `notes` in its working directory. With no such folder it serves an empty, read-only library, and says so in the log and on the Devices page. |
+| `WASM_DIR` | Folder of the built web app. A `-Dwasm.dir=…` argument wins over it. Without either, the server looks in `composeApp/build/dist/wasmJs/` from the repository root or from `server/`. |
 | `KORGNOTE_PORT` | HTTP port. Default: 8080. |
 | `KORGNOTE_HTTP_HOST` | Address the HTTP port listens on. Default: `127.0.0.1`. |
 | `KORGNOTE_HTTPS_PORT` | HTTPS port for paired devices. Default: 8443. |
@@ -503,7 +503,8 @@ scripts/webdav-test-servers.sh stop
 Run all tests:
 
 ```shell
-./gradlew allTests :server:test --continue
+./gradlew allTests --continue
+cargo test --manifest-path server/Cargo.toml
 ```
 
 Run one part only:
@@ -513,16 +514,23 @@ Run one part only:
 ./gradlew :composeApp:jvmTest
 ./gradlew :shared:iosSimulatorArm64Test
 ./gradlew :shared:wasmJsTest
-./gradlew :server:test --tests 'com.korgnote.server.FileStoreTest'
+cargo test --manifest-path server/Cargo.toml --test store
 ```
 
 Reports are in `<module>/build/reports/tests/`.
 
+The app's own sync code against the real server, as CI runs it:
+
+```shell
+cargo build --release --manifest-path server/Cargo.toml
+KORGNOTE_SERVER_UNDER_TEST=server/target/release/korgnote-server ./gradlew :composeApp:jvmTest --tests '*ExternalServerSyncTest*'
+```
+
 To run tests again even if nothing changed:
 
 ```shell
-./gradlew :shared:jvmTest --rerun                                                            # one task
-./gradlew cleanAllTests allTests :server:cleanTest :server:test --no-build-cache --continue  # all tests
+./gradlew :shared:jvmTest --rerun                                        # one task
+./gradlew cleanAllTests allTests --no-build-cache --continue             # all tests
 ```
 
 On macOS, the iOS tests need the full Xcode. If they fail with `unable to find utility "simctl"`,

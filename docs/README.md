@@ -13,7 +13,7 @@ What is still open is in one place: the [gaps list in 08](08-roadmap.md#open-and
 | G4 | Edit offline, then sync changes automatically. The KorgNote server was meant to replace Syncthing, which has no iOS client; since 1.2.0 it is one of three places the notes can live: the server, a folder on the phone (typically kept in step by Syncthing), or a WebDAV server (experimental, since 1.3.0). See `NotesSource.kt`. |
 | G5 | Minimal bandwidth usage, while staying reasonably maintainable. |
 | G6 | A calendar closer to Google Calendar than to a bare list: `DEADLINE`, date ranges, hours in a day — plus reminders/notifications on the phone. |
-| G7 | Maintainable by one person: one stack (Compose Multiplatform + JVM server), not two. Still true: the Android widgets are Glance, in Kotlin, and the iOS app is about 33 lines of Swift, beside a share extension of about 280. |
+| G7 | Maintainable by one person: one stack for the app (Compose Multiplatform), not one per platform. Still true: the Android widgets are Glance, in Kotlin, and the iOS app is about 33 lines of Swift, beside a share extension of about 280. The server was the same stack on the JVM until T46 rewrote it in Rust, for its memory; it shares no code with the app, only the JSON of the sync API. |
 
 ## Map
 
@@ -24,7 +24,7 @@ What is still open is in one place: the [gaps list in 08](08-roadmap.md#open-and
 | [05-sync-protocol.md](05-sync-protocol.md) | Offline store, sync protocol, conflicts, auth, bandwidth budget. |
 | [06-editor.md](06-editor.md) | Editing at scale, keyword completion, search. |
 | [07-calendar-agenda.md](07-calendar-agenda.md) | Timestamp/agenda engine, the calendar's views, local notifications, widgets. |
-| [08-roadmap.md](08-roadmap.md) | What is open, the defects the plan began from (D1–D12), and why each change was made, by task number. T30–T42 record what shipped without a plan: pairing, the folder and WebDAV sources, widgets, tables, French, the dark theme, clocking, resuming. |
+| [08-roadmap.md](08-roadmap.md) | What is open, the defects the plan began from (D1–D12), and why each change was made, by task number. T30–T46 record what shipped without a plan: pairing, the folder and WebDAV sources, widgets, tables, French, the dark theme, clocking, resuming, the server in Rust. |
 | [09-element-editing.md](09-element-editing.md) | Editing one heading at a time as a range splice, the only editing surface: the menu, folding, keywords and what they log, priorities, refile, links, tables, resuming. |
 | [10-capture.md](10-capture.md) | **Built (1.5.0).** Capturing from other apps: share sheet, selected text, calendar files, `korgnote://capture`. No templates: one dialog that asks where, and shows what. |
 | [11-clocking.md](11-clocking.md) | Org's clocking: `CLOCK:` lines in the logbook, the running-clock bar, totals beside headings, clocked time in the calendar and its report, Android's ongoing notification. |

@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
 class OrgFixtureRoundTripTest {
 
     private val fixtures: List<File> =
-        File("../server/src/test/resources/org").listFiles()
+        File("src/jvmTest/resources/org").listFiles()
             ?.filter { it.isFile && it.extension == "org" }
             ?.sortedBy { it.name }
             .orEmpty()

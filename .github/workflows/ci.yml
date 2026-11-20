@@ -43,14 +43,38 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
+      # The server is Rust. The runner image ships rustup; stable is brought up to date, since
+      # Cargo.lock may ask for a newer toolchain than the image has.
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy
+          rustup default stable
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            server/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('server/Cargo.lock') }}
+
+      - name: Server tests
+        run: |
+          cargo clippy --locked --manifest-path server/Cargo.toml --all-targets -- -D warnings
+          cargo test --locked --manifest-path server/Cargo.toml
+
+      # The binary ExternalServerSyncTest runs the app's own sync code against, below.
+      - name: Server build
+        run: cargo build --locked --release --manifest-path server/Cargo.toml
+
       # The wasm tests run in headless Chrome, which the Ubuntu runner image ships with. The Android
       # SDK is preinstalled too; AGP downloads the compileSdk platform if it is missing.
       - name: Test and build
+        env:
+          KORGNOTE_SERVER_UNDER_TEST: server/target/release/korgnote-server
         run: >
           ./gradlew --continue
           :shared:jvmTest :shared:wasmJsTest
           :composeApp:jvmTest :composeApp:wasmJsTest
-          :server:test
           :composeApp:wasmJsBrowserDistribution
           :androidApp:assembleDebug
 

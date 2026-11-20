@@ -62,9 +62,10 @@ expected_cert=${KORGNOTE_CERT_SHA256:-2bb8626e0a758e5fc3284f833bfa7b81995ecb3315
 cd "$(dirname "$0")/.."
 android=androidApp/build.gradle.kts
 desktop=composeApp/build.gradle.kts
-server=server/build.gradle.kts
+server=server/Cargo.toml
+server_lock=server/Cargo.lock
 ios=iosApp/Configuration/Config.xcconfig
-versioned=("$android" "$desktop" "$server" "$ios")
+versioned=("$android" "$desktop" "$server" "$server_lock" "$ios")
 
 # --- Is this a state to release from? ----------------------------------------------------------
 
@@ -95,6 +96,7 @@ major=${BASH_REMATCH[1]} minor=${BASH_REMATCH[2]} patch=${BASH_REMATCH[3]}
 # The other files must say the same, or raising them would leave some behind.
 grep -q "^ *packageVersion = \"$current\"$" "$desktop" &&
   grep -q "^version = \"$current\"$" "$server" &&
+  grep -A1 -x "name = \"korgnote-server\"" "$server_lock" | grep -qx "version = \"$current\"" &&
   grep -q "^MARKETING_VERSION=$current$" "$ios" &&
   grep -q "^CURRENT_PROJECT_VERSION=$code$" "$ios" ||
   die "the version is not $current (build $code) in all of ${versioned[*]}; make them agree first."
@@ -197,13 +199,15 @@ if $raise; then
   perl -pi -e "s/^(\s*versionCode = )$code\$/\${1}$next_code/; s/^(\s*versionName = )\"$current\"/\${1}\"$next\"/" "$android"
   perl -pi -e "s/^(\s*packageVersion = )\"$current\"/\${1}\"$next\"/" "$desktop"
   perl -pi -e "s/^(version = )\"$current\"/\${1}\"$next\"/" "$server"
+  perl -0pi -e "s/(name = \"korgnote-server\"\\nversion = )\"$current\"/\${1}\"$next\"/" "$server_lock"
   perl -pi -e "s/^MARKETING_VERSION=$current\$/MARKETING_VERSION=$next/; s/^CURRENT_PROJECT_VERSION=$code\$/CURRENT_PROJECT_VERSION=$next_code/" "$ios"
   [[ $(git diff --numstat -- "${versioned[@]}" | wc -l) -eq ${#versioned[@]} ]] ||
     { restore; die "could not raise the version in all of ${versioned[*]}."; }
 fi
 
 if $tests; then
-  ./gradlew :shared:jvmTest :composeApp:jvmTest :server:test
+  cargo test --locked --manifest-path server/Cargo.toml
+  ./gradlew :shared:jvmTest :composeApp:jvmTest
 fi
 
 scripts/release.sh "$database"
