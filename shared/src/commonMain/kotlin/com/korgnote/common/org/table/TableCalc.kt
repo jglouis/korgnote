@@ -122,7 +122,7 @@ private sealed interface Value {
 }
 
 private val orgDate = Regex("""[\[<](\d{4})-(\d{2})-(\d{2})(?:\s+[^\s\d\]>]+)?[]>]""")
-private val orgTimestamp = Regex("""[\[<]\d{4}-\d{2}-\d{2}[^]>]*[]>]""")
+private val orgTimestamp = Regex("""[\[<]\d{4}-\d{2}-\d{2}[^]>\[<]*[]>]""")
 
 /** Evaluates one formula for one cell of [layout]: the one at [line], in [column]. */
 private class Evaluation(

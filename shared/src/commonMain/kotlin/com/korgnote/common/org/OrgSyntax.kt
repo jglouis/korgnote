@@ -186,3 +186,20 @@ object OrgSyntax {
     fun isTableLine(line: String) = line.isOrgTableLine()
     fun isTableRuleLine(line: String) = line.isOrgTableRuleLine()
 }
+
+/**
+ * How far from where it starts an inline construct is looked for: a link, a timestamp, emphasis. A
+ * longer one is not one, and stays text.
+ */
+const val INLINE_REACH = 4096
+
+/**
+ * The match of this pattern starting at [index] of [text], looked for within [INLINE_REACH] of it.
+ *
+ * Highlighting looks at each `[`, `<` and the like in a line. On Android every look copied the
+ * whole line first, so a line of 20,000 brackets took half a minute to show; looked at through a
+ * window, each costs what the window does. The patterns this serves look neither behind nor for
+ * the line's start or end, so the window changes nothing they find.
+ */
+fun Regex.matchNear(text: String, index: Int): MatchResult? =
+    if (text.length <= INLINE_REACH) matchAt(text, index) else matchAt(text.substring(index, minOf(text.length, index + INLINE_REACH)), 0)

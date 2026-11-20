@@ -2,6 +2,7 @@ package com.korgnote.app.ui
 
 import androidx.compose.ui.text.font.FontWeight
 import com.korgnote.common.org.edit.STATISTICS_COOKIE
+import com.korgnote.common.org.matchNear
 import com.korgnote.common.org.edit.progressOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
@@ -717,13 +718,13 @@ private fun AnnotatedString.Builder.appendInline(text: String, viewMode: Boolean
         var consumed = 0
         when (c) {
             '[' -> {
-                OrgSyntax.link.matchAt(text, i)?.let { m ->
+                OrgSyntax.link.matchNear(text, i)?.let { m ->
                     appendLink(m, viewMode)
                     consumed = m.value.length
-                } ?: OrgSyntax.footnoteReference.matchAt(text, i)?.let { m ->
+                } ?: OrgSyntax.footnoteReference.matchNear(text, i)?.let { m ->
                     withStyle(SpanStyle(color = OrgColors.footnote)) { append(m.value) }
                     consumed = m.value.length
-                } ?: OrgSyntax.statistics.matchAt(text, i)?.let { m ->
+                } ?: OrgSyntax.statistics.matchNear(text, i)?.let { m ->
                     // Read as it is: all done stands out from part done.
                     val complete = viewMode && STATISTICS_COOKIE.matchEntire(m.value)?.let(::progressOf)
                         ?.let { it.total > 0 && it.done >= it.total } == true
@@ -734,13 +735,13 @@ private fun AnnotatedString.Builder.appendInline(text: String, viewMode: Boolean
                     }
                     withStyle(style) { append(m.value) }
                     consumed = m.value.length
-                } ?: OrgSyntax.timestamp.matchAt(text, i)?.let { m ->
+                } ?: OrgSyntax.timestamp.matchNear(text, i)?.let { m ->
                     appendTimestamp(m.value, viewMode)
                     consumed = m.value.length
                 }
             }
 
-            '<' -> OrgSyntax.timestamp.matchAt(text, i)?.let { m ->
+            '<' -> OrgSyntax.timestamp.matchNear(text, i)?.let { m ->
                 appendTimestamp(m.value, viewMode)
                 consumed = m.value.length
             } ?: if (viewMode) {
@@ -767,7 +768,7 @@ private fun AnnotatedString.Builder.appendInline(text: String, viewMode: Boolean
             }
 
             'h', 'f', 'm' -> if (i == 0 || !text[i - 1].isLetterOrDigit()) {
-                OrgSyntax.url.matchAt(text, i)?.let { m ->
+                OrgSyntax.url.matchNear(text, i)?.let { m ->
                     appendUrl(m.value, m.value, viewMode)
                     consumed = m.value.length
                 }
@@ -799,7 +800,7 @@ private fun AnnotatedString.Builder.appendInline(text: String, viewMode: Boolean
 /** Appends the emphasis run marked by [marker] at [i] of [text], returning its length; null when none starts there. */
 private fun AnnotatedString.Builder.appendEmphasisAt(text: String, i: Int, marker: Char, viewMode: Boolean): Int? {
     if (!isEmphasisPre(text, i)) return null
-    val m = OrgSyntax.emphasis.getValue(marker).matchAt(text, i) ?: return null
+    val m = OrgSyntax.emphasis.getValue(marker).matchNear(text, i) ?: return null
     if (!isEmphasisPost(text, i + m.value.length)) return null
     appendEmphasis(emphasisStyles.getValue(marker), m.groupValues[1], viewMode)
     return m.value.length

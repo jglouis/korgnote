@@ -324,28 +324,28 @@ private fun addInline(
         var consumed = 0
         when (text[i]) {
             '[' -> {
-                OrgSyntax.link.matchAt(text, i)?.let { m ->
+                OrgSyntax.link.matchNear(text, i)?.let { m ->
                     addLink(m, offset + i, nesting, add)
                     consumed = m.value.length
-                } ?: OrgSyntax.footnoteReference.matchAt(text, i)?.let { m ->
+                } ?: OrgSyntax.footnoteReference.matchNear(text, i)?.let { m ->
                     add(offset + i until (offset + i + m.value.length), OrgSpanKind.Footnote, nesting)
                     consumed = m.value.length
-                } ?: OrgSyntax.statistics.matchAt(text, i)?.let { m ->
+                } ?: OrgSyntax.statistics.matchNear(text, i)?.let { m ->
                     add(offset + i until (offset + i + m.value.length), OrgSpanKind.Statistics, nesting)
                     consumed = m.value.length
-                } ?: OrgSyntax.timestamp.matchAt(text, i)?.let { m ->
+                } ?: OrgSyntax.timestamp.matchNear(text, i)?.let { m ->
                     add(offset + i until (offset + i + m.value.length), OrgSpanKind.Timestamp, nesting)
                     consumed = m.value.length
                 }
             }
 
-            '<' -> OrgSyntax.timestamp.matchAt(text, i)?.let { m ->
+            '<' -> OrgSyntax.timestamp.matchNear(text, i)?.let { m ->
                 add(offset + i until (offset + i + m.value.length), OrgSpanKind.Timestamp, nesting)
                 consumed = m.value.length
             }
 
             'h', 'f', 'm' -> if (i == 0 || !text[i - 1].isLetterOrDigit()) {
-                OrgSyntax.url.matchAt(text, i)?.let { m ->
+                OrgSyntax.url.matchNear(text, i)?.let { m ->
                     add(offset + i until (offset + i + m.value.length), OrgSpanKind.Url, nesting)
                     consumed = m.value.length
                 }
@@ -353,7 +353,7 @@ private fun addInline(
 
             '*', '/', '_', '+', '=', '~' -> if (OrgSyntax.emphasisMayOpenAt(text, i)) {
                 val marker = text[i]
-                OrgSyntax.emphasis.getValue(marker).matchAt(text, i)?.let { m ->
+                OrgSyntax.emphasis.getValue(marker).matchNear(text, i)?.let { m ->
                     val end = i + m.value.length
                     if (OrgSyntax.emphasisMayCloseAt(text, end)) {
                         addEmphasis(marker, m, offset + i, nesting, add)

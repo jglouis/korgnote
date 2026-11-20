@@ -74,7 +74,7 @@ private val ENTITY = Regex("""\\([A-Za-z]+[0-9]*)(\{\})?""")
  * none starts there or the name is not one Org knows.
  */
 fun orgEntityAt(text: String, index: Int): Pair<String, Int>? {
-    val m = ENTITY.matchAt(text, index) ?: return null
+    val m = ENTITY.matchNear(text, index) ?: return null
     val shown = ORG_ENTITIES[m.groupValues[1]] ?: return null
     // Without `{}`, the name must end at a non-letter, so `\alphabet` is no `\alpha` followed by `bet`.
     if (m.groupValues[2].isEmpty()) {
@@ -91,7 +91,7 @@ fun orgEntityAt(text: String, index: Int): Pair<String, Int>? {
  */
 fun orgScriptAt(text: String, index: Int): Pair<String, Int>? {
     if (index == 0 || text[index - 1].isWhitespace()) return null
-    val m = SCRIPT.matchAt(text, index) ?: return null
+    val m = SCRIPT.matchNear(text, index) ?: return null
     return m.groupValues[1] to m.value.length
 }
 
@@ -99,7 +99,7 @@ private val SCRIPT = Regex("""[_^]\{([^{}\n]+)\}""")
 
 /** A `<<target>>` or `<<<radio target>>>` at [index] as `(its text, how many characters it takes)`, or null. */
 fun orgTargetAt(text: String, index: Int): Pair<String, Int>? {
-    val m = OrgSyntax.target.matchAt(text, index) ?: return null
+    val m = OrgSyntax.target.matchNear(text, index) ?: return null
     if (m.groupValues[1].length != m.groupValues[3].length) return null
     return m.groupValues[2] to m.value.length
 }

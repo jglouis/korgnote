@@ -1,6 +1,9 @@
 package com.korgnote.common
 
+import com.korgnote.common.org.INLINE_REACH
+import com.korgnote.common.org.OrgSpanKind
 import com.korgnote.common.org.OrgSyntax
+import com.korgnote.common.org.orgSpans
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -44,6 +47,23 @@ class OrgSyntaxSpeedTest {
         val line = "<2024-01-01 ".repeat(20_000)
         inTime("a line of open stamps") { assertNull(OrgSyntax.timestamp.find(line)) }
         inTime("the same, one closed at the end") { assertEquals("<2024-01-01 Mon>", OrgSyntax.timestamp.findAll("$line<2024-01-01 Mon>").single().value) }
+    }
+
+    /**
+     * Highlighting looks at each bracket of a line through a window ([INLINE_REACH]): on Android a
+     * look at the whole line copied it, so a line of 20,000 brackets took half a minute to open.
+     * What is far into a long line is still found.
+     */
+    @Test
+    fun aLineOfBracketsIsHighlightedInOnePassAndWhatIsFarIntoItIsFound() {
+        inTime("a line of open brackets") { orgSpans("${"[<a ".repeat(20_000)}\n") }
+        val filler = "word ".repeat(3_000)
+        val line = "$filler[[https://example.com][a link]] $filler<2026-09-25 Fri> *bold* [2/5]"
+        val found = orgSpans("$line\n").map { it.kind to line.substring(it.range.first, it.range.last + 1) }
+        assertTrue(OrgSpanKind.LinkDescription to "a link" in found, "$found")
+        assertTrue(OrgSpanKind.Timestamp to "<2026-09-25 Fri>" in found, "$found")
+        assertTrue(found.any { it.first == OrgSpanKind.Bold && "bold" in it.second }, "$found")
+        assertTrue(OrgSpanKind.Statistics to "[2/5]" in found, "$found")
     }
 
     @Test
