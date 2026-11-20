@@ -4,6 +4,7 @@ import com.korgnote.common.pairing.PairingLink
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -12,8 +13,10 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Pairing trusts the certificate its link names and nothing else — not the one paired before — and
@@ -26,6 +29,7 @@ class DevicePairingTest {
     private val before = PairedServer("server-1", "Old", listOf("192.168.1.20"), 8443, "cd".repeat(32), "dev-1", "old-token")
     private val pinsGiven = mutableListOf<Set<String>>()
     private val hosts = mutableListOf<String>()
+    private val bodies = mutableListOf<String>()
 
     private fun pairing(
         settings: SettingsRepository,
@@ -38,6 +42,7 @@ class DevicePairingTest {
             pinsGiven += pins.accepted()
             HttpClient(MockEngine { request ->
                 hosts += request.url.host
+                bodies += request.body.toByteArray().decodeToString()
                 failures[request.url.host]?.let { throw it }
                 if (request.url.host in unreachable) throw RuntimeException("no route")
                 respond(
@@ -47,6 +52,38 @@ class DevicePairingTest {
                 )
             }) { install(ContentNegotiation) { json() } }
         }, settings)
+
+    @Test
+    fun theOldEntryAndItsTokenGoOnlyToTheServerTheyAreFor() = runTest {
+        // The same server scanned again, for new addresses: it is told which entry to replace.
+        val again = link.copy(serverId = before.serverId, fingerprint = before.fingerprint)
+        pairing(InMemorySettingsRepository(initialPairedServer = before)).pair(again, "Phone")
+        assertTrue(bodies.single().contains("old-token"), bodies.single())
+        assertTrue(bodies.single().contains(before.deviceId), bodies.single())
+
+        // Another server that gives itself the same id is not the same server: its certificate says so.
+        bodies.clear()
+        val lookAlike = link.copy(serverId = before.serverId)
+        pairing(InMemorySettingsRepository(initialPairedServer = before)).pair(lookAlike, "Phone")
+        assertFalse(bodies.single().contains("old-token"), bodies.single())
+        assertFalse(bodies.single().contains(before.deviceId), bodies.single())
+    }
+
+    @Test
+    fun whatMustBeAgreedToBeforePairing() {
+        val same = link.copy(serverId = before.serverId, fingerprint = before.fingerprint.uppercase())
+        // The app's own scanner or paste box, with nothing to replace, or the same server again.
+        assertNull(confirmationFor(link, current = null, fromOutside = false))
+        assertNull(confirmationFor(same, current = before, fromOutside = false))
+        // A link another app opened, whatever it names.
+        assertEquals(PairingConfirmation.FromOutside, confirmationFor(link, current = null, fromOutside = true))
+        assertEquals(PairingConfirmation.FromOutside, confirmationFor(same, current = before, fromOutside = true))
+        // Another server in place of the one paired, however the link came: and one that only
+        // claims the paired server's id is another server.
+        assertEquals(PairingConfirmation.ReplacesAnother, confirmationFor(link, current = before, fromOutside = false))
+        assertEquals(PairingConfirmation.ReplacesAnother, confirmationFor(link, current = before, fromOutside = true))
+        assertEquals(PairingConfirmation.ReplacesAnother, confirmationFor(link.copy(serverId = before.serverId), current = before, fromOutside = false))
+    }
 
     @Test
     fun theLinksCertificateAloneIsTrusted() = runTest {

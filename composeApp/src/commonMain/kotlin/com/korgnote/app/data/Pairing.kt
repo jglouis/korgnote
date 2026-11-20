@@ -46,6 +46,14 @@ data class PairedServer(
 
     fun encode(): String = Json.encodeToString(this)
 
+    /**
+     * Whether [link] names this server: the same id and the same certificate. The id alone is no
+     * proof — anyone can write it in a link of their own — while a certificate the server made is
+     * one only it can show.
+     */
+    fun isServerOf(link: PairingLink): Boolean =
+        serverId == link.serverId && fingerprint.equals(link.fingerprint, ignoreCase = true)
+
     companion object {
         fun decode(stored: String?): PairedServer? =
             stored?.takeIf { it.isNotBlank() }?.let { runCatching { Json.decodeFromString<PairedServer>(it) }.getOrNull() }
@@ -103,6 +111,30 @@ object PairingLinks {
         pending.value = uri
         return true
     }
+}
+
+/**
+ * Why pairing with a link must be agreed to first. A link names the server and the certificate this
+ * device will trust from then on, and whoever wrote the link chose both: a web page or a message
+ * can open one as well as the camera can.
+ */
+enum class PairingConfirmation {
+    /** It came from outside the app, not from its own scanner or paste box. */
+    FromOutside,
+
+    /** This device is paired with another server, which this one would take the place of. */
+    ReplacesAnother,
+}
+
+/**
+ * What must be agreed to before pairing with [link], when [current] is the server this device is
+ * paired with; null when nothing need be: the app's own scanner or paste box, and no other server
+ * to replace.
+ */
+fun confirmationFor(link: PairingLink, current: PairedServer?, fromOutside: Boolean): PairingConfirmation? = when {
+    current != null && !current.isServerOf(link) -> PairingConfirmation.ReplacesAnother
+    fromOutside -> PairingConfirmation.FromOutside
+    else -> null
 }
 
 /** How a pairing went. */
@@ -168,7 +200,8 @@ class DevicePairing(
     private val probe: suspend (host: String, port: Int) -> PairingProblem? = { _, _ -> null },
 ) {
     suspend fun pair(link: PairingLink, deviceName: String): PairingResult {
-        val previous = settings.getPairedServer()?.takeIf { it.serverId == link.serverId }
+        // The entry it replaces, and the token that proves it, go only to the server they are for.
+        val previous = settings.getPairedServer()?.takeIf { it.isServerOf(link) }
         val request = PairRequest(link.code, deviceName, previous?.deviceId, previous?.token)
         val client = newClient(CertificatePins { link.fingerprint })
         val computer = link.serverName.ifBlank { getString(Res.string.settings_the_computer) }

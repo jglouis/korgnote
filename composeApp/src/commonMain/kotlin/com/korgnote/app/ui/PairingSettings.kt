@@ -30,8 +30,10 @@ import androidx.compose.ui.unit.dp
 import com.korgnote.app.data.DevicePairing
 import com.korgnote.app.data.InMemorySettingsRepository
 import com.korgnote.app.data.PairedServer
+import com.korgnote.app.data.PairingConfirmation
 import com.korgnote.app.data.PairingResult
 import com.korgnote.app.data.SettingsRepository
+import com.korgnote.app.data.confirmationFor
 import com.korgnote.common.pairing.PairingLink
 import com.korgnote.common.pairing.PairingLinkCheck
 import korgnote.composeapp.generated.resources.Res
@@ -42,7 +44,12 @@ import korgnote.composeapp.generated.resources.settings_pair
 import korgnote.composeapp.generated.resources.settings_pair_how_to
 import korgnote.composeapp.generated.resources.settings_pair_not_a_link
 import korgnote.composeapp.generated.resources.ok
+import korgnote.composeapp.generated.resources.settings_pair_confirm_outside
+import korgnote.composeapp.generated.resources.settings_pair_confirm_title
 import korgnote.composeapp.generated.resources.settings_pair_failed_title
+import korgnote.composeapp.generated.resources.settings_pair_replace
+import korgnote.composeapp.generated.resources.settings_pair_replace_text
+import korgnote.composeapp.generated.resources.settings_pair_replace_title
 import korgnote.composeapp.generated.resources.settings_pair_incomplete
 import korgnote.composeapp.generated.resources.settings_pair_no_address
 import korgnote.composeapp.generated.resources.settings_pair_title
@@ -69,7 +76,10 @@ fun PairingSettings(
     pairing: DevicePairing?,
     /** After pairing or forgetting, so that syncing starts again against what is now set. */
     onChanged: () -> Unit,
-    /** A link that arrived from outside — another app opened one — to pair with at once. */
+    /**
+     * A link that arrived from outside — another app opened one: the camera, but as well a web page
+     * or a message — to pair with once it is agreed to.
+     */
     incomingLink: String? = null,
     onIncomingLinkUsed: () -> Unit = {},
     /** Says where the code is shown; off where the screen around it already says so. */
@@ -85,9 +95,31 @@ fun PairingSettings(
     /** Why the last try did not pair, with what to do: a dialog, as pairing is not to fail unnoticed. */
     var failure by remember { mutableStateOf<String?>(null) }
     var forgetting by remember { mutableStateOf(false) }
+    /** A link waiting to be agreed to, with why it must be. */
+    var confirming by remember { mutableStateOf<Pair<PairingLink, PairingConfirmation>?>(null) }
     val deviceName = rememberDeviceName()
 
-    fun pairWith(text: String) = scope.launch {
+    suspend fun pairNow(link: PairingLink) {
+        if (pairing == null) return
+        busy = true
+        message = getString(Res.string.settings_pairing_with, link.serverName.ifBlank { getString(Res.string.settings_the_computer) })
+        when (val result = pairing.pair(link, deviceName)) {
+            is PairingResult.Paired -> {
+                paired = result.server
+                pasted = ""
+                onChanged()
+                message = getString(Res.string.settings_paired_with, result.server.serverName)
+            }
+            is PairingResult.Failed -> {
+                message = null
+                failure = result.reason
+            }
+        }
+        busy = false
+    }
+
+    /** [fromOutside]: another app opened the link, rather than this one's scanner or paste box. */
+    fun pairWith(text: String, fromOutside: Boolean = false) = scope.launch {
         message = null
         val link = when (val check = PairingLink.check(text)) {
             is PairingLinkCheck.Valid -> check.link
@@ -106,27 +138,16 @@ fun PairingSettings(
             }
         }
         if (pairing == null) return@launch
-        busy = true
-        message = getString(Res.string.settings_pairing_with, link.serverName.ifBlank { getString(Res.string.settings_the_computer) })
-        when (val result = pairing.pair(link, deviceName)) {
-            is PairingResult.Paired -> {
-                paired = result.server
-                pasted = ""
-                onChanged()
-                message = getString(Res.string.settings_paired_with, result.server.serverName)
-            }
-            is PairingResult.Failed -> {
-                message = null
-                failure = result.reason
-            }
+        when (val needed = confirmationFor(link, repo.getPairedServer(), fromOutside)) {
+            null -> pairNow(link)
+            else -> confirming = link to needed
         }
-        busy = false
     }
 
     LaunchedEffect(incomingLink) {
         incomingLink?.let {
             onIncomingLinkUsed()
-            pairWith(it)
+            pairWith(it, fromOutside = true)
         }
     }
     val scan = rememberPairingScanner { pairWith(it) }
@@ -142,6 +163,41 @@ fun PairingSettings(
                 }
             },
             dismissButton = { TextButton(onClick = { failure = null }) { Text(stringResource(Res.string.ok)) } },
+        )
+    }
+
+    confirming?.let { (link, why) ->
+        val theComputer = stringResource(Res.string.settings_the_computer)
+        val name = link.serverName.ifBlank { theComputer }
+        val where = link.addresses.joinToString(", ") + ":" + link.port
+        val current = repo.getPairedServer()
+        AlertDialog(
+            onDismissRequest = { confirming = null },
+            title = {
+                Text(
+                    when (why) {
+                        PairingConfirmation.ReplacesAnother -> stringResource(Res.string.settings_pair_replace_title, current?.serverName ?: theComputer, name)
+                        PairingConfirmation.FromOutside -> stringResource(Res.string.settings_pair_confirm_title, name)
+                    },
+                )
+            },
+            text = {
+                Text(
+                    when (why) {
+                        PairingConfirmation.ReplacesAnother -> stringResource(Res.string.settings_pair_replace_text, current?.serverName ?: theComputer, name, where)
+                        PairingConfirmation.FromOutside -> stringResource(Res.string.settings_pair_confirm_outside, name, where)
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirming = null
+                    scope.launch { pairNow(link) }
+                }) {
+                    Text(stringResource(if (why == PairingConfirmation.ReplacesAnother) Res.string.settings_pair_replace else Res.string.settings_pair))
+                }
+            },
+            dismissButton = { CancelButton(onClick = { confirming = null }) },
         )
     }
 

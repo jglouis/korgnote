@@ -73,4 +73,9 @@
     <string name="settings_scan_again">Scan again</string>
     <string name="settings_paste_link">Or paste the pairing link</string>
     <string name="settings_pair">Pair</string>
+    <string name="settings_pair_confirm_title">Pair with %1$s?</string>
+    <string name="settings_pair_confirm_outside">A link opened from outside KorgNote asks to pair this device with %1$s, at %2$s. Pair only if you just showed this code on your own computer's Devices page: the computer you pair with gets the notes you write here.</string>
+    <string name="settings_pair_replace_title">Replace %1$s with %2$s?</string>
+    <string name="settings_pair_replace_text">This device is paired with %1$s. Pairing with %2$s, at %3$s, makes it sync with that computer instead: the notes this device has already synced with %1$s are taken off it (they stay on %1$s), and changes not yet sent go to %2$s. Pair only if you just showed this code on your own computer's Devices page.</string>
+    <string name="settings_pair_replace">Replace</string>
 </resources>

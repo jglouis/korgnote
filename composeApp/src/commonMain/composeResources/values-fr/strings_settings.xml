@@ -72,4 +72,9 @@
     <string name="settings_scan_again">Scanner à nouveau</string>
     <string name="settings_paste_link">Ou collez le lien d’association</string>
     <string name="settings_pair">Associer</string>
+    <string name="settings_pair_confirm_title">Associer à %1$s ?</string>
+    <string name="settings_pair_confirm_outside">Un lien ouvert hors de KorgNote demande d’associer cet appareil à %1$s, à %2$s. N’acceptez que si vous venez d’afficher ce code sur la page Devices de votre propre ordinateur : l’ordinateur associé reçoit les notes que vous écrivez ici.</string>
+    <string name="settings_pair_replace_title">Remplacer %1$s par %2$s ?</string>
+    <string name="settings_pair_replace_text">Cet appareil est associé à %1$s. L’associer à %2$s, à %3$s, le fait se synchroniser avec cet ordinateur à la place : les notes déjà synchronisées avec %1$s sont retirées de cet appareil (elles restent sur %1$s), et les modifications pas encore envoyées partent vers %2$s. N’acceptez que si vous venez d’afficher ce code sur la page Devices de votre propre ordinateur.</string>
+    <string name="settings_pair_replace">Remplacer</string>
 </resources>
