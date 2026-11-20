@@ -1,6 +1,6 @@
 [package]
 name = "korgnote-server"
-version = "1.8.1"
+version = "1.9.0"
 edition = "2024"
 description = "The KorgNote sync server: keeps the notes in a folder and syncs them with paired devices."
 license = "GPL-3.0-or-later"
