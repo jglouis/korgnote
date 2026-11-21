@@ -16,7 +16,7 @@ hyper = { version = "1.12.0", features = ["http1", "http2", "server"] }
 hyper-util = { version = "0.1.21", features = ["tokio", "server-auto", "http1", "http2", "service"] }
 libc = "0.2.191"
 nix = { version = "0.32.0", features = ["net", "user", "resource"] }
-notify = { version = "8.2.2", default-features = false, features = ["macos_fsevent"] }
+notify = { version = "9.0.0", default-features = false, features = ["macos_fsevent"] }
 p12-keystore = "0.4.1"
 qrcodegen = "1.8.0"
 rcgen = { version = "0.14.10", default-features = false, features = ["ring"] }
