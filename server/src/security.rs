@@ -7,11 +7,14 @@ use std::net::IpAddr;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-/// Who may use what, as the server enforces it: `devices` for the network, and the plain port for
-/// this computer only.
+/// Describes how devices can access and pair with this server.
+///
+/// Stores the shared device registry, optional pairing information advertised
+/// through QR codes, and the set of non-loopback addresses that should be
+/// treated as referring to this computer.
 pub struct ServerAccess {
     pub devices: Arc<DeviceRegistry>,
-    /// What a pairing QR code says about this server; None where devices cannot pair.
+    /// Optional details about the pairing associated with this item.
     pub pairing: Option<PairingDetails>,
     /// Addresses besides loopback that the plain port takes as this computer: in a container, the
     /// network's gateway, which is where the host's published port arrives from.
@@ -25,7 +28,28 @@ impl ServerAccess {
     }
 }
 
-/// The server's side of a pairing link, all but the one-time code and the addresses of the moment.
+/// Details advertised to clients during pairing with this server.
+///
+/// `PairingDetails` contains the server identity, connection information, and
+/// address sources used to build pairing data such as QR codes or device-list
+/// entries.
+///
+/// # Fields
+///
+/// - `server_id`: Stable identifier for this server.
+/// - `server_name`: Human-readable server name shown to clients.
+/// - `fingerprint`: Server fingerprint used by clients to verify the server identity.
+/// - `port`: TCP port on which the server accepts pairing or connection requests.
+/// - `configured_addresses`: Addresses explicitly provided at startup.
+/// - `interfaces`: Function used to discover this computer's current local interface
+///   addresses. This may return no addresses when running inside a container.
+/// - `last_addresses`: Most recent addresses supplied by the host pairing script,
+///   typically the addresses used when the latest QR code was generated.
+///
+/// The address fields may come from different sources. `configured_addresses` are
+/// startup-provided values, `interfaces` reports addresses discovered from the
+/// local machine, and `last_addresses` caches addresses reported externally by
+/// `scripts/pair.sh`.
 pub struct PairingDetails {
     pub server_id: String,
     pub server_name: String,

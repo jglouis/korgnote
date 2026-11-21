@@ -104,42 +104,59 @@ impl ServerConfig {
         )
     }
 
-    /// From the process's own arguments and environment.
+    /// Create a [ServerConfig] from the process's own arguments and environment.
+    /// Arguments takes precedence over environment variables.
     pub fn from_process() -> Self {
         let arguments: Vec<String> = std::env::args().skip(1).collect();
-        let property = move |name: &str| {
+        let read_argument = |name: &str| {
             arguments.iter().find_map(|argument| {
-                let argument = argument.strip_prefix("-D").or_else(|| argument.strip_prefix("--")).unwrap_or(argument);
-                argument.strip_prefix(name).and_then(|rest| rest.strip_prefix('=')).map(str::to_string)
+                let argument = argument
+                    .strip_prefix("-D")
+                    .or_else(|| argument.strip_prefix("--"))
+                    .unwrap_or(argument);
+                argument
+                    .strip_prefix(name)
+                    .and_then(|rest| rest.strip_prefix('='))
+                    .map(str::to_string)
             })
         };
-        Self::from_environment(&property, &|name| std::env::var(name).ok())
+        let read_variable = &|name: &str| std::env::var(name).ok();
+        Self::from_environment(&read_argument, read_variable)
     }
 
-    /// What is set by a property, `-Dnotes.dir=…`, wins over the environment.
-    pub fn from_environment(property: &dyn Fn(&str) -> Option<String>, read: &dyn Fn(&str) -> Option<String>) -> Self {
-        let value = |name: &str| read(name).map(|v| trim(&v).to_string()).filter(|v| !v.is_empty());
-        let property_value = |name: &str| property(name).map(|v| trim(&v).to_string()).filter(|v| !v.is_empty());
-        let is_set = |name: &str| value(name).is_some_and(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"));
-        let expanded = |path: &str| expand_path(path, read);
-        let defaults = ServerConfig::default();
-        let https_port = value(HTTPS_PORT_VARIABLE).and_then(|v| to_int(&v)).unwrap_or(defaults.https_port);
+    /// Create a [ServerConfig] from the environment.
+    pub fn from_environment(read_argument: &dyn Fn(&str) -> Option<String>, read_variable: &dyn Fn(&str) -> Option<String>) -> Self {
+        let read_value = |name: &str| read_variable(name)
+            .map(|v| trim(&v).to_string()).filter(|v| !v.is_empty());
+        let read_property_value = |name: &str| read_argument(name)
+            .map(|v| trim(&v).to_string()).filter(|v| !v.is_empty());
+        let read_is_set = |name: &str| read_value(name)
+            .is_some_and(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"));
+        let read_expanded = |path: &str| expand_path(path, read_variable);
+        let read_defaults = ServerConfig::default();
+        let read_https_port = read_value(HTTPS_PORT_VARIABLE)
+            .and_then(|v| to_int(&v)).unwrap_or(read_defaults.https_port);
         ServerConfig {
-            http_host: value(HTTP_HOST_VARIABLE).unwrap_or(defaults.http_host),
-            http_port: value(PORT_VARIABLE).and_then(|v| to_int(&v)).unwrap_or(defaults.http_port),
-            https_host: defaults.https_host,
-            https_port,
-            advertised_port: value(ADVERTISED_PORT_VARIABLE).and_then(|v| to_int(&v)).unwrap_or(https_port),
-            state_dir: value(STATE_DIR_VARIABLE).map(|v| PathBuf::from(expanded(&v))).unwrap_or(defaults.state_dir),
-            server_name: value(SERVER_NAME_VARIABLE).unwrap_or(defaults.server_name),
-            advertised_addresses: value(ADDRESSES_VARIABLE)
-                .map(|v| v.split([',', ' ']).map(|address| trim(address).to_string()).filter(|address| !address.is_empty()).collect())
+            http_host: read_value(HTTP_HOST_VARIABLE).unwrap_or(read_defaults.http_host),
+            http_port: read_value(PORT_VARIABLE).and_then(|v| to_int(&v)).unwrap_or(read_defaults.http_port),
+            https_host: read_defaults.https_host,
+            https_port: read_https_port,
+            advertised_port: read_value(ADVERTISED_PORT_VARIABLE).and_then(|v| to_int(&v)).unwrap_or(read_https_port),
+            state_dir: read_value(STATE_DIR_VARIABLE).map(|v| PathBuf::from(read_expanded(&v))).unwrap_or(read_defaults.state_dir),
+            server_name: read_value(SERVER_NAME_VARIABLE).unwrap_or(read_defaults.server_name),
+            advertised_addresses: read_value(ADDRESSES_VARIABLE)
+                .map(|v| v.split([',', ' '])
+                    .map(|address| trim(address).to_string())
+                    .filter(|address| !address.is_empty())
+                    .collect())
                 .unwrap_or_default(),
-            leftover_token: value(TOKEN_VARIABLE).is_some(),
-            notes_dir: PathBuf::from(expanded(&property_value(NOTES_DIR_PROPERTY).or_else(|| value(NOTES_DIR_VARIABLE)).unwrap_or_else(|| DEFAULT_NOTES_DIR.to_string()))),
-            require_notes_dir: is_set(REQUIRE_NOTES_DIR_VARIABLE),
-            web_client_dir: property_value(WEB_DIR_PROPERTY).or_else(|| value(WEB_DIR_VARIABLE)),
-            serve_web_client: !is_set(DISABLE_WEB_VARIABLE),
+            leftover_token: read_value(TOKEN_VARIABLE).is_some(),
+            notes_dir: PathBuf::from(read_expanded(&read_property_value(NOTES_DIR_PROPERTY)
+                .or_else(|| read_value(NOTES_DIR_VARIABLE))
+                .unwrap_or_else(|| DEFAULT_NOTES_DIR.to_string()))),
+            require_notes_dir: read_is_set(REQUIRE_NOTES_DIR_VARIABLE),
+            web_client_dir: read_property_value(WEB_DIR_PROPERTY).or_else(|| read_value(WEB_DIR_VARIABLE)),
+            serve_web_client: !read_is_set(DISABLE_WEB_VARIABLE),
         }
     }
 
@@ -173,20 +190,40 @@ impl ServerConfig {
         Ok(FileStore::with_mode(&self.notes_dir, true))
     }
 
-    /// The build of the web client to serve at `/`, if it should be served and one can be found.
+    /// Finds the directory containing the web client to serve.
+    ///
+    /// Returns `None` when serving the web client is disabled via
+    /// `DISABLE_WEB_VARIABLE`. Otherwise, searches for an existing web client
+    /// directory in this order:
+    ///
+    /// 1. Paths explicitly configured in `self.web_client_dir`.
+    /// 2. Built client output directories under `composeApp`.
+    /// 3. Built client output directories under `../composeApp`.
+    ///
+    /// Both production and development wasm output directories are considered:
+    ///
+    /// - `build/dist/wasmJs/productionExecutable`
+    /// - `build/dist/wasmJs/developmentExecutable`
+    ///
+    /// Logs whether serving is disabled, which client directory was found, or the
+    /// current working directory used while searching.
+    ///
+    /// Returns the first existing candidate path, or `None` if no web client
+    /// directory could be found.
     pub fn find_web_client(&self) -> Option<PathBuf> {
         if !self.serve_web_client {
             crate::info!("Not serving the web client: {DISABLE_WEB_VARIABLE} is set");
             return None;
         }
-        // The repository root and a module's folder, which is where the server is started from in a checkout.
         let built = ["composeApp", "../composeApp"]
             .iter()
             .flat_map(|module| [format!("{module}/build/dist/wasmJs/productionExecutable"), format!("{module}/build/dist/wasmJs/developmentExecutable")]);
-        let found = self.web_client_dir.iter().cloned().chain(built).map(PathBuf::from).find(|candidate| candidate.exists());
+        let found = self.web_client_dir.iter().cloned()
+            .chain(built).map(PathBuf::from).find(|candidate| candidate.exists());
         match &found {
             Some(found) => crate::info!("Serving the web client from {}", absolute(found).display()),
-            None => crate::info!("No web client to serve, looking from {}", std::env::current_dir().map(|here| here.display().to_string()).unwrap_or_default()),
+            None => crate::info!("No web client to serve, looking from {}", std::env::current_dir()
+                .map(|here| here.display().to_string()).unwrap_or_default()),
         }
         found
     }

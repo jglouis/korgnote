@@ -38,28 +38,35 @@ pub fn raise_open_file_limit() {
 /// How many connections the secure port takes at once: `MOST_CONNECTIONS`, or three quarters of
 /// the files the process may open, less some for the notes, the plain port and the watcher.
 fn most_connections() -> usize {
-    let files = nix::sys::resource::getrlimit(nix::sys::resource::Resource::RLIMIT_NOFILE).map(|(soft, _)| soft).unwrap_or(1024);
+    let files = nix::sys::resource::getrlimit(nix::sys::resource::Resource::RLIMIT_NOFILE)
+        .map(|(soft, _)| soft)
+        .unwrap_or(1024);
     let room = (files.min(1 << 20) as usize * 3 / 4).saturating_sub(32);
     room.clamp(16, MOST_CONNECTIONS)
 }
 
-/// The connections open to the secure port.
+/// Tracks admission limits and shared admission state.
 ///
-/// Who a connection is cannot be told by where it comes from: behind Docker Desktop every one
-/// comes from the same address, a phone's and a stranger's alike. What tells them apart is a
-/// paired device's token. So connections that have shown none, strangers, take their turn in a
-/// queue of [App::most_strangers] at most, and a new one past it takes the place of the oldest:
-/// someone who fills the queue does not keep a phone out, as the phone's connection is the newest
-/// and shows its token in a moment. A connection that has shown one is never let go for a new one,
-/// nor is one waiting for its pairing to be allowed.
+/// `Admission` coordinates access by enforcing an overall maximum (`most`) and
+/// a separate maximum for stranger entries (`most_strangers`). Mutable state is
+/// stored in `open` behind a mutex, while `last_logged` records the last log time
+/// for rate-limited or diagnostic logging.
 struct Admission {
     most: usize,
     most_strangers: usize,
-    open: Mutex<Open>,
+    open_connections: Mutex<OpenConnections>,
     last_logged: AtomicU64,
 }
 
-struct Open {
+/// Tracks open connections and their token-pairing state.
+///
+/// Connections that have not yet presented a token are kept in `strangers` in
+/// oldest-first order. Connections that have presented a token are counted in
+/// `paired`.
+///
+/// The `next` value is the next connection identifier or sequence number to
+/// allocate.
+struct OpenConnections {
     next: u64,
     /// Connections that had shown no token when last looked at, the oldest first.
     strangers: VecDeque<Stranger>,
@@ -67,6 +74,20 @@ struct Open {
     paired: usize,
 }
 
+/// Represents a peer connection that is not yet fully accepted, identified, or
+/// integrated into the main peer set.
+///
+/// `Stranger` keeps the peer handle together with shared shutdown/cleanup state
+/// used to coordinate its lifetime across asynchronous tasks.
+///
+/// # Fields
+///
+/// - `id`: Unique identifier assigned to this stranger.
+/// - `peer`: The underlying peer connection or peer metadata.
+/// - `let_go`: Notification used to signal that the peer should be released,
+///   disconnected, or allowed to terminate.
+/// - `gone`: Shared atomic flag indicating whether the peer has already left or
+///   has been marked as terminated.
 struct Stranger {
     id: u64,
     peer: Peer,
@@ -74,8 +95,19 @@ struct Stranger {
     gone: Arc<AtomicBool>,
 }
 
-/// One connection's place, given back when it closes; `let_go` is told when its place is given
-/// to a newer connection.
+/// Represents a ticket associated with a shared admission state.
+///
+/// A `Ticket` identifies a granted or pending admission using a unique `id` and
+/// holds shared synchronization state used to coordinate release or cancellation.
+///
+/// The ticket keeps:
+/// - a shared reference to the associated [`Admission`],
+/// - a unique ticket identifier,
+/// - a notification handle used to signal that the ticket may be released, and
+/// - an atomic flag indicating whether the ticket has already been marked as gone.
+///
+/// Shared ownership is provided through [`Arc`], allowing the ticket state to be
+/// referenced safely across tasks or threads.
 struct Ticket {
     admission: Arc<Admission>,
     id: u64,
@@ -83,7 +115,7 @@ struct Ticket {
     gone: Arc<AtomicBool>,
 }
 
-impl Open {
+impl OpenConnections {
     /// Counts those that have shown a token since among the paired, out of the queue.
     fn settle(&mut self) {
         let before = self.strangers.len();
@@ -94,11 +126,22 @@ impl Open {
 
 impl Admission {
     fn new(most: usize, most_strangers: usize) -> Arc<Self> {
-        Arc::new(Admission { most, most_strangers, open: Mutex::new(Open { next: 0, strangers: VecDeque::new(), paired: 0 }), last_logged: AtomicU64::new(0) })
+        Arc::new(Admission {
+            most,
+            most_strangers,
+            open_connections: Mutex::new(OpenConnections {
+                next: 0,
+                strangers: VecDeque::new(),
+                paired: 0,
+            }),
+            last_logged: AtomicU64::new(0),
+        })
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Open> {
-        self.open.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    fn lock(&self) -> std::sync::MutexGuard<'_, OpenConnections> {
+        self.open_connections
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// A place for `peer`'s connection, made by letting the oldest stranger go when there is none;
@@ -106,8 +149,14 @@ impl Admission {
     fn admit(self: &Arc<Self>, peer: &Peer) -> Option<Ticket> {
         let mut open = self.lock();
         open.settle();
-        while open.strangers.len() >= self.most_strangers || open.strangers.len() + open.paired >= self.most {
-            let Some(at) = open.strangers.iter().position(|stranger| stranger.peer.pairing.load(Ordering::SeqCst) == 0) else {
+        while open.strangers.len() >= self.most_strangers
+            || open.strangers.len() + open.paired >= self.most
+        {
+            let Some(at) = open
+                .strangers
+                .iter()
+                .position(|stranger| stranger.peer.pairing.load(Ordering::SeqCst) == 0)
+            else {
                 drop(open);
                 self.say("Turning connections away: every one open has shown a paired device's token or waits on its pairing.");
                 return None;
@@ -120,15 +169,33 @@ impl Admission {
         let id = open.next;
         open.next += 1;
         let (let_go, gone) = (Arc::new(Notify::new()), Arc::new(AtomicBool::new(false)));
-        open.strangers.push_back(Stranger { id, peer: peer.clone(), let_go: let_go.clone(), gone: gone.clone() });
-        Some(Ticket { admission: self.clone(), id, let_go, gone })
+        open.strangers.push_back(Stranger {
+            id,
+            peer: peer.clone(),
+            let_go: let_go.clone(),
+            gone: gone.clone(),
+        });
+        Some(Ticket {
+            admission: self.clone(),
+            id,
+            let_go,
+            gone,
+        })
     }
 
     /// Once a minute at most: a flood is not worth a flood of lines.
     fn say(&self, what: &str) {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|elapsed| elapsed.as_secs()).unwrap_or(0);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_secs())
+            .unwrap_or(0);
         let last = self.last_logged.load(Ordering::Relaxed);
-        if now >= last + 60 && self.last_logged.compare_exchange(last, now, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
+        if now >= last + 60
+            && self
+                .last_logged
+                .compare_exchange(last, now, Ordering::Relaxed, Ordering::Relaxed)
+                .is_ok()
+        {
             crate::warn!("{what}");
         }
     }
@@ -137,7 +204,11 @@ impl Admission {
 impl Drop for Ticket {
     fn drop(&mut self) {
         let mut open = self.admission.lock();
-        if let Some(at) = open.strangers.iter().position(|stranger| stranger.id == self.id) {
+        if let Some(at) = open
+            .strangers
+            .iter()
+            .position(|stranger| stranger.id == self.id)
+        {
             open.strangers.remove(at);
         } else if !self.gone.load(Ordering::SeqCst) {
             open.paired = open.paired.saturating_sub(1);
@@ -211,7 +282,9 @@ async fn accept(listener: &TcpListener) -> Option<(TcpStream, SocketAddr)> {
             // A phone that leaves the network says nothing, and its connection would stay open for
             // good, a task and a descriptor each. Asked every so often whether it is still there, one
             // that is not is closed by the system within a few minutes.
-            let probes = socket2::TcpKeepalive::new().with_time(Duration::from_secs(60)).with_interval(Duration::from_secs(20));
+            let probes = socket2::TcpKeepalive::new()
+                .with_time(Duration::from_secs(60))
+                .with_interval(Duration::from_secs(20));
             let _ = socket2::SockRef::from(&stream).set_tcp_keepalive(&probes);
             Some((stream, remote))
         }
@@ -230,8 +303,12 @@ pub async fn listen_plain(app: Arc<App>, host: &str, port: u16) -> io::Result<Li
     let address = listener.local_addr()?;
     let task = tokio::spawn(async move {
         loop {
-            let Some((stream, remote)) = accept(&listener).await else { continue };
-            tokio::spawn(serve(app.clone(), Peer::new(remote, address.port(), false), stream));
+            let Some((stream, remote)) = accept(&listener).await else { continue; };
+            tokio::spawn(serve(
+                app.clone(),
+                Peer::new(remote, address.port(), false),
+                stream,
+            ));
         }
     });
     Ok(Listening { address, task })

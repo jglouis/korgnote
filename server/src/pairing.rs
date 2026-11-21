@@ -42,7 +42,14 @@ impl PairingLink {
     }
 }
 
-/// What a device sends to pair, over TLS to the pinned certificate. It is read strictly: a field it does not know, or no name, and the request is not one.
+/// Request payload used to pair a device with this server.
+///
+/// Contains the pairing `code`, the device's user-visible name, and optional
+/// information for replacing an existing pairing so the same physical device
+/// does not appear twice after re-pairing.
+///
+/// Unknown fields are rejected during deserialization. The serialized JSON field
+/// names include `deviceName` and `replacesToken`.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PairRequest {

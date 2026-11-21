@@ -47,7 +47,7 @@ impl ServerIdentity {
         let store_file = dir.join("tls.jks");
         let (certificate, private_key) = if store_file.is_file() {
             read_key_store(&fs::read(&store_file)?, &password).map_err(|error| invalid(format!("{}: {error}", store_file.display())))?
-        } else {
+        } else { // The key store file does not exist, so we need to create it.
             let (certificate, private_key) = make_certificate(&server_id).map_err(io::Error::other)?;
             fs::write(&store_file, write_key_store(&certificate, &private_key, &password).map_err(io::Error::other)?)?;
             owner_only(&store_file);
@@ -96,8 +96,10 @@ fn owner_only(file: &Path) {
 /// An EC P-256 key and a certificate for it, signed by itself and good for a hundred years, with
 /// the names earlier releases gave theirs. Returns (certificate DER, PKCS#8 key DER).
 fn make_certificate(server_id: &str) -> Result<(Vec<u8>, Vec<u8>), String> {
-    let key_pair = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256).map_err(|error| format!("could not make a key: {error}"))?;
-    let mut params = rcgen::CertificateParams::new(vec!["korgnote".to_string()]).map_err(|error| error.to_string())?;
+    let key_pair = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256)
+        .map_err(|error| format!("could not make a key: {error}"))?;
+    let mut params = rcgen::CertificateParams::new(vec!["korgnote".to_string()])
+        .map_err(|error| error.to_string())?;
     params.subject_alt_names.push(rcgen::SanType::IpAddress(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)));
     let mut name = rcgen::DistinguishedName::new();
     name.push(rcgen::DnType::CommonName, format!("KorgNote {server_id}"));
@@ -106,7 +108,8 @@ fn make_certificate(server_id: &str) -> Result<(Vec<u8>, Vec<u8>), String> {
     let now = time::OffsetDateTime::now_utc();
     params.not_before = now;
     params.not_after = now + time::Duration::days(36_500);
-    let certificate = params.self_signed(&key_pair).map_err(|error| format!("could not sign the certificate: {error}"))?;
+    let certificate = params.self_signed(&key_pair)
+        .map_err(|error| format!("could not sign the certificate: {error}"))?;
     Ok((certificate.der().to_vec(), key_pair.serialize_der()))
 }
 
@@ -115,7 +118,8 @@ fn read_key_store(data: &[u8], password: &str) -> Result<(Vec<u8>, Vec<u8>), Str
     if data.starts_with(&[0xFE, 0xED, 0xFE, 0xED]) {
         return Err("it is a JKS store, which only JDKs before 9 write, and this server does not read; move it away to make a new one.".to_string());
     }
-    let store = p12_keystore::KeyStore::from_pkcs12(data, password, p12_keystore::Pkcs12ImportPolicy::Strict).map_err(|error| error.to_string())?;
+    let store = p12_keystore::KeyStore::from_pkcs12(data, password, p12_keystore::Pkcs12ImportPolicy::Strict)
+        .map_err(|error| error.to_string())?;
     match store.entry(KEY_ALIAS) {
         Some(p12_keystore::KeyStoreEntry::PrivateKeyChain(chain)) => {
             let certificate = chain.certs().first().ok_or_else(no_certificate)?;

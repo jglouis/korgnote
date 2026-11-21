@@ -74,6 +74,23 @@ fn now() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
+/// Watches a notes directory for file-system changes and records them in the change journal.
+///
+/// `NotesWatcher` owns the background watcher state used to keep a [`FileStore`] and
+/// [`ChangeJournal`] up to date with changes made under `root`. It combines file-system
+/// notifications with an optional periodic rescan so that edits can still be detected if an
+/// event is delayed, coalesced, or missed by the platform watcher.
+///
+/// The watcher is intended to run on a background thread. Its lifecycle is coordinated through
+/// shared status and stop flags:
+///
+/// - `status` exposes the current watcher state.
+/// - `stopping` signals the worker thread to terminate.
+/// - `thread` stores the running watcher thread handle, if one has been started.
+///
+/// `late_event_grace` defines how long a file-system event may arrive after the change it
+/// describes. This allows the periodic rescan to detect a change before its corresponding
+/// notification arrives without treating that notification as a missed or duplicate event.
 pub struct NotesWatcher {
     root: PathBuf,
     store: Arc<FileStore>,
@@ -146,13 +163,26 @@ impl NotesWatcher {
             watched: HashMap::new(),
             suspects: Vec::new(),
         };
-        let handle = std::thread::Builder::new().name("notes-watcher".to_string()).spawn(move || worker.run()).expect("a thread to watch the notes with");
-        *self.thread.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(handle);
+        // Spawn the worker thread.
+        let handle = std::thread::Builder::new()
+            .name("notes-watcher".to_string())
+            .spawn(move || worker.run())
+            .expect("a thread to watch the notes with");
+        // Store the worker thread handle.
+        let mut thread_slot = self.thread
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *thread_slot = Some(handle);
     }
 
     pub fn stop(&self) {
+        // Flags the watcher to stop.
         self.stopping.store(true, Ordering::SeqCst);
-        if let Some(handle) = self.thread.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take() {
+        // Wait for the worker thread to stop.
+        if let Some(handle) = self.thread
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take() {
             let _ = handle.join();
         }
     }
@@ -172,6 +202,26 @@ enum Happened {
     Modified,
 }
 
+/// Background worker that keeps a [`FileStore`] and [`ChangeJournal`] in sync with
+/// the filesystem under `root`.
+///
+/// `Worker` owns the state needed by the watcher loop. It tracks which files are
+/// already known to the journal, which folders currently have active watches, and
+/// which changes were discovered by periodic rescans before a filesystem event was
+/// observed.
+///
+/// The worker combines two sources of change information:
+///
+/// - filesystem watcher events, used for near-real-time updates;
+/// - optional periodic rescans, used to detect events that were missed by the
+///   platform watcher.
+///
+/// Changes found during a rescan are recorded as `suspects`. They are journaled
+/// immediately, but are only counted as missed watcher events if no matching
+/// filesystem event arrives within `late_event_grace`.
+///
+/// Shared state such as `status` and `stopping` allows other tasks to observe the
+/// worker state and request shutdown.
 struct Worker {
     root: PathBuf,
     store: Arc<FileStore>,

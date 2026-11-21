@@ -36,19 +36,21 @@ struct State {
     codes: Vec<(String, i64)>,
 }
 
-/// The devices, kept in `devices.json` in the server's state directory; and the one-time codes a
-/// pairing QR code offers, kept in memory only, since a restart is no reason to honour a code shown
-/// before it.
-///
-/// Revoking a device removes it, and its token stops working on its next request.
+/// Device registry. Persisted in `devices.json` in the server's state directory.
 pub struct DeviceRegistry {
+    /// The path to the devices file. `None` means in-memory only.
     file: Option<PathBuf>,
+    /// Time source for code expiration. Can be mocked for tests.
     now: Clock,
+    /// Random generator for device tokens.
     new_token: Maker,
+    /// Random generator for pairing codes.
     new_code: Maker,
+    /// The devices list.
     state: Mutex<State>,
-    /// Counts the devices taken off, so that what a device has open, its change stream, can end
-    /// the moment it is revoked rather than at its next request.
+    /// Counter bumped on each revoked or replaced devices.
+    /// A phone's open change stream subscribes to it and closes the moment the phone is revoked.
+    /// Without it, a revoked phone would keep receiving changes until its next request.
     removals: watch::Sender<u64>,
 }
 
@@ -73,7 +75,7 @@ impl DeviceRegistry {
         Self::with(file, Box::new(system_millis), Box::new(|| random_hex(32)), Box::new(|| random_hex(16)))
     }
 
-    /// Kept in memory only, as the tests want.
+    /// Kept in memory only, for testing purposes.
     pub fn in_memory() -> Self {
         Self::open(None).expect("no file to fail on")
     }
@@ -82,7 +84,8 @@ impl DeviceRegistry {
         let mut devices = Vec::new();
         if let Some(path) = file.as_ref().filter(|path| path.is_file()) {
             let text = fs::read_to_string(path)?;
-            devices = serde_json::from_str(&text).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, format!("{}: {error}", path.display())))?;
+            devices = serde_json::from_str(&text)
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, format!("{}: {error}", path.display())))?;
         }
         Ok(DeviceRegistry { file, now, new_token, new_code, state: Mutex::new(State { devices, codes: Vec::new() }), removals: watch::Sender::new(0) })
     }
@@ -122,7 +125,8 @@ impl DeviceRegistry {
     /// now, whatever comes of the pairing it was brought for.
     pub fn take_code(&self, code: &str) -> bool {
         let mut state = self.lock();
-        let Some(at) = state.codes.iter().position(|(known, _)| constant_time_equals(known, code)) else { return false };
+        let Some(at) = state.codes.iter()
+            .position(|(known, _)| constant_time_equals(known, code)) else { return false };
         let (_, expires) = state.codes.remove(at);
         expires >= (self.now)()
     }
@@ -148,7 +152,8 @@ impl DeviceRegistry {
     pub fn authenticate(&self, token: &str) -> io::Result<Option<PairedDevice>> {
         let mut state = self.lock();
         let hashed = hash(token);
-        let Some(index) = state.devices.iter().position(|device| constant_time_equals(&device.token_hash, &hashed)) else { return Ok(None) };
+        let Some(index) = state.devices.iter()
+            .position(|device| constant_time_equals(&device.token_hash, &hashed)) else { return Ok(None) };
         let seen = (self.now)();
         // Written now and then, not on every request: a phone syncing all day is not worth a disk write each time.
         let stale = match state.devices[index].last_seen {
@@ -168,12 +173,15 @@ impl DeviceRegistry {
         self.lock().devices.iter().any(|device| constant_time_equals(&device.token_hash, &hashed))
     }
 
-    /// Changes each time a device is taken off: revoked, or replaced by its own pairing again.
+    /// Returns a watch receiver subscribed to removal updates.
+    ///
+    /// The returned receiver observes the current removal value and is notified
+    /// whenever the removal count changes.
     pub fn removals(&self) -> watch::Receiver<u64> {
         self.removals.subscribe()
     }
 
-    /// Whether there was such a device to revoke.
+    /// Revokes a device by its ID. Returns whether the device was revoked.
     pub fn revoke(&self, id: &str) -> io::Result<bool> {
         let mut state = self.lock();
         let before = state.devices.len();
@@ -186,6 +194,7 @@ impl DeviceRegistry {
         Ok(removed)
     }
 
+    /// Saves the current state to the file.
     fn save(&self, state: &State) -> io::Result<()> {
         let Some(target) = self.file.as_ref() else { return Ok(()) };
         if let Some(parent) = target.parent() {
@@ -199,7 +208,7 @@ impl DeviceRegistry {
     }
 }
 
-/// The devices indented by four spaces, as earlier releases wrote the file.
+/// Pretty-prints the devices indented by four spaces, as earlier releases wrote the file.
 fn pretty(devices: &[PairedDevice]) -> Vec<u8> {
     let mut out = Vec::new();
     let formatter = serde_json::ser::PrettyFormatter::with_indent(b"    ");

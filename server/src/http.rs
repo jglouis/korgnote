@@ -32,7 +32,33 @@ use tokio::sync::mpsc;
 
 pub type Body = UnsyncBoxBody<Bytes, io::Error>;
 
-/// What the server serves, and with what.
+/// Shared application state for the server.
+///
+/// `App` owns the long-lived services and configuration used while handling
+/// requests: note storage, access control, change journaling, optional filesystem
+/// watching, upload limits, pairing approvals, and connection timeout settings.
+///
+/// Most service handles are stored in `Arc` so request handlers and background
+/// tasks can cheaply clone and share them.
+///
+/// # Fields
+///
+/// - `store`: Persistent file-backed note storage.
+/// - `access`: Server access and authentication state.
+/// - `journal`: Change journal used to record and stream note updates.
+/// - `watcher`: Optional watcher for detecting note changes outside the server.
+/// - `web_client`: Optional path to the built web client served from `/`.
+/// - `heartbeat_every`: Interval for heartbeat messages on otherwise quiet
+///   change streams.
+/// - `log_requests`: Whether incoming requests are written to the log.
+/// - `body_idle`: Maximum idle time allowed while receiving a request body.
+/// - `unpaired_lifetime`: Maximum lifetime of an unauthenticated secure-port
+///   connection.
+/// - `most_strangers`: Maximum number of simultaneous unauthenticated secure-port
+///   connections.
+/// - `approvals`: Pending pairing approvals waiting for confirmation.
+/// - `approval_wait`: Maximum time a pairing request waits for approval.
+/// - `uploads`: Semaphore limiting the amount of in-memory upload data.
 pub struct App {
     pub store: Arc<FileStore>,
     pub access: Arc<ServerAccess>,
@@ -93,7 +119,24 @@ impl App {
     }
 }
 
-/// Where a connection comes from, and which of the two ports it arrived on.
+/// Describes a peer connection accepted by the server.
+///
+/// A `Peer` records the remote socket address, the local server port used for
+/// the connection, whether the connection is considered secure, and any
+/// pairing state associated with the connected device.
+///
+/// # Fields
+///
+/// - `remote`: The remote socket address of the connected peer.
+/// - `local_port`: The local port on which the server accepted the connection.
+/// - `secure`: Whether this connection was made through the secure endpoint.
+/// - `paired`: The token of the paired device first identified on this
+///   connection. Until a token is set, a connection to the secure port is
+///   treated as belonging to an unknown peer and may be closed quickly. If the
+///   paired device is later revoked, the connection is closed.
+/// - `pairing`: The number of pairing attempts on this connection that are
+///   waiting to be approved on the Devices page. A connection with pending
+///   pairings is kept alive while approval is pending.
 #[derive(Debug, Clone)]
 pub struct Peer {
     pub remote: SocketAddr,
@@ -169,6 +212,13 @@ fn megabytes_held(content_length: Option<u64>) -> u32 {
     }
 }
 
+/// Represents the payload body of a message.
+///
+/// A payload may be empty, fully buffered in memory, or provided as an
+/// asynchronous stream of byte chunks.
+///
+/// The optional length on streamed payloads indicates the total number of bytes
+/// when it is known ahead of time; `None` means the length is unknown.
 enum Payload {
     Empty,
     Full(Bytes),
@@ -176,6 +226,10 @@ enum Payload {
     Stream(Box<dyn Stream<Item = io::Result<Bytes>> + Send + Unpin>, Option<u64>),
 }
 
+/// Represents an HTTP response to be returned to a client.
+///
+/// A `Reply` contains the response status code, optional content type,
+/// additional headers, and the response payload/body.
 struct Reply {
     status: StatusCode,
     content_type: Option<&'static str>,
@@ -273,7 +327,44 @@ async fn on_disk<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -
     tokio::task::spawn_blocking(work).await.expect("work on the disk does not panic")
 }
 
-/// One request to one answer.
+/// Handles a single incoming HTTP request and produces the final HTTP response.
+///
+/// The request is decomposed into its parts and body, normalized into the path/query
+/// form expected by the router, checked against the application access rules, and then
+/// either rejected or dispatched to [`route`].
+///
+/// Request handling includes:
+///
+/// - Detecting absolute-form request targets for HTTP/1.x requests and preserving them
+///   as non-local paths that should not match server routes.
+/// - Extracting the raw path and optional query string from the request URI.
+/// - Logging request method, URI, remote address, and user agent when request logging is
+///   enabled.
+/// - Reading relevant headers such as `Accept-Encoding`, `Host`, `Origin`, and
+///   `Authorization`.
+/// - Building an [`Asking`] access-check context from the request, peer, and connection
+///   metadata.
+/// - Applying access-control rules through [`refusal_of`].
+/// - Recording the bearer token for paired TLS peers when the request is authorized and
+///   is not the pairing endpoint.
+/// - Rejecting malformed requests with multiple `Host` headers.
+/// - Routing authorized requests to [`route`].
+/// - Finalizing the [`Reply`] into a [`Response<Body>`], including response encoding
+///   negotiation based on `Accept-Encoding`.
+///
+/// # Arguments
+///
+/// * `app` - Shared application state, including configuration, access rules, and
+///   logging settings.
+/// * `peer` - Information about the connected peer, including remote address, local
+///   port, TLS status, and pairing state.
+/// * `request` - The incoming HTTP request.
+///
+/// # Returns
+///
+/// A finalized HTTP response for the request. The response may be an access-control
+/// refusal, a malformed-request error, an internal error while reading paired-device
+/// data, or the result of routing the request.
 pub async fn handle(app: Arc<App>, peer: Peer, request: Request<Incoming>) -> Response<Body> {
     let (parts, body) = request.into_parts();
     // A request line that names a whole URL is not a path of this server's, and finds nothing.
@@ -375,7 +466,41 @@ fn find_route(segments: &[String], trailing: bool, web: bool) -> Option<(Route, 
     })
 }
 
-/// `token` is the paired device's that asks, over TLS; None on the plain port.
+/// Routes an incoming HTTP request to the appropriate application handler.
+///
+/// The request path is split into URL-decoded path segments and matched against the
+/// server's known routes. If path decoding fails, a `400 Bad Request` response is
+/// returned. If no matching route exists, the function returns `404 Not Found`, unless
+/// the request is a `GET` and a web client is configured, in which case it attempts to
+/// serve a static web-client file. If the path exists but does not support the requested
+/// method, `405 Method Not Allowed` is returned.
+///
+/// This function handles both public endpoints, such as the root status page, API status,
+/// favicon, manifest, and bundle routes, and private endpoints, such as device pairing,
+/// approvals, events, and file operations.
+///
+/// Private responses are automatically marked with `Cache-Control: no-store` unless the
+/// handler has already set a cache-control header. This prevents browsers and devices
+/// from caching sensitive data such as pairing codes, notes, device information, and
+/// approval requests.
+///
+/// # Arguments
+///
+/// * `app` - Shared application state, including access control, approvals, watcher state,
+///   web-client configuration, and file handling state.
+/// * `peer` - Information about the connected peer making the request.
+/// * `method` - HTTP method used by the request.
+/// * `headers` - Request headers.
+/// * `uri_text` - Original request URI text, used for error reporting.
+/// * `raw_path` - Raw request path before percent decoding.
+/// * `query` - Optional raw query string.
+/// * `token` - Optional authentication or event-stream token.
+/// * `body` - Incoming request body.
+///
+/// # Returns
+///
+/// A `Reply` containing the HTTP status, headers, content type, and response payload for
+/// the matched route.
 #[allow(clippy::too_many_arguments)]
 async fn route(app: &Arc<App>, peer: &Peer, method: &Method, headers: &HeaderMap, uri_text: &str, raw_path: &str, query: Option<&str>, token: Option<String>, body: Incoming) -> Reply {
     let mut segments = Vec::new();
@@ -403,7 +528,12 @@ async fn route(app: &Arc<App>, peer: &Peer, method: &Method, headers: &HeaderMap
     let private = !matches!(route, Route::Root | Route::Api | Route::Favicon);
     let reply = match route {
         Route::Root | Route::Api => Reply::text(StatusCode::OK, RUNNING),
-        Route::Favicon => Reply { status: StatusCode::OK, content_type: Some("image/png"), headers: Vec::new(), payload: Payload::Full(Bytes::from_static(FAVICON)) },
+        Route::Favicon => Reply {
+            status: StatusCode::OK,
+            content_type: Some("image/png"),
+            headers: Vec::new(),
+            payload: Payload::Full(Bytes::from_static(FAVICON))
+        },
         Route::Devices => Reply::html(StatusCode::OK, page(&devices_body(&app.access, &app.approvals.waiting(), app.watcher.as_ref().map(|watcher| watcher.status()).as_ref(), None, None))),
         Route::DevicesPair => devices_pair(app, headers, body).await,
         Route::Requests => {
@@ -437,7 +567,9 @@ async fn route(app: &Arc<App>, peer: &Peer, method: &Method, headers: &HeaderMap
             _ => delete_file(app, headers, path).await,
         },
     };
-    if private && !reply.headers.iter().any(|(name, _)| name == header::CACHE_CONTROL) { reply.with(header::CACHE_CONTROL, "no-store") } else { reply }
+    if private && !reply.headers.iter().any(|(name, _)| name == header::CACHE_CONTROL) {
+        reply.with(header::CACHE_CONTROL, "no-store")
+    } else { reply }
 }
 
 // --- The sync API ---
@@ -451,6 +583,19 @@ fn since_of(query: &str) -> Result<Option<i64>, Reply> {
     Ok(query_value(query, "since").map_err(|_| bad_query())?.and_then(|since| since.parse::<i64>().ok()))
 }
 
+/// Builds a manifest response for the notes store.
+///
+/// If the query contains a valid `since` generation and the journal can provide
+/// changes after that generation, this returns an incremental manifest containing
+/// only changed entries and deleted paths. Otherwise, it falls back to a complete
+/// manifest by walking the store.
+///
+/// The full-walk generation is captured before reading from disk so that any
+/// change that occurs during the walk will be reported again in a later
+/// incremental request rather than being missed.
+///
+/// Returns a JSON [`Manifest`] on success, or an error [`Reply`] if the query is
+/// invalid or the notes metadata cannot be read.
 async fn manifest(app: &Arc<App>, query: &str) -> Reply {
     let since = match since_of(query) {
         Ok(since) => since,
@@ -459,14 +604,23 @@ async fn manifest(app: &Arc<App>, query: &str) -> Reply {
     if let Some(delta) = since.and_then(|since| app.journal.changes_since(since)) {
         // The journal could answer: send only what moved.
         let store = app.store.clone();
-        let paths: Vec<String> = delta.changes.iter().filter(|change| !change.deleted).map(|change| change.path.clone()).collect();
-        let metas = on_disk(move || paths.iter().filter_map(|path| store.meta(path).transpose()).collect::<io::Result<Vec<FileMeta>>>()).await;
+        let paths: Vec<String> = delta.changes.iter()
+            .filter(|change| !change.deleted)
+            .map(|change| change.path.clone())
+            .collect();
+        let metas = on_disk(move || paths.iter()
+            .filter_map(|path| store.meta(path).transpose())
+            .collect::<io::Result<Vec<FileMeta>>>())
+            .await;
         return match metas {
             Ok(metas) => Reply::json(&Manifest {
                 generation: delta.generation,
                 complete: false,
                 entries: entries_of(&metas),
-                deleted: delta.changes.iter().filter(|change| change.deleted).map(|change| change.path.as_str()).collect(),
+                deleted: delta.changes.iter()
+                    .filter(|change| change.deleted)
+                    .map(|change| change.path.as_str())
+                    .collect(),
             }),
             Err(error) => Reply::could_not_read("the notes that changed", &error),
         };
@@ -533,11 +687,30 @@ fn receiver_stream(receiver: mpsc::Receiver<io::Result<Bytes>>) -> impl Stream<I
     Box::pin(stream::unfold(receiver, |mut receiver| async move { receiver.recv().await.map(|item| (item, receiver)) }))
 }
 
-/// The change stream. `token` is the device's that opened it, over TLS: when that device is
-/// revoked the stream ends there and then, with nothing more said to it.
+/// Opens a Server-Sent Events stream for journal change notifications.
+///
+/// The stream is intentionally only a hint stream: clients are expected to
+/// reconcile state against the manifest. If an event is missed, the stream is
+/// closed so the client can reconnect and resynchronize rather than silently
+/// losing an edit.
+///
+/// On connection, the response immediately emits a `: connected` SSE comment.
+/// While open, it emits:
+///
+/// - `event: changed` frames for updated journal entries.
+/// - `event: deleted` frames for deleted journal entries.
+/// - `: ping` comment frames at the configured heartbeat interval.
+///
+/// If `token` is provided, the stream remains open only while that device is
+/// still paired. When the device is removed, or when the journal reports that an
+/// event has been missed, the stream ends.
+///
+/// The returned response has content type `text/event-stream; charset=UTF-8`,
+/// disables caching, and streams frames through a bounded channel with capacity
+/// one. This applies backpressure so a client that stops reading causes this
+/// task to stop producing frames, allowing the journal to drop pending events for
+/// that reader and force a later resynchronization.
 fn events(app: &Arc<App>, token: Option<String>) -> Reply {
-    // A hint stream: clients reconcile with the manifest, so a missed event is a delay, never a
-    // lost edit. It closes at one missed, for the client to do that.
     let mut changes = app.journal.events_until_one_is_missed();
     let heartbeat_every = app.heartbeat_every;
     let devices = app.access.devices.clone();
@@ -821,15 +994,31 @@ fn is_json(headers: &HeaderMap) -> bool {
     header_text(headers, header::CONTENT_TYPE).is_some_and(|value| trim(value.split(';').next().unwrap_or("")).eq_ignore_ascii_case(JSON))
 }
 
-/// `POST /api/pair`: a device exchanges the one-time code from a pairing QR code for a token of its
-/// own. Reached over TLS, to the certificate the same QR code named, so the token cannot go anywhere
-/// else.
+/// Handles a device pairing request.
 ///
-/// A good code is not enough: another app on the phone may have taken it from the QR code. The
-/// device is shown on the Devices page, and this answers once someone there allows it (`200` with
-/// the token), refuses it (`410`), or `APPROVAL_WAIT` passes (`408`).
+/// Validates that device pairing is enabled, reads and parses a JSON [`PairRequest`],
+/// checks that the submitted pairing code is still valid, and then waits for the
+/// user to approve the request from the Devices page.
+///
+/// While approval is pending, the peer is marked as having a pairing request in
+/// flight so the connection is not treated as an idle stranger connection.
+///
+/// On approval, the device is added to the known devices list and a JSON
+/// [`PairResponse`] is returned containing the new device ID, authentication token,
+/// and server identity details.
+///
+/// Returns:
+/// - `404 NOT_FOUND` if this server does not allow device pairing.
+/// - `403 FORBIDDEN` if the request is not valid JSON, cannot be parsed, or the
+///   pairing code is missing, invalid, or expired.
+/// - `410 GONE` if the user refuses the pairing request.
+/// - `408 REQUEST_TIMEOUT` if the user does not approve the request in time.
+/// - An error reply if the paired devices store cannot be updated.
+/// - A JSON success reply containing pairing credentials when approved.
 async fn pair(app: &Arc<App>, peer: &Peer, headers: &HeaderMap, body: Incoming) -> Reply {
-    let Some(details) = &app.access.pairing else { return Reply::text(StatusCode::NOT_FOUND, "This server does not pair devices.") };
+    let Some(details) = &app.access.pairing else {
+        return Reply::text(StatusCode::NOT_FOUND, "This server does not pair devices.")
+    };
     let json = is_json(headers);
     let body = read_body(body, PAIR_BODY_LIMIT, app.body_idle).await.ok().flatten();
     let request = body.filter(|_| json).and_then(|body| serde_json::from_slice::<PairRequest>(&body).ok());
@@ -861,7 +1050,12 @@ async fn pair(app: &Arc<App>, peer: &Peer, headers: &HeaderMap, body: Incoming) 
     Reply::json(&PairResponse { device_id: device.id, token, server_id: details.server_id.clone(), server_name: details.server_name.clone() })
 }
 
-/// Counts a pairing waiting on a connection, for as long as it waits.
+/// Tracks the number of pairing operations currently in progress.
+///
+/// This is a shared, atomically updated counter intended to be cloned and
+/// accessed across threads/tasks. The inner `Arc<AtomicUsize>` provides shared
+/// ownership and lock-free increment/decrement operations for maintaining the
+/// in-flight pairing count.
 struct PairingInFlight(Arc<AtomicUsize>);
 
 impl PairingInFlight {

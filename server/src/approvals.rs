@@ -49,7 +49,22 @@ impl Approvals {
         self.waiting.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// Shows the device called `name`, asking from `from`, on the Devices page, until it is answered.
+    /// Registers a new approval request and returns a handle for awaiting its result.
+    ///
+    /// A unique request ID is generated, a one-shot response channel is created, and
+    /// the request is stored in the pending approval queue. The returned [`Asked`]
+    /// value can be used to track the request and receive the eventual answer.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name or identifier associated with the approval request.
+    /// * `from` - The IP address from which the request originated.
+    /// * `now` - The timestamp at which the request was made.
+    ///
+    /// # Returns
+    ///
+    /// An [`Asked`] handle containing the generated request ID and a receiver for
+    /// the approval response.
     pub fn ask(&self, name: &str, from: IpAddr, now: i64) -> Asked<'_> {
         let id = crate::text::random_hex(16);
         let (sender, receiver) = oneshot::channel();

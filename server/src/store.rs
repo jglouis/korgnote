@@ -114,26 +114,29 @@ struct HashEntry {
     etag: String,
 }
 
-/// See the module's note. Built once, but it reads the disk on every request rather than caching
-/// contents; only *hashes* are cached, keyed on the size and timestamp they were computed from, so
-/// an unchanged file is not re-read.
+/// A filesystem-backed store rooted at a specific directory.
+///
+/// `FileStore` manages files below `root`, optionally enforcing read-only access.
+/// It also maintains an in-memory cache of file hash metadata and uses internal
+/// synchronization to coordinate write operations.
+///
+/// The store records the filesystem volume for `root` when available, allowing
+/// callers or internal logic to detect whether paths belong to the same volume.
+///
+/// # Fields
+///
+/// - `root`: Root directory used by the store.
+/// - `read_only`: Whether the store disallows mutating operations.
+/// - `hashes`: Cached hash metadata indexed by path or key.
+/// - `writing`: Mutex used to serialize write operations.
+/// - `volume_of`: Function used to determine the volume identifier for a path.
+/// - `volume`: Cached volume identifier for `root`, if available.
 pub struct FileStore {
-    /// The notes directory being served; the watcher needs it too.
     pub root: PathBuf,
-    /// True when the notes directory was not there at startup, so there is nowhere to write to.
     pub read_only: bool,
     hashes: Mutex<HashMap<String, HashEntry>>,
-    /// Held from a write's check of the version to its move into place, so that of two devices pushing
-    /// from the same version only one wins and the other is told to merge. An editor outside the
-    /// server does not take it: a save landing in that instant is still overwritten, which nothing on
-    /// a plain filesystem can prevent.
     writing: Mutex<()>,
-    /// Which volume a folder is on; see [Self::list]. Given in tests, which cannot unmount one.
     volume_of: fn(&Path) -> Option<u64>,
-    /// The volume the notes directory was on when the store was made, or None where the system does
-    /// not say. A volume unmounted leaves its mount point behind, an empty folder on another volume,
-    /// which listed as it is would be a complete library with no notes in it: every phone would
-    /// delete its copies. So a notes directory that is no longer on this volume is not listed.
     volume: Option<u64>,
 }
 

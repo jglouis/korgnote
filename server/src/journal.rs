@@ -16,7 +16,15 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
-/// One thing that happened to the library, in order. The field order is the wire's.
+/// Represents a single change entry for a tracked path.
+///
+/// A `ChangeEntry` records the state of a file or object at a specific
+/// generation, including its path, optional entity tag, and whether it was
+/// deleted.
+///
+/// The `etag` can be used to identify or validate the exact version of the
+/// object when available. If `deleted` is `true`, the entry represents a
+/// deletion event rather than an existing object.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ChangeEntry {
     pub generation: i64,
@@ -37,6 +45,20 @@ struct Inner {
     entries: VecDeque<ChangeEntry>,
 }
 
+/// A bounded journal of change entries with asynchronous notifications for readers.
+///
+/// `ChangeJournal` stores recent changes up to a fixed `capacity` and publishes
+/// each generated [`ChangeEntry`] through a broadcast channel. The journal is
+/// protected by a [`Mutex`] so updates to the stored state and event publication
+/// can be coordinated.
+///
+/// When the journal reaches capacity, the oldest entries are discarded. This
+/// prevents slow or stopped readers from blocking writers indefinitely. Readers
+/// are expected to detect missed entries through the event stream and recover
+/// using the journal state as needed.
+///
+/// Events are sent while holding the journal lock, preserving generation order
+/// for subscribers.
 pub struct ChangeJournal {
     capacity: usize,
     inner: Mutex<Inner>,
