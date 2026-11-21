@@ -252,7 +252,7 @@ class FolderNoteStorage(
             conflicts += path
             // The note now holds what was written elsewhere: that is what to show, and to save over next.
             // Only now: with the save still to be written, the next try has to find the same change.
-            known = (known ?: emptyMap()) + (path to current.stamp!!)
+            known = (known ?: emptyMap()) + (path to current.stamp)
             remember(path, current.stamp, outside)
         }
         return true
