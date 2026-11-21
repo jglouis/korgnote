@@ -39,6 +39,7 @@ import korgnote.composeapp.generated.resources.capture_all_day
 import korgnote.composeapp.generated.resources.capture_calendar_allow
 import korgnote.composeapp.generated.resources.capture_calendar_allow_text
 import korgnote.composeapp.generated.resources.capture_calendar_fetch
+import korgnote.composeapp.generated.resources.capture_calendar_no_match
 import korgnote.composeapp.generated.resources.capture_calendar_none
 import korgnote.composeapp.generated.resources.capture_calendar_search
 import korgnote.composeapp.generated.resources.capture_pick_event
@@ -55,7 +56,8 @@ import kotlin.time.Clock
 
 /**
  * The phone's calendar, the past week and the next two months, to pick an event to capture: what
- * Google Calendar cannot share. Asks for the calendar first when it may not be read yet, and on
+ * Google Calendar cannot share. A search looks two years ahead instead, for the event planned far
+ * off, which a list that long would bury under each week's meetings. Asks for the calendar first when it may not be read yet, and on
  * Android for its account once, which a sync of it needs: see [CalendarAccountAccess].
  */
 @Composable
@@ -69,6 +71,10 @@ fun CalendarEventPicker(
     var granted by remember { mutableStateOf(permission.granted) }
     var events by remember { mutableStateOf<List<DeviceEvent>?>(null) }
     var query by remember { mutableStateOf("") }
+    // A search reads much further ahead than the list shown before one.
+    val far = query.isNotBlank()
+    // Whether [events] was read that far: until it is, a search that finds nothing has not looked yet.
+    var readFar by remember { mutableStateOf(false) }
     // Bumped to read the calendar again, once it is allowed.
     var reads by remember { mutableIntStateOf(0) }
     // Bumped once the account chooser closes, to ask for the sync again with what was picked.
@@ -90,10 +96,11 @@ fun CalendarEventPicker(
     }
 
     // Read now, then again each time the phone's calendar changes, as the fetch brings events in.
-    LaunchedEffect(granted, reads) {
+    LaunchedEffect(granted, reads, far) {
         if (!granted) return@LaunchedEffect
         calendar.changes.onStart { emit(Unit) }.conflate().collect {
-            events = calendar.events(today.minus(DatePeriod(days = PAST_DAYS)), PAST_DAYS + COMING_DAYS)
+            events = calendar.events(today.minus(DatePeriod(days = PAST_DAYS)), PAST_DAYS + if (far) SEARCH_DAYS else COMING_DAYS)
+            readFar = far
         }
     }
 
@@ -135,8 +142,13 @@ fun CalendarEventPicker(
                     }
                 }
                 if (shown.isEmpty()) {
+                    val nothing = when {
+                        !far -> Res.string.capture_calendar_none
+                        readFar -> Res.string.capture_calendar_no_match
+                        else -> Res.string.capture_reading_calendar
+                    }
                     Text(
-                        stringResource(Res.string.capture_calendar_none),
+                        stringResource(nothing),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.padding(top = 12.dp),
@@ -176,7 +188,9 @@ fun CalendarEventPicker(
 
 @Composable
 private fun DayHeader(day: LocalDate, today: LocalDate) {
-    val name = "${day.dayOfWeek.displayName().capitalised()} ${day.day} ${day.month.shortName()}"
+    // The year only where a search reaches another one, which the same day and month would hide.
+    val year = if (day.year != today.year) " ${day.year}" else ""
+    val name = "${day.dayOfWeek.displayName().capitalised()} ${day.day} ${day.month.shortName()}$year"
     Text(
         name,
         style = MaterialTheme.typography.labelLarge,
@@ -223,8 +237,11 @@ private fun timeOf(event: CalendarEvent): String? {
 /** How far back the picker looks: a meeting just had is often what gets written down. */
 private const val PAST_DAYS = 7
 
-/** How far ahead it looks. */
+/** How far ahead it lists, before a search. */
 private const val COMING_DAYS = 60
+
+/** How far ahead a search looks: two years, within the four that EventKit reads at once. */
+private const val SEARCH_DAYS = 730
 
 // Previews
 // -----------------------

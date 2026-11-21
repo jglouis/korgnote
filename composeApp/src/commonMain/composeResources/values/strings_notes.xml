@@ -189,13 +189,14 @@
     <string name="capture_nothing_to_add">Choose what to add to the heading.</string>
     <string name="capture_reading_notes">Reading the notes…</string>
     <string name="capture_pick_event">Pick an event</string>
-    <string name="capture_calendar_search">Search the events</string>
+    <string name="capture_calendar_search">Search the next two years</string>
     <string name="capture_calendar_allow_text">KorgNote reads this phone's calendar, Google Calendar's events included, only to list them here.</string>
     <string name="capture_calendar_allow">Allow</string>
     <string name="capture_calendar_account_why">Pick your calendar's account, so KorgNote can ask it for events just added on the web or another device.</string>
     <string name="capture_calendar_fetch">Fetch new events</string>
     <string name="capture_reading_calendar">Reading the calendar…</string>
     <string name="capture_calendar_none">No events in the last week or the next two months.</string>
+    <string name="capture_calendar_no_match">No event matches in the last week or the next two years.</string>
     <string name="capture_all_day">All day</string>
     <string name="capture_add_to_it">Add to it</string>
     <string name="capture_new_entry_under">Sub-entry</string>
