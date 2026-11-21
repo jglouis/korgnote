@@ -1,6 +1,13 @@
 package com.korgnote.common.replica
 
-/** One file as the server's manifest describes it. */
+/**
+ * Remote manifest entry for a note file tracked by synchronization.
+ *
+ * Records the entry's relative path together with remote object metadata used to compare local and
+ * remote state, detect changes, and decide whether content must be uploaded, downloaded, or removed.
+ * The entity tag identifies the remote content or revision as reported by the backing storage, while
+ * size and modification time provide additional observable state when available.
+ */
 data class RemoteEntry(val path: String, val etag: String, val size: Long = 0, val mtime: Long = 0)
 
 data class RemoteManifest(
@@ -14,8 +21,12 @@ data class RemoteManifest(
 data class RemoteFile(val path: String, val etag: String, val text: String)
 
 /**
- * What a write must find on the server, or be refused. There is no unconditional write: the protocol
- * allows one, and with it a device could replace an edit it never saw.
+ * Condition that must be satisfied by the remote item before a push is accepted.
+ *
+ * Used to make synchronization writes conditional and prevent overwriting remote changes made by
+ * another client. Implementations represent HTTP-style preconditions based on entity tags: [Matches]
+ * requires the remote item to still have a known ETag, while [Absent] requires the remote item not
+ * to exist.
  */
 sealed interface PushCondition {
     /** Only over this version: `If-Match`. */
@@ -49,32 +60,76 @@ sealed interface DeleteResult {
 }
 
 /**
- * The sync API v1 as the client needs it.
+ * Remote synchronization endpoint used to list, read, write, delete, and observe files.
  *
- * An interface so the engine can be tested without a server, and so the transport stays in the
- * client module while the algorithm lives here.
+ * The API is designed around optimistic concurrency. Remote items are identified by their path and
+ * versioned by ETags, and mutating operations are conditional so that changes made by another client
+ * are not overwritten or deleted accidentally.
+ *
+ * A synchronization client typically obtains remote state with [manifest], retrieves file contents
+ * with [fetch] or [bundle], and applies local changes with [push] and [delete]. Implementations may
+ * also provide [events] as a best-effort notification stream to prompt faster resynchronization.
+ *
+ * Suspend functions may perform network or storage I/O. Operation-level failures that are part of
+ * normal synchronization flow are reported through the corresponding result types.
  */
 interface SyncApi {
     suspend fun manifest(since: Long? = null): RemoteManifest
     suspend fun fetch(path: String): FetchResult
 
     /**
-     * Many files in one request: every file the server holds, or what changed since [since]. It may
-     * stop short of some, as the server caps its size; those are fetched one by one. Null where the
-     * transport has no such call, which leaves every file to [fetch].
+     * Retrieves a batch of remote files, including their paths, ETags, and text content.
+     *
+     * When [since] is provided, the returned bundle may be limited to files changed after that
+     * synchronization point, according to the implementation's remote change tracking. When [since] is
+     * null, the bundle represents the implementation's default file set, typically the current remote
+     * contents available for synchronization.
+     *
+     * A null result indicates that bundled retrieval is not available and callers should use
+     * [manifest] and [fetch] to obtain remote state and file contents.
+     *
+     * @param since optional synchronization point used to request only files changed after that point.
+     * @return the bundled remote files, or null if bundled retrieval is not supported.
      */
     suspend fun bundle(since: Long? = null): List<RemoteFile>? = null
-    /** Writes [path], if the server's copy meets [condition]. */
+    /**
+     * Pushes [content] to the remote item at [path] if [condition] is satisfied.
+     *
+     * The write is conditional to avoid overwriting remote changes made by another client. Use
+     * [PushCondition.Matches] to update only a known remote version, or [PushCondition.Absent] to create
+     * the item only when it does not already exist.
+     *
+     * @param path the remote path of the item to create or update.
+     * @param content the text content to store remotely.
+     * @param condition the precondition that must hold for the push to be accepted.
+     * @return the result of the push, including the new ETag on success, conflict information when the
+     * remote state does not satisfy the condition, or failure details.
+     */
     suspend fun push(path: String, content: String, condition: PushCondition): PushResult
 
-    /** Deletes [path], but only the version [ifMatch] names: an edit made elsewhere is never deleted. */
+    /**
+     * Deletes the remote item at [path] if its current ETag matches [ifMatch].
+     *
+     * The delete is conditional to avoid removing remote changes made by another client. If the remote
+     * item has changed since the caller observed it, the operation reports a conflict instead of
+     * deleting the item.
+     *
+     * @param path the remote path of the item to delete.
+     * @param ifMatch the ETag that the remote item must currently have for the delete to be accepted.
+     * @return the result of the delete, indicating whether the item was deleted, already gone, conflicted
+     * with a newer remote version, or failed.
+     */
     suspend fun delete(path: String, ifMatch: String): DeleteResult
 
     /**
-     * Streams change notifications until cancelled.
+     * Subscribes to remote change events and invokes [onChange] for each changed item.
      *
-     * A hint channel: correctness comes from the manifest diff, so an implementation that never
-     * emits is merely slower, never wrong. That is why it defaults to doing nothing.
+     * The callback receives the remote path of the changed item and a flag indicating whether the item
+     * was deleted. Implementations may keep this call active while listening for events and may invoke
+     * the callback multiple times.
+     *
+     * @param onChange callback invoked when a remote item changes; receives the changed item path and
+     * whether the change represents a deletion.
      */
     suspend fun events(onChange: suspend (path: String, deleted: Boolean) -> Unit) {}
 }

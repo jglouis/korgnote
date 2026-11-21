@@ -5,7 +5,14 @@ import com.korgnote.common.sync.merge
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** What one sync cycle did, mostly so tests and the UI can say something specific. */
+/**
+ * Summary of the effects of a synchronization run.
+ *
+ * Records the note paths that were downloaded, uploaded, merged, deleted on either side, left in
+ * conflict, or failed during synchronization. The report can be used by callers to decide whether
+ * visible state should be refreshed, whether follow-up conflict handling is needed, and which remote
+ * generation was reached by the run.
+ */
 data class SyncReport(
     val pulled: List<String> = emptyList(),
     val pushed: List<String> = emptyList(),
@@ -31,15 +38,29 @@ data class SyncReport(
 }
 
 /**
- * Reconciles the local replica with the server, per `docs/05-sync-protocol.md`.
+ * Coordinates synchronization between the local replica and the remote service.
  *
- * Each path is decided by comparing three versions: local (L), base (B — what the server last had)
- * and remote (R). The store tracks L against B with its dirty flag and B against R with the stored
- * etag, so the whole table reduces to two booleans.
+ * SyncEngine compares the remote manifest with local state, pulls stale remote files,
+ * pushes dirty local files, handles deletions, and records the generation or timestamp
+ * reached by a successful cycle. A full synchronization is serialized so overlapping
+ * triggers do not push or delete the same pending work multiple times; a later caller
+ * observes the work already completed by the cycle in progress.
  *
- * The rule that matters above all is that no branch ever discards an edit the user made, nor one
- * the server holds. The server is the source of truth: when two versions cannot be merged, its
- * version keeps the path and this device's is kept beside it as a conflict copy.
+ * Remote change events are treated as hints. A single-path pull may update the local
+ * replica when there is no competing local edit, but the next full synchronization is
+ * responsible for deciding the authoritative result from the manifest and local change
+ * state.
+ *
+ * When both sides changed the same file, the engine attempts to reconcile the versions.
+ * Clean merges are written locally and pushed against the remote version they merged
+ * from. True conflicts preserve both versions: the remote version keeps the original
+ * path, while the local version is saved as a conflict copy using the engine timestamp.
+ * New local files are pushed only as creations, so they never overwrite independently
+ * created remote files at the same path.
+ *
+ * The engine depends on the local store for replica state, the remote API for manifests,
+ * files, pushes, and event streams, a timestamp source for conflict names and bookkeeping,
+ * and a cycle guard for serialized synchronization.
  */
 class SyncEngine(
     private val store: DocumentStore,
@@ -56,11 +77,13 @@ class SyncEngine(
     private val cycle = Mutex()
 
     /**
-     * One full cycle: diff the manifest, pull what is stale, push what is dirty.
+     * Runs one synchronization cycle between the local store and the remote API.
      *
-     * One at a time: a save, the change stream and a retry each start one, and two running together
-     * both sent what was pending — a deletion three times, an edit twice, the second time against a
-     * version the first had already replaced. One that waits finds that work done.
+     * Only one cycle is allowed to run at a time; concurrent callers wait for the current cycle to
+     * finish before their own cycle begins.
+     *
+     * @return a report summarizing the files pulled, pushed, merged, deleted, conflicted, failed, and
+     * the remote generation reached by the cycle.
      */
     suspend fun sync(): SyncReport = cycle.withLock { syncLocked() }
 
@@ -113,43 +136,43 @@ class SyncEngine(
         }
 
         try {
-            for (entry in manifest.entries) {
-                val tombstone = tombstones[entry.path]
+            for ((path, etag) in manifest.entries) {
+                val tombstone = tombstones[path]
                 if (tombstone != null) {
-                    if (tombstone.etag == entry.etag) {
+                    if (tombstone.etag == etag) {
                         pendingDeletes.add(tombstone)
                     } else {
                         // Edited elsewhere after the version deleted here: the edit wins, and the note
                         // comes back rather than taking someone's work with it.
-                        store.forgetTombstone(entry.path)
-                        record(pullOne(entry.path), entry.path)
+                        store.forgetTombstone(path)
+                        record(pullOne(path), path)
                     }
                     continue
                 }
-                val meta = store.meta(entry.path)
-                val haveLocally = entry.path in localPaths
+                val meta = store.meta(path)
+                val haveLocally = path in localPaths
                 val dirty = meta?.dirty == true
 
                 when {
                     // Never seen it, or the copy went missing: take the server's.
-                    !haveLocally -> record(pullOne(entry.path), entry.path)
+                    !haveLocally -> record(pullOne(path), path)
 
                     // Here, but with no record of what was synced — a corrupt meta.json is read as
                     // empty — so it may hold edits never pushed. Theirs takes the path, and ours is kept
                     // beside it unless the two are the same.
-                    meta == null -> record(keepTheirs(entry.path), entry.path)
+                    meta == null -> record(keepTheirs(path), path)
 
                     // Untouched locally and unchanged remotely: nothing to do.
-                    !dirty && meta.etag == entry.etag -> Unit
+                    !dirty && meta.etag == etag -> Unit
 
                     // Untouched locally, moved remotely: take theirs.
-                    !dirty -> record(pullOne(entry.path), entry.path)
+                    !dirty -> record(pullOne(path), path)
 
                     // Edited locally, server unchanged since we synced: push.
-                    meta.etag == entry.etag -> record(pushLocal(entry.path, entry.etag), entry.path)
+                    meta.etag == etag -> record(pushLocal(path, etag), path)
 
                     // Both moved: try to reconcile them, and only involve the user if that fails.
-                    else -> record(reconcile(entry.path), entry.path)
+                    else -> record(reconcile(path), path)
                 }
             }
         } finally {
@@ -211,20 +234,20 @@ class SyncEngine(
             if (records[path]?.etag == null) record(pushNew(path), path)
         }
 
-        for (tombstone in pendingDeletes) {
-            val etag = tombstone.etag ?: continue
-            when (api.delete(tombstone.path, etag)) {
+        for ((path, etag1) in pendingDeletes) {
+            val etag = etag1 ?: continue
+            when (api.delete(path, etag)) {
                 DeleteResult.Deleted -> {
-                    store.forgetTombstone(tombstone.path)
-                    deletedLocally.add(tombstone.path)
+                    store.forgetTombstone(path)
+                    deletedLocally.add(path)
                 }
                 // Edited elsewhere in the meantime: as above, the edit wins.
                 is DeleteResult.Conflict -> {
-                    store.forgetTombstone(tombstone.path)
-                    record(pullForCycle(tombstone.path), tombstone.path)
+                    store.forgetTombstone(path)
+                    record(pullForCycle(path), path)
                 }
-                DeleteResult.Gone -> store.forgetTombstone(tombstone.path)
-                is DeleteResult.Failed -> failed.add(tombstone.path)
+                DeleteResult.Gone -> store.forgetTombstone(path)
+                is DeleteResult.Failed -> failed.add(path)
             }
         }
 
@@ -246,9 +269,18 @@ class SyncEngine(
     }
 
     /**
-     * The files this cycle will pull, in one request, when there are enough of them to be worth it:
-     * one at a time, the first sync of a few hundred notes took over a minute on a phone. Empty when
-     * there are few, or the server cannot bundle.
+     * Builds a bundled set of remote files when the manifest indicates enough files are worth fetching in
+     * bulk.
+     *
+     * Entries that have pending local deletions are ignored. Entries are considered wanted when they are
+     * absent locally, have no stored metadata, or are clean locally and have a different remote ETag. Dirty
+     * local files are not included in the decision because local changes take precedence.
+     *
+     * @param manifest remote manifest whose entries are evaluated for bundled retrieval.
+     * @param since optional synchronization point passed to the remote bundle request.
+     * @param localPaths paths currently present in the local replica.
+     * @param tombstones paths deleted locally but not yet confirmed remotely.
+     * @return remote files keyed by path when the wanted-entry count reaches the bundle threshold, or an empty map otherwise.
      */
     private suspend fun bundleFor(
         manifest: RemoteManifest,
@@ -267,9 +299,14 @@ class SyncEngine(
     }
 
     /**
-     * Fetches one path, for an SSE `changed` event.
+     * Fetches the remote file at the specified path and stores it in the local replica only if the
+     * local file has not changed since its metadata was read.
      *
-     * A local edit wins: the event is a hint, and the next full cycle will decide properly.
+     * Local dirty files, locally deleted files, files whose ETag changed during the fetch, missing
+     * remote files, and failed fetches are left unchanged.
+     *
+     * @param path the replica path of the file to pull from the remote API.
+     * @return true if the remote content was fetched and accepted into the local store; false otherwise.
      */
     suspend fun pull(path: String): Boolean {
         // A cycle can run while this is fetched, a save's most of all, and leave something newer.
@@ -279,9 +316,11 @@ class SyncEngine(
     }
 
     /**
-     * A pull a cycle decided on. What it fetches is at least as new as the manifest whose generation
-     * the cycle is about to keep, so it is taken over whatever a hint left here meanwhile, or that
-     * generation would have moved past it. Only local work outranks it.
+     * Fetches a remote file for the current synchronization cycle and accepts it into the local store
+     * only when the corresponding local file is still untouched.
+     *
+     * @param path the replica path of the file to fetch and accept.
+     * @return the pull outcome indicating whether the remote file was taken, left unchanged, or failed to fetch.
      */
     private suspend fun pullForCycle(path: String): PullOutcome =
         fetchAndAccept(path) { store.acceptAllUntouched(listOf(it)).isNotEmpty() }
@@ -298,10 +337,14 @@ class SyncEngine(
     }
 
     /**
-     * Follows the server's event stream, applying each change to the replica.
+     * Watches remote change events and applies accepted changes to the local replica.
      *
-     * Runs until cancelled. [onApplied] fires only when the replica actually moved, so the UI is not
-     * redrawn for an event about a file the user is editing.
+     * Remote deletions remove the local file only when the local metadata is absent or not dirty.
+     * Remote creations or updates are pulled and stored locally when they can be accepted without
+     * overwriting local changes. The callback is invoked only after a remote change has been applied
+     * locally.
+     *
+     * @param onApplied callback invoked with the path of each remote change successfully applied to the local store.
      */
     suspend fun watch(onApplied: suspend (String) -> Unit) {
         api.events { path, deleted ->
@@ -317,17 +360,18 @@ class SyncEngine(
     }
 
     /**
-     * Merges a file both sides changed.
+     * Reconciles divergent local and remote content at the specified path by performing a three-way merge
+     * against the stored base version.
      *
-     * A clean merge is written locally and pushed with the *remote's* etag, so the server accepts
-     * it. A real conflict keeps the server's version at the path and saves this device's beside it
-     * as `name.sync-conflict-<timestamp>.org` — deliberately not conflict markers inside the note.
-     * Neither version is ever discarded; the user resolves it by keeping one.
+     * If the file is absent locally, no action is taken. If no base version is available, the remote version
+     * is kept and any differing local content is handled as a conflict. When the remote file can be fetched,
+     * the local, base, and remote contents are merged. A clean merge is saved only if the local content has
+     * not changed during reconciliation, then pushed back to the remote only if the remote ETag still matches.
+     * Merge conflicts keep the server version at the original path and preserve the local changes as a
+     * conflict.
      *
-     * Without a base there is nothing to merge from: a note created here, or over the name of one
-     * deleted here, and another at the same path elsewhere are two notes, not one changed twice.
-     * Merged against an empty base, both would be kept whole, one after the other — one file with
-     * two IDs and two titles — so theirs takes the path, as for a conflict.
+     * @param path the replica path of the file to reconcile.
+     * @return the push outcome indicating whether the file was merged, conflicted, skipped, not fetched, or failed.
      */
     private suspend fun reconcile(path: String): PushOutcome {
         val local = store.read(path) ?: return PushOutcome.SKIPPED
@@ -358,7 +402,15 @@ class SyncEngine(
         }
     }
 
-    /** A fetch that brought nothing to merge with. Tried again next cycle, which the generation must allow. */
+    /**
+     * Converts a fetch result from a no-file reconciliation path into the corresponding push outcome.
+     *
+     * A failed fetch is reported as [PushOutcome.NOT_FETCHED] because the remote content could not be
+     * inspected. Any non-failed result is treated as [PushOutcome.FAILED].
+     *
+     * @param answer the result returned by the attempted remote fetch.
+     * @return the push outcome to report for the no-file case.
+     */
     private fun outcomeOfNoFile(answer: FetchResult) =
         if (answer is FetchResult.Failed) PushOutcome.NOT_FETCHED else PushOutcome.FAILED
 
@@ -382,11 +434,14 @@ class SyncEngine(
     }
 
     /**
-     * Pushes a file the server does not have, or no longer has.
+     * Pushes a locally present file as a new remote item, requiring the remote path to be absent.
      *
-     * Only as a creation (`If-None-Match: *`): a note made here must never replace one someone
-     * made at the same path elsewhere. When that has happened, theirs takes the path and ours is
-     * kept beside it as a conflict copy, which is pushed like any other new note.
+     * If no local content exists at the path, the push is skipped. When the remote create succeeds,
+     * the local store is marked with the returned ETag and pushed content. If the remote item already
+     * exists, the remote version is kept and any differing local content is handled as a conflict.
+     *
+     * @param path the replica path of the local file to create remotely.
+     * @return the push outcome indicating whether the file was pushed, skipped, conflicted, or failed.
      */
     private suspend fun pushNew(path: String): PushOutcome {
         val content = store.read(path) ?: return PushOutcome.SKIPPED
@@ -400,7 +455,16 @@ class SyncEngine(
         }
     }
 
-    /** The server's [path] takes the path; what is here, if it differs, is kept as a conflict copy. */
+    /**
+     * Keeps the remote version of the file at the specified path in the local store.
+     *
+     * The remote file is fetched and saved as the server version. If saving the server version produces a
+     * preserved local conflict, the operation reports a conflict. If the server version is kept without a
+     * local conflict, the operation is skipped because no local content is pushed.
+     *
+     * @param path the replica path whose remote version should be kept locally.
+     * @return the push outcome indicating whether keeping the remote version caused a conflict, was skipped, failed, or could not fetch the remote file.
+     */
     private suspend fun keepTheirs(path: String): PushOutcome {
         val answer = api.fetch(path)
         val theirs = (answer as? FetchResult.Fetched)?.file ?: return outcomeOfNoFile(answer)

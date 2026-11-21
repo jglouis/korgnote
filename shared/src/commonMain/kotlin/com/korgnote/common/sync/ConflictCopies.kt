@@ -1,8 +1,14 @@
 package com.korgnote.common.sync
 
 /**
- * The name a conflicting copy is saved under, mirroring Syncthing's so it is already familiar:
- * `notes/idea.org` becomes `notes/idea.sync-conflict-20260920-101500.org`, in the same folder.
+ * Builds the file name used for a conflict copy of [path].
+ *
+ * The generated name inserts `.sync-conflict-[timestamp]` before the final file extension when one
+ * is present, or appends it to the full path when there is no extension.
+ *
+ * @param path original file path or file name.
+ * @param timestamp timestamp string to include in the conflict copy name.
+ * @return conflict copy path derived from [path] and [timestamp].
  */
 fun conflictCopyName(path: String, timestamp: String): String {
     val extension = path.substringAfterLast('.', "")
@@ -12,22 +18,31 @@ fun conflictCopyName(path: String, timestamp: String): String {
 }
 
 /**
- * Our copies, `stem.sync-conflict-yyyyMMdd-HHmmss.ext`, and Syncthing's, which add the device that
- * made the change (`…-HHmmss-ABCDEF1.ext`). The same suffix carries the counter added when two
- * copies of one note land in the same second.
+ * Matches file names that are sync-conflict copies rather than ordinary notes.
+ *
+ * The expression recognizes names ending in `.sync-conflict-YYYYMMDD-HHMMSS`,
+ * optionally followed by a dash and an alphanumeric suffix, and preserves an
+ * optional final extension. Capture group 1 is the original base path before the
+ * conflict marker; capture group 2 is the final extension, when present.
  */
 private val conflictCopy = Regex("""^(.*)\.sync-conflict-\d{8}-\d{6}(?:-[A-Za-z0-9]+)?(\.[^./]+)?$""")
 
-/** The note [path] is a conflict copy of, or null when it is not a conflict copy. */
+/**
+ * Returns the original file path encoded by a conflict-copy path.
+ *
+ * @param path The path to inspect.
+ * @return The original path if [path] matches the conflict-copy naming pattern, or null otherwise.
+ */
 fun conflictCopyOriginal(path: String): String? =
     conflictCopy.matchEntire(path)?.let { it.groupValues[1] + it.groupValues[2] }
 
 /**
- * Every note in [paths] that has conflict copies beside it, with those copies newest first.
+ * Finds conflict-copy paths whose original path is also present in [paths].
  *
- * This *is* a note's conflict state: the copy stands until someone deals with it, whichever device
- * — or Syncthing — made it, and deleting it is what resolves the conflict. A copy whose note is gone
- * has nothing left to conflict with and is just a note.
+ * @param paths The file paths to inspect.
+ * @return A map from each original path to the matching conflict-copy paths found in [paths],
+ * sorted in descending order. Paths that are not conflict copies, or whose original path is not
+ * present in [paths], are omitted.
  */
 fun conflictsIn(paths: Collection<String>): Map<String, List<String>> {
     val present = paths.toSet()

@@ -1,15 +1,30 @@
 package com.korgnote.common.replica
 
 /**
- * The replica held in memory: the web build's storage, and what every [DocumentStore] test runs
- * against so the store's behaviour is proven without a filesystem.
+ * In-memory implementation of [ReplicaStorage] for tests and non-persistent replicas.
+ *
+ * Stores the working copy, base contents, and replica metadata in mutable memory structures. Data is
+ * lost when the instance is discarded. Files supplied through [initialFiles] populate only the
+ * working copy; base contents and metadata start empty unless written later through the storage API.
+ *
+ * File stamps are derived from each file's content hash and length, and are cached until the
+ * corresponding working-copy file is changed or deleted. Written working-copy and base paths are
+ * validated as safe replica-relative paths.
+ *
+ * This implementation does not provide synchronization or persistence guarantees beyond the lifetime
+ * of the object.
  */
 class InMemoryReplicaStorage(
     initialFiles: Map<String, String> = emptyMap(),
 ) : ReplicaStorage {
     private val files = initialFiles.toMutableMap()
 
-    /** Each note's stamp, kept until it changes: the web lists its notes on one thread, and has no files to look at. */
+    /**
+     * Current in-memory stamps for files in the replica, keyed by replica-relative path.
+     *
+     * Mirrors the visible file set tracked by storage and is used to report file state and detect
+     * changes without reading file contents.
+     */
     private val stampsOfFiles = mutableMapOf<String, FileStamp>()
     private val base = mutableMapOf<String, String>()
     private var meta = ReplicaMeta()

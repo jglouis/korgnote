@@ -88,8 +88,17 @@ fun merge(base: String, local: String, remote: String): MergeResult {
 }
 
 /**
- * For each line of [from], the index of the line it corresponds to in [to], or null when the line
- * was changed or removed. Computed as a longest common subsequence.
+ * Computes an index alignment from one list of lines to another.
+ *
+ * The alignment identifies lines in [from] that are considered unchanged in [to], preserving order
+ * according to a longest common subsequence match. Each position in the returned array corresponds
+ * to the same index in [from]. A non-null value is the matching index in [to], while a null value
+ * indicates that the line from [from] has no aligned counterpart in [to].
+ *
+ * @param from the source list of lines to align from.
+ * @param to the target list of lines to align against.
+ * @return an array whose entries map indices in [from] to matching indices in [to], or null for
+ * unmatched lines.
  */
 internal fun alignment(from: List<String>, to: List<String>): Array<Int?> {
     val result = arrayOfNulls<Int>(from.size)

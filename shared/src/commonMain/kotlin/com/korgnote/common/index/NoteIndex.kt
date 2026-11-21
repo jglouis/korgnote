@@ -17,16 +17,30 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
 /**
- * Where a [NoteIndex] is kept between runs, a line at a time: a big library's facts should not have to
- * fit in memory twice to be read or written.
+ * Provides persistent storage for the kept note index, split into independent [IndexPart] sections.
  *
- * It is a cache: nothing in it is only there, so losing it costs a scan of the notes and nothing else.
+ * Implementations read a requested part as plain text lines and replace a part atomically, so callers
+ * either observe the previous contents or the complete new contents. The split allows callers to load
+ * only the portion of the index required for a task without reading the remainder of the index.
  */
 interface NoteIndexFile {
-    /** Hands over each line of [part]; nothing when there is none. */
+    /**
+     * Reads the stored index [part] one line at a time.
+     *
+     * @param part the part of the kept index to read.
+     * @param line called once for each line read from the stored index part.
+     */
     suspend fun read(part: IndexPart, line: (String) -> Unit)
 
-    /** Replaces [part] with [lines], whole or not at all. */
+    /**
+     * Replaces the stored index [part] with the supplied text [lines].
+     *
+     * The replacement is performed atomically, so readers observe either the previous contents or the
+     * complete new contents for the part.
+     *
+     * @param part the part of the kept index to replace.
+     * @param lines the lines to store for the index part.
+     */
     suspend fun write(part: IndexPart, lines: Sequence<String>)
 }
 

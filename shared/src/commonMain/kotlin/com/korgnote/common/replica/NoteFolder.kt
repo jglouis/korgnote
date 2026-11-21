@@ -3,48 +3,94 @@ package com.korgnote.common.replica
 import kotlinx.serialization.Serializable
 
 /**
- * What a note file looked like when it was listed: enough to tell that it changed since, without
- * reading it. Neither a phone's shared storage nor iOS's Files says when a file changes, so this is
- * how an edit made by Syncthing, Dropbox or Emacs is noticed.
+ * Snapshot of a local file's observable state used to detect changes.
+ *
+ * Combines the file's last-modified timestamp and byte size into a lightweight stamp suitable for
+ * comparison, persistence, and serialization during synchronization.
  */
 @Serializable
 data class FileStamp(val modified: Long, val size: Long)
 
-/** A note file in a [NoteFolder], by its path relative to the folder. */
+/**
+ * Local manifest entry for a folder item tracked by synchronization.
+ *
+ * Records the entry's relative path together with a snapshot of its observable file state, allowing
+ * the sync engine to compare local state against stored or remote manifests and detect changes.
+ */
 data class FolderEntry(val path: String, val stamp: FileStamp)
 
 /**
- * A folder of `.org` files that the user chose and that other apps also write to: the notes
- * themselves, not a copy the app keeps.
+ * Abstraction over a local folder that stores note files for synchronization.
  *
- * Each platform reaches it its own way — the Storage Access Framework on Android, a bookmarked URL
- * on iOS — and both are slow next to a file in the app's own storage, so [FolderNoteStorage] asks as
- * little of it as it can. Paths are relative and `/`-separated, as in the replica.
+ * Exposes note content through paths relative to the folder root and provides the file state needed
+ * to detect local changes. Implementations handle the backing storage details, including recursive
+ * listing, reading, writing, deletion, and creation of missing parent folders when writing files.
  *
- * Every call may throw when the folder can no longer be reached: the user took KorgNote's access
- * away, or the folder was deleted or is on a card that was taken out.
+ * Hidden files and directories are excluded from the synchronized view so that application metadata,
+ * versioning folders, and other non-note files do not appear as note entries.
+ *
+ * Operations are suspendable because they may perform file system or platform storage I/O.
  */
 interface NoteFolder {
     /**
-     * Every `.org` file in the folder and the folders under it, sorted. Hidden files and folders are
-     * left out: `.stversions`, where Syncthing keeps old versions, would otherwise show every note
-     * several times over.
+     * Lists the visible note files currently present in this folder.
+     *
+     * Hidden files and directories are excluded from the synchronized view. Entry paths are relative to
+     * the folder root and each entry includes the file state snapshot used for synchronization.
+     *
+     * @return the current local manifest entries for files tracked by synchronization.
      */
     suspend fun list(): List<FolderEntry>
 
-    /** [path]'s text, or null when there is no such file. */
+    /**
+     * Reads the text content of the file at [path].
+     *
+     * @param path the file path relative to the folder root.
+     * @return the file content, or null if no such file is available.
+     */
     suspend fun read(path: String): String?
 
-    /** Writes [content] to [path], creating it and the folders above it when missing. */
+    /**
+     * Writes [content] to the file at [path].
+     *
+     * Creates missing parent folders as needed and replaces any existing content at the same path.
+     * The path is relative to the folder root.
+     *
+     * @param path the file path relative to the folder root.
+     * @param content the text content to write.
+     * @return the file state snapshot after the write completes.
+     */
     suspend fun write(path: String, content: String): FileStamp
 
+    /**
+     * Deletes the file at [path] from this folder.
+     *
+     * The path is relative to the folder root.
+     *
+     * @param path the file path relative to the folder root.
+     */
     suspend fun delete(path: String)
 
-    /** How [path] looks now, or null when there is no such file. */
+    /**
+     * Returns the current file state snapshot for the file at [path].
+     *
+     * The path is relative to the folder root.
+     *
+     * @param path the file path relative to the folder root.
+     * @return the file state snapshot, or null if no such file is available.
+     */
     suspend fun stamp(path: String): FileStamp?
 }
 
-/** Whether a listed name is one [NoteFolder.list] keeps: a visible `.org` file in visible folders. */
+/**
+ * Determines whether the supplied path represents a listed note path.
+ *
+ * A listed note path must end with the case-sensitive ".org" suffix and every slash-separated path
+ * segment must be non-empty and must not start with ".".
+ *
+ * @param path the path to test.
+ * @return true if the path is a listed note path; false otherwise.
+ */
 fun isListedNotePath(path: String): Boolean =
     path.endsWith(".org") && path.split('/').none { it.isEmpty() || it.startsWith('.') }
 
@@ -52,16 +98,26 @@ fun isListedNotePath(path: String): Boolean =
 const val LONGEST_SYNCED_NAME = 200
 
 /**
- * Whether a path a server or a WebDAV folder names is one this device keeps a copy of: a note as
- * [isListedNotePath] has it, with no control characters, and no name longer than
- * [LONGEST_SYNCED_NAME]. Anything else a server lists is left where it is: a file that is not a
- * note has no business on this device, and a name that cannot be written here would stop every
- * sync at it.
+ * Determines whether the supplied path is eligible for synchronization as a note path.
+ *
+ * A synced note path must be a listed note path, contain no ASCII control characters or delete
+ * character, and have every slash-separated path segment fit within the synced name byte-length
+ * limit when encoded as UTF-8.
+ *
+ * @param path the path to test.
+ * @return true if the path is a synced note path; false otherwise.
  */
 fun isSyncedNotePath(path: String): Boolean =
     isListedNotePath(path) &&
         path.none { it.code < 0x20 || it.code == 0x7F } &&
         path.split('/').all { it.encodeToByteArray().size <= LONGEST_SYNCED_NAME }
 
-/** Rejects a path that is not relative, or climbs out of the folder, as [NoteFolder]s must. */
+/**
+ * Requires [path] to be a safe note path relative to the replica directory.
+ *
+ * Rejects blank paths, absolute paths, paths containing backslashes, and paths with "." or ".." segments.
+ *
+ * @param path note path to validate.
+ * @throws IllegalArgumentException if [path] is blank, absolute, uses backslashes, or contains "." or ".." segments.
+ */
 fun requireSafeNotePath(path: String) = requireSafeReplicaPath(path)

@@ -18,32 +18,75 @@ class DocumentStore(private val storage: ReplicaStorage) {
 
     private val mutex = Mutex()
 
+    /**
+     * Retrieves the available storage paths.
+     *
+     * @return a list of path strings from storage.
+     */
     suspend fun paths(): List<String> = storage.list()
 
+    /**
+     * Reads the content stored at the specified path.
+     *
+     * @param path the path of the content to read.
+     * @return the content at the specified path, or null if no content is available.
+     */
     suspend fun read(path: String): String? = storage.read(path)
 
-    /** Every note with how its file looks now: see [ReplicaStorage.stamps]. */
+    /**
+     * Retrieves the stored file stamps keyed by their associated file identifier or path.
+     *
+     * @return a map of stored file stamps, or null if no stamp information is available
+     */
     suspend fun stamps(): Map<String, FileStamp>? = storage.stamps()
 
-    /** The texts of [paths], those that can be read: see [ReplicaStorage.readSeveral]. */
+    /**
+     * Reads the contents associated with multiple storage paths.
+     *
+     * @param paths the storage paths to read
+     * @return a map where each key is a requested path and each value is the content read from that path
+     */
     suspend fun readSeveral(paths: List<String>): Map<String, String> = storage.readSeveral(paths)
 
-    /** True when [path] has local changes that have not reached the server. */
+    /**
+     * Checks whether the file metadata for the specified path is marked as dirty.
+     *
+     * @param path The path of the file to check.
+     * @return `true` if the file exists in metadata and is marked as dirty; otherwise `false`.
+     */
     suspend fun isDirty(path: String): Boolean = storage.readMeta().files[path]?.dirty == true
 
+    /**
+     * Retrieves the paths of all files currently marked as dirty.
+     *
+     * @return a sorted list of dirty file paths.
+     */
     suspend fun dirtyPaths(): List<String> =
         storage.readMeta().files.values.filter { it.dirty }.map { it.path }.sorted()
 
+    /**
+     * Retrieves metadata for the file identified by the given path.
+     *
+     * @param path the path of the file whose metadata should be retrieved
+     * @return the file metadata for the given path, or null if no metadata exists
+     */
     suspend fun meta(path: String): FileMeta? = storage.readMeta().files[path]
 
-    /** Every file's record at once, for a loop over many: each [meta] looks at the disk. */
+    /**
+     * Reads the stored file metadata records.
+     *
+     * @return a map of file metadata records keyed by their associated file identifier
+     */
     suspend fun records(): Map<String, FileMeta> = storage.readMeta().files
 
     /**
-     * Writes [content] locally and marks it dirty.
+     * Saves the specified content at the given replica path.
      *
-     * Deliberately cannot fail on a network problem: there is no network here. The file is on disk
-     * before this returns, so an edit made offline survives a restart.
+     * The path is validated before writing, and the write operation is performed
+     * under synchronization to prevent concurrent modifications.
+     *
+     * @param path the replica path where the content should be saved
+     * @param content the content to save
      */
     suspend fun save(path: String, content: String) {
         requireSafeReplicaPath(path)
@@ -51,10 +94,12 @@ class DocumentStore(private val storage: ReplicaStorage) {
     }
 
     /**
-     * [save], but only while [path] still holds [expected]; false, writing nothing, when it moved.
+     * Saves new content to the replica at the specified path only if its current content matches the expected value.
      *
-     * For a write computed from what was read a moment ago — a merge, across a network round trip —
-     * which must not land on an edit saved in between.
+     * @param path the replica path to save to
+     * @param expected the content that must currently be stored at the path for the save to proceed
+     * @param content the new content to store when the current content matches the expected value
+     * @return true if the content was saved, or false if the current content did not match the expected value
      */
     suspend fun saveIfUnchanged(path: String, expected: String, content: String): Boolean {
         requireSafeReplicaPath(path)
@@ -90,10 +135,12 @@ class DocumentStore(private val storage: ReplicaStorage) {
     }
 
     /**
-     * Deletes [path] here and records it for the server as a tombstone.
+     * Deletes the entry identified by the specified path.
      *
-     * A file the server never had is simply forgotten; there is nobody to tell. Otherwise the
-     * tombstone keeps the etag the file was last synced at, and sync deletes only that version.
+     * The operation is performed while holding the internal mutex to ensure the
+     * deletion state is updated atomically.
+     *
+     * @param path the path of the entry to delete
      */
     suspend fun delete(path: String) {
         mutex.withLock { tombstoneLocked(path) }
@@ -112,16 +159,23 @@ class DocumentStore(private val storage: ReplicaStorage) {
         storage.writeMeta(meta.copy(files = files))
     }
 
-    /** True when a note exists at [path] here. */
+    /**
+     * Checks whether a value exists in storage at the specified path.
+     *
+     * @param path the storage path to check.
+     * @return true if data exists at the specified path, false otherwise.
+     */
     private suspend fun isTaken(path: String): Boolean =
         storage.read(path) != null
 
     /**
-     * Creates [path] with [content], dirty and never synced, so the next sync pushes it as new.
-     * Returns false, writing nothing, when a note already exists there.
+     * Creates content at the specified replica path if the path is not already taken.
      *
-     * A path whose tombstone has not reached the server yet is taken over rather than refused: the
-     * new content is pushed as an edit of the version that was deleted, which is what the user sees.
+     * The path is validated before creation. If the path is already in use, no content is created.
+     *
+     * @param path The replica path where the content should be created.
+     * @param content The content to store at the specified path.
+     * @return `true` if the content was created, or `false` if the path was already taken.
      */
     suspend fun create(path: String, content: String): Boolean {
         requireSafeReplicaPath(path)
@@ -148,12 +202,16 @@ class DocumentStore(private val storage: ReplicaStorage) {
     }
 
     /**
-     * Moves [from] to [to]: a new note with the same content, and a tombstone for the old one.
-     * Returns false, changing nothing, when [from] is missing or [to] is taken.
+     * Renames the stored content from one replica path to another.
      *
-     * Both happen under one lock, so nothing here ever sees one without the other; the sync engine
-     * pushes the new note before it deletes the old one, so another device may briefly see both,
-     * but never neither. Unsynced edits travel with the content.
+     * The target path is validated before the rename is attempted. If the source and target paths
+     * are the same, the operation is not performed. The rename succeeds only when the source exists
+     * and the target path is not already taken.
+     *
+     * @param from the existing replica path to rename from
+     * @param to the target replica path to rename to
+     * @return true if the content was renamed successfully, or false if the source does not exist,
+     * the target is already taken, or both paths are the same
      */
     suspend fun rename(from: String, to: String): Boolean {
         requireSafeReplicaPath(to)
@@ -167,11 +225,23 @@ class DocumentStore(private val storage: ReplicaStorage) {
         }
     }
 
-    /** Deletions the server has not been told about yet. */
+    /**
+     * Retrieves metadata for files marked as deleted, sorted by file path.
+     *
+     * @return a list of deleted file metadata sorted by path
+     */
     suspend fun tombstones(): List<FileMeta> =
         storage.readMeta().files.values.filter { it.deleted }.sortedBy { it.path }
 
-    /** Drops [path]'s tombstone once the server has deleted it, or it no longer needs deleting. */
+    /**
+     * Removes the stored deletion marker for the file at the specified path.
+     *
+     * If the metadata entry exists and is marked as deleted, the entry is removed
+     * from storage. If the path is not present or is not marked as deleted, this
+     * function leaves the metadata unchanged.
+     *
+     * @param path the file path whose tombstone metadata should be removed
+     */
     suspend fun forgetTombstone(path: String) {
         mutex.withLock {
             val meta = storage.readMeta()
@@ -180,11 +250,16 @@ class DocumentStore(private val storage: ReplicaStorage) {
     }
 
     /**
-     * Records content that came from the server: it becomes both the working copy and the base, and
-     * the file is no longer dirty.
+     * Accepts content received from the server for the replica at the specified path.
      *
-     * Whatever is here is overwritten, so this is for setting up a replica in a test. Text that took
-     * a network round trip to arrive goes through [acceptIfUntouched] or [acceptAllUntouched].
+     * The path is validated before the update is applied. The operation is performed
+     * while holding the replica mutex to ensure serialized access to the underlying
+     * replica state.
+     *
+     * @param path safe replica path identifying the content to update.
+     * @param content server-provided content to store for the specified path.
+     * @param etag optional server entity tag associated with the accepted content.
+     * @throws IllegalArgumentException if the provided path is not a safe replica path.
      */
     internal suspend fun acceptFromServer(path: String, content: String, etag: String? = null) {
         requireSafeReplicaPath(path)
@@ -192,13 +267,15 @@ class DocumentStore(private val storage: ReplicaStorage) {
     }
 
     /**
-     * [acceptFromServer] for text fetched across a network round trip: only while [path] is as it
-     * was when the server was asked, which is at [knownEtag] with nothing done to it here. False,
-     * writing nothing, when it moved, and what was fetched is dropped.
+     * Accepts and stores replica content for the specified path only if the local metadata has not changed
+     * from the expected known ETag and the file is neither dirty nor deleted.
      *
-     * The check and the write share the lock, so a save cannot land between them and be overwritten
-     * and marked as synced. An edit left dirty is not lost track of: the next cycle finds it meeting
-     * the server's change, and merges them.
+     * @param path the safe replica path of the file to accept
+     * @param content the content to store for the file
+     * @param etag the new ETag associated with the accepted content
+     * @param knownEtag the expected current ETag from local metadata, or null if no ETag is expected
+     * @return true if the content was accepted and stored; false if the file was dirty, deleted, or its
+     * ETag did not match knownEtag
      */
     suspend fun acceptIfUntouched(path: String, content: String, etag: String, knownEtag: String?): Boolean {
         requireSafeReplicaPath(path)
@@ -211,13 +288,14 @@ class DocumentStore(private val storage: ReplicaStorage) {
     }
 
     /**
-     * Takes many files from the server under one lock with one metadata write, leaving out any with
-     * local work: an edit, or a deletion. Returns the paths taken.
+     * Accepts the provided remote files only when their local metadata is not marked as dirty or deleted.
      *
-     * One lock so that a save cannot land between the check and the write; one metadata write because
-     * one for each is what made a first sync quadratic. A write that fails partway still records those
-     * before it. A crash leaves them with an old record or none, which the next cycle takes again or
-     * finds identical.
+     * Each file path is validated before processing. Files that are currently marked dirty or deleted in
+     * metadata are skipped. For accepted files, both the working content and base content are written, and
+     * metadata is updated with the file path and ETag. If no files are accepted, an empty list is returned.
+     *
+     * @param files remote files to accept when their local metadata is untouched
+     * @return the paths of files that were accepted and written
      */
     suspend fun acceptAllUntouched(files: List<RemoteFile>): List<String> {
         files.forEach { requireSafeReplicaPath(it.path) }
@@ -248,11 +326,16 @@ class DocumentStore(private val storage: ReplicaStorage) {
     }
 
     /**
-     * Records that [path]'s current content reached the server: it becomes the base, and the file is
-     * no longer dirty.
+     * Marks the content at the specified path as successfully pushed to remote storage.
      *
-     * The content is re-read under the lock rather than passed in, so an edit made while the push
-     * was in flight stays dirty instead of being marked as synced.
+     * Updates the stored base content and metadata with the supplied ETag when the local content still
+     * matches the pushed content. If the file was deleted while the push was in progress, records a
+     * clean tombstone with the new ETag. If the file was edited again while the push was in progress,
+     * keeps it dirty while advancing the base content and ETag to the pushed version.
+     *
+     * @param path path of the file whose push state should be recorded
+     * @param etag remote ETag returned for the pushed content
+     * @param pushedContent content that was sent during the completed push
      */
     suspend fun markPushed(path: String, etag: String, pushedContent: String) {
         mutex.withLock {
@@ -283,16 +366,16 @@ class DocumentStore(private val storage: ReplicaStorage) {
     }
 
     /**
-     * Settles a conflict the server's way: [path] becomes [serverText] at [serverEtag], and what was
-     * here is saved beside it as a conflict copy, whose name is returned. Null when there was nothing
-     * here to keep, or it already matched the server.
+     * Keeps the server version of the content at the specified replica path.
      *
-     * The server's version keeps the path because the server is the source of truth: a file in the
-     * notes directory is never replaced by a version nobody merged. The copy is a new note, dirty, so
-     * the next sync pushes it and every device sees it until someone resolves it.
+     * If a different local version already exists, it is saved as a timestamped copy before
+     * the server content and ETag are accepted as the current stored version.
      *
-     * One lock for both, and the local text read under it, so a save made while the server was
-     * being asked lands in the copy rather than being overwritten.
+     * @param path the replica path whose content should be replaced with the server version
+     * @param serverText the text content received from the server
+     * @param serverEtag the ETag associated with the server content
+     * @param timestamp the timestamp used when creating a copy of the previous local content
+     * @return the path of the saved local copy if a differing local version existed, or null otherwise
      */
     suspend fun keepServerVersion(path: String, serverText: String, serverEtag: String, timestamp: String): String? {
         requireSafeReplicaPath(path)
@@ -308,7 +391,16 @@ class DocumentStore(private val storage: ReplicaStorage) {
         }
     }
 
-    /** A conflict copy name for [path] that nothing here has yet: two conflicts can share a second. */
+    /**
+     * Generates an available copy name for the specified path using the given timestamp.
+     *
+     * If the initial conflict copy name is already taken, incrementing numeric suffixes are
+     * appended to the timestamp until a free name is found.
+     *
+     * @param path The original path used to derive the copy name.
+     * @param timestamp The timestamp used as part of the generated copy name.
+     * @return A copy name that is not currently taken.
+     */
     private suspend fun freeCopyName(path: String, timestamp: String): String {
         var name = conflictCopyName(path, timestamp)
         var counter = 2
@@ -317,11 +409,13 @@ class DocumentStore(private val storage: ReplicaStorage) {
     }
 
     /**
-     * Resolves a conflict in favour of [copy]: its content becomes [path]'s, as an edit to push, and
-     * the copy is deleted. False, changing nothing, when either is missing.
+     * Replaces the content at the specified replica path with the content stored at the copy path,
+     * then marks the copy as tombstoned.
      *
-     * Under one lock, so the replica never holds the note without the content chosen for it; the
-     * engine pushes the edit before it sends the deletion, so the server never has neither.
+     * @param path the replica path whose content should be replaced.
+     * @param copy the path of the stored copy whose content should be used as the replacement.
+     * @return true if the replacement was completed and the copy was tombstoned, or false if either
+     * the copy or the target path does not exist.
      */
     suspend fun replaceWithCopy(path: String, copy: String): Boolean {
         requireSafeReplicaPath(path)
@@ -335,13 +429,21 @@ class DocumentStore(private val storage: ReplicaStorage) {
     }
 
     /**
-     * Resolves a conflict with [content] made from both versions, chunk by chunk: it becomes
-     * [path]'s, as an edit to push, and [copy] is deleted. When [content] is what the note already
-     * has, only the copy goes, and nothing is pushed for the note.
+     * Resolves a conflict between a note and its replica copy when both still match
+     * the expected contents.
      *
-     * Only while the note still holds [expectedNote] and the copy [expectedCopy], the texts the
-     * choices were made on: false, changing nothing, when either moved or is gone — a sync landing
-     * while the reader was choosing.
+     * The operation succeeds only if the current content at [path] equals
+     * [expectedNote] and the current content at [copy] equals [expectedCopy]. When
+     * successful, [path] is updated to [content] if it differs from [expectedNote],
+     * and [copy] is tombstoned.
+     *
+     * @param path safe replica path of the primary note to keep.
+     * @param copy safe replica path of the conflicting copy to remove.
+     * @param expectedNote expected current content of the primary note.
+     * @param expectedCopy expected current content of the conflicting copy.
+     * @param content resolved content to store in the primary note.
+     * @return `true` if the conflict was resolved, or `false` if either file no
+     * longer matches its expected content.
      */
     suspend fun resolveConflict(path: String, copy: String, expectedNote: String, expectedCopy: String, content: String): Boolean {
         requireSafeReplicaPath(path)
@@ -354,11 +456,12 @@ class DocumentStore(private val storage: ReplicaStorage) {
     }
 
     /**
-     * Remembers how far the replica has caught up, so the next sync can ask for a delta.
+     * Sets the persisted generation value.
      *
-     * Taken as the server gives it, even when lower: a server whose clock went back across a
-     * restart counts from behind where it was, and a client kept at the higher number would ask
-     * for changes since a generation that server reaches only later, missing all before it.
+     * The metadata is updated only when the current generation differs from the
+     * supplied value.
+     *
+     * @param generation the generation value to store
      */
     suspend fun setGeneration(generation: Long) {
         mutex.withLock {
@@ -367,9 +470,22 @@ class DocumentStore(private val storage: ReplicaStorage) {
         }
     }
 
+    /**
+     * Retrieves the current generation value from the stored metadata.
+     *
+     * @return the current generation value.
+     */
     suspend fun generation(): Long = storage.readMeta().generation
 
-    /** Removes [path] locally without recording a deletion to push. */
+    /**
+     * Removes the file identified by the given path from local storage and updates
+     * local metadata so the path is no longer tracked.
+     *
+     * The removal is performed while holding the internal mutex to ensure local
+     * storage and metadata remain consistent.
+     *
+     * @param path the path of the file to remove from local storage
+     */
     suspend fun removeLocally(path: String) {
         mutex.withLock {
             storage.delete(path)
@@ -379,6 +495,11 @@ class DocumentStore(private val storage: ReplicaStorage) {
         }
     }
 
-    /** The content as the server last had it: the ancestor of a three-way merge. */
+    /**
+     * Reads the base value associated with the specified path.
+     *
+     * @param path the path whose base value should be read
+     * @return the base value for the path, or null if no value is available
+     */
     suspend fun base(path: String): String? = storage.readBase(path)
 }

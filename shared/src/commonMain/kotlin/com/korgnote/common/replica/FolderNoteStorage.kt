@@ -13,58 +13,88 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 
 /**
- * The notes as files in a folder the user chose, with no server: what other apps sync — Syncthing,
- * Dropbox, Nextcloud — or nothing at all.
+ * Stores replica notes as files in a [NoteFolder].
  *
- * There is no base or metadata to keep, since there is nothing to sync with: they read as empty and
- * writing them does nothing, so nothing of KorgNote's ever lands in the user's folder. The folder
- * itself is the only copy, which the rest of the app does not have to know: it reads and writes
- * through [DocumentStore] as it does the replica.
+ * Provides a [ReplicaStorage] implementation backed by a folder, with serialized access,
+ * cached note text, cached file stamps, and deferred writes when the folder cannot be reached.
+ * Failed writes are kept in memory and retried on later access or during [rescan].
  *
- * The folder is slow to reach — a tenth of a second a call on some phones — so what it holds is
- * listed once, and the texts last read are kept by their [FileStamp], as many as `textBudget` has room
- * for: how much is in the folder is anybody's guess. Others write to the folder too, and nothing says
- * when: a save over a file that changed since it was read goes to a conflict copy beside it, as
- * Syncthing would make, rather than over that change. The app already shows such copies, and settles
- * them. Telling takes only the hash of what was read, which is kept for every note.
+ * Detects external changes before overwriting a note. When a note has changed outside this
+ * storage since it was last read or written, the new content is written to a conflict copy
+ * instead of replacing the external change. Conflict paths can be retrieved with
+ * [takeConflicts].
  *
- * The folder can go away — its access taken back, the card it is on taken out — and this never
- * throws for it: listing falls back on what was last seen, reading on the texts still kept, and a
- * save that cannot be written is kept here and written by the next [rescan] that reaches the folder.
- * [problem] says what went wrong meanwhile.
+ * The storage keeps track of the last folder listing and exposes reachability failures through
+ * [problem]. A null [problem] means the most recent folder operation succeeded.
+ *
+ * @param folder folder used to list, read, write, delete, and stamp note files.
+ * @param textBudget maximum cached text size, in bytes, used for recently read or written notes.
+ * @param timestamp supplies the timestamp segment used when naming conflict copies.
  */
 class FolderNoteStorage(
     private val folder: NoteFolder,
-    /** How many bytes of text to keep at hand. */
     textBudget: Long = NoteBudgets.forThisDevice().folderTexts,
-    /** The stamp a conflict copy is named with, as in [conflictCopyName]. */
     private val timestamp: () -> String,
 ) : ReplicaStorage {
 
     private val mutex = Mutex()
 
-    /** Each file's stamp, as last listed or written; null until the folder is first listed. */
+    /**
+     * Last successfully known file stamps for the folder, keyed by note path.
+     *
+     * A `null` value means the folder has not yet been listed successfully. Once populated, this cache is
+     * used when the folder cannot be reached and is updated after successful rescans, writes, and deletes.
+     */
     private var known: Map<String, FileStamp>? = null
 
-    /** The texts last read or written, with the stamp the file had then. */
+    /**
+     * Cache of recently read note text together with the file stamp it was read from.
+     *
+     * Entries are sized by an estimated memory cost of the text content plus fixed overhead, allowing the
+     * cache to evict older text when the configured text budget is exceeded.
+     */
     private val texts = SizedCache<Pair<FileStamp, String>>(textBudget) { (_, text) -> text.length * 2L + TEXT_OVERHEAD }
 
-    /** The hash of what was last read from or written to each file, with the stamp it had then. */
+    /**
+     * Remembers files already observed by this storage, keyed by note path.
+     *
+     * The stored pair contains the last known folder stamp and the fingerprint of the text associated
+     * with that observation, allowing later writes to detect outside changes and avoid overwriting them.
+     */
     private val seen = mutableMapOf<String, Pair<FileStamp, Long>>()
 
-    /** Saves the folder refused, by path, to write when it can be reached again. */
+    /**
+     * Pending note writes that have not yet been persisted to the folder.
+     *
+     * Keys are note paths and values are the text content to write. Entries remain here until they are
+     * successfully flushed, allowing reads and stamp queries to reflect local changes even when the
+     * folder is temporarily unreachable.
+     */
     private val unsaved = mutableMapOf<String, String>()
 
-    /** Notes whose save went to a conflict copy since [takeConflicts] last asked. */
+    /**
+     * Paths of conflict copies created while writing notes.
+     *
+     * Entries are kept in insertion order until they are returned and cleared by `takeConflicts`.
+     */
     private val conflicts = mutableListOf<String>()
 
-    /** Why the folder could not be reached on the last attempt, or null when it could. */
+    /**
+     * Most recent folder reachability or I/O problem message.
+     *
+     * `null` indicates that the last checked folder operation completed without a recorded problem.
+     */
     var problem: String? = null
         private set
 
     /**
-     * Lists the folder again, and writes any save it refused before. True when what it holds
-     * changed since it was last listed: an edit made by another app, or a note added or removed.
+     * Flushes pending unsaved writes, lists the folder again, and updates the remembered file stamps.
+     *
+     * Cached text and seen state for files no longer present in the folder are discarded.
+     *
+     * @return `true` when the folder was reached and the known file set or stamps changed, `false` when
+     * the folder could not be reached, pending writes could not be flushed, or the rescan found no
+     * changes.
      */
     suspend fun rescan(): Boolean = mutex.withLock {
         val before = known
@@ -76,7 +106,13 @@ class FolderNoteStorage(
         before != now
     }
 
-    /** The notes whose save went to a conflict copy since this was last asked, each once. */
+    /**
+     * Returns the paths of conflict copies recorded since the previous call, then clears the recorded
+     * conflicts.
+     *
+     * @return the recorded conflict paths, in insertion order, or an empty list when no conflicts have
+     * been recorded
+     */
     suspend fun takeConflicts(): List<String> = mutex.withLock {
         conflicts.toList().also { conflicts.clear() }
     }
@@ -99,7 +135,17 @@ class FolderNoteStorage(
         seen[path] = stamp to contentHash(text)
     }
 
-    /** How each file looked when last listed; a save not written yet has only its text to go by. */
+    /**
+     * Returns the file stamps currently known for the folder, with pending unsaved writes reflected in
+     * the result.
+     *
+     * Pending writes take precedence over listed folder entries and are stamped from their content hash
+     * and text length. If the folder has never been listed successfully and cannot be reached now, the
+     * contents are unknown.
+     *
+     * @return the known file stamps by path, including pending unsaved writes, or `null` when the folder
+     * could not be listed and no previous listing is known
+     */
     override suspend fun stamps(): Map<String, FileStamp>? = mutex.withLock {
         val listed = entries()
         // Never listed, and it failed: nobody knows what is there, which is not the same as nothing,
@@ -109,8 +155,14 @@ class FolderNoteStorage(
     }
 
     /**
-     * Reads [paths] [PARALLEL_READS] at a time: one after another, a few hundred notes took most of a
-     * minute. The lock is held throughout, so that no save lands in the middle of one being read.
+     * Reads the text for the requested note paths, using pending unsaved content and valid cached text
+     * before reading from the folder.
+     *
+     * Files that are not known to exist, cannot be read, or are unavailable because the folder cannot be
+     * reached are omitted from the result.
+     *
+     * @param paths the note paths to read
+     * @return a map from each successfully read path to its text
      */
     override suspend fun readSeveral(paths: List<String>): Map<String, String> = mutex.withLock {
         val stamps = entries()
@@ -159,7 +211,16 @@ class FolderNoteStorage(
     override suspend fun readMeta(): ReplicaMeta = ReplicaMeta()
     override suspend fun writeMeta(meta: ReplicaMeta) {}
 
-    /** What the folder was last seen to hold, listing it the first time. */
+    /**
+     * Returns the file stamps currently listed for the folder, using the remembered listing when
+     * available.
+     *
+     * When no listing is remembered, the folder is listed and the result is cached. If the folder cannot
+     * be reached before any listing has been cached, an empty map is returned.
+     *
+     * @return the remembered or newly listed file stamps by path, or an empty map when the folder cannot
+     * be reached and no remembered listing exists
+     */
     private suspend fun entries(): Map<String, FileStamp> {
         known?.let { return it }
         val listed = reach { folder.list().associate { it.path to it.stamp } } ?: return emptyMap()
@@ -168,8 +229,17 @@ class FolderNoteStorage(
     }
 
     /**
-     * Writes [content] to [path], or to a conflict copy beside it when [path] changed since it was
-     * read. False when the folder could not be reached.
+     * Writes [content] while the caller holds the storage lock.
+     *
+     * If [path] has been changed outside this storage since it was last read or remembered, the new
+     * content is written to a conflict copy instead of overwriting the external change. The original path
+     * is then remembered with its externally changed content so a later write can resolve it.
+     *
+     * @param path the note path to write
+     * @param content the text content to write
+     * @return `true` when the content was written and local state was updated, or `false` when the folder
+     * could not be reached, the current file state could not be verified, a conflict copy name could not
+     * be found, or the write failed
      */
     private suspend fun writeLocked(path: String, content: String): Boolean {
         val current = reach { Present(folder.stamp(path)) } ?: return false
@@ -189,10 +259,17 @@ class FolderNoteStorage(
     }
 
     /**
-     * What [path], which now has [current], holds when that is something other than what was read
-     * from it: nothing, when it holds what was read. A stamp alone is not enough: a sync app may write a
-     * file back unchanged, which moves its stamp. Null when it moved and cannot be read to tell, which
-     * must not pass for its not having changed.
+     * Checks whether the file at [path] differs from the last text read or from the remembered folder
+     * stamp.
+     *
+     * A non-null result means the check completed. Its text is `null` when no outside content change was
+     * found, or the current folder text when an outside change was found. A `null` return means the file
+     * content could not be read or the folder could not be reached, so the outside-change state could not
+     * be determined.
+     *
+     * @param path the note path to check
+     * @param current the file stamp currently listed for the path
+     * @return the detected outside change information, or `null` when it cannot be determined
      */
     private suspend fun changedOutside(path: String, current: FileStamp): Outside? {
         val read = seen[path]
@@ -202,7 +279,16 @@ class FolderNoteStorage(
         return Outside(now.takeIf { contentHash(it) != read?.second })
     }
 
-    /** A conflict copy name for [path] that the folder has no file under; null when it cannot say. */
+    /**
+     * Finds an unused conflict copy path for [path].
+     *
+     * Candidate names are built from the current timestamp. If the first candidate is already present,
+     * numeric suffixes are appended to the timestamp until a path with no current file stamp is found.
+     *
+     * @param path the original note path that needs a conflict copy name
+     * @return an available conflict copy path, or `null` when the folder cannot be reached while checking
+     * candidate names
+     */
     private suspend fun freeCopyName(path: String): String? {
         val stamp = timestamp()
         var name = conflictCopyName(path, stamp)
@@ -214,7 +300,15 @@ class FolderNoteStorage(
         }
     }
 
-    /** Writes what the folder refused before, oldest first. False when it still cannot be reached. */
+    /**
+     * Writes all pending local changes to the folder and clears each change after it is successfully
+     * persisted.
+     *
+     * Processing stops at the first write failure, leaving that change and any remaining changes pending
+     * for a later attempt.
+     *
+     * @return `true` when all pending changes were written successfully, or `false` when any write failed
+     */
     private suspend fun flushUnsaved(): Boolean {
         for ((path, content) in unsaved.toList()) {
             if (!writeLocked(path, content)) return false
@@ -223,7 +317,15 @@ class FolderNoteStorage(
         return true
     }
 
-    /** [block]'s result, or null — with [problem] saying why — when the folder could not be reached. */
+    /**
+     * Runs [block] and records whether the folder was reachable.
+     *
+     * On success, clears the current problem message and returns the block result. Cancellation is rethrown.
+     * Other exceptions are converted to a problem message and reported as an unreachable folder.
+     *
+     * @param block the suspending operation to perform while checking reachability
+     * @return the result of [block], or `null` when the operation fails with a non-cancellation exception
+     */
     private suspend fun <T> reach(block: suspend () -> T): T? = try {
         block().also { problem = null }
     } catch (e: CancellationException) {
@@ -233,10 +335,20 @@ class FolderNoteStorage(
         null
     }
 
-    /** A value that may itself be null, told apart from [reach] failing. */
+    /**
+     * Records that a note path is known to be present in the folder state tracked by the storage.
+     *
+     * The stamp is the file state observed for the path when it was listed or remembered. A null stamp
+     * represents a present entry whose concrete folder stamp is not currently available.
+     */
     private class Present(val stamp: FileStamp?)
 
-    /** What another app wrote, if anything, told apart from not being able to tell. */
+    /**
+     * Describes the completed result of checking whether a note was changed outside this storage.
+     *
+     * A non-null text value represents the current external content when an outside change was detected.
+     * A null text value means the check completed and no outside content change was found.
+     */
     private class Outside(val text: String?)
 
     private companion object {

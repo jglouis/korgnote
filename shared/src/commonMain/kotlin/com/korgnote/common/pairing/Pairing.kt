@@ -3,12 +3,6 @@ package com.korgnote.common.pairing
 import kotlinx.serialization.Serializable
 
 /**
- * The port the server serves paired devices on, over TLS. [com.korgnote.common.SERVER_PORT] is the
- * plain one, which only the computer the server runs on can reach.
- */
-const val SECURE_PORT = 8443
-
-/**
  * Everything a device needs to pair with a server, as the QR code on the server's Devices page
  * carries it: which server ([serverId], which stays the same when its addresses change), where to
  * reach it, the SHA-256 [fingerprint] of the certificate it will show — the only one the device
@@ -68,7 +62,13 @@ data class PairingLink(
     }
 }
 
-/** What a scanned or pasted text turned out to be; see [PairingLink.check]. */
+/**
+ * Result of checking whether text represents a usable pairing link.
+ *
+ * Distinguishes a valid link from inputs that cannot be used for pairing, including text that is
+ * not a pairing link, links with required fields missing or damaged, and otherwise complete links
+ * that contain no reachable server address.
+ */
 sealed interface PairingLinkCheck {
     data class Valid(val link: PairingLink) : PairingLinkCheck
 
@@ -82,7 +82,13 @@ sealed interface PairingLinkCheck {
     data object Incomplete : PairingLinkCheck
 }
 
-/** What a device sends to pair, over TLS to the pinned certificate. */
+/**
+ * Request body sent when a device pairs with a server.
+ *
+ * Contains the pairing code entered or scanned by the device, the user-visible device name, and
+ * optional replacement details used to retire a previous pairing entry when the same device pairs
+ * again.
+ */
 @Serializable
 data class PairRequest(
     val code: String,
@@ -105,7 +111,15 @@ data class PairResponse(
     val serverName: String,
 )
 
-/** Percent-encodes everything but letters, digits and `-._~`, as a URI component. */
+/**
+ * Percent-encodes [value] as UTF-8 for inclusion in a URI component.
+ *
+ * Leaves ASCII letters, digits, and the unreserved characters `-`, `.`, `_`, and `~` unchanged.
+ * Encodes all other bytes as uppercase hexadecimal percent sequences.
+ *
+ * @param value the string to encode.
+ * @return the percent-encoded representation of [value].
+ */
 private fun encode(value: String): String = buildString {
     for (byte in value.encodeToByteArray()) {
         val c = byte.toInt() and 0xff

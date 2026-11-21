@@ -2,11 +2,22 @@ package com.korgnote.common.sync
 
 import kotlinx.serialization.Serializable
 
-/** What `GET /api/v1/manifest` says about one file; see `docs/05-sync-protocol.md`. */
+/**
+ * Describes one file recorded in a synchronization manifest.
+ *
+ * The entry identifies a file by its manifest path and stores the metadata needed to compare local
+ * and remote state, including byte size, last modification time, and entity tag.
+ */
 @Serializable
 data class ManifestEntry(val path: String, val size: Long, val mtime: Long, val etag: String)
 
-/** The answer of `GET /api/v1/manifest`, written by the server and read by the apps. */
+/**
+ * Describes a snapshot or delta of files known to the synchronization system.
+ *
+ * A manifest identifies the library generation it was produced from, reports whether it represents
+ * the complete library state or only changes since an earlier generation, lists files currently
+ * present, and lists manifest paths that were deleted when the manifest is a delta.
+ */
 @Serializable
 data class Manifest(
     val generation: Long,

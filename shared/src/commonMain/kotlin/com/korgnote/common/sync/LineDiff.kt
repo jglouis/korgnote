@@ -2,12 +2,28 @@ package com.korgnote.common.sync
 
 import com.korgnote.common.org.OrgSyntax
 
-/** One line of a [lineDiff]: in both versions, only the first, or only the second. */
+/**
+ * Represents a single line in a line-based diff.
+ *
+ * A diff line records the line content together with how that line relates to the compared text:
+ * unchanged, removed, or added. It is intended for presenting or processing textual differences
+ * without embedding merge conflict markers in the text itself.
+ */
 data class DiffLine(val kind: Kind, val text: String) {
     enum class Kind { SAME, REMOVED, ADDED }
 }
 
-/** [first] turned into [second], line by line, from their longest common subsequence. */
+/**
+ * Computes a line-based diff between two strings.
+ *
+ * The result preserves the order of lines as they appear in the compared text. Lines present in
+ * both inputs are marked as [DiffLine.Kind.SAME], lines present only in [first] are marked as
+ * [DiffLine.Kind.REMOVED], and lines present only in [second] are marked as [DiffLine.Kind.ADDED].
+ *
+ * @param first the original text to compare from.
+ * @param second the revised text to compare against.
+ * @return the ordered list of diff lines describing unchanged, removed, and added lines.
+ */
 fun lineDiff(first: String, second: String): List<DiffLine> {
     val a = first.lineSequence().toList()
     val b = second.lineSequence().toList()

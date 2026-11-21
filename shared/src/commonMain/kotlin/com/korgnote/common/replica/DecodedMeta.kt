@@ -3,22 +3,28 @@ package com.korgnote.common.replica
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
-/** What says `meta.json` is still the file it was: its modification time and its size. */
+/**
+ * Lightweight record of a file's observable metadata at a point in time.
+ *
+ * Used to compare a later file state against a previously seen state without reading the file
+ * contents. A change in either timestamp or size means the file may have changed.
+ */
 internal data class MetaStamp(val modified: Long, val size: Long)
 
 /**
- * `meta.json` as last decoded, kept until the file's [MetaStamp] moves.
+ * Caches the decoded contents of a replica metadata file for the last observed file stamp.
  *
- * The sync engine asks for one file's record hundreds of times a cycle, and decoding the whole file
- * for each made a cycle quadratic in the notes held. It is kept here, under the storage, rather than
- * in [DocumentStore]: a folder's storage keeps no metadata at all, and must go on reading as empty
- * after a save; and the file stays the truth, so a second copy of the desktop app on the same replica
- * is seen as soon as it writes, rather than having its records overwritten from a stale copy here.
+ * The cache avoids decoding `meta.json` repeatedly when its observable file metadata has not
+ * changed. A cached value is reused only when the requested [MetaStamp] matches the stamp stored
+ * with the decoded [ReplicaMeta].
  *
- * Reads are not under the store's lock, so one can overlap a write. A read takes the stamp before the
- * file, so a write landing between leaves an old stamp on new content, which only costs another
- * decode; and it keeps what it decoded only if nothing was written since it began, or two writes
- * sharing a stamp could leave the older one here.
+ * Failed or empty decodes are not cached. In that case callers receive an empty [ReplicaMeta], while
+ * a later read of the same stamp may attempt decoding again. This prevents a transient read failure
+ * from making the metadata appear permanently empty until the file is rewritten.
+ *
+ * Updates are atomic, so concurrent readers and writers may share an instance without external
+ * synchronization. Races are benign: a reader may decode and lose the compare-and-set to another
+ * update, but it still returns the metadata it decoded for the requested stamp.
  */
 @OptIn(ExperimentalAtomicApi::class)
 internal class DecodedMeta {
@@ -27,8 +33,16 @@ internal class DecodedMeta {
     private val known = AtomicReference<Known?>(null)
 
     /**
-     * What the file at [stamp] holds. Empty when [decode] gets nothing from it, which is not kept: a
-     * read can fail for a moment, and the file would look empty until something next wrote to it.
+     * Reads replica metadata for the given file stamp, reusing the cached decoded value when the
+     * stamp matches the last successfully decoded metadata.
+     *
+     * If no cached value matches, [decode] is invoked. A non-null decoded value is returned and may be
+     * cached for [stamp]. A null result is treated as an unavailable or empty decode and returns a new
+     * empty [ReplicaMeta] without updating the cache.
+     *
+     * @param stamp observable file metadata identifying the state to read.
+     * @param decode function that decodes the metadata when the cached value cannot be reused.
+     * @return the cached or decoded [ReplicaMeta], or an empty [ReplicaMeta] when decoding yields null.
      */
     fun read(stamp: MetaStamp, decode: () -> ReplicaMeta?): ReplicaMeta {
         val seen = known.load()
@@ -38,7 +52,13 @@ internal class DecodedMeta {
         return meta
     }
 
-    /** [meta] is what the file now holds, at [stamp]: no need to decode it again. */
+    /**
+     * Records the replica metadata that was written for the given file stamp, making it the cached
+     * known metadata for subsequent reads.
+     *
+     * @param stamp observable file metadata identifying the state that was written.
+     * @param meta replica metadata associated with the written state.
+     */
     fun wrote(stamp: MetaStamp, meta: ReplicaMeta) {
         known.store(Known(stamp, meta))
     }

@@ -21,7 +21,16 @@ data class NoteBudgets(
     val maxNoteBytes: Long,
 ) {
     companion object {
-        /** The shares of [heap] that leave room for the screen and for one big note being opened. */
+        /**
+         * Creates note memory budgets from heap-size limits.
+         *
+         * The cache-based budgets are derived from [caches], while budgets that bound
+         * total note facts and the largest readable note are derived from [heap].
+         *
+         * @param heap total heap bytes available for note-related limits.
+         * @param caches heap bytes to use when sizing cached note text, parsed notes, and folder text.
+         * @return budgets split across text, parse, folder text, facts, and maximum note size limits.
+         */
         fun of(heap: Long, caches: Long = heap) = NoteBudgets(
             texts = caches / 4,
             parses = caches * 3 / 20,
