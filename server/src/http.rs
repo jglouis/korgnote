@@ -1112,6 +1112,50 @@ fn multipart_value(content_type: &str, body: &[u8], name: &str) -> Option<String
     })
 }
 
+/// Handles a device-pairing form submission and returns the appropriate HTTP response.
+///
+/// This endpoint is available only when pairing is enabled in `app.access.pairing`.
+/// It accepts an `addresses` field from a form body, validates the submitted pairing
+/// addresses, stores valid addresses for future pairing links, and then generates a
+/// pairing page containing a QR/link body.
+///
+/// Supported request body formats:
+///
+/// - `application/x-www-form-urlencoded`
+/// - `multipart/form-data`
+///
+/// JSON bodies are explicitly rejected because pairing addresses must be submitted as
+/// a form field. Any other content type is rejected as unsupported.
+///
+/// The request body is read with a maximum size of 1 MiB and the application's body
+/// idle timeout. If the body cannot be read, it is treated as empty.
+///
+/// # Responses
+///
+/// Returns:
+///
+/// - `404 Not Found` if this server does not support device pairing.
+/// - `400 Bad Request` if:
+///   - the client sends JSON instead of a form,
+///   - one or more submitted values are not valid pairing addresses,
+///   - no usable pairing address is available and pairing configuration can provide
+///     advice for fixing the problem.
+/// - `415 Unsupported Media Type` if the request is not a supported form type.
+/// - `200 OK` with an HTML pairing page if a pairing link/code can be generated.
+/// - a "too long for a code" response if the generated pairing link cannot fit in a
+///   pairing code.
+///
+/// # Parameters
+///
+/// - `app`: Shared application state containing access settings, pairing details,
+///   approval state, watcher status, and request-body limits.
+/// - `headers`: Request headers used to determine the submitted content type.
+/// - `body`: Incoming request body containing the submitted form data.
+///
+/// # Returns
+///
+/// A [`Reply`] containing either an error message/form page or the generated pairing
+/// page.
 async fn devices_pair(app: &Arc<App>, headers: &HeaderMap, body: Incoming) -> Reply {
     let Some(details) = &app.access.pairing else { return Reply::text(StatusCode::NOT_FOUND, "This server does not pair devices.") };
     // A form of either kind is read, JSON is a body that cannot be made a form of, and anything

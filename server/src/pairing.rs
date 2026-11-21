@@ -85,9 +85,23 @@ pub struct PairResponse {
 
 const BORDER: i32 = 4;
 
-/// A pairing link as a QR code for the Devices page. It keeps the four-module quiet border
-/// scanners need, and draws dark modules on light, whatever the page's own colours: many scanners
-/// do not read a code drawn the other way round.
+/// Generates an SVG string representing a QR code for the provided text.
+///
+/// The QR code is rendered as a black path on a white background, with a quiet
+/// border around the encoded modules. The SVG uses a `viewBox` based on QR module
+/// units and scales its displayed width and height by `module_size`.
+///
+/// Returns `Some(String)` containing the SVG markup if the text can be encoded,
+/// or `None` if QR encoding fails.
+///
+/// # Parameters
+///
+/// - `text`: The text content to encode into the QR code.
+/// - `module_size`: The size, in pixels, of each QR module in the output SVG.
+///
+/// # Returns
+///
+/// An optional SVG document as a string.
 pub fn qr_svg(text: &str, module_size: i32) -> Option<String> {
     let qr = encode(text)?;
     let side = qr.size() + BORDER * 2;
@@ -129,8 +143,10 @@ pub fn qr_terminal(text: &str) -> Option<String> {
     Some(out)
 }
 
-/// None for a text longer than a QR code holds, some 2,300 characters: a pairing link is a few
-/// hundred, but its addresses are whatever was typed, and as many.
+/// Encodes the provided text into a QR code using medium error correction.
+///
+/// Returns `Some(QrCode)` if the text is successfully encoded, or `None` if
+/// encoding fails.
 fn encode(text: &str) -> Option<QrCode> {
     QrCode::encode_text(text, QrCodeEcc::Medium).ok()
 }

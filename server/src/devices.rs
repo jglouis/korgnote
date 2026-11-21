@@ -30,6 +30,11 @@ pub const LAST_SEEN_RESOLUTION_MS: i64 = 60 * 1000;
 type Clock = Box<dyn Fn() -> i64 + Send + Sync>;
 type Maker = Box<dyn Fn() -> String + Send + Sync>;
 
+/// Stores pairing state, including paired devices and issued temporary codes.
+///
+/// Paired devices are kept for future recognition, while codes are tracked with
+/// their expiration timestamps in creation order so they can be validated or
+/// cleaned up predictably.
 struct State {
     devices: Vec<PairedDevice>,
     /// Each code with when it expires, in the order they were made.

@@ -116,7 +116,10 @@ struct Ticket {
 }
 
 impl OpenConnections {
-    /// Counts those that have shown a token since among the paired, out of the queue.
+    /// Removes strangers whose peers have become paired and updates the paired count.
+    ///
+    /// Retains only unpaired strangers in `self.strangers`, then increments
+    /// `self.paired` by the number of removed paired strangers.
     fn settle(&mut self) {
         let before = self.strangers.len();
         self.strangers.retain(|stranger| !stranger.peer.is_paired());
@@ -144,32 +147,52 @@ impl Admission {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// A place for `peer`'s connection, made by letting the oldest stranger go when there is none;
-    /// None when every connection open has shown a token or waits on its pairing.
+    /// Attempts to admit `peer` as a new unpaired connection.
+    ///
+    /// This records the peer as a `Stranger` and returns a [`Ticket`] that represents
+    /// the admission. The ticket contains the admission state, the assigned admission
+    /// id, and notification state used to signal when the connection has been forced
+    /// out.
+    ///
+    /// Before admitting the peer, this method:
+    ///
+    /// - locks the admission state,
+    /// - settles any stale/finished entries,
+    /// - enforces both the maximum number of strangers and the total connection limit,
+    /// - evicts the oldest stranger that has not presented or started waiting on a
+    ///   pairing token when space is needed.
+    ///
+    /// If an eviction occurs, the evicted stranger is marked as gone and its waiter is
+    /// notified.
+    ///
+    /// Returns `None` when the admission limits are full and every currently open
+    /// stranger has already shown a paired device's token or is waiting on pairing,
+    /// meaning no safe eviction candidate is available. Otherwise, returns `Some` with
+    /// a newly created [`Ticket`] for `peer`.
     fn admit(self: &Arc<Self>, peer: &Peer) -> Option<Ticket> {
-        let mut open = self.lock();
-        open.settle();
-        while open.strangers.len() >= self.most_strangers
-            || open.strangers.len() + open.paired >= self.most
-        {
-            let Some(at) = open
+        let mut open_connections = self.lock();
+        open_connections.settle();
+        while open_connections.strangers.len() >= self.most_strangers
+            || open_connections.strangers.len() + open_connections.paired >= self.most
+        { // Need to evict a stranger with a pairing counter == 0.
+            let Some(at) = open_connections
                 .strangers
                 .iter()
                 .position(|stranger| stranger.peer.pairing.load(Ordering::SeqCst) == 0)
-            else {
-                drop(open);
+            else { // No stranger to evict, drop the connection.
+                drop(open_connections);
                 self.say("Turning connections away: every one open has shown a paired device's token or waits on its pairing.");
                 return None;
             };
-            let oldest = open.strangers.remove(at).expect("it was found there");
+            let oldest = open_connections.strangers.remove(at).expect("it was found there");
             oldest.gone.store(true, Ordering::SeqCst);
             oldest.let_go.notify_one();
             self.say("Letting the oldest connections that showed no token go, to make room for new ones: something is opening many.");
         }
-        let id = open.next;
-        open.next += 1;
+        let id = open_connections.next;
+        open_connections.next += 1;
         let (let_go, gone) = (Arc::new(Notify::new()), Arc::new(AtomicBool::new(false)));
-        open.strangers.push_back(Stranger {
+        open_connections.strangers.push_back(Stranger {
             id,
             peer: peer.clone(),
             let_go: let_go.clone(),
@@ -183,7 +206,14 @@ impl Admission {
         })
     }
 
-    /// Once a minute at most: a flood is not worth a flood of lines.
+    /// Logs `what` as a warning at most once every 60 seconds.
+    ///
+    /// Uses the current UNIX timestamp and an atomic `last_logged` value to
+    /// rate-limit repeated messages. If the stored timestamp is at least 60 seconds
+    /// behind the current time, it is updated and the warning is emitted.
+    ///
+    /// If the system time is earlier than the UNIX epoch, the timestamp defaults to
+    /// `0`, which prevents panicking.
     fn say(&self, what: &str) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
