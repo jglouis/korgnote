@@ -1,18 +1,7 @@
 package com.korgnote.app.ui
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -22,14 +11,13 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.tooling.preview.Preview
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.DaySpan
@@ -58,11 +46,12 @@ fun MonthView(
 ) {
     val weeks = remember(anchorDate.year, anchorDate.month) { monthWeeks(anchorDate) }
     val keywordColors = rememberKeywordColors(agenda)
+    val sizes = LocalCalendarSizes.current
     Column(modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth()) {
             for (d in DayOfWeek.entries) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    Text(d.shortName(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                    Text(d.shortName(), style = MaterialTheme.typography.labelMedium, fontSize = sizes.dayNumberFont, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                 }
             }
         }
@@ -100,7 +89,8 @@ private fun MonthWeek(
     // A line is kept for the count of the rest wherever a lane is left out.
     val shownLanes = if (lanes > MONTH_MAX_ENTRIES) MONTH_MAX_ENTRIES - 1 else lanes
     // A bar under the day numbers, with the gap above it.
-    val line = with(LocalDensity.current) { CHIP_LINE.toDp() } + 1.dp
+    val sizes = LocalCalendarSizes.current
+    val line = with(LocalDensity.current) { sizes.chipLine.toDp() } + 1.dp
     Box(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxSize()) {
             dates.forEachIndexed { col, date ->
@@ -133,13 +123,13 @@ private fun MonthWeek(
                     }
                     val hidden = rest - shown.size
                     if (hidden > 0) {
-                        Text("+$hidden", fontSize = CHIP_FONT, lineHeight = CHIP_LINE, color = MaterialTheme.colorScheme.outline)
+                        Text("+$hidden", fontSize = sizes.chipFont, lineHeight = sizes.chipLine, color = MaterialTheme.colorScheme.outline)
                     }
                 }
             }
         }
         // Drawn over the cells, below the day numbers, at the height their spacers keep.
-        Column(Modifier.fillMaxWidth().padding(top = 1.dp + DAY_NUMBER_SIZE)) {
+        Column(Modifier.fillMaxWidth().padding(top = 1.dp + sizes.dayNumber)) {
             for (lane in 0 until shownLanes) {
                 Spacer(Modifier.height(1.dp))
                 BarLane(bars.filter { it.lane == lane }, days = 7, modifier = Modifier.height(line - 1.dp)) { bar ->

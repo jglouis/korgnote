@@ -2,46 +2,30 @@ package com.korgnote.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.tooling.preview.Preview
-import kotlinx.datetime.DateTimeUnit
-import kotlinx.datetime.plus
+import androidx.compose.ui.unit.dp
 import com.korgnote.common.org.agenda.AgendaKind
 import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.DaySpan
 import korgnote.composeapp.generated.resources.Res
 import korgnote.composeapp.generated.resources.cal_status_prefix
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.plus
 import org.jetbrains.compose.resources.stringResource
 
 /** One lane of [bars] across a row of [days] columns, each bar as wide as the days it crosses. */
@@ -72,6 +56,7 @@ internal fun RangeBarChip(
 ) {
     val occurrence = bar.occurrence
     val accent = occurrence.entry.kind.accent()
+    val sizes = LocalCalendarSizes.current
     val r = 3.dp
     val start = if (bar.continuesBefore) 0.dp else r
     val end = if (bar.continuesAfter) 0.dp else r
@@ -90,8 +75,8 @@ internal fun RangeBarChip(
         Text(
             text = occurrence.headline(keywordColor = keywordColor, titleOnly = true),
             modifier = Modifier.keywordDescription(occurrence, titleOnly = true),
-            fontSize = CHIP_FONT,
-            lineHeight = CHIP_LINE,
+            fontSize = sizes.chipFont,
+            lineHeight = sizes.chipLine,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = maxLines,
             overflow = TextOverflow.Ellipsis,
@@ -116,6 +101,7 @@ internal fun EventChip(
 ) {
     val accent = occurrence.entry.kind.accent()
     val status = occurrence.status(today)?.label()
+    val sizes = LocalCalendarSizes.current
     val r = 3.dp
     val (shape, inset) = when (occurrence.span) {
         DaySpan.Single -> RoundedCornerShape(r) to PaddingValues(horizontal = 1.dp)
@@ -143,7 +129,7 @@ internal fun EventChip(
     ) {
         EntryMenu(occurrence.entry.file, occurrence.entry.headingOffset, occurrence.entry.todo, menu, onDismiss = { menu = false }, entry = occurrence.entry)
         if (!compact) {
-            Icon(occurrence.entry.kind.icon(), contentDescription = null, tint = accent, modifier = Modifier.size(10.dp))
+            Icon(occurrence.entry.kind.icon(), contentDescription = null, tint = accent, modifier = Modifier.size(sizes.icon))
             Spacer(Modifier.width(2.dp))
         }
         Text(
@@ -153,8 +139,8 @@ internal fun EventChip(
                 else -> occurrence.headline(keywordColor = keywordColor, titleOnly = compact)
             },
             modifier = Modifier.keywordDescription(occurrence, compact),
-            fontSize = if (compact) CHIP_FONT else 11.sp,
-            lineHeight = if (compact) CHIP_LINE else 13.sp,
+            fontSize = if (compact) sizes.chipFont else sizes.dayChipFont,
+            lineHeight = if (compact) sizes.chipLine else sizes.dayChipLine,
             color = MaterialTheme.colorScheme.onSurface,
             // A range is one line on every day it crosses, so its bar stays straight.
             maxLines = if (occurrence.span == DaySpan.Single) maxLines else 1,
@@ -165,15 +151,17 @@ internal fun EventChip(
 
 @Composable
 internal fun DayNumber(date: LocalDate, isToday: Boolean, dim: Boolean = false) {
+    val sizes = LocalCalendarSizes.current
     Box(
         Modifier
-            .size(DAY_NUMBER_SIZE)
+            .size(sizes.dayNumber)
             .background(if (isToday) MaterialTheme.colorScheme.primary else Color.Transparent, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             date.day.toString(),
             style = MaterialTheme.typography.labelMedium,
+            fontSize = sizes.dayNumberFont,
             fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
             color = when {
                 isToday -> MaterialTheme.colorScheme.onPrimary
@@ -183,13 +171,6 @@ internal fun DayNumber(date: LocalDate, isToday: Boolean, dim: Boolean = false) 
         )
     }
 }
-
-/** The circle a day's number sits in. */
-internal val DAY_NUMBER_SIZE = 24.dp
-
-/** The text of an entry in the week's all-day strip and in the month, where a day is narrow. */
-internal val CHIP_FONT = 10.sp
-internal val CHIP_LINE = 12.sp
 
 // Previews
 // -----------------------

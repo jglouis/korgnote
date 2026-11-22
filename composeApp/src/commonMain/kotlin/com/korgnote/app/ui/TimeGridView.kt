@@ -41,7 +41,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -60,7 +59,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.sp
 import com.korgnote.common.org.agenda.AgendaIndex
 import com.korgnote.common.org.agenda.AgendaOccurrence
 import com.korgnote.common.org.agenda.on
@@ -125,10 +123,6 @@ val DEFAULT_HOUR_HEIGHT = 60.dp
 private val MIN_HOUR_HEIGHT = 24.dp
 private val MAX_HOUR_HEIGHT = 240.dp
 
-private val TIME_LABEL_SIZE = 9.sp
-private val TIME_LABEL_LINE = 11.sp
-private val GUTTER_WIDTH = 44.dp
-
 /**
  * The narrowest a day of the week is drawn. Seven days on a phone held upright are a word wide
  * each, too narrow for a title; there the days scroll sideways instead, three and a bit on screen,
@@ -165,19 +159,22 @@ fun TimeGridView(
     // What was clocked on each day, a running clock up to now: moved on each minute with it.
     val clockedByDate = remember(agenda, dates, now) { dates.associateWith { agenda.clocks.on(it, now) } }
     val keywordColors = rememberKeywordColors(agenda)
+    val sizes = LocalCalendarSizes.current
+    val gutter = sizes.gutter
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(fontSize = sizes.labelFont, lineHeight = sizes.labelLine)
     BoxWithConstraints(modifier.fillMaxSize()) {
-        val dayWidth = maxOf((maxWidth - GUTTER_WIDTH) / dates.size, MIN_DAY_WIDTH)
+        val dayWidth = maxOf((maxWidth - gutter) / dates.size, MIN_DAY_WIDTH)
         val daysWidth = dayWidth * dates.size
         // One scroll for the headers, the all-day strip and the grid, so that they stay in line. A
         // swipe that starts at either end goes on to the pager, and so to the week before or after.
         val sideways = rememberScrollState(with(LocalDensity.current) { (dayWidth * dates.indexOf(today).coerceAtLeast(0)).roundToPx() })
-        val days = if (daysWidth > maxWidth - GUTTER_WIDTH) Modifier.horizontalScroll(sideways).width(daysWidth) else Modifier
+        val days = if (daysWidth > maxWidth - gutter) Modifier.horizontalScroll(sideways).width(daysWidth) else Modifier
         val allDayMax = maxHeight / 3
         Column(Modifier.fillMaxSize().nestedScroll(remember { StopAtTheEdge() })) {
             ClockedSummary(agenda, dates.first(), dates.last(), now)
             if (dates.size > 1) {
                 Row(Modifier.fillMaxWidth()) {
-                    Spacer(Modifier.width(GUTTER_WIDTH))
+                    Spacer(Modifier.width(gutter))
                     // The weekday beside the date rather than over it: the height is better spent on the hours.
                     Row(Modifier.weight(1f).then(days)) {
                         for (date in dates) {
@@ -186,7 +183,7 @@ fun TimeGridView(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(date.dayOfWeek.shortName(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                Text(date.dayOfWeek.shortName(), style = labelStyle, color = MaterialTheme.colorScheme.outline)
                                 DayNumber(date, isToday = date == today)
                             }
                         }
@@ -205,9 +202,9 @@ fun TimeGridView(
                 Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
                     Text(
                         stringResource(Res.string.cal_all_day),
-                        style = MaterialTheme.typography.labelSmall,
+                        style = labelStyle,
                         color = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.width(GUTTER_WIDTH).padding(top = 2.dp),
+                        modifier = Modifier.width(gutter).padding(top = 2.dp),
                     )
                     if (compact) {
                         WeekAllDay(dates, allDay, today, keywordColors, onOpen, onDayClick, Modifier.weight(1f).then(days))
@@ -247,15 +244,16 @@ fun TimeGridView(
                 }
             }
             Row(Modifier.fillMaxWidth().weight(1f).then(zoom).verticalScroll(scroll).testTag("hourGrid")) {
-                Column(Modifier.width(GUTTER_WIDTH)) {
+                Column(Modifier.width(gutter)) {
                     for (hour in 0 until 24) {
                         Box(Modifier.height(hourHeight)) {
                             if (hour > 0) {
                                 Text(
                                     "${hour.toString().padStart(2, '0')}:00",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = labelStyle,
                                     color = MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.offset(y = (-7).dp),
+                                    // Half a line up, so the hour's line runs through its middle.
+                                    modifier = Modifier.offset(y = 1.dp - with(LocalDensity.current) { sizes.labelLine.toDp() } / 2),
                                 )
                             }
                         }
@@ -339,8 +337,8 @@ private fun DayColumn(
     modifier: Modifier,
 ) {
     val lineColor = MaterialTheme.colorScheme.outlineVariant
-    val titleStyle = MaterialTheme.typography.labelSmall
-    val (titleLine, timeLine) = with(LocalDensity.current) { titleStyle.lineHeight.toDp() to TIME_LABEL_LINE.toDp() }
+    val sizes = LocalCalendarSizes.current
+    val (titleLine, timeLine) = with(LocalDensity.current) { sizes.titleLine.toDp() to sizes.timeLine.toDp() }
     BoxWithConstraints(modifier.height(hourHeight * 24)) {
         // Hour lines.
         for (hour in 0 until 24) {
@@ -388,6 +386,7 @@ private fun EventBlock(
     onOpen: (AgendaOccurrence) -> Unit,
 ) {
     val occurrence = block.occurrence
+    val sizes = LocalCalendarSizes.current
     val accent = occurrence.entry.kind.accent()
     val keywordColor = keywordColors.of(occurrence.entry)
     val height = hourHeight * (block.endMinute - block.startMinute) / 60
@@ -426,12 +425,14 @@ private fun EventBlock(
             headline,
             modifier = Modifier.keywordDescription(occurrence, compact),
             style = MaterialTheme.typography.labelSmall,
+            fontSize = sizes.titleFont,
+            lineHeight = sizes.titleLine,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = lines,
             overflow = TextOverflow.Ellipsis,
         )
         time?.let {
-            Text(it, fontSize = TIME_LABEL_SIZE, lineHeight = TIME_LABEL_LINE, color = accent, maxLines = 1)
+            Text(it, fontSize = sizes.timeFont, lineHeight = sizes.timeLine, color = accent, maxLines = 1)
         }
     }
 }
@@ -444,6 +445,7 @@ private fun EventBlock(
 @Composable
 private fun ClockedBlockView(block: ClockedBlock, width: Dp, hourHeight: Dp, compact: Boolean, titleLine: Dp, timeLine: Dp) {
     val actions = LocalCalendarActions.current
+    val sizes = LocalCalendarSizes.current
     val span = block.piece.span
     val running = span.end == null
     val accent = if (running) MaterialTheme.colorScheme.primary else clockedAccent()
@@ -472,16 +474,18 @@ private fun ClockedBlockView(block: ClockedBlock, width: Dp, hourHeight: Dp, com
     ) {
         EntryMenu(span.file, span.headingOffset, span.todo, menu, onDismiss = { menu = false })
         Row(verticalAlignment = Alignment.Top) {
-            Icon(Icons.Filled.Timer, contentDescription = null, tint = accent, modifier = Modifier.padding(top = 2.dp, end = 2.dp).size(10.dp))
+            Icon(Icons.Filled.Timer, contentDescription = null, tint = accent, modifier = Modifier.padding(top = 2.dp, end = 2.dp).size(sizes.icon))
             Text(
                 title,
                 style = MaterialTheme.typography.labelSmall,
+                fontSize = sizes.titleFont,
+                lineHeight = sizes.titleLine,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = lines,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        time?.let { Text(it, fontSize = TIME_LABEL_SIZE, lineHeight = TIME_LABEL_LINE, color = accent, maxLines = 1) }
+        time?.let { Text(it, fontSize = sizes.timeFont, lineHeight = sizes.timeLine, color = accent, maxLines = 1) }
     }
 }
 
@@ -503,6 +507,7 @@ private fun WeekAllDay(
     val bars = remember(allDay) { layoutRangeBars(allDay) }
     val lanes = (bars.maxOfOrNull { it.lane } ?: -1) + 1
     val shownLanes = lanes.coerceAtMost(ALL_DAY_LIMIT)
+    val sizes = LocalCalendarSizes.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         for (lane in 0 until shownLanes) {
             BarLane(bars.filter { it.lane == lane }, dates.size) { bar ->
@@ -528,6 +533,8 @@ private fun WeekAllDay(
                         Text(
                             "+$hidden",
                             style = MaterialTheme.typography.labelSmall,
+                            fontSize = sizes.labelFont,
+                            lineHeight = sizes.labelLine,
                             color = MaterialTheme.colorScheme.outline,
                             modifier = Modifier.clickable { onDayClick(date) }.padding(horizontal = 2.dp),
                         )

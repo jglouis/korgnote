@@ -136,6 +136,10 @@ Each period is a page that turns under the finger. Deadlines and scheduled items
 (colour and icon), DONE items dimmed, and every occurrence opens the document at `headingOffset`. In reading
 mode a `SCHEDULED` or `DEADLINE` stamp opens the calendar on its day.
 
+The day, the week and the month draw their text at a phone's sizes, and larger where the calendar has the
+room, as on a tablet or in a browser window (`CalendarSizes.fitting`, in `CalendarSizes.kt`). Width and
+height both count, so a phone on its side keeps a phone's sizes.
+
 The grid opens an hour before now, or at 7:00 on any other day, and never below the first timed entry on
 screen (`initialHour` in `CalendarLayout.kt`, `dayStartHour` in `TimeGridView.kt`). **Not built:**
 configurable day start and end hours, and a drag horizon on the week.
