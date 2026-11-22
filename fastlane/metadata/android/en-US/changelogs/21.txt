@@ -1,0 +1,3 @@
+* Pairing: a dialog says where to press Allow on the computer, and stays until it answers.
+* The event picker's search reads two years ahead.
+* The calendar is drawn larger where there is room, as on a tablet.
