@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -56,12 +57,15 @@ import korgnote.composeapp.generated.resources.settings_pair_title
 import korgnote.composeapp.generated.resources.settings_paired_as
 import korgnote.composeapp.generated.resources.settings_paired_with
 import korgnote.composeapp.generated.resources.settings_pairing_unreadable
-import korgnote.composeapp.generated.resources.settings_pairing_with
+import korgnote.composeapp.generated.resources.settings_pair_allow_text
+import korgnote.composeapp.generated.resources.settings_pair_allow_title
 import korgnote.composeapp.generated.resources.settings_paste_link
 import korgnote.composeapp.generated.resources.settings_reached_at
 import korgnote.composeapp.generated.resources.settings_scan_again
 import korgnote.composeapp.generated.resources.settings_scan_code
 import korgnote.composeapp.generated.resources.settings_the_computer
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
@@ -98,25 +102,37 @@ fun PairingSettings(
     var forgetting by remember { mutableStateOf(false) }
     /** A link waiting to be agreed to, with why it must be. */
     var confirming by remember { mutableStateOf<Pair<PairingLink, PairingConfirmation>?>(null) }
+    /**
+     * The computer a pairing is waiting on, by name. It answers only once someone there has pressed
+     * Allow on its Devices page, which nothing on this device does: a dialog says so, and stays in
+     * the way, as leaving this screen would end the wait without a word.
+     */
+    var waitingFor by remember { mutableStateOf<String?>(null) }
+    var attempt by remember { mutableStateOf<Job?>(null) }
     val deviceName = rememberDeviceName()
 
     suspend fun pairNow(link: PairingLink) {
         if (pairing == null) return
         busy = true
-        message = getString(Res.string.settings_pairing_with, link.serverName.ifBlank { getString(Res.string.settings_the_computer) })
-        when (val result = pairing.pair(link, deviceName)) {
-            is PairingResult.Paired -> {
-                paired = result.server
-                pasted = ""
-                onChanged()
-                message = getString(Res.string.settings_paired_with, result.server.serverName)
+        message = null
+        attempt = currentCoroutineContext()[Job]
+        waitingFor = link.serverName.ifBlank { getString(Res.string.settings_the_computer) }
+        try {
+            when (val result = pairing.pair(link, deviceName)) {
+                is PairingResult.Paired -> {
+                    paired = result.server
+                    pasted = ""
+                    onChanged()
+                    message = getString(Res.string.settings_paired_with, result.server.serverName)
+                }
+                is PairingResult.Failed -> failure = result.reason
             }
-            is PairingResult.Failed -> {
-                message = null
-                failure = result.reason
-            }
+        } finally {
+            // Also when it is cancelled, which ends the request the computer is holding.
+            waitingFor = null
+            attempt = null
+            busy = false
         }
-        busy = false
     }
 
     /** [fromOutside]: another app opened the link, rather than this one's scanner or paste box. */
@@ -152,6 +168,21 @@ fun PairingSettings(
         }
     }
     val scan = rememberPairingScanner { pairWith(it) }
+
+    waitingFor?.let { computer ->
+        AlertDialog(
+            // Only Cancel closes it: a tap beside it or Back would hide what is being waited for.
+            onDismissRequest = {},
+            title = { Text(stringResource(Res.string.settings_pair_allow_title, computer)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(stringResource(Res.string.settings_pair_allow_text, computer.replaceFirstChar { it.uppercase() }, deviceName))
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = { CancelButton(onClick = { attempt?.cancel() }) },
+        )
+    }
 
     failure?.let { reason ->
         AlertDialog(

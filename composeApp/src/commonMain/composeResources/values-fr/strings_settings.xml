@@ -59,7 +59,8 @@
     <string name="settings_pair_no_address">Ce code de %1$s ne dit pas où le joindre : le serveur ne connaît aucune adresse pour lui-même, comme lorsqu’il tourne dans Docker sans KORGNOTE_ADVERTISED_ADDRESSES. Sur sa page Devices, saisissez l’adresse de l’ordinateur sur votre réseau (comme 192.168.1.20) dans le champ d’adresse, appuyez sur Show a pairing code et scannez le nouveau code.</string>
     <string name="settings_pair_incomplete">Ce lien d’appairage est incomplet. Copiez-le en entier, de korgnote://pair jusqu’au code après &amp;c=, ou scannez plutôt le code QR.</string>
     <string name="settings_pair_failed_title">Appairage impossible</string>
-    <string name="settings_pairing_with">Association avec %1$s… Sur sa page Devices, appuyez sur Allow quand cet appareil le demande.</string>
+    <string name="settings_pair_allow_title">Appuyez maintenant sur Allow sur %1$s</string>
+    <string name="settings_pair_allow_text">%1$s doit accepter cet appareil. Sur cet ordinateur, revenez à la page Devices qui affichait le code (http://localhost:8080/devices) : « %2$s » y demande l’appairage. Appuyez sur Allow à côté, dans les deux minutes.</string>
     <string name="settings_the_computer">l’ordinateur</string>
     <string name="settings_paired_with">Associé à %1$s.</string>
     <string name="settings_forget_title">Oublier %1$s ?</string>
